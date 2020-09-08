@@ -15,6 +15,11 @@ static auto world() -> coro::task<std::string, std::suspend_always>
     co_return "World";
 }
 
+static auto void_task() -> coro::task<void, std::suspend_always>
+{
+    co_return;
+}
+
 static auto throws_exception() -> coro::task<std::string, std::suspend_always>
 {
     co_await std::suspend_always();
@@ -27,18 +32,27 @@ TEST_CASE("hello world task")
     auto h = hello();
     auto w = world();
 
-    REQUIRE(h.return_value().empty());
-    REQUIRE(w.return_value().empty());
+    REQUIRE(h.promise().result().empty());
+    REQUIRE(w.promise().result().empty());
 
     h.resume(); // task suspends immediately
     w.resume();
 
-    auto w_value = std::move(w).return_value();
+    auto w_value = std::move(w).promise().result();
 
-    REQUIRE(h.return_value() == "Hello");
+    REQUIRE(h.promise().result() == "Hello");
     REQUIRE(w_value == "World");
-    REQUIRE(w.return_value().empty());
+    REQUIRE(w.promise().result().empty());
 }
+
+// This currently won't report as is_done(), not sure why yet...
+// TEST_CASE("void task")
+// {
+//     auto task = void_task();
+//     task.resume();
+
+//     REQUIRE(task.is_done());
+// }
 
 TEST_CASE("Exception thrown")
 {

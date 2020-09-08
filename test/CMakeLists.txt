@@ -3,6 +3,7 @@ project(libcoro_test)
 
 set(LIBCORO_TEST_SOURCE_FILES
     test_async_manual_reset_event.cpp
+    test_engine.cpp
     test_task.cpp
 )
 

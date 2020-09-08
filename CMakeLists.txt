@@ -10,6 +10,7 @@ message("${PROJECT_NAME} CORO_CODE_COVERAGE    = ${CORO_CODE_COVERAGE}")
 set(LIBCORO_SOURCE_FILES
     src/coro/async_manual_reset_event.hpp
     src/coro/coro.hpp
+    src/coro/engine.hpp src/coro/engine.cpp
     src/coro/task.hpp
 )
 
@@ -17,6 +18,7 @@ add_library(${PROJECT_NAME} STATIC ${LIBCORO_SOURCE_FILES})
 set_target_properties(${PROJECT_NAME} PROPERTIES LINKER_LANGUAGE CXX)
 target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_20)
 target_include_directories(${PROJECT_NAME} PUBLIC src)
+target_link_libraries(${PROJECT_NAME} PUBLIC zmq pthread)
 target_compile_options(${PROJECT_NAME} PUBLIC -fcoroutines)
 
 if(CORO_BUILD_TESTS)

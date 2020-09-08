@@ -31,7 +31,7 @@ TEST_CASE("manual reset event one watcher")
     mre_producer<uint64_t>(event, 42);
     value.resume();
 
-    REQUIRE(value.return_value() == 42);
+    REQUIRE(value.promise().result() == 42);
 }
 
 TEST_CASE("manual reset event multiple watcher")
@@ -47,7 +47,7 @@ TEST_CASE("manual reset event multiple watcher")
     value2.resume();
     value3.resume();
 
-    REQUIRE(value1.return_value() == expected_value);
-    REQUIRE(value2.return_value() == expected_value);
-    REQUIRE(value3.return_value() == expected_value);
+    REQUIRE(value1.promise().result() == expected_value);
+    REQUIRE(value2.promise().result() == expected_value);
+    REQUIRE(value3.promise().result() == expected_value);
 }
