@@ -14,49 +14,12 @@
 namespace coro
 {
 
-// class message
-// {
-// public:
-//     enum class type
-//     {
-//         new_web_request,
-//         async_resume
-//     };
-
-//     message() = default;
-//     message(type t, int socket)
-//         : m_type(t),
-//           m_socket(socket)
-//     {
-
-//     }
-//     ~message() = default;
-
-//     type m_type;
-//     int m_socket;
-// };
-
-// class web_request
-// {
-// public:
-//     web_request() = default;
-
-//     web_request(int socket) : m_socket(socket)
-//     {
-
-//     }
-
-//     ~web_request() = default;
-// private:
-//     int m_socket{0};
-// };
-
 class engine
 {
 public:
     /// Always suspend at the start since the engine will call the first `resume()`.
-    using task = coro::task<void, std::suspend_always>;
-    using message = uint8_t;
+    using task_type = coro::task<void>;
+    using message_type = uint8_t;
 
     engine()
         :
@@ -92,14 +55,14 @@ public:
         m_background_thread.join();
     }
 
-    auto submit_task(std::unique_ptr<task> t) -> bool
+    auto submit_task(task_type t) -> bool
     {
         {
             std::lock_guard<std::mutex> lock{m_queued_tasks_mutex};
             m_queued_tasks.push_back(std::move(t));
         }
 
-        message msg = 1;
+        message_type msg = 1;
         zmq::message_t zmq_msg{&msg, sizeof(msg)};
 
         zmq::send_result_t result;
@@ -133,7 +96,6 @@ public:
         using namespace std::chrono_literals;
 
         m_is_running = true;
-        std::cerr << "running\n";
 
         std::vector<zmq::pollitem_t> poll_items {
             zmq::pollitem_t{static_cast<void*>(m_async_recv_events_socket), 0, ZMQ_POLLIN, 0}
@@ -141,32 +103,27 @@ public:
 
         while(!m_stop)
         {
-            std::cerr << "polling\n";
             auto events = zmq::poll(poll_items, 1000ms);
 
             if(events > 0)
             {
                 while(true)
                 {
-                    message msg;
-                    zmq::mutable_buffer buffer(static_cast<void*>(&msg), sizeof(message));
+                    message_type msg;
+                    zmq::mutable_buffer buffer(static_cast<void*>(&msg), sizeof(msg));
                     auto result = m_async_recv_events_socket.recv(buffer, zmq::recv_flags::dontwait);
 
                     if(!result.has_value())
                     {
-                        std::cerr << "result no value\n";
-                        // zmq returns 0 on no messages available
                         break; // while(true)
                     }
                     else if(result.value().truncated())
                     {
-                        std::cerr << "message received with incorrect size " << result.value().size << "\n";
+                        // let the task die? malformed message
                     }
                     else
                     {
-                        std::cerr << "message received\n";
-
-                        std::vector<std::unique_ptr<task>> grabbed_tasks;
+                        std::vector<task_type> grabbed_tasks;
                         {
                             std::lock_guard<std::mutex> lock{m_queued_tasks_mutex};
                             grabbed_tasks.swap(m_queued_tasks);
@@ -174,23 +131,27 @@ public:
 
                         for(auto& t : grabbed_tasks)
                         {
-                            // start executing now
-                            t->resume();
+                            t.resume();
 
-                            // if the task is awaiting then push into active tasks.
-                            if(!t->is_done())
+                            // if the task is still awaiting then push into active tasks.
+                            if(!t.is_ready())
                             {
                                 m_active_tasks.push_back(std::move(t));
                             }
                         }
+                        m_active_tasks_count = m_active_tasks.size();
                     }
                 }
             }
         }
 
         m_is_running = false;
-        std::cerr << "stopping\n";
     }
+
+    /**
+     * @return The number of active tasks still executing.
+     */
+    auto size() const -> std::size_t { return m_active_tasks_count; }
 
 private:
     static std::atomic<uint32_t> m_engine_id_counter;
@@ -206,8 +167,10 @@ private:
     std::thread m_background_thread;
 
     std::mutex m_queued_tasks_mutex;
-    std::vector<std::unique_ptr<task>> m_queued_tasks;
-    std::vector<std::unique_ptr<task>> m_active_tasks;
+    std::vector<task_type> m_queued_tasks;
+    std::vector<task_type> m_active_tasks;
+
+    std::atomic<std::size_t> m_active_tasks_count{0};
 };
 
 } // namespace coro

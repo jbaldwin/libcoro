@@ -19,7 +19,14 @@ set_target_properties(${PROJECT_NAME} PROPERTIES LINKER_LANGUAGE CXX)
 target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_20)
 target_include_directories(${PROJECT_NAME} PUBLIC src)
 target_link_libraries(${PROJECT_NAME} PUBLIC zmq pthread)
-target_compile_options(${PROJECT_NAME} PUBLIC -fcoroutines)
+
+
+if(${CMAKE_CXX_COMPILER_ID} MATCHES "GNU")
+    target_compile_options(${PROJECT_NAME} PUBLIC -fcoroutines)
+elseif(${CMAKE_CXX_COMPILER_ID} MATCHES "Clang")
+    target_compile_options(${PROJECT_NAME} PUBLIC -fcoroutines-ts)
+endif()
+
 
 if(CORO_BUILD_TESTS)
     if(CORO_CODE_COVERAGE)

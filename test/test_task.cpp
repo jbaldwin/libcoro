@@ -5,38 +5,22 @@
 #include <chrono>
 #include <thread>
 
-static auto hello() -> coro::task<std::string, std::suspend_always>
-{
-    co_return "Hello";
-}
-
-static auto world() -> coro::task<std::string, std::suspend_always>
-{
-    co_return "World";
-}
-
-static auto void_task() -> coro::task<void, std::suspend_always>
-{
-    co_return;
-}
-
-static auto throws_exception() -> coro::task<std::string, std::suspend_always>
-{
-    co_await std::suspend_always();
-    throw std::runtime_error("I'll be reached");
-    co_return "I'll never be reached";
-}
 
 TEST_CASE("hello world task")
 {
-    auto h = hello();
-    auto w = world();
+    using task_type = coro::task<std::string>;
+
+    auto h = []() -> task_type { co_return "Hello"; }();
+    auto w = []() -> task_type { co_return "World"; }();
 
     REQUIRE(h.promise().result().empty());
     REQUIRE(w.promise().result().empty());
 
     h.resume(); // task suspends immediately
     w.resume();
+
+    REQUIRE(h.is_ready());
+    REQUIRE(w.is_ready());
 
     auto w_value = std::move(w).promise().result();
 
@@ -45,25 +29,62 @@ TEST_CASE("hello world task")
     REQUIRE(w.promise().result().empty());
 }
 
-// This currently won't report as is_done(), not sure why yet...
-// TEST_CASE("void task")
-// {
-//     auto task = void_task();
-//     task.resume();
+TEST_CASE("void task")
+{
+    using namespace std::chrono_literals;
+    using task_type = coro::task<void>;
 
-//     REQUIRE(task.is_done());
-// }
+    auto t = []() -> task_type {
+        std::this_thread::sleep_for(10ms);
+        co_return;
+    }();
+    t.resume();
+
+    REQUIRE(t.is_ready());
+}
 
 TEST_CASE("Exception thrown")
 {
-    auto task = throws_exception();
+    using task_type = coro::task<std::string>;
 
+    std::string throw_msg = "I'll be reached";
+
+    auto task = [&]() -> task_type {
+        throw std::runtime_error(throw_msg);
+        co_return "I'll never be reached";
+    }();
+
+    task.resume();
+
+    REQUIRE(task.is_ready());
+
+    bool thrown{false};
     try
     {
-        task.resume();
+        auto value = task.promise().result();
     }
     catch(const std::exception& e)
     {
-        REQUIRE(e.what() == "I'll be reached");
+        thrown = true;
+        REQUIRE(e.what() == throw_msg);
     }
+
+    REQUIRE(thrown);
+}
+
+TEST_CASE("Task in a task")
+{
+    auto inner_task = []() -> coro::task<int> {
+        std::cerr << "inner_task start\n";
+        std::cerr << "inner_task stop\n";
+        co_return 42;
+    };
+    auto outer_task = [&]() -> coro::task<> {
+        std::cerr << "outer_task start\n";
+        auto v = co_await inner_task();
+        REQUIRE(v == 42);
+        std::cerr << "outer_task stop\n";
+    }();
+
+    outer_task.resume();
 }

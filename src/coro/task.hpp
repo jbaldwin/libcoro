@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <coroutine>
 #include <optional>
 
@@ -8,16 +9,14 @@ namespace coro
 
 template<
     typename return_type = void,
-    typename initial_suspend_type = std::suspend_never,
-    typename final_suspend_type = std::suspend_never>
+    typename initial_suspend_type = std::suspend_always>
 class task;
 
 namespace detail
 {
 
 template<
-    typename initial_suspend_type,
-    typename final_suspend_type>
+    typename initial_suspend_type>
 struct promise_base
 {
     promise_base() noexcept = default;
@@ -30,17 +29,12 @@ struct promise_base
 
     auto final_suspend()
     {
-        return final_suspend_type();
+        return std::suspend_always();
     }
 
     auto unhandled_exception() -> void
     {
         m_exception_ptr = std::current_exception();
-    }
-
-    auto return_void() -> void
-    {
-        // no-op
     }
 
 protected:
@@ -49,12 +43,11 @@ protected:
 
 template<
     typename return_type,
-    typename initial_suspend_type,
-    typename final_suspend_type>
-struct promise : public promise_base<initial_suspend_type, final_suspend_type>
+    typename initial_suspend_type>
+struct promise : public promise_base<initial_suspend_type>
 {
-    using task_type = task<return_type, initial_suspend_type, final_suspend_type>;
-    using coro_handle = std::coroutine_handle<promise<return_type, initial_suspend_type, final_suspend_type>>;
+    using task_type = task<return_type, initial_suspend_type>;
+    using coro_handle = std::coroutine_handle<promise<return_type, initial_suspend_type>>;
 
     promise() noexcept = default;
     ~promise() = default;
@@ -91,17 +84,18 @@ private:
 };
 
 template<
-    typename initial_suspend_type,
-    typename final_suspend_type>
-struct promise<void, initial_suspend_type, final_suspend_type> : public promise_base<initial_suspend_type, final_suspend_type>
+    typename initial_suspend_type>
+struct promise<void, initial_suspend_type> : public promise_base<initial_suspend_type>
 {
-    using task_type = task<void, initial_suspend_type, final_suspend_type>;
-    using coro_handle = std::coroutine_handle<promise<void, initial_suspend_type, final_suspend_type>>;
+    using task_type = task<void, initial_suspend_type>;
+    using coro_handle = std::coroutine_handle<promise<void, initial_suspend_type>>;
 
     promise() noexcept = default;
     ~promise() = default;
 
     auto get_return_object() -> task_type;
+
+    auto return_void() -> void { }
 
     auto result() const -> void
     {
@@ -116,13 +110,19 @@ struct promise<void, initial_suspend_type, final_suspend_type> : public promise_
 
 template<
     typename return_type,
-    typename initial_suspend_type,
-    typename final_suspend_type>
+    typename initial_suspend_type>
 class task
 {
 public:
-    using promise_type = detail::promise<return_type, initial_suspend_type, final_suspend_type>;
+    using task_type = task<return_type, initial_suspend_type>;
+    using promise_type = detail::promise<return_type, initial_suspend_type>;
     using coro_handle = std::coroutine_handle<promise_type>;
+
+    task() noexcept
+        : m_handle(nullptr)
+    {
+
+    }
 
     task(coro_handle handle)
         : m_handle(handle)
@@ -130,23 +130,31 @@ public:
 
     }
     task(const task&) = delete;
-    task(task&&) = delete;
+    task(task&& other) noexcept
+        : m_handle(other.m_handle)
+    {
+        other.m_handle = nullptr;
+    }
+
     auto operator=(const task&) -> task& = delete;
-    auto operator=(task&& other) -> task& = delete;
-    // {
-    //     if(std::addressof(other) != this)
-    //     {
-    //         if(m_handle)
-    //         {
-    //             m_handle.destroy();
-    //         }
+    auto operator=(task&& other) noexcept -> task&
+    {
+        if(std::addressof(other) != this)
+        {
+            if(m_handle)
+            {
+                m_handle.destroy();
+            }
 
-    //         m_handle = other.m_handle;
-    //         other.m_handle = nullptr;
-    //     }
-    // }
+            m_handle = other.m_handle;
+            other.m_handle = nullptr;
+        }
+    }
 
-    auto is_done() const noexcept -> bool
+    /**
+     * @return True if the task is in its final suspend or if the task has been destroyed.
+     */
+    auto is_ready() const noexcept -> bool
     {
         return m_handle == nullptr || m_handle.done();
     }
@@ -160,35 +168,47 @@ public:
         return !m_handle.done();
     }
 
+    auto destroy() -> bool
+    {
+        if(m_handle != nullptr)
+        {
+            m_handle.destroy();
+            m_handle = nullptr;
+            return true;
+        }
+
+        return false;
+    }
+
     struct awaiter
     {
-        awaiter(coro_handle handle) noexcept
-            : m_handle(handle)
+        awaiter(const task_type& t) noexcept
+            : m_task(t)
         {
 
         }
 
         auto await_ready() const noexcept -> bool
         {
-            return !m_handle || m_handle.done();
+            return m_task.is_ready();
         }
 
         auto await_suspend(std::coroutine_handle<>) noexcept -> void
         {
-            
+            // no-op, the handle passed in is the same as m_task.promise()
         }
 
         auto await_resume() noexcept -> return_type
         {
-            return m_handle.promise().result();
+            return m_task.promise().result();
         }
 
-        coro_handle m_handle;
+        const task_type& m_task;
     };
 
     auto operator co_await() const noexcept -> awaiter
     {
-        return awaiter(m_handle);
+        return awaiter(*this);
     }
 
     auto promise() const & -> const promise_type& { return m_handle.promise(); }
@@ -203,18 +223,16 @@ namespace detail
 
 template<
     typename return_type,
-    typename initial_suspend_type,
-    typename final_suspend_type>
-auto promise<return_type, initial_suspend_type, final_suspend_type>::get_return_object()
+    typename initial_suspend_type>
+auto promise<return_type, initial_suspend_type>::get_return_object()
     -> task_type
 {
     return coro_handle::from_promise(*this);
 }
 
 template<
-    typename initial_suspend_type,
-    typename final_suspend_type>
-auto promise<void,initial_suspend_type, final_suspend_type>::get_return_object()
+    typename initial_suspend_type>
+auto promise<void,initial_suspend_type>::get_return_object()
     -> task_type
 {
     return coro_handle::from_promise(*this);

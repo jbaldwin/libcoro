@@ -10,14 +10,14 @@ auto mre_producer(coro::async_manual_reset_event<return_type>& event, return_typ
 {
     // simulate complicated background task
     using namespace std::chrono_literals;
-    std::this_thread::sleep_for(100ms);
+    std::this_thread::sleep_for(10ms);
     event.set(std::move(produced_value));
 }
 
 template<typename return_type>
 auto mre_consumer(
     const coro::async_manual_reset_event<return_type>& event
-) -> coro::task<return_type, std::suspend_never, std::suspend_always>
+) -> coro::task<return_type, std::suspend_never>
 {
     co_await event;
     co_return event.return_value();
