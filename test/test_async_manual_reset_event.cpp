@@ -17,7 +17,7 @@ auto mre_producer(coro::async_manual_reset_event<return_type>& event, return_typ
 template<typename return_type>
 auto mre_consumer(
     const coro::async_manual_reset_event<return_type>& event
-) -> coro::task<return_type, std::suspend_never>
+) -> coro::task<return_type>
 {
     co_await event;
     co_return event.return_value();

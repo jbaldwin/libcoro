@@ -4,42 +4,47 @@
 
 #include <atomic>
 #include <vector>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <thread>
-#include <zmq.hpp>
 
+#include <sys/epoll.h>
+#include <sys/eventfd.h>
+#include <unistd.h>
 #include <iostream>
 
 namespace coro
 {
 
+enum class await_op
+{
+    read = EPOLLIN,
+    write = EPOLLOUT,
+    read_write = EPOLLIN | EPOLLOUT
+};
+
 class engine
 {
 public:
-    /// Always suspend at the start since the engine will call the first `resume()`.
     using task_type = coro::task<void>;
     using message_type = uint8_t;
+    using task_id_type = uint64_t;
+    using socket_type = int;
 
+private:
+    static constexpr task_id_type submit_id = 0xFFFFFFFFFFFFFFFF;
+
+public:
     engine()
-        :
-            m_async_recv_events_socket(m_zmq_context, zmq::socket_type::pull),
-            m_async_send_notify_socket(m_zmq_context, zmq::socket_type::push)
+        :   m_epoll_fd(epoll_create1(EPOLL_CLOEXEC)),
+            m_submit_fd(eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK))
     {
-        auto dsn = "inproc://engine";
-        int linger = 125;
-        uint32_t high_water_mark = 0;
+        struct epoll_event e{};
+        e.events = EPOLLIN | EPOLLET;
 
-        m_async_recv_events_socket.setsockopt<int>(ZMQ_LINGER, linger);
-        m_async_recv_events_socket.setsockopt<uint32_t>(ZMQ_RCVHWM, high_water_mark);
-        m_async_recv_events_socket.setsockopt<uint32_t>(ZMQ_SNDHWM, high_water_mark);
-
-        m_async_send_notify_socket.setsockopt<int>(ZMQ_LINGER, linger);
-        m_async_send_notify_socket.setsockopt<uint32_t>(ZMQ_RCVHWM, high_water_mark);
-        m_async_send_notify_socket.setsockopt<uint32_t>(ZMQ_SNDHWM, high_water_mark);
-
-        m_async_recv_events_socket.bind(dsn);
-        m_async_send_notify_socket.connect(dsn);
+        e.data.u64 = submit_id;
+        epoll_ctl(m_epoll_fd, EPOLL_CTL_ADD, m_submit_fd, &e);
 
         m_background_thread = std::thread([this] { this->run(); });
     }
@@ -53,32 +58,43 @@ public:
     {
         stop();
         m_background_thread.join();
+        if(m_epoll_fd != -1)
+        {
+            close(m_epoll_fd);
+            m_epoll_fd = -1;
+        }
     }
 
-    auto submit_task(task_type t) -> bool
+    auto submit_task(task_type t) -> task_id_type
     {
+        auto task_id = m_task_id_counter++;
         {
-            std::lock_guard<std::mutex> lock{m_queued_tasks_mutex};
-            m_queued_tasks.push_back(std::move(t));
+            std::lock_guard<std::mutex> lock{m_mutex};
+            m_submit_queued_tasks.emplace_back(task_id, std::move(t));
         }
 
-        message_type msg = 1;
-        zmq::message_t zmq_msg{&msg, sizeof(msg)};
+        // Signal to the event loop there is a submitted task.
+        uint64_t value{1};
+        write(m_submit_fd, &value, sizeof(value));
 
-        zmq::send_result_t result;
-        {
-            std::lock_guard<std::mutex> lock{m_async_send_notify_mutex};
-            result = m_async_send_notify_socket.send(zmq_msg, zmq::send_flags::none);
-        }
+        return task_id;
+    }
 
-        if(!result.has_value())
-        {
-            return false;
-        }
-        else
-        {
-            return result.value() == sizeof(msg);
-        }
+    auto await(task_id_type id, socket_type socket, await_op op) -> void
+    {
+        struct epoll_event e{};
+        e.events = static_cast<uint32_t>(op) | EPOLLONESHOT;
+        e.data.u64 = id;
+        epoll_ctl(m_epoll_fd, EPOLL_CTL_ADD, socket, &e);
+    }
+
+    /**
+     * @return The number of active tasks still executing.
+     */
+    auto size() const -> std::size_t
+    {
+        std::lock_guard<std::mutex> lock{m_mutex};
+        return m_submit_queued_tasks.size();
     }
 
     auto is_running() const noexcept -> bool
@@ -91,86 +107,91 @@ public:
         m_stop = true;
     }
 
+private:
+    static std::atomic<uint32_t> m_engine_id_counter;
+    const uint32_t m_engine_id{m_engine_id_counter++};
+
+    socket_type m_epoll_fd{-1};
+    socket_type m_submit_fd{-1};
+
+    std::atomic<bool> m_is_running{false};
+    std::atomic<bool> m_stop{false};
+    std::thread m_background_thread;
+
+    std::atomic<uint64_t> m_task_id_counter{0};
+
+    mutable std::mutex m_mutex;
+    std::vector<std::pair<task_id_type, task_type>> m_submit_queued_tasks;
+    std::map<task_id_type, task_type> m_active_tasks;
+
     auto run() -> void
     {
         using namespace std::chrono_literals;
 
         m_is_running = true;
 
-        std::vector<zmq::pollitem_t> poll_items {
-            zmq::pollitem_t{static_cast<void*>(m_async_recv_events_socket), 0, ZMQ_POLLIN, 0}
-        };
+        constexpr std::chrono::milliseconds timeout{1000};
+        constexpr std::size_t max_events = 8;
+        std::array<struct epoll_event, max_events> events;
 
         while(!m_stop)
         {
-            auto events = zmq::poll(poll_items, 1000ms);
+            auto event_count = epoll_wait(m_epoll_fd, events.data(), max_events, timeout.count());
 
-            if(events > 0)
+            for(std::size_t i = 0; i < event_count; ++i)
             {
-                while(true)
-                {
-                    message_type msg;
-                    zmq::mutable_buffer buffer(static_cast<void*>(&msg), sizeof(msg));
-                    auto result = m_async_recv_events_socket.recv(buffer, zmq::recv_flags::dontwait);
+                task_id_type task_id = events[i].data.u64;
 
-                    if(!result.has_value())
+                if(task_id == submit_id)
+                {
+                    uint64_t value{0};
+                    read(m_submit_fd, &value, sizeof(value));
+                    (void)value; // discard, the read merely reset the eventfd counter in the kernel.
+
+                    std::vector<std::pair<task_id_type, task_type>> grabbed_tasks;
                     {
-                        break; // while(true)
+                        std::lock_guard<std::mutex> lock{m_mutex};
+                        grabbed_tasks.swap(m_submit_queued_tasks);
                     }
-                    else if(result.value().truncated())
+
+                    for(auto& [task_id, task] : grabbed_tasks)
                     {
-                        // let the task die? malformed message
+                        std::cerr << "submit: task.resume()\n";
+                        task.resume();
+
+                        // If the task is still awaiting then push into active tasks.
+                        if(!task.is_ready())
+                        {
+                            m_active_tasks.emplace(task_id, std::move(task));
+                        }
+                    }
+                }
+                else
+                {
+                    auto task_found = m_active_tasks.find(task_id);
+                    if(task_found != m_active_tasks.end())
+                    {
+                        auto& task = task_found->second;
+                        std::cerr << "await: task.resume()\n";
+                        task.resume();
+
+                        // If the task is done, remove it from internal state.
+                        if(task.is_ready())
+                        {
+                            m_active_tasks.erase(task_found);
+                        }
                     }
                     else
                     {
-                        std::vector<task_type> grabbed_tasks;
-                        {
-                            std::lock_guard<std::mutex> lock{m_queued_tasks_mutex};
-                            grabbed_tasks.swap(m_queued_tasks);
-                        }
-
-                        for(auto& t : grabbed_tasks)
-                        {
-                            t.resume();
-
-                            // if the task is still awaiting then push into active tasks.
-                            if(!t.is_ready())
-                            {
-                                m_active_tasks.push_back(std::move(t));
-                            }
-                        }
-                        m_active_tasks_count = m_active_tasks.size();
+                        std::cerr << "await: not found\n";
                     }
+                    // else unknown task, let the event just pass.
                 }
             }
         }
 
         m_is_running = false;
     }
-
-    /**
-     * @return The number of active tasks still executing.
-     */
-    auto size() const -> std::size_t { return m_active_tasks_count; }
-
-private:
-    static std::atomic<uint32_t> m_engine_id_counter;
-    const uint32_t m_engine_id{m_engine_id_counter++};
-
-    zmq::context_t m_zmq_context{0};
-    zmq::socket_t  m_async_recv_events_socket;
-    std::mutex     m_async_send_notify_mutex{};
-    zmq::socket_t  m_async_send_notify_socket;
-
-    std::atomic<bool> m_is_running{false};
-    std::atomic<bool> m_stop{false};
-    std::thread m_background_thread;
-
-    std::mutex m_queued_tasks_mutex;
-    std::vector<task_type> m_queued_tasks;
-    std::vector<task_type> m_active_tasks;
-
-    std::atomic<std::size_t> m_active_tasks_count{0};
 };
 
 } // namespace coro
