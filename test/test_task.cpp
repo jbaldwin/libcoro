@@ -126,3 +126,51 @@ TEST_CASE("task in a task in a task")
 
     REQUIRE(task1.is_ready());
 }
+
+TEST_CASE("task multiple suspends return void")
+{
+    auto task = []() -> coro::task<void>
+    {
+        co_await std::suspend_always{};
+        co_await std::suspend_never{};
+        co_await std::suspend_always{};
+        co_await std::suspend_always{};
+        co_return;
+    }();
+
+    task.resume(); // initial suspend
+    REQUIRE_FALSE(task.is_ready());
+
+    task.resume(); // first internal suspend
+    REQUIRE_FALSE(task.is_ready());
+
+    task.resume(); // second internal suspend
+    REQUIRE_FALSE(task.is_ready());
+
+    task.resume(); // third internal suspend
+    REQUIRE(task.is_ready());
+}
+
+TEST_CASE("task multiple suspends return integer")
+{
+    auto task = []() -> coro::task<int>
+    {
+        co_await std::suspend_always{};
+        co_await std::suspend_always{};
+        co_await std::suspend_always{};
+        co_return 11;
+    }();
+
+    task.resume(); // initial suspend
+    REQUIRE_FALSE(task.is_ready());
+
+    task.resume(); // first internal suspend
+    REQUIRE_FALSE(task.is_ready());
+
+    task.resume(); // second internal suspend
+    REQUIRE_FALSE(task.is_ready());
+
+    task.resume(); // third internal suspend
+    REQUIRE(task.is_ready());
+    REQUIRE(task.promise().result() == 11);
+}

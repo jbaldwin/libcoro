@@ -24,7 +24,7 @@ target_link_libraries(${PROJECT_NAME} PUBLIC zmq pthread)
 if(${CMAKE_CXX_COMPILER_ID} MATCHES "GNU")
     target_compile_options(${PROJECT_NAME} PUBLIC -fcoroutines)
 elseif(${CMAKE_CXX_COMPILER_ID} MATCHES "Clang")
-    target_compile_options(${PROJECT_NAME} PUBLIC -fcoroutines-ts)
+    target_compile_options(${PROJECT_NAME} PUBLIC -fcoroutines -fcoroutines-ts)
 endif()
 
 

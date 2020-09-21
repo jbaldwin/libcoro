@@ -191,7 +191,7 @@ public:
     {
         if(std::addressof(other) != this)
         {
-            if(m_coroutine)
+            if(m_coroutine != nullptr)
             {
                 m_coroutine.destroy();
             }
@@ -199,6 +199,8 @@ public:
             m_coroutine = other.m_coroutine;
             other.m_coroutine = nullptr;
         }
+
+        return *this;
     }
 
     /**
