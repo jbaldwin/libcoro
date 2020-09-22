@@ -174,3 +174,77 @@ TEST_CASE("task multiple suspends return integer")
     REQUIRE(task.is_ready());
     REQUIRE(task.promise().result() == 11);
 }
+
+TEST_CASE("task multiple suspends return integer with sync_wait")
+{
+    auto func = []() -> coro::task<int>
+    {
+        co_await std::suspend_always{};
+        co_await std::suspend_always{};
+        co_await std::suspend_always{};
+        co_return 11;
+    };
+
+    auto result = coro::sync_wait(func);
+    REQUIRE(result == 11);
+}
+
+TEST_CASE("task co_await single")
+{
+    auto answer = []() -> coro::task<int>
+    {
+        std::cerr << "\tThinking deep thoughts...\n";
+        co_return 42;
+    };
+
+    auto await_answer = [&]() -> coro::task<int>
+    {
+        std::cerr << "\tStarting to wait for answer.\n";
+        auto a = answer();
+        std::cerr << "\tGot the coroutine, getting the value.\n";
+        auto v = co_await a;
+        std::cerr << "\tCoroutine value is " << v << "\n";
+        REQUIRE(v == 42);
+        v = co_await a;
+        std::cerr << "\tValue is still " << v << "\n";
+        REQUIRE(v == 42);
+        co_return 1337;
+    };
+
+    auto output = coro::sync_wait(await_answer);
+    REQUIRE(output == 1337);
+}
+
+TEST_CASE("task resume from promise to coroutine handles of different types")
+{
+    auto task1 = [&]() -> coro::task<int>
+    {
+        std::cerr << "Task ran\n";
+        co_return 42;
+    }();
+
+    auto task2 = [&]() -> coro::task<void>
+    {
+        std::cerr << "Task 2 ran\n";
+        co_return;
+    }();
+
+    // task.resume();  normal method of resuming
+
+    std::vector<std::coroutine_handle<>> handles;
+
+    handles.emplace_back(std::coroutine_handle<coro::task<int>::promise_type>::from_promise(task1.promise()));
+    handles.emplace_back(std::coroutine_handle<coro::task<void>::promise_type>::from_promise(task2.promise()));
+
+    auto& coro_handle1 = handles[0];
+    coro_handle1.resume();
+    auto& coro_handle2 = handles[1];
+    coro_handle2.resume();
+
+    REQUIRE(task1.is_ready());
+    REQUIRE(coro_handle1.done());
+    REQUIRE(task1.promise().result() == 42);
+
+    REQUIRE(task2.is_ready());
+    REQUIRE(coro_handle2.done());
+}

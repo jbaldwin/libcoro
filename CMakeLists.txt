@@ -11,6 +11,7 @@ set(LIBCORO_SOURCE_FILES
     src/coro/async_manual_reset_event.hpp
     src/coro/coro.hpp
     src/coro/engine.hpp src/coro/engine.cpp
+    src/coro/sync_wait.hpp
     src/coro/task.hpp
 )
 

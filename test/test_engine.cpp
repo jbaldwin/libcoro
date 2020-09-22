@@ -9,13 +9,23 @@
 #include <fcntl.h>
 
 using namespace std::chrono_literals;
-using task_type = coro::engine::task_type;
 
 TEST_CASE("engine submit single functor")
 {
     std::atomic<uint64_t> counter{0};
     coro::engine e{};
-    e.execute([&]() -> task_type { counter++; co_return; }());
+
+    auto task = [&]() -> coro::task<void>
+    {
+        std::cerr << "Hello world from engine task!\n";
+        counter++;
+        co_return;
+    }();
+
+    e.execute(task);
+
+    // while(counter != 1) std::this_thread::sleep_for(1ms);
+
     e.shutdown();
 
     REQUIRE(counter == 1);
@@ -27,10 +37,14 @@ TEST_CASE("engine submit mutiple tasks")
     std::atomic<uint64_t> counter{0};
     coro::engine e{};
 
-    auto func = [&]() -> task_type { counter++; co_return; };
+    std::vector<coro::task<void>> tasks{};
+    tasks.reserve(n);
+
+    auto func = [&]() -> coro::task<void> { counter++; co_return; };
     for(std::size_t i = 0; i < n; ++i)
     {
-        e.execute(func());
+        tasks.emplace_back(func());
+        e.execute(tasks.back());
     }
     e.shutdown();
 
@@ -39,31 +53,35 @@ TEST_CASE("engine submit mutiple tasks")
 
 TEST_CASE("engine task with multiple suspends and manual resumes")
 {
-    std::atomic<coro::engine_task_id_type> task_id{0};
+    // std::atomic<coro::engine_task_id_type> task_id{0};
     std::atomic<uint64_t> counter{0};
-
     coro::engine e{};
+
+    auto task = [&]() -> coro::task<void>
+    {
+        std::cerr << "1st suspend\n";
+        co_await std::suspend_always{};
+        ++counter;
+        std::cerr << "never suspend\n";
+        co_await std::suspend_never{};
+        std::cerr << "2nd suspend\n";
+        co_await std::suspend_always{};
+        ++counter;
+        std::cerr << "3rd suspend\n";
+        co_await std::suspend_always{};
+        ++counter;
+        co_return;
+    }();
+
     auto resume_task = [&](int expected) {
-        e.resume(task_id);
+        e.resume(task.handle());
         while(counter != expected)
         {
             std::this_thread::sleep_for(1ms);
         }
     };
 
-    auto task = [&]() -> task_type
-    {
-        co_await std::suspend_always{};
-        ++counter;
-        co_await std::suspend_never{};
-        co_await std::suspend_always{};
-        ++counter;
-        co_await std::suspend_always{};
-        ++counter;
-        co_return;
-    }();
-
-    e.execute(std::move(task));
+    e.execute(task);
 
     resume_task(1);
     resume_task(2);
@@ -77,14 +95,15 @@ TEST_CASE("engine task with read poll")
     auto trigger_fd = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
     coro::engine e{};
 
-    auto task = [&]() -> task_type
+    auto task = [&]() -> coro::task<void>
     {
         // Poll will block until there is data to read.
         co_await e.poll(trigger_fd, coro::await_op::read);
+        REQUIRE(true);
         co_return;
     }();
 
-    e.execute(std::move(task));
+    e.execute(task);
 
     uint64_t value{42};
     write(trigger_fd, &value, sizeof(value));
@@ -99,7 +118,7 @@ TEST_CASE("engine task with read")
     auto trigger_fd = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
     coro::engine e{};
 
-    auto task = [&]() -> task_type
+    auto task = [&]() -> coro::task<void>
     {
         uint64_t val{0};
         auto bytes_read = co_await e.read(
@@ -112,7 +131,7 @@ TEST_CASE("engine task with read")
         co_return;
     }();
 
-    e.execute(std::move(task));
+    e.execute(task);
 
     write(trigger_fd, &expected_value, sizeof(expected_value));
 
@@ -132,7 +151,7 @@ TEST_CASE("engine task with read and write same fd")
     auto trigger_fd = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
     coro::engine e{};
 
-    auto task = [&]() -> task_type
+    auto task = [&]() -> coro::task<void>
     {
         auto bytes_written = co_await e.write(
             trigger_fd,
@@ -152,7 +171,7 @@ TEST_CASE("engine task with read and write same fd")
         co_return;
     }();
 
-    e.execute(std::move(task));
+    e.execute(task);
 
     e.shutdown();
     close(trigger_fd);
@@ -166,7 +185,7 @@ TEST_CASE("engine task with read and write pipe")
 
     coro::engine e{};
 
-    auto read_task = [&]() -> task_type
+    auto read_task = [&]() -> coro::task<void>
     {
         std::string buffer(4096, '0');
         std::span<char> view{buffer.data(), buffer.size()};
@@ -176,15 +195,15 @@ TEST_CASE("engine task with read and write pipe")
         REQUIRE(buffer == msg);
     }();
 
-    auto write_task = [&]() -> task_type
+    auto write_task = [&]() -> coro::task<void>
     {
         std::span<const char> view{msg.data(), msg.size()};
         auto bytes_written = co_await e.write(pipe_fd[1], view);
         REQUIRE(bytes_written == msg.size());
     }();
 
-    e.execute(std::move(read_task));
-    e.execute(std::move(write_task));
+    e.execute(read_task);
+    e.execute(write_task);
 
     e.shutdown();
     close(pipe_fd[0]);
@@ -195,7 +214,7 @@ static auto standalone_read(
     coro::engine& e,
     coro::engine::socket_type socket,
     std::span<char> buffer
-) -> coro::engine_task<ssize_t>
+) -> coro::task<ssize_t>
 {
     // do other stuff in larger function
     co_return co_await e.read(socket, buffer);
@@ -208,7 +227,7 @@ TEST_CASE("engine standalone read task")
     auto trigger_fd = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
     coro::engine e{};
 
-    auto task = [&]() -> task_type
+    auto task = [&]() -> coro::task<void>
     {
         ssize_t v{0};
         auto bytes_read = co_await standalone_read(e, trigger_fd, std::span<char>(reinterpret_cast<char*>(&v), sizeof(v)));
@@ -218,7 +237,7 @@ TEST_CASE("engine standalone read task")
         co_return;
     }();
 
-    e.execute(std::move(task));
+    e.execute(task);
 
     write(trigger_fd, &expected_value, sizeof(expected_value));
 
@@ -228,7 +247,7 @@ TEST_CASE("engine standalone read task")
 
 TEST_CASE("engine separate thread resume")
 {
-    coro::engine_task_id_type task_id;
+    std::coroutine_handle<> handle;
     coro::engine e{};
 
     // This lambda will mimic a 3rd party service which will execute on a service on
@@ -239,20 +258,20 @@ TEST_CASE("engine separate thread resume")
         std::thread third_party_thread([&]() -> void {
             // mimic some expensive computation
             // std::this_thread::sleep_for(1s);
-            std::cerr << "task_id=" << task_id << "\n";
-            e.resume(task_id);
+            e.resume(handle);
         });
         third_party_thread.detach();
         return std::suspend_always{};
     };
 
-    auto task = [&]() -> task_type
+    auto task = [&]() -> coro::task<void>
     {
         co_await third_party_service();
         REQUIRE(true);
     }();
+    handle = task.handle();
 
-    task_id = e.execute(std::move(task));
+    e.execute(task);
     e.shutdown();
 }
 
@@ -264,7 +283,7 @@ TEST_CASE("engine separate thread resume with return")
     struct shared_data
     {
         std::atomic<bool> ready{false};
-        std::optional<coro::engine_task_id_type> task_id{};
+        std::optional<std::coroutine_handle<>> handle{};
         uint64_t output{0};
     } data{};
 
@@ -277,25 +296,51 @@ TEST_CASE("engine separate thread resume with return")
             }
 
             data.output = expected_value;
-            e.resume(data.task_id.value());
+            e.resume(data.handle.value());
         }
     };
 
-    auto third_party_service = [&](int multiplier) -> coro::engine_task<uint64_t>
+    auto third_party_service = [&](int multiplier) -> coro::task<uint64_t>
     {
-        co_await e.suspend([&](auto task_id) { data.task_id = task_id; data.ready = true; });
+        co_await e.suspend([&](std::coroutine_handle<> handle) {
+            data.handle = handle;
+            data.ready = true;
+        });
         co_return data.output * multiplier;
     };
 
-    auto task = [&]() -> task_type
+    auto task = [&]() -> coro::task<void>
     {
         int multiplier{5};
         uint64_t value = co_await third_party_service(multiplier);
         REQUIRE(value == (expected_value * multiplier));
     }();
 
-    e.execute(std::move(task));
+    e.execute(task);
 
-    e.shutdown();
     service.join();
+    e.shutdown();
+}
+
+TEST_CASE("engine with normal task")
+{
+    constexpr std::size_t expected_value{5};
+    std::atomic<uint64_t> counter{0};
+    coro::engine e{};
+
+    auto add_data = [&](uint64_t val) -> coro::task<int>
+    {
+        co_return val;
+    };
+
+    auto task1 = [&]() -> coro::task<void>
+    {
+        counter += co_await add_data(expected_value);
+        co_return;
+    }();
+
+    e.execute(task1);
+    e.shutdown();
+
+    REQUIRE(counter == expected_value);
 }

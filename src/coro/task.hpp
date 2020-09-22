@@ -125,7 +125,10 @@ struct promise<void> : public promise_base
 
     auto get_return_object() noexcept -> task_type;
 
-    auto return_void() -> void { }
+    auto return_void() -> void
+    {
+
+    }
 
     auto result() const -> void
     {
@@ -184,6 +187,14 @@ public:
         : m_coroutine(other.m_coroutine)
     {
         other.m_coroutine = nullptr;
+    }
+
+    ~task()
+    {
+        if(m_coroutine != nullptr)
+        {
+            m_coroutine.destroy();
+        }
     }
 
     auto operator=(const task&) -> task& = delete;
@@ -245,8 +256,24 @@ public:
         return awaitable{m_coroutine};
     }
 
-    auto promise() const & -> const promise_type& { return m_coroutine.promise(); }
-    auto promise() && -> promise_type&& { return std::move(m_coroutine.promise()); }
+    auto promise() & -> promise_type&
+    {
+        return m_coroutine.promise();
+    }
+
+    auto promise() const & -> const promise_type&
+    {
+        return m_coroutine.promise();
+    }
+    auto promise() && -> promise_type&&
+    {
+        return std::move(m_coroutine.promise());
+    }
+
+    auto handle() -> coro_handle
+    {
+        return m_coroutine;
+    }
 
 private:
     coro_handle m_coroutine{nullptr};
