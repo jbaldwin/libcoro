@@ -51,40 +51,49 @@ TEST_CASE("engine submit mutiple tasks")
     REQUIRE(counter == n);
 }
 
-TEST_CASE("engine task with multiple yields and manual resumes")
+TEST_CASE("engine task with multiple yields on event")
 {
     std::atomic<uint64_t> counter{0};
     coro::engine e{};
+    coro::engine_event<uint64_t> event1{e};
+    coro::engine_event<uint64_t> event2{e};
+    coro::engine_event<uint64_t> event3{e};
 
     auto task = [&]() -> coro::task<void>
     {
         std::cerr << "1st suspend\n";
-        co_await std::suspend_always{};
-        ++counter;
+        co_await e.yield(event1);
+        std::cerr << "1st resume\n";
+        counter += event1.result();
         std::cerr << "never suspend\n";
         co_await std::suspend_never{};
         std::cerr << "2nd suspend\n";
-        co_await std::suspend_always{};
-        ++counter;
+        co_await e.yield(event2);
+        std::cerr << "2nd resume\n";
+        counter += event2.result();
         std::cerr << "3rd suspend\n";
-        co_await std::suspend_always{};
-        ++counter;
+        co_await e.yield(event3);
+        std::cerr << "3rd resume\n";
+        counter += event3.result();
         co_return;
     }();
 
-    auto resume_task = [&](int expected) {
-        e.resume(task.handle());
+    auto resume_task = [&](coro::engine_event<uint64_t>& event, int expected) {
+        event.set(1);
         while(counter != expected)
         {
+            std::cerr << "counter=" << counter << "\n";
             std::this_thread::sleep_for(1ms);
         }
     };
 
     e.execute(task);
 
-    resume_task(1);
-    resume_task(2);
-    resume_task(3);
+    resume_task(event1, 1);
+    resume_task(event2, 2);
+    resume_task(event3, 3);
+
+    e.shutdown();
 
     REQUIRE(e.empty());
 }
@@ -246,29 +255,31 @@ TEST_CASE("engine standalone read task")
 
 TEST_CASE("engine separate thread resume")
 {
-    std::coroutine_handle<> handle;
     coro::engine e{};
 
-    // This lambda will mimic a 3rd party service which will execute on a service on
-    // a background thread;
-    auto third_party_service = [&]() -> std::suspend_always
+    // This lambda will mimic a 3rd party service which will execute on a service on a background thread.
+    // Uses the passed event handle to resume execution of the awaiting corountine on the engine.
+    auto third_party_service = [](coro::engine_event<void>& handle) -> coro::task<void>
     {
         // Normally this thread is probably already running for real world use cases.
-        std::thread third_party_thread([&]() -> void {
+        std::thread third_party_thread([](coro::engine_event<void>& h) -> void {
             // mimic some expensive computation
             // std::this_thread::sleep_for(1s);
-            e.resume(handle);
-        });
+            h.set();
+        }, std::ref(handle));
+
         third_party_thread.detach();
-        return std::suspend_always{};
+
+        co_await handle;
+        co_return;
     };
 
     auto task = [&]() -> coro::task<void>
     {
-        co_await third_party_service();
+        coro::engine_event<void> handle{e};
+        co_await third_party_service(handle);
         REQUIRE(true);
     }();
-    handle = task.handle();
 
     e.execute(task);
     e.shutdown();
@@ -345,7 +356,7 @@ TEST_CASE("engine trigger growth of internal tasks storage")
 
     auto wait_func = [&](uint64_t id, std::chrono::milliseconds wait_time) -> coro::task<void>
     {
-        co_await e.wait(wait_time);
+        co_await e.yield_for(wait_time);
         ++counter;
         co_return;
     };
@@ -373,7 +384,6 @@ TEST_CASE("engine yield with engine event void")
         co_await e.yield<void>(
             [&](coro::engine_event<void>& event) -> void
             {
-                e.wait(std::chrono::milliseconds{10});
                 event.set();
             }
         );
@@ -399,7 +409,6 @@ TEST_CASE("engine yield with engine event uint64_t")
         counter += co_await e.yield<uint64_t>(
             [&](coro::engine_event<uint64_t>& event) -> void
             {
-                e.wait(std::chrono::milliseconds{10});
                 event.set(42);
             }
         );
@@ -412,4 +421,24 @@ TEST_CASE("engine yield with engine event uint64_t")
     e.shutdown();
 
     REQUIRE(counter == 42);
+}
+
+TEST_CASE("engine yield user provided event")
+{
+    std::string expected_result = "Here I am!";
+    coro::engine e{};
+    coro::engine_event<std::string> event{e};
+
+    auto task = [&]() -> coro::task<void>
+    {
+        co_await e.yield(event);
+        REQUIRE(event.result() == expected_result);
+        co_return;
+    }();
+
+    e.execute(task);
+
+    event.set(expected_result);
+
+    e.shutdown();
 }

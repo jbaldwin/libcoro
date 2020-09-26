@@ -33,6 +33,8 @@ namespace coro
 
 class engine;
 
+namespace detail
+{
 class engine_event_base
 {
 public:
@@ -120,12 +122,20 @@ protected:
     mutable std::atomic<void*> m_state;
 };
 
+} // namespace detail
+
 template<typename return_type>
-class engine_event final : public engine_event_base
+class engine_event final : public detail::engine_event_base
 {
+    friend engine;
+    engine_event()
+        : detail::engine_event_base(nullptr)
+    {
+
+    }
 public:
-    engine_event(engine* eng)
-        : engine_event_base(eng)
+    engine_event(engine& eng)
+        : detail::engine_event_base(&eng)
     {
 
     }
@@ -147,11 +157,17 @@ private:
 };
 
 template<>
-class engine_event<void> final : public engine_event_base
+class engine_event<void> final : public detail::engine_event_base
 {
+    friend engine;
+    engine_event()
+        : detail::engine_event_base(nullptr)
+    {
+
+    }
 public:
-    engine_event(engine* eng)
-        : engine_event_base(eng)
+    engine_event(engine& eng)
+        : detail::engine_event_base(&eng)
     {
 
     }
@@ -162,13 +178,19 @@ public:
 
 enum class poll_op
 {
+    /// Poll for read operations.
     read = EPOLLIN,
+    /// Poll for write operations.
     write = EPOLLOUT,
+    /// Poll for read and write operations.
     read_write = EPOLLIN | EPOLLOUT
 };
 
 class engine
 {
+    template<typename return_type>
+    friend class engine_event;
+
 public:
     using fd_type = int;
 
@@ -311,7 +333,7 @@ public:
     template<typename return_type, std::invocable<engine_event<return_type>&> before_functor>
     auto yield(before_functor before) -> coro::task<return_type>
     {
-        engine_event<return_type> e{this};
+        engine_event<return_type> e{*this};
         before(e);
         co_await e;
         if constexpr (std::is_same_v<return_type, void>)
@@ -324,39 +346,11 @@ public:
         }
     }
 
-    template<typename return_type, std::invocable<engine_event<return_type>&> before_functor>
-    auto unsafe_yield(before_functor before) -> coro::task<return_type>
+    template<typename return_type>
+    auto yield(engine_event<return_type>& e) -> coro::task<void>
     {
-        engine_event<return_type> e{nullptr};
-        before(e);
         co_await e;
-        if constexpr (std::is_same_v<return_type, void>)
-        {
-            co_return;
-        }
-        else
-        {
-            co_return e.result();
-        }
-    }
-
-    /**
-     * Resumes a yield'ed task manually.  The use case is to first call `engine.yield()` and
-     * co_await the manual yield point to pause execution of that task.  Then later on another
-     * thread, probably a 3rd party service, call `engine.resume(handle)` to resume execution of
-     * the task that was previously yield'ed with the 3rd party services result.
-     * @param handle The task to resume its execution from its current yield point.
-     */
-    auto resume(std::coroutine_handle<> handle) -> void
-    {
-        {
-            std::lock_guard<std::mutex> lock{m_mutex};
-            m_resume_tasks.emplace_back(handle);
-        }
-
-        // Signal to the event loop there is a task to resume.
-        uint64_t value{1};
-        ::write(m_submit_fd, &value, sizeof(value));
+        co_return;
     }
 
     /**
@@ -364,7 +358,7 @@ public:
      * @throw std::runtime_error If the internal system failed to setup required resources to wait.
      * @param amount The amount of time to wait.
      */
-    auto wait(std::chrono::milliseconds amount) -> coro::task<void>
+    auto yield_for(std::chrono::milliseconds amount) -> coro::task<void>
     {
         fd_type timer_fd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC);
         if(timer_fd == -1)
@@ -458,6 +452,34 @@ private:
     std::vector<std::coroutine_handle<>> m_resume_tasks{};
 
     std::atomic<std::size_t> m_size{0};
+
+    template<typename return_type, std::invocable<engine_event<return_type>&> before_functor>
+    auto unsafe_yield(before_functor before) -> coro::task<return_type>
+    {
+        engine_event<return_type> e{};
+        before(e);
+        co_await e;
+        if constexpr (std::is_same_v<return_type, void>)
+        {
+            co_return;
+        }
+        else
+        {
+            co_return e.result();
+        }
+    }
+
+    auto resume(std::coroutine_handle<> handle) -> void
+    {
+        {
+            std::lock_guard<std::mutex> lock{m_mutex};
+            m_resume_tasks.emplace_back(handle);
+        }
+
+        // Signal to the event loop there is a task to resume.
+        uint64_t value{1};
+        ::write(m_submit_fd, &value, sizeof(value));
+    }
 
     auto run(const std::size_t growth_size) -> void
     {
