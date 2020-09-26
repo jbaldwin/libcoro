@@ -51,9 +51,8 @@ TEST_CASE("engine submit mutiple tasks")
     REQUIRE(counter == n);
 }
 
-TEST_CASE("engine task with multiple suspends and manual resumes")
+TEST_CASE("engine task with multiple yields and manual resumes")
 {
-    // std::atomic<coro::engine_task_id_type> task_id{0};
     std::atomic<uint64_t> counter{0};
     coro::engine e{};
 
@@ -98,7 +97,7 @@ TEST_CASE("engine task with read poll")
     auto task = [&]() -> coro::task<void>
     {
         // Poll will block until there is data to read.
-        co_await e.poll(trigger_fd, coro::await_op::read);
+        co_await e.poll(trigger_fd, coro::poll_op::read);
         REQUIRE(true);
         co_return;
     }();
@@ -212,7 +211,7 @@ TEST_CASE("engine task with read and write pipe")
 
 static auto standalone_read(
     coro::engine& e,
-    coro::engine::socket_type socket,
+    coro::engine::fd_type socket,
     std::span<char> buffer
 ) -> coro::task<ssize_t>
 {
@@ -302,7 +301,7 @@ TEST_CASE("engine separate thread resume with return")
 
     auto third_party_service = [&](int multiplier) -> coro::task<uint64_t>
     {
-        co_await e.suspend([&](std::coroutine_handle<> handle) {
+        co_await e.yield([&](std::coroutine_handle<> handle) {
             data.handle = handle;
             data.ready = true;
         });
@@ -343,4 +342,30 @@ TEST_CASE("engine with normal task")
     e.shutdown();
 
     REQUIRE(counter == expected_value);
+}
+
+TEST_CASE("engine trigger growth of internal tasks storage")
+{
+    std::atomic<uint64_t> counter{0};
+    constexpr std::size_t iterations{512};
+    coro::engine e{1};
+
+    auto wait_func = [&](uint64_t id, std::chrono::milliseconds wait_time) -> coro::task<void>
+    {
+        co_await e.wait(wait_time);
+        ++counter;
+        co_return;
+    };
+
+    std::vector<coro::task<void>> tasks{};
+    tasks.reserve(iterations);
+    for(std::size_t i = 0; i < iterations; ++i)
+    {
+        tasks.emplace_back(wait_func(i, std::chrono::milliseconds{50}));
+        e.execute(tasks.back());
+    }
+
+    e.shutdown();
+
+    REQUIRE(counter == iterations);
 }
