@@ -11,6 +11,7 @@
 #include <span>
 #include <type_traits>
 #include <list>
+#include <variant>
 
 #include <sys/epoll.h>
 #include <sys/eventfd.h>
@@ -29,6 +30,135 @@
 
 namespace coro
 {
+
+class engine;
+
+class engine_event_base
+{
+public:
+    engine_event_base(engine* eng) noexcept
+        :   m_engine(eng),
+            m_state(nullptr)
+    {
+    }
+
+    virtual ~engine_event_base() = default;
+
+    engine_event_base(const engine_event_base&) = delete;
+    engine_event_base(engine_event_base&&) = delete;
+    auto operator=(const engine_event_base&) -> engine_event_base& = delete;
+    auto operator=(engine_event_base&&) -> engine_event_base& = delete;
+
+    bool is_set() const noexcept
+    {
+        return m_state.load(std::memory_order_acquire) == this;
+    }
+
+    struct awaiter
+    {
+        awaiter(const engine_event_base& event) noexcept
+            : m_event(event)
+        {
+
+        }
+
+        auto await_ready() const noexcept -> bool
+        {
+            return m_event.is_set();
+        }
+
+        auto await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept -> bool
+        {
+            const void* const set_state = &m_event;
+
+            m_awaiting_coroutine = awaiting_coroutine;
+
+            // This value will update if other threads write to it via acquire.
+            void* old_value = m_event.m_state.load(std::memory_order_acquire);
+            do
+            {
+                // Resume immediately if already in the set state.
+                if(old_value == set_state)
+                {
+                    return false;
+                }
+
+                m_next = static_cast<awaiter*>(old_value);
+            } while(!m_event.m_state.compare_exchange_weak(
+                old_value,
+                this,
+                std::memory_order_release,
+                std::memory_order_acquire));
+
+            return true;
+        }
+
+        auto await_resume() noexcept
+        {
+
+        }
+
+        const engine_event_base& m_event;
+        std::coroutine_handle<> m_awaiting_coroutine;
+        awaiter* m_next{nullptr};
+    };
+
+    auto operator co_await() const noexcept -> awaiter
+    {
+        return awaiter{*this};
+    }
+
+    auto reset() noexcept -> void
+    {
+        void* old_value = this;
+        m_state.compare_exchange_strong(old_value, nullptr, std::memory_order_acquire);
+    }
+
+protected:
+    friend struct awaiter;
+    engine* m_engine{nullptr};
+    mutable std::atomic<void*> m_state;
+};
+
+template<typename return_type>
+class engine_event final : public engine_event_base
+{
+public:
+    engine_event(engine* eng)
+        : engine_event_base(eng)
+    {
+
+    }
+    ~engine_event() override = default;
+
+    auto set(return_type result) noexcept -> void;
+
+    auto result() const & -> const return_type&
+    {
+        return m_result;
+    }
+
+    auto result() && -> return_type&&
+    {
+        return std::move(m_result);
+    }
+private:
+    return_type m_result;
+};
+
+template<>
+class engine_event<void> final : public engine_event_base
+{
+public:
+    engine_event(engine* eng)
+        : engine_event_base(eng)
+    {
+
+    }
+    ~engine_event() override = default;
+
+    auto set() noexcept -> void;
+};
 
 enum class poll_op
 {
@@ -117,19 +247,17 @@ public:
 
     auto poll(fd_type fd, poll_op op) -> coro::task<void>
     {
-        co_await yield(
-            [&](std::coroutine_handle<> handle)
+        co_await unsafe_yield<void>(
+            [&](engine_event<void>& event)
             {
                 struct epoll_event e{};
                 e.events = static_cast<uint32_t>(op) | EPOLLONESHOT | EPOLLET;
-                e.data.ptr = handle.address();
+                e.data.ptr = &event;
                 epoll_ctl(m_epoll_fd, EPOLL_CTL_ADD, fd, &e);
-            },
-            [&]()
-            {
-                epoll_ctl(m_epoll_fd, EPOLL_CTL_DEL, fd, nullptr);
             }
         );
+
+        epoll_ctl(m_epoll_fd, EPOLL_CTL_DEL, fd, nullptr);
     }
 
     /**
@@ -160,13 +288,16 @@ public:
     }
 
     /**
-     * Immediately yields the current task and provides the coroutine handle that the user should
-     * call `engine.resume(handle)` with via the functor_before parameter.
+     * Immediately yields the current task and provides an event to set when the async operation
+     * being yield'ed to has completed.
+     *
      * Normal usage of this might look like:
-     *      engine.yield([&](std::coroutine_handle<> handle) {
-     *          auto on_service_complete = [&]() { engine.resume(handle); };
-     *          service.execute(on_service_complete);
-     *      });
+     *  \code
+           engine.yield([](coro::engine_event<void>& e) {
+               auto on_service_complete = [&]() { e.set(); };
+               service.execute(on_service_complete);
+           });
+     *  \endcode
      * The above example will yield the current task and then through the 3rd party service's
      * on complete callback function let the engine know that it should resume execution of the task.
      *
@@ -177,40 +308,36 @@ public:
      * @param f Immediately invoked functor with the yield point coroutine handle to resume with.
      * @return A task to co_await until the manual `engine::resume(handle)` is called.
      */
-    template<std::invocable<std::coroutine_handle<>> functor_before>
-    auto yield(functor_before before) -> coro::task<void>
+    template<typename return_type, std::invocable<engine_event<return_type>&> before_functor>
+    auto yield(before_functor before) -> coro::task<return_type>
     {
-        auto task = yield();
-        auto coro_handle = std::coroutine_handle<coro::task<void>::promise_type>::from_promise(task.promise());
-        before(coro_handle);
-        co_await task;
-        co_return;
-    }
-
-    template<std::invocable<std::coroutine_handle<>> functor_before, std::invocable functor_after>
-    auto yield(functor_before before, functor_after after) -> coro::task<void>
-    {
-        auto task = yield();
-        auto coro_handle = std::coroutine_handle<coro::task<void>::promise_type>::from_promise(task.promise());
-        before(coro_handle);
-        co_await task;
-        after();
-        co_return;
-    }
-
-    /**
-     * Creates a yield point that can later be resumed by another thread.
-     * @return A reference to the task to `co_await yield` on and the task's ID to call
-     *         `engine.resume(handle)` from another thread to resume execution at this yield
-     *         point.
-     */
-    auto yield() -> coro::task<void>
-    {
-        return []() -> coro::task<void>
+        engine_event<return_type> e{this};
+        before(e);
+        co_await e;
+        if constexpr (std::is_same_v<return_type, void>)
         {
-            co_await std::suspend_always{};
             co_return;
-        }();
+        }
+        else
+        {
+            co_return e.result();
+        }
+    }
+
+    template<typename return_type, std::invocable<engine_event<return_type>&> before_functor>
+    auto unsafe_yield(before_functor before) -> coro::task<return_type>
+    {
+        engine_event<return_type> e{nullptr};
+        before(e);
+        co_await e;
+        if constexpr (std::is_same_v<return_type, void>)
+        {
+            co_return;
+        }
+        else
+        {
+            co_return e.result();
+        }
     }
 
     /**
@@ -428,11 +555,8 @@ private:
                     else
                     {
                         // Individual poll task wake-up.
-                        auto handle = std::coroutine_handle<>::from_address(handle_ptr);
-                        if(!handle.done())
-                        {
-                            handle.resume();
-                        }
+                        auto* event_ptr = static_cast<engine_event<void>*>(handle_ptr);
+                        event_ptr->set(); // this will resume the coroutine.
                     }
                 }
 
@@ -455,6 +579,57 @@ private:
         m_is_running = false;
     }
 };
+
+template<typename return_type>
+inline auto engine_event<return_type>::set(return_type result) noexcept -> void
+{
+    void* old_value = m_state.exchange(this, std::memory_order_acq_rel);
+    if(old_value != this)
+    {
+        m_result = std::move(result);
+
+        auto* waiters = static_cast<awaiter*>(old_value);
+        while(waiters != nullptr)
+        {
+            auto* next = waiters->m_next;
+            // If engine is nullptr this is an unsafe_yield()
+            // If engine is present this is a yield()
+            if(m_engine == nullptr)
+            {
+                waiters->m_awaiting_coroutine.resume();
+            }
+            else
+            {
+                m_engine->resume(waiters->m_awaiting_coroutine);
+            }
+            waiters = next;
+        }
+    }
+}
+
+inline auto engine_event<void>::set() noexcept -> void
+{
+    void* old_value = m_state.exchange(this, std::memory_order_acq_rel);
+    if(old_value != this)
+    {
+        auto* waiters = static_cast<awaiter*>(old_value);
+        while(waiters != nullptr)
+        {
+            auto* next = waiters->m_next;
+            // If engine is nullptr this is an unsafe_yield()
+            // If engine is present this is a yield()
+            if(m_engine == nullptr)
+            {
+                waiters->m_awaiting_coroutine.resume();
+            }
+            else
+            {
+                m_engine->resume(waiters->m_awaiting_coroutine);
+            }
+            waiters = next;
+        }
+    }
+}
 
 } // namespace coro
 

@@ -279,33 +279,26 @@ TEST_CASE("engine separate thread resume with return")
     constexpr uint64_t expected_value{1337};
     coro::engine e{};
 
-    struct shared_data
-    {
-        std::atomic<bool> ready{false};
-        std::optional<std::coroutine_handle<>> handle{};
-        uint64_t output{0};
-    } data{};
+    std::atomic<coro::engine_event<uint64_t>*> event{};
 
     std::thread service{
         [&]() -> void
         {
-            while(!data.ready)
+            while(event == nullptr)
             {
                 std::this_thread::sleep_for(1ms);
             }
 
-            data.output = expected_value;
-            e.resume(data.handle.value());
+            event.load()->set(expected_value);
         }
     };
 
     auto third_party_service = [&](int multiplier) -> coro::task<uint64_t>
     {
-        co_await e.yield([&](std::coroutine_handle<> handle) {
-            data.handle = handle;
-            data.ready = true;
+        auto output = co_await e.yield<uint64_t>([&](coro::engine_event<uint64_t>& ev) {
+            event = &ev;
         });
-        co_return data.output * multiplier;
+        co_return output * multiplier;
     };
 
     auto task = [&]() -> coro::task<void>
@@ -368,4 +361,55 @@ TEST_CASE("engine trigger growth of internal tasks storage")
     e.shutdown();
 
     REQUIRE(counter == iterations);
+}
+
+TEST_CASE("engine yield with engine event void")
+{
+    std::atomic<uint64_t> counter{0};
+    coro::engine e{};
+
+    auto task = [&]() -> coro::task<void>
+    {
+        co_await e.yield<void>(
+            [&](coro::engine_event<void>& event) -> void
+            {
+                e.wait(std::chrono::milliseconds{10});
+                event.set();
+            }
+        );
+
+        counter += 42;
+        co_return;
+    }();
+
+    e.execute(task);
+
+    e.shutdown();
+
+    REQUIRE(counter == 42);
+}
+
+TEST_CASE("engine yield with engine event uint64_t")
+{
+    std::atomic<uint64_t> counter{0};
+    coro::engine e{};
+
+    auto task = [&]() -> coro::task<void>
+    {
+        counter += co_await e.yield<uint64_t>(
+            [&](coro::engine_event<uint64_t>& event) -> void
+            {
+                e.wait(std::chrono::milliseconds{10});
+                event.set(42);
+            }
+        );
+
+        co_return;
+    }();
+
+    e.execute(task);
+
+    e.shutdown();
+
+    REQUIRE(counter == 42);
 }
