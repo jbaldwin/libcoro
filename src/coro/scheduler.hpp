@@ -248,10 +248,9 @@ public:
     }
 
     // TODO:
-    // 1) Have schedule take ownership of task rather than forcing the user to maintain lifetimes.
-    // 2) schedule_afer(task, chrono<REP, RATIO>)
+    // 1) schedule_afer(task, chrono<REP, RATIO>)
 
-    auto schedule(coro::task<void>& task) -> bool
+    auto schedule(coro::task<void> task) -> bool
     {
         if(m_shutdown)
         {
@@ -259,11 +258,9 @@ public:
         }
 
         ++m_size;
-        auto coro_handle = std::coroutine_handle<coro::task<void>::promise_type>::from_promise(task.promise());
-
         {
             std::lock_guard<std::mutex> lock{m_mutex};
-            m_submitted_tasks.emplace_back(coro_handle);
+            m_submitted_tasks.emplace_back(std::move(task));
         }
 
         // Signal to the event loop there is a submitted task.
@@ -454,7 +451,8 @@ private:
     std::thread m_background_thread;
 
     std::mutex m_mutex;
-    std::vector<std::coroutine_handle<coro::task<void>::promise_type>> m_submitted_tasks{};
+    std::vector<coro::task<void>> m_submitted_tasks{};
+    // std::vector<std::coroutine_handle<coro::task<void>::promise_type>> m_submitted_tasks{};
     std::vector<std::coroutine_handle<>> m_resume_tasks{};
 
     std::atomic<std::size_t> m_size{0};
@@ -487,52 +485,112 @@ private:
         ::write(m_submit_fd, &value, sizeof(value));
     }
 
-    auto run(const std::size_t growth_size, const double growth_factor) -> void
+    struct task_data
+    {
+        /// The user's task, lifetime is maintained by the scheduler.
+        coro::task<void> m_user_task;
+        /// The post processing cleanup tasks to remove a completed task from the scheduler.
+        coro::task<void> m_cleanup_task;
+    };
+
+    class task_manager
+    {
+    public:
+        using task_pos = std::list<std::size_t>::iterator;
+
+        task_manager(const std::size_t reserve_size, const double growth_factor)
+            : m_growth_factor(growth_factor)
+        {
+            m_tasks.resize(reserve_size);
+            for(std::size_t i = 0; i < reserve_size; ++i)
+            {
+                m_task_indexes.emplace_back(i);
+            }
+            m_free_pos = m_task_indexes.begin();
+        }
+
+        auto store(
+            coro::task<void> user_task
+        ) -> void
+        {
+            // Only grow if completely full and attempting to add more.
+            if(m_free_pos == m_task_indexes.end())
+            {
+                m_free_pos = grow();
+            }
+
+            // Store the user task with its cleanup task to maintain their lifetimes until completed.
+            auto index = *m_free_pos;
+            auto& task_data = *m_tasks.emplace(
+                m_tasks.begin() + index,
+                std::move(user_task),
+                cleanup_func(m_free_pos));
+
+            // Attach the cleanup task to be the continuation after the users task.
+            task_data.m_user_task.promise().set_continuation(task_data.m_cleanup_task.handle());
+
+            // Mark the current used slot as used.
+            std::advance(m_free_pos, 1);
+        }
+
+        auto gc() -> std::size_t
+        {
+            std::size_t deleted{0};
+            if(!m_tasks_to_delete.empty())
+            {
+                for(const auto& pos : m_tasks_to_delete)
+                {
+                    // This doesn't actually 'delete' the task, it'll get overwritten by a new user
+                    // task claims the free space.
+
+                    // Put the deleted position at the end of the free indexes list.
+                    m_task_indexes.splice(m_task_indexes.end(), m_task_indexes, pos);
+                }
+                deleted = m_tasks_to_delete.size();
+                m_tasks_to_delete.clear();
+            }
+            return deleted;
+        }
+
+    private:
+        auto grow() -> task_pos
+        {
+            // Save an index at the current last item.
+            auto last_pos = std::prev(m_task_indexes.end());
+            std::size_t new_size = m_tasks.size() * m_growth_factor;
+            for(std::size_t i = m_tasks.size(); i < new_size; ++i)
+            {
+                m_task_indexes.emplace_back(i);
+            }
+            m_tasks.resize(new_size);
+            // Set the free pos to the item just after the previous last item.
+            return std::next(last_pos);
+        }
+
+        auto cleanup_func(
+            // std::vector<std::list<std::size_t>::iterator>& tasks_to_delete,
+            task_pos pos
+        ) -> coro::task<void>
+        {
+            // Mark this task for deletion, it cannot delete itself.
+            m_tasks_to_delete.push_back(pos);
+            co_return;
+        };
+
+        std::vector<task_data> m_tasks{};
+        std::list<std::size_t> m_task_indexes{};
+        std::vector<task_pos> m_tasks_to_delete{};
+        task_pos m_free_pos{};
+        double m_growth_factor{};
+    };
+
+    auto run(const std::size_t reserve_size, const double growth_factor) -> void
     {
         using namespace std::chrono_literals;
 
         m_is_running = true;
 
-        /**
-         * Each task submitted into the scheduler has a finalize task that is set as the user's
-         * continuation to 'delete' itself from within the scheduler upon its completion.  The
-         * finalize tasks lifetimes are maintained within the vector.  The list of indexes
-         * maintains stable indexes into the vector but are swapped around when tasks complete
-         * as a 'free list'.  This free list is divided into two partitions, used and unused
-         * based on the position of the free_index variable.  When the vector is completely full
-         * it will grow by the given growth size, this might switch to doubling in the future.
-         *
-         * Finally, there is one last vector that takes itereators into the list of indexes, this
-         * final vector is special in that it contains 'dead' tasks to be deleted.  Since a task
-         * cannot actually delete itself (double free/corruption) it marks itself as 'dead' and
-         * the sheduler will free it on the next event loop iteration.
-         */
-
-        std::vector<std::optional<coro::task<void>>> finalize_tasks{};
-        std::list<std::size_t> finalize_indexes{};
-        std::vector<std::list<std::size_t>::iterator> delete_indexes{};
-
-        auto grow = [&]() mutable -> void
-        {
-            std::size_t new_size = finalize_tasks.size() + growth_size;
-            for(size_t i = finalize_tasks.size(); i < new_size; ++i)
-            {
-                finalize_indexes.emplace_back(i);
-            }
-            finalize_tasks.resize(new_size);
-        };
-        grow();
-        auto free_index = finalize_indexes.begin();
-
-        auto completed = [](
-            std::vector<std::list<std::size_t>::iterator>& delete_indexes,
-            std::list<std::size_t>::iterator pos
-        ) -> coro::task<void>
-        {
-            // Mark this task for deletion, it cannot delete itself.
-            delete_indexes.push_back(pos);
-            co_return;
-        };
+        task_manager tm{reserve_size, growth_factor};
 
         constexpr std::chrono::milliseconds timeout{1000};
         constexpr std::size_t max_events = 8;
@@ -553,37 +611,35 @@ private:
                     {
                         uint64_t value{0};
                         ::read(m_submit_fd, &value, sizeof(value));
-                        (void)value; // discard, the read merely reset the eventfd counter in the kernel.
+                        (void)value; // discard, the read merely resets the eventfd counter in the kernel.
 
-                        std::vector<std::coroutine_handle<coro::task<void>::promise_type>> submit_tasks{};
+                        // todo: split into their own tasks? or turn into coroutines which process/execute
+                        //       submitted or resumed tasks?
+                        std::vector<coro::task<void>> submitted_tasks{};
                         std::vector<std::coroutine_handle<>> resume_tasks{};
                         {
                             std::lock_guard<std::mutex> lock{m_mutex};
-                            submit_tasks.swap(m_submitted_tasks);
+                            submitted_tasks.swap(m_submitted_tasks);
                             resume_tasks.swap(m_resume_tasks);
                         }
 
-                        for(std::coroutine_handle<coro::task<void>::promise_type>& handle : submit_tasks)
+                        for(coro::task<void>& task : submitted_tasks)
                         {
-                            if(!handle.done())
+                            if(!task.is_ready()) // sanity check, the user could have manually resumed.
                             {
-                                if(std::next(free_index) == finalize_indexes.end())
+                                // Attempt to process the task synchronously before suspending.
+                                task.resume();
+
+                                if(!task.is_ready())
                                 {
-                                    grow();
+                                    tm.store(std::move(task));
+                                    // This task is now suspended waiting for an event.
                                 }
-
-                                auto pos = free_index;
-                                std::advance(free_index, 1);
-
-                                // Wrap in finalizing task to subtract from m_size.
-                                auto index = *pos;
-                                finalize_tasks[index] = completed(delete_indexes, pos);
-                                auto& task = finalize_tasks[index].value();
-
-                                auto& promise = handle.promise();
-                                promise.set_continuation(task.handle());
-
-                                handle.resume();
+                                else
+                                {
+                                    // This task completed synchronously.
+                                    --m_size;
+                                }
                             }
                         }
 
@@ -603,19 +659,9 @@ private:
                     }
                 }
 
-                // delete everything marked as completed.
-                if(!delete_indexes.empty())
-                {
-                    for(const auto& pos : delete_indexes)
-                    {
-                        std::size_t index = *pos;
-                        finalize_tasks[index] = std::nullopt;
-                        // Put the deleted position at the end of the free indexes list.
-                        finalize_indexes.splice(finalize_indexes.end(), finalize_indexes, pos);
-                    }
-                    m_size -= delete_indexes.size();
-                    delete_indexes.clear();
-                }
+                // Cleanup any tasks that marked themselves as completed and remove them from
+                // the active tasks in the scheduler.
+                m_size -= tm.gc();
             }
         }
 

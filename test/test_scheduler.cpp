@@ -22,9 +22,7 @@ TEST_CASE("scheduler submit single functor")
         co_return;
     }();
 
-    s.schedule(task);
-
-    // while(counter != 1) std::this_thread::sleep_for(1ms);
+    s.schedule(std::move(task));
 
     s.shutdown();
 
@@ -37,14 +35,10 @@ TEST_CASE("scheduler submit mutiple tasks")
     std::atomic<uint64_t> counter{0};
     coro::scheduler s{};
 
-    std::vector<coro::task<void>> tasks{};
-    tasks.reserve(n);
-
     auto func = [&]() -> coro::task<void> { counter++; co_return; };
     for(std::size_t i = 0; i < n; ++i)
     {
-        tasks.emplace_back(func());
-        s.schedule(tasks.back());
+        s.schedule(func());
     }
     s.shutdown();
 
@@ -88,7 +82,7 @@ TEST_CASE("scheduler task with multiple yields on event")
         }
     };
 
-    s.schedule(task);
+    s.schedule(std::move(task));
 
     resume_task(token, 1);
     resume_task(token, 2);
@@ -112,7 +106,7 @@ TEST_CASE("scheduler task with read poll")
         co_return;
     }();
 
-    s.schedule(task);
+    s.schedule(std::move(task));
 
     uint64_t value{42};
     write(trigger_fd, &value, sizeof(value));
@@ -140,7 +134,7 @@ TEST_CASE("scheduler task with read")
         co_return;
     }();
 
-    s.schedule(task);
+    s.schedule(std::move(task));
 
     write(trigger_fd, &expected_value, sizeof(expected_value));
 
@@ -180,7 +174,7 @@ TEST_CASE("scheduler task with read and write same fd")
         co_return;
     }();
 
-    s.schedule(task);
+    s.schedule(std::move(task));
 
     s.shutdown();
     close(trigger_fd);
@@ -211,8 +205,8 @@ TEST_CASE("scheduler task with read and write pipe")
         REQUIRE(bytes_written == msg.size());
     }();
 
-    s.schedule(read_task);
-    s.schedule(write_task);
+    s.schedule(std::move(read_task));
+    s.schedule(std::move(write_task));
 
     s.shutdown();
     close(pipe_fd[0]);
@@ -246,7 +240,7 @@ TEST_CASE("scheduler standalone read task")
         co_return;
     }();
 
-    s.schedule(task);
+    s.schedule(std::move(task));
 
     write(trigger_fd, &expected_value, sizeof(expected_value));
 
@@ -279,7 +273,7 @@ TEST_CASE("scheduler separate thread resume")
         REQUIRE(true);
     }();
 
-    s.schedule(task);
+    s.schedule(std::move(task));
     s.shutdown();
 }
 
@@ -317,7 +311,7 @@ TEST_CASE("scheduler separate thread resume with return")
         REQUIRE(value == (expected_value * multiplier));
     }();
 
-    s.schedule(task);
+    s.schedule(std::move(task));
 
     service.join();
     s.shutdown();
@@ -340,7 +334,7 @@ TEST_CASE("scheduler with basic task")
         co_return;
     }();
 
-    s.schedule(task1);
+    s.schedule(std::move(task1));
     s.shutdown();
 
     REQUIRE(counter == expected_value);
@@ -359,12 +353,9 @@ TEST_CASE("scheduler trigger growth of internal tasks storage")
         co_return;
     };
 
-    std::vector<coro::task<void>> tasks{};
-    tasks.reserve(iterations);
     for(std::size_t i = 0; i < iterations; ++i)
     {
-        tasks.emplace_back(wait_func(i, std::chrono::milliseconds{50}));
-        s.schedule(tasks.back());
+        s.schedule(wait_func(i, std::chrono::milliseconds{50}));
     }
 
     s.shutdown();
@@ -390,7 +381,7 @@ TEST_CASE("scheduler yield with scheduler event void")
         co_return;
     }();
 
-    s.schedule(task);
+    s.schedule(std::move(task));
 
     s.shutdown();
 
@@ -414,7 +405,7 @@ TEST_CASE("scheduler yield with scheduler event uint64_t")
         co_return;
     }();
 
-    s.schedule(task);
+    s.schedule(std::move(task));
 
     s.shutdown();
 
@@ -434,7 +425,7 @@ TEST_CASE("scheduler yield user provided event")
         co_return;
     }();
 
-    s.schedule(task);
+    s.schedule(std::move(task));
 
     token.resume(expected_result);
 
