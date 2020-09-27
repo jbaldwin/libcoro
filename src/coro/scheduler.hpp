@@ -11,7 +11,6 @@
 #include <span>
 #include <type_traits>
 #include <list>
-#include <variant>
 
 #include <sys/epoll.h>
 #include <sys/eventfd.h>
@@ -31,25 +30,25 @@
 namespace coro
 {
 
-class engine;
+class scheduler;
 
 namespace detail
 {
-class engine_event_base
+class resume_token_base
 {
 public:
-    engine_event_base(engine* eng) noexcept
-        :   m_engine(eng),
+    resume_token_base(scheduler* eng) noexcept
+        :   m_scheduler(eng),
             m_state(nullptr)
     {
     }
 
-    virtual ~engine_event_base() = default;
+    virtual ~resume_token_base() = default;
 
-    engine_event_base(const engine_event_base&) = delete;
-    engine_event_base(engine_event_base&&) = delete;
-    auto operator=(const engine_event_base&) -> engine_event_base& = delete;
-    auto operator=(engine_event_base&&) -> engine_event_base& = delete;
+    resume_token_base(const resume_token_base&) = delete;
+    resume_token_base(resume_token_base&&) = delete;
+    auto operator=(const resume_token_base&) -> resume_token_base& = delete;
+    auto operator=(resume_token_base&&) -> resume_token_base& = delete;
 
     bool is_set() const noexcept
     {
@@ -58,25 +57,25 @@ public:
 
     struct awaiter
     {
-        awaiter(const engine_event_base& event) noexcept
-            : m_event(event)
+        awaiter(const resume_token_base& token) noexcept
+            : m_token(token)
         {
 
         }
 
         auto await_ready() const noexcept -> bool
         {
-            return m_event.is_set();
+            return m_token.is_set();
         }
 
         auto await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept -> bool
         {
-            const void* const set_state = &m_event;
+            const void* const set_state = &m_token;
 
             m_awaiting_coroutine = awaiting_coroutine;
 
             // This value will update if other threads write to it via acquire.
-            void* old_value = m_event.m_state.load(std::memory_order_acquire);
+            void* old_value = m_token.m_state.load(std::memory_order_acquire);
             do
             {
                 // Resume immediately if already in the set state.
@@ -86,7 +85,7 @@ public:
                 }
 
                 m_next = static_cast<awaiter*>(old_value);
-            } while(!m_event.m_state.compare_exchange_weak(
+            } while(!m_token.m_state.compare_exchange_weak(
                 old_value,
                 this,
                 std::memory_order_release,
@@ -97,10 +96,10 @@ public:
 
         auto await_resume() noexcept
         {
-
+            // no-op
         }
 
-        const engine_event_base& m_event;
+        const resume_token_base& m_token;
         std::coroutine_handle<> m_awaiting_coroutine;
         awaiter* m_next{nullptr};
     };
@@ -118,30 +117,30 @@ public:
 
 protected:
     friend struct awaiter;
-    engine* m_engine{nullptr};
+    scheduler* m_scheduler{nullptr};
     mutable std::atomic<void*> m_state;
 };
 
 } // namespace detail
 
 template<typename return_type>
-class engine_event final : public detail::engine_event_base
+class resume_token final : public detail::resume_token_base
 {
-    friend engine;
-    engine_event()
-        : detail::engine_event_base(nullptr)
+    friend scheduler;
+    resume_token()
+        : detail::resume_token_base(nullptr)
     {
 
     }
 public:
-    engine_event(engine& eng)
-        : detail::engine_event_base(&eng)
+    resume_token(scheduler& s)
+        : detail::resume_token_base(&s)
     {
 
     }
-    ~engine_event() override = default;
+    ~resume_token() override = default;
 
-    auto set(return_type result) noexcept -> void;
+    auto resume(return_type result) noexcept -> void;
 
     auto result() const & -> const return_type&
     {
@@ -157,23 +156,23 @@ private:
 };
 
 template<>
-class engine_event<void> final : public detail::engine_event_base
+class resume_token<void> final : public detail::resume_token_base
 {
-    friend engine;
-    engine_event()
-        : detail::engine_event_base(nullptr)
+    friend scheduler;
+    resume_token()
+        : detail::resume_token_base(nullptr)
     {
 
     }
 public:
-    engine_event(engine& eng)
-        : detail::engine_event_base(&eng)
+    resume_token(scheduler& s)
+        : detail::resume_token_base(&s)
     {
 
     }
-    ~engine_event() override = default;
+    ~resume_token() override = default;
 
-    auto set() noexcept -> void;
+    auto resume() noexcept -> void;
 };
 
 enum class poll_op
@@ -186,10 +185,11 @@ enum class poll_op
     read_write = EPOLLIN | EPOLLOUT
 };
 
-class engine
+class scheduler
 {
+    /// resume_token<T> needs to be able to call internal scheduler::resume()
     template<typename return_type>
-    friend class engine_event;
+    friend class resume_token;
 
 public:
     using fd_type = int;
@@ -207,11 +207,13 @@ private:
 
 public:
     /**
-     * @param reserve_size Reserve up-front this many tasks for concurrent execution.  The engine
+     * @param reserve_size Reserve up-front this many tasks for concurrent execution.  The scheduler
      *                     will also automatically grow this if needed.
+     * @param growth_factor The factor to grow by when the internal tasks are full.
      */
-    engine(
-        std::size_t reserve_size = 16
+    scheduler(
+        std::size_t reserve_size = 8,
+        double growth_factor = 2
     )
         :   m_epoll_fd(epoll_create1(EPOLL_CLOEXEC)),
             m_submit_fd(eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK))
@@ -222,15 +224,15 @@ public:
         e.data.ptr = m_submit_ptr;
         epoll_ctl(m_epoll_fd, EPOLL_CTL_ADD, m_submit_fd, &e);
 
-        m_background_thread = std::thread([this, reserve_size] { this->run(reserve_size); });
+        m_background_thread = std::thread([this, reserve_size, growth_factor] { this->run(reserve_size, growth_factor); });
     }
 
-    engine(const engine&) = delete;
-    engine(engine&&) = delete;
-    auto operator=(const engine&) -> engine& = delete;
-    auto operator=(engine&&) -> engine& = delete;
+    scheduler(const scheduler&) = delete;
+    scheduler(scheduler&&) = delete;
+    auto operator=(const scheduler&) -> scheduler& = delete;
+    auto operator=(scheduler&&) -> scheduler& = delete;
 
-    ~engine()
+    ~scheduler()
     {
         shutdown();
         if(m_epoll_fd != -1)
@@ -245,7 +247,11 @@ public:
         }
     }
 
-    auto execute(coro::task<void>& task) -> bool
+    // TODO:
+    // 1) Have schedule take ownership of task rather than forcing the user to maintain lifetimes.
+    // 2) schedule_afer(task, chrono<REP, RATIO>)
+
+    auto schedule(coro::task<void>& task) -> bool
     {
         if(m_shutdown)
         {
@@ -270,11 +276,11 @@ public:
     auto poll(fd_type fd, poll_op op) -> coro::task<void>
     {
         co_await unsafe_yield<void>(
-            [&](engine_event<void>& event)
+            [&](resume_token<void>& token)
             {
                 struct epoll_event e{};
                 e.events = static_cast<uint32_t>(op) | EPOLLONESHOT | EPOLLET;
-                e.data.ptr = &event;
+                e.data.ptr = &token;
                 epoll_ctl(m_epoll_fd, EPOLL_CTL_ADD, fd, &e);
             }
         );
@@ -310,46 +316,46 @@ public:
     }
 
     /**
-     * Immediately yields the current task and provides an event to set when the async operation
-     * being yield'ed to has completed.
+     * Immediately yields the current task and provides a resume token to resume this yielded
+     * coroutine when the async operation has completed.
      *
      * Normal usage of this might look like:
      *  \code
-           engine.yield([](coro::engine_event<void>& e) {
-               auto on_service_complete = [&]() { e.set(); };
-               service.execute(on_service_complete);
+           scheduler.yield([](coro::resume_token<void>& t) {
+               auto on_service_complete = [&]() { t.resume(); };
+               service.do_work(on_service_complete);
            });
      *  \endcode
      * The above example will yield the current task and then through the 3rd party service's
-     * on complete callback function let the engine know that it should resume execution of the task.
+     * on complete callback function let the scheduler know that it should resume execution of the task.
      *
-     * This function along with `engine::resume()` are special additions for working with 3rd party
-     * services that do not provide coroutine support, or that are event driven and cannot work
-     * directly with the engine.
      * @tparam func Functor to invoke with the yielded coroutine handle to be resumed.
      * @param f Immediately invoked functor with the yield point coroutine handle to resume with.
-     * @return A task to co_await until the manual `engine::resume(handle)` is called.
+     * @return A task to co_await until the manual `scheduler::resume(handle)` is called.
      */
-    template<typename return_type, std::invocable<engine_event<return_type>&> before_functor>
+    template<typename return_type, std::invocable<resume_token<return_type>&> before_functor>
     auto yield(before_functor before) -> coro::task<return_type>
     {
-        engine_event<return_type> e{*this};
-        before(e);
-        co_await e;
+        resume_token<return_type> token{*this};
+        before(token);
+        co_await token;
         if constexpr (std::is_same_v<return_type, void>)
         {
             co_return;
         }
         else
         {
-            co_return e.result();
+            co_return token.result();
         }
     }
 
+    /**
+     * User provided resume token to yield the current coroutine until the token's resume is called.
+     */
     template<typename return_type>
-    auto yield(engine_event<return_type>& e) -> coro::task<void>
+    auto yield(resume_token<return_type>& token) -> coro::task<void>
     {
-        co_await e;
+        co_await token;
         co_return;
     }
 
@@ -394,26 +400,26 @@ public:
     auto size() const -> std::size_t { return m_size.load(); }
 
     /**
-     * @return True if there are no tasks executing or waiting to be executed in this engine.
+     * @return True if there are no tasks executing or waiting to be executed in this scheduler.
      */
     auto empty() const -> bool { return m_size == 0; }
 
     /**
-     * @return True if this engine is currently running.
+     * @return True if this scheduler is currently running.
      */
     auto is_running() const noexcept -> bool { return m_is_running; }
 
     /**
-     * @return True if this engine has been requested to shutdown.
+     * @return True if this scheduler has been requested to shutdown.
      */
     auto is_shutdown() const noexcept -> bool { return m_shutdown; }
 
     /**
-     * Requests the engine to finish processing all of its current tasks and shutdown.
-     * New tasks submitted via `engine::execute()` will be rejected after this is called.
+     * Requests the scheduler to finish processing all of its current tasks and shutdown.
+     * New tasks submitted via `scheduler::schedule()` will be rejected after this is called.
      * @param wait_for_tasks This call will block until all tasks are complete if shutdown_type::sync
      *                       is passed in, if shutdown_type::async is passed this function will tell
-     *                       the engine to shutdown but not wait for all tasks to complete, it returns
+     *                       the scheduler to shutdown but not wait for all tasks to complete, it returns
      *                       immediately.
      */
     auto shutdown(shutdown_type wait_for_tasks = shutdown_type::sync) -> void
@@ -432,13 +438,13 @@ public:
     }
 
     /**
-     * @return A unique id to identify this engine.
+     * @return A unique id to identify this scheduler.
      */
-    auto engine_id() const -> uint32_t { return m_engine_id; }
+    auto scheduler_id() const -> uint32_t { return m_scheduler_id; }
 
 private:
-    static std::atomic<uint32_t> m_engine_id_counter;
-    const uint32_t m_engine_id{m_engine_id_counter++};
+    static std::atomic<uint32_t> m_scheduler_id_counter;
+    const uint32_t m_scheduler_id{m_scheduler_id_counter++};
 
     fd_type m_epoll_fd{-1};
     fd_type m_submit_fd{-1};
@@ -453,10 +459,10 @@ private:
 
     std::atomic<std::size_t> m_size{0};
 
-    template<typename return_type, std::invocable<engine_event<return_type>&> before_functor>
+    template<typename return_type, std::invocable<resume_token<return_type>&> before_functor>
     auto unsafe_yield(before_functor before) -> coro::task<return_type>
     {
-        engine_event<return_type> e{};
+        resume_token<return_type> e{};
         before(e);
         co_await e;
         if constexpr (std::is_same_v<return_type, void>)
@@ -481,11 +487,26 @@ private:
         ::write(m_submit_fd, &value, sizeof(value));
     }
 
-    auto run(const std::size_t growth_size) -> void
+    auto run(const std::size_t growth_size, const double growth_factor) -> void
     {
         using namespace std::chrono_literals;
 
         m_is_running = true;
+
+        /**
+         * Each task submitted into the scheduler has a finalize task that is set as the user's
+         * continuation to 'delete' itself from within the scheduler upon its completion.  The
+         * finalize tasks lifetimes are maintained within the vector.  The list of indexes
+         * maintains stable indexes into the vector but are swapped around when tasks complete
+         * as a 'free list'.  This free list is divided into two partitions, used and unused
+         * based on the position of the free_index variable.  When the vector is completely full
+         * it will grow by the given growth size, this might switch to doubling in the future.
+         *
+         * Finally, there is one last vector that takes itereators into the list of indexes, this
+         * final vector is special in that it contains 'dead' tasks to be deleted.  Since a task
+         * cannot actually delete itself (double free/corruption) it marks itself as 'dead' and
+         * the sheduler will free it on the next event loop iteration.
+         */
 
         std::vector<std::optional<coro::task<void>>> finalize_tasks{};
         std::list<std::size_t> finalize_indexes{};
@@ -517,7 +538,7 @@ private:
         constexpr std::size_t max_events = 8;
         std::array<struct epoll_event, max_events> events{};
 
-        // Execute until stopped or there are more tasks to complete.
+        // Execute tasks until stopped or there are more tasks to complete.
         while(!m_shutdown || m_size > 0)
         {
             auto event_count = epoll_wait(m_epoll_fd, events.data(), max_events, timeout.count());
@@ -577,8 +598,8 @@ private:
                     else
                     {
                         // Individual poll task wake-up.
-                        auto* event_ptr = static_cast<engine_event<void>*>(handle_ptr);
-                        event_ptr->set(); // this will resume the coroutine.
+                        auto* token_ptr = static_cast<resume_token<void>*>(handle_ptr);
+                        token_ptr->resume();
                     }
                 }
 
@@ -603,7 +624,7 @@ private:
 };
 
 template<typename return_type>
-inline auto engine_event<return_type>::set(return_type result) noexcept -> void
+inline auto resume_token<return_type>::resume(return_type result) noexcept -> void
 {
     void* old_value = m_state.exchange(this, std::memory_order_acq_rel);
     if(old_value != this)
@@ -614,22 +635,22 @@ inline auto engine_event<return_type>::set(return_type result) noexcept -> void
         while(waiters != nullptr)
         {
             auto* next = waiters->m_next;
-            // If engine is nullptr this is an unsafe_yield()
-            // If engine is present this is a yield()
-            if(m_engine == nullptr)
+            // If scheduler is nullptr this is an unsafe_yield()
+            // If scheduler is present this is a yield()
+            if(m_scheduler == nullptr)
             {
                 waiters->m_awaiting_coroutine.resume();
             }
             else
             {
-                m_engine->resume(waiters->m_awaiting_coroutine);
+                m_scheduler->resume(waiters->m_awaiting_coroutine);
             }
             waiters = next;
         }
     }
 }
 
-inline auto engine_event<void>::set() noexcept -> void
+inline auto resume_token<void>::resume() noexcept -> void
 {
     void* old_value = m_state.exchange(this, std::memory_order_acq_rel);
     if(old_value != this)
@@ -638,20 +659,22 @@ inline auto engine_event<void>::set() noexcept -> void
         while(waiters != nullptr)
         {
             auto* next = waiters->m_next;
-            // If engine is nullptr this is an unsafe_yield()
-            // If engine is present this is a yield()
-            if(m_engine == nullptr)
+            // If scheduler is nullptr this is an unsafe_yield()
+            // If scheduler is present this is a yield()
+            if(m_scheduler == nullptr)
             {
                 waiters->m_awaiting_coroutine.resume();
             }
             else
             {
-                m_engine->resume(waiters->m_awaiting_coroutine);
+                m_scheduler->resume(waiters->m_awaiting_coroutine);
             }
             waiters = next;
         }
     }
 }
+
+inline std::atomic<uint32_t> scheduler::m_scheduler_id_counter{0};
 
 } // namespace coro
 

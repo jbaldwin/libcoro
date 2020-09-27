@@ -10,7 +10,7 @@ message("${PROJECT_NAME} CORO_CODE_COVERAGE    = ${CORO_CODE_COVERAGE}")
 set(LIBCORO_SOURCE_FILES
     src/coro/async_manual_reset_event.hpp
     src/coro/coro.hpp
-    src/coro/engine.hpp src/coro/engine.cpp
+    src/coro/scheduler.hpp
     src/coro/sync_wait.hpp
     src/coro/task.hpp
 )
@@ -21,11 +21,14 @@ target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_20)
 target_include_directories(${PROJECT_NAME} PUBLIC src)
 target_link_libraries(${PROJECT_NAME} PUBLIC zmq pthread)
 
-
 if(${CMAKE_CXX_COMPILER_ID} MATCHES "GNU")
+    if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "10.2.0")
+        message(FATAL_ERROR "gcc version ${CMAKE_CXX_COMPILER_VERSION} is unsupported, please upgrade to at least 10.2.0")
+    endif()
+
     target_compile_options(${PROJECT_NAME} PUBLIC -fcoroutines)
 elseif(${CMAKE_CXX_COMPILER_ID} MATCHES "Clang")
-    target_compile_options(${PROJECT_NAME} PUBLIC -fcoroutines -fcoroutines-ts)
+    message(FATAL_ERROR "Clang is currently not supported.")
 endif()
 
 
