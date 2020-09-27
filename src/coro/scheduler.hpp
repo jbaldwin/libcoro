@@ -203,7 +203,10 @@ public:
     };
 
 private:
-    static constexpr void* m_submit_ptr = nullptr;
+    static constexpr const int m_submit_object{0};
+    static constexpr const int m_resume_object{0};
+    static constexpr const void* m_submit_ptr = &m_submit_object;
+    static constexpr const void* m_resume_ptr = &m_resume_object;
 
 public:
     /**
@@ -216,13 +219,17 @@ public:
         double growth_factor = 2
     )
         :   m_epoll_fd(epoll_create1(EPOLL_CLOEXEC)),
-            m_submit_fd(eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK))
+            m_submit_fd(eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK)),
+            m_resume_fd(eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK))
     {
         struct epoll_event e{};
         e.events = EPOLLIN;
 
-        e.data.ptr = m_submit_ptr;
+        e.data.ptr = const_cast<void*>(m_submit_ptr);
         epoll_ctl(m_epoll_fd, EPOLL_CTL_ADD, m_submit_fd, &e);
+
+        e.data.ptr = const_cast<void*>(m_resume_ptr);
+        epoll_ctl(m_epoll_fd, EPOLL_CTL_ADD, m_resume_fd, &e);
 
         m_background_thread = std::thread([this, reserve_size, growth_factor] { this->run(reserve_size, growth_factor); });
     }
@@ -259,7 +266,7 @@ public:
 
         ++m_size;
         {
-            std::lock_guard<std::mutex> lock{m_mutex};
+            std::lock_guard<std::mutex> lock{m_submit_mutex};
             m_submitted_tasks.emplace_back(std::move(task));
         }
 
@@ -445,14 +452,16 @@ private:
 
     fd_type m_epoll_fd{-1};
     fd_type m_submit_fd{-1};
+    fd_type m_resume_fd{-1};
 
     std::atomic<bool> m_is_running{false};
     std::atomic<bool> m_shutdown{false};
     std::thread m_background_thread;
 
-    std::mutex m_mutex;
+    std::mutex m_submit_mutex{};
     std::vector<coro::task<void>> m_submitted_tasks{};
-    // std::vector<std::coroutine_handle<coro::task<void>::promise_type>> m_submitted_tasks{};
+
+    std::mutex m_resume_mutex{};
     std::vector<std::coroutine_handle<>> m_resume_tasks{};
 
     std::atomic<std::size_t> m_size{0};
@@ -476,13 +485,13 @@ private:
     auto resume(std::coroutine_handle<> handle) -> void
     {
         {
-            std::lock_guard<std::mutex> lock{m_mutex};
+            std::lock_guard<std::mutex> lock{m_resume_mutex};
             m_resume_tasks.emplace_back(handle);
         }
 
         // Signal to the event loop there is a task to resume.
         uint64_t value{1};
-        ::write(m_submit_fd, &value, sizeof(value));
+        ::write(m_resume_fd, &value, sizeof(value));
     }
 
     struct task_data
@@ -567,10 +576,7 @@ private:
             return std::next(last_pos);
         }
 
-        auto cleanup_func(
-            // std::vector<std::list<std::size_t>::iterator>& tasks_to_delete,
-            task_pos pos
-        ) -> coro::task<void>
+        auto cleanup_func(task_pos pos) -> coro::task<void>
         {
             // Mark this task for deletion, it cannot delete itself.
             m_tasks_to_delete.push_back(pos);
@@ -613,14 +619,10 @@ private:
                         ::read(m_submit_fd, &value, sizeof(value));
                         (void)value; // discard, the read merely resets the eventfd counter in the kernel.
 
-                        // todo: split into their own tasks? or turn into coroutines which process/execute
-                        //       submitted or resumed tasks?
                         std::vector<coro::task<void>> submitted_tasks{};
-                        std::vector<std::coroutine_handle<>> resume_tasks{};
                         {
-                            std::lock_guard<std::mutex> lock{m_mutex};
+                            std::lock_guard<std::mutex> lock{m_submit_mutex};
                             submitted_tasks.swap(m_submitted_tasks);
-                            resume_tasks.swap(m_resume_tasks);
                         }
 
                         for(coro::task<void>& task : submitted_tasks)
@@ -641,6 +643,14 @@ private:
                                     --m_size;
                                 }
                             }
+                        }
+                    }
+                    else if(handle_ptr == m_resume_ptr)
+                    {
+                        std::vector<std::coroutine_handle<>> resume_tasks{};
+                        {
+                            std::lock_guard<std::mutex> lock{m_resume_mutex};
+                            resume_tasks.swap(m_resume_tasks);
                         }
 
                         for(auto& handle : resume_tasks)
