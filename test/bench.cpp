@@ -10,6 +10,8 @@
 using namespace std::chrono_literals;
 using sc = std::chrono::steady_clock;
 
+constexpr std::size_t default_iterations = 5'000'000;
+
 static auto print_stats(
     const std::string& bench_name,
     uint64_t operations,
@@ -29,93 +31,76 @@ static auto print_stats(
     std::cout << "    ops/sec: " << std::fixed << ops_per_sec << "\n";
 }
 
-TEST_CASE("benchmark counter task")
+TEST_CASE("benchmark counter func direct call")
 {
-    constexpr std::size_t iterations = 1'000'000;
-
+    constexpr std::size_t iterations = default_iterations;
+    std::atomic<uint64_t> counter{0};
+    auto func = [&]() -> void
     {
-        coro::scheduler s1{};
-        std::atomic<uint64_t> counter{0};
-        auto func = [&]() -> coro::task<void>
-        {
-            ++counter;
-            co_return;
-        };
+        ++counter;
+        return;
+    };
 
-        auto start = sc::now();
+    auto start = sc::now();
 
-        for(std::size_t i = 0; i < iterations; ++i)
-        {
-            s1.schedule(func());
-        }
-
-        s1.shutdown();
-        print_stats("benchmark counter task through scheduler", iterations, start, sc::now());
-        REQUIRE(s1.empty());
-        REQUIRE(counter == iterations);
+    for(std::size_t i = 0; i < iterations; ++i)
+    {
+        func();
     }
 
-    {
-        std::atomic<uint64_t> counter{0};
-        auto func = [&]() -> coro::task<void>
-        {
-            ++counter;
-            co_return;
-        };
-
-        auto start = sc::now();
-
-        for(std::size_t i = 0; i < iterations; ++i)
-        {
-            coro::sync_wait(func);
-        }
-
-        print_stats("benchmark counter func coro::sync_wait(awaitable)", iterations, start, sc::now());
-        REQUIRE(counter == iterations);
-    }
-
-    {
-        std::atomic<uint64_t> counter{0};
-        auto func = [&]() -> coro::task<void>
-        {
-            ++counter;
-            co_return;
-        };
-
-        auto start = sc::now();
-
-        for(std::size_t i = 0; i < iterations; ++i)
-        {
-            coro::sync_wait_task<void>(func());
-        }
-
-        print_stats("benchmark counter func coro::sync_wait(task)", iterations, start, sc::now());
-        REQUIRE(counter == iterations);
-    }
-
-    {
-        std::atomic<uint64_t> counter{0};
-        auto func = [&]() -> void
-        {
-            ++counter;
-            return;
-        };
-
-        auto start = sc::now();
-
-        for(std::size_t i = 0; i < iterations; ++i)
-        {
-            func();
-        }
-
-        print_stats("benchmark counter func direct call", iterations, start, sc::now());
-        REQUIRE(counter == iterations);
-    }
+    print_stats("benchmark counter func direct call", iterations, start, sc::now());
+    REQUIRE(counter == iterations);
 }
 
-TEST_CASE("benchmark task with yield resume token from main thread")
+TEST_CASE("benchmark counter func coro::sync_wait(awaitable)")
 {
-    constexpr std::size_t iterations = 1'000'000;
+    constexpr std::size_t iterations = default_iterations;
+    std::atomic<uint64_t> counter{0};
+    auto func = [&]() -> coro::task<void>
+    {
+        ++counter;
+        co_return;
+    };
+
+    auto start = sc::now();
+
+    for(std::size_t i = 0; i < iterations; ++i)
+    {
+        coro::sync_wait(func);
+    }
+
+    print_stats("benchmark counter func coro::sync_wait(awaitable)", iterations, start, sc::now());
+    REQUIRE(counter == iterations);
+}
+
+TEST_CASE("benchmark counter task scheduler")
+{
+    constexpr std::size_t iterations = default_iterations;
+
+    coro::scheduler s1{};
+    std::atomic<uint64_t> counter{0};
+    auto func = [&]() -> coro::task<void>
+    {
+        ++counter;
+        co_return;
+    };
+
+    auto start = sc::now();
+
+    for(std::size_t i = 0; i < iterations; ++i)
+    {
+        s1.schedule(func());
+    }
+
+    s1.shutdown();
+    print_stats("benchmark counter task through scheduler", iterations, start, sc::now());
+    REQUIRE(s1.empty());
+    REQUIRE(counter == iterations);
+}
+
+TEST_CASE("benchmark counter task scheduler yield -> resume from main")
+{
+    constexpr std::size_t iterations = default_iterations;
 
     coro::scheduler s{};
     coro::resume_token<void> rt{s};
@@ -149,14 +134,15 @@ TEST_CASE("benchmark task with yield resume token from main thread")
     s.shutdown();
 
     auto stop = sc::now();
-    print_stats("benchmark task with yield resume token from main thread", iterations, start, stop);
+    print_stats("benchmark counter task scheduler yield -> resume from main", iterations, start, stop);
     REQUIRE(s.empty());
     REQUIRE(counter == iterations);
 }
 
-TEST_CASE("benchmark task with yield resume token from separate coroutine (resume second)")
+TEST_CASE("benchmark counter task scheduler yield -> resume from coroutine")
 {
-    constexpr std::size_t iterations = 50'000;
+    constexpr std::size_t iterations = default_iterations;
+    constexpr std::size_t ops = iterations * 2; // each iteration executes 2 coroutines.
 
     coro::scheduler s{};
     std::vector<coro::resume_token<void>> tokens{};
@@ -191,14 +177,15 @@ TEST_CASE("benchmark task with yield resume token from separate coroutine (resum
     s.shutdown();
 
     auto stop = sc::now();
-    print_stats("benchmark task with yield resume token from separate coroutine (resume second)", iterations, start, stop);
+    print_stats("benchmark counter task scheduler yield -> resume from coroutine", ops, start, stop);
     REQUIRE(s.empty());
     REQUIRE(counter == iterations);
 }
 
-TEST_CASE("benchmark task with yield resume token from separate coroutine (resume first)")
+TEST_CASE("benchmark counter task scheduler resume from coroutine -> yield")
 {
-    constexpr std::size_t iterations = 1'000'000;
+    constexpr std::size_t iterations = default_iterations;
+    constexpr std::size_t ops = iterations * 2; // each iteration executes 2 coroutines.
 
     coro::scheduler s{};
     std::vector<coro::resume_token<void>> tokens{};
@@ -233,14 +220,15 @@ TEST_CASE("benchmark task with yield resume token from separate coroutine (resum
     s.shutdown();
 
     auto stop = sc::now();
-    print_stats("benchmark task with yield resume token from separate coroutine (resume first)", iterations, start, stop);
+    print_stats("benchmark counter task scheduler resume from coroutine -> yield", ops, start, stop);
     REQUIRE(s.empty());
     REQUIRE(counter == iterations);
 }
 
-TEST_CASE("benchmark task with yield resume token from separate coroutine (alloc all upfront)")
+TEST_CASE("benchmark counter task scheduler yield (all) -> resume (all) from coroutine with reserve")
 {
-    constexpr std::size_t iterations = 50'000;
+    constexpr std::size_t iterations = default_iterations;
+    constexpr std::size_t ops = iterations * 2; // each iteration executes 2 coroutines.
 
     coro::scheduler s{iterations};
     std::vector<coro::resume_token<void>> tokens{};
@@ -279,7 +267,7 @@ TEST_CASE("benchmark task with yield resume token from separate coroutine (alloc
     s.shutdown();
 
     auto stop = sc::now();
-    print_stats("benchmark task with yield resume token from separate coroutine (alloc all upfront)", iterations, start, stop);
+    print_stats("benchmark counter task scheduler yield -> resume from coroutine with reserve", ops, start, stop);
     REQUIRE(s.empty());
     REQUIRE(counter == iterations);
 }

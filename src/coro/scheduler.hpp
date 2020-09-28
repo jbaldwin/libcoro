@@ -257,10 +257,9 @@ private:
 
             // Store the user task with its cleanup task to maintain their lifetimes until completed.
             auto index = *m_free_pos;
-            auto& task_data = *m_tasks.emplace(
-                m_tasks.begin() + index,
-                std::move(user_task),
-                cleanup_func(m_free_pos));
+            auto& task_data = m_tasks[index];
+            task_data.m_user_task = std::move(user_task);
+            task_data.m_cleanup_task = cleanup_func(m_free_pos);
 
             // Attach the cleanup task to be the continuation after the users task.
             task_data.m_user_task.promise().continuation(task_data.m_cleanup_task.handle());
