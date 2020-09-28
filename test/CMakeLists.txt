@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.16)
 project(libcoro_test)
 
 set(LIBCORO_TEST_SOURCE_FILES
+    bench.cpp
     test_async_manual_reset_event.cpp
     test_scheduler.cpp
     test_task.cpp

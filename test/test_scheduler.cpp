@@ -10,17 +10,46 @@
 
 using namespace std::chrono_literals;
 
-TEST_CASE("scheduler submit single functor")
+TEST_CASE("scheduler submit single task")
 {
     std::atomic<uint64_t> counter{0};
     coro::scheduler s{};
 
-    auto task = [&]() -> coro::task<void>
+    // Note that captures are only safe as long as the lambda object outlives the execution
+    // of the coroutine.  In all of these tests the lambda is created on the root test function
+    // and thus will always outlive the coroutines, but in a real application this is dangerous
+    // and coroutine 'captures' should be passed in via paramters to the function to be copied
+    // into the coroutines stack frame.  Lets
+    auto func = [&]() -> coro::task<void>
     {
         std::cerr << "Hello world from scheduler task!\n";
         counter++;
         co_return;
-    }();
+    };
+
+    auto task = func();
+    s.schedule(std::move(task));
+
+    s.shutdown();
+
+    REQUIRE(counter == 1);
+}
+
+TEST_CASE("scheduler submit single task with move and auto initializing lambda")
+{
+    // This example test will auto invoke the lambda object, return the task and then destruct.
+    // Because the lambda immediately goes out of scope the task must capture all variables
+    // through its parameters directly.
+
+    std::atomic<uint64_t> counter{0};
+    coro::scheduler s{};
+
+    auto task = [](std::atomic<uint64_t>& counter) -> coro::task<void>
+    {
+        std::cerr << "Hello world from scheduler task!\n";
+        counter++;
+        co_return;
+    }(counter);
 
     s.schedule(std::move(task));
 
@@ -51,7 +80,7 @@ TEST_CASE("scheduler task with multiple yields on event")
     coro::scheduler s{};
     coro::resume_token<uint64_t> token{s};
 
-    auto task = [&]() -> coro::task<void>
+    auto func = [&]() -> coro::task<void>
     {
         std::cerr << "1st suspend\n";
         co_await s.yield(token);
@@ -71,7 +100,7 @@ TEST_CASE("scheduler task with multiple yields on event")
         std::cerr << "3rd resume\n";
         counter += token.result();
         co_return;
-    }();
+    };
 
     auto resume_task = [&](coro::resume_token<uint64_t>& token, int expected) {
         token.resume(1);
@@ -82,7 +111,7 @@ TEST_CASE("scheduler task with multiple yields on event")
         }
     };
 
-    s.schedule(std::move(task));
+    s.schedule(func());
 
     resume_task(token, 1);
     resume_task(token, 2);
@@ -98,15 +127,15 @@ TEST_CASE("scheduler task with read poll")
     auto trigger_fd = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
     coro::scheduler s{};
 
-    auto task = [&]() -> coro::task<void>
+    auto func = [&]() -> coro::task<void>
     {
         // Poll will block until there is data to read.
         co_await s.poll(trigger_fd, coro::poll_op::read);
         REQUIRE(true);
         co_return;
-    }();
+    };
 
-    s.schedule(std::move(task));
+    s.schedule(func());
 
     uint64_t value{42};
     write(trigger_fd, &value, sizeof(value));
@@ -121,7 +150,7 @@ TEST_CASE("scheduler task with read")
     auto trigger_fd = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
     coro::scheduler s{};
 
-    auto task = [&]() -> coro::task<void>
+    auto func = [&]() -> coro::task<void>
     {
         uint64_t val{0};
         auto bytes_read = co_await s.read(
@@ -132,9 +161,9 @@ TEST_CASE("scheduler task with read")
         REQUIRE(bytes_read == sizeof(uint64_t));
         REQUIRE(val == expected_value);
         co_return;
-    }();
+    };
 
-    s.schedule(std::move(task));
+    s.schedule(func());
 
     write(trigger_fd, &expected_value, sizeof(expected_value));
 
@@ -154,7 +183,7 @@ TEST_CASE("scheduler task with read and write same fd")
     auto trigger_fd = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
     coro::scheduler s{};
 
-    auto task = [&]() -> coro::task<void>
+    auto func = [&]() -> coro::task<void>
     {
         auto bytes_written = co_await s.write(
             trigger_fd,
@@ -172,9 +201,9 @@ TEST_CASE("scheduler task with read and write same fd")
         REQUIRE(bytes_read == sizeof(uint64_t));
         REQUIRE(val == expected_value);
         co_return;
-    }();
+    };
 
-    s.schedule(std::move(task));
+    s.schedule(func());
 
     s.shutdown();
     close(trigger_fd);
@@ -188,7 +217,7 @@ TEST_CASE("scheduler task with read and write pipe")
 
     coro::scheduler s{};
 
-    auto read_task = [&]() -> coro::task<void>
+    auto read_func = [&]() -> coro::task<void>
     {
         std::string buffer(4096, '0');
         std::span<char> view{buffer.data(), buffer.size()};
@@ -196,17 +225,17 @@ TEST_CASE("scheduler task with read and write pipe")
         REQUIRE(bytes_read == msg.size());
         buffer.resize(bytes_read);
         REQUIRE(buffer == msg);
-    }();
+    };
 
-    auto write_task = [&]() -> coro::task<void>
+    auto write_func = [&]() -> coro::task<void>
     {
         std::span<const char> view{msg.data(), msg.size()};
         auto bytes_written = co_await s.write(pipe_fd[1], view);
         REQUIRE(bytes_written == msg.size());
-    }();
+    };
 
-    s.schedule(std::move(read_task));
-    s.schedule(std::move(write_task));
+    s.schedule(read_func());
+    s.schedule(write_func());
 
     s.shutdown();
     close(pipe_fd[0]);
@@ -230,7 +259,7 @@ TEST_CASE("scheduler standalone read task")
     auto trigger_fd = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
     coro::scheduler s{};
 
-    auto task = [&]() -> coro::task<void>
+    auto func = [&]() -> coro::task<void>
     {
         ssize_t v{0};
         auto bytes_read = co_await standalone_read(s, trigger_fd, std::span<char>(reinterpret_cast<char*>(&v), sizeof(v)));
@@ -238,9 +267,9 @@ TEST_CASE("scheduler standalone read task")
 
         REQUIRE(v == expected_value);
         co_return;
-    }();
+    };
 
-    s.schedule(std::move(task));
+    s.schedule(func());
 
     write(trigger_fd, &expected_value, sizeof(expected_value));
 
@@ -252,7 +281,7 @@ TEST_CASE("scheduler separate thread resume")
 {
     coro::scheduler s{};
 
-    auto task = [&]() -> coro::task<void>
+    auto func = [&]() -> coro::task<void>
     {
         // User manual resume token, create one specifically for each task being generated
         coro::resume_token<void> token{s};
@@ -271,9 +300,9 @@ TEST_CASE("scheduler separate thread resume")
         // Wait on the handle until the 3rd party service is completed.
         co_await token;
         REQUIRE(true);
-    }();
+    };
 
-    s.schedule(std::move(task));
+    s.schedule(func());
     s.shutdown();
 }
 
@@ -304,14 +333,14 @@ TEST_CASE("scheduler separate thread resume with return")
         co_return output * multiplier;
     };
 
-    auto task = [&]() -> coro::task<void>
+    auto func = [&]() -> coro::task<void>
     {
         int multiplier{5};
         uint64_t value = co_await third_party_service(multiplier);
         REQUIRE(value == (expected_value * multiplier));
-    }();
+    };
 
-    s.schedule(std::move(task));
+    s.schedule(func());
 
     service.join();
     s.shutdown();
@@ -328,13 +357,13 @@ TEST_CASE("scheduler with basic task")
         co_return val;
     };
 
-    auto task1 = [&]() -> coro::task<void>
+    auto func = [&]() -> coro::task<void>
     {
         counter += co_await add_data(expected_value);
         co_return;
-    }();
+    };
 
-    s.schedule(std::move(task1));
+    s.schedule(func());
     s.shutdown();
 
     REQUIRE(counter == expected_value);
@@ -368,7 +397,7 @@ TEST_CASE("scheduler yield with scheduler event void")
     std::atomic<uint64_t> counter{0};
     coro::scheduler s{};
 
-    auto task = [&]() -> coro::task<void>
+    auto func = [&]() -> coro::task<void>
     {
         co_await s.yield<void>(
             [&](coro::resume_token<void>& token) -> void
@@ -379,9 +408,9 @@ TEST_CASE("scheduler yield with scheduler event void")
 
         counter += 42;
         co_return;
-    }();
+    };
 
-    s.schedule(std::move(task));
+    s.schedule(func());
 
     s.shutdown();
 
@@ -393,7 +422,7 @@ TEST_CASE("scheduler yield with scheduler event uint64_t")
     std::atomic<uint64_t> counter{0};
     coro::scheduler s{};
 
-    auto task = [&]() -> coro::task<void>
+    auto func = [&]() -> coro::task<void>
     {
         counter += co_await s.yield<uint64_t>(
             [&](coro::resume_token<uint64_t>& token) -> void
@@ -403,9 +432,9 @@ TEST_CASE("scheduler yield with scheduler event uint64_t")
         );
 
         co_return;
-    }();
+    };
 
-    s.schedule(std::move(task));
+    s.schedule(func());
 
     s.shutdown();
 
@@ -418,14 +447,14 @@ TEST_CASE("scheduler yield user provided event")
     coro::scheduler s{};
     coro::resume_token<std::string> token{s};
 
-    auto task = [&]() -> coro::task<void>
+    auto func = [&]() -> coro::task<void>
     {
         co_await s.yield(token);
         REQUIRE(token.result() == expected_result);
         co_return;
-    }();
+    };
 
-    s.schedule(std::move(task));
+    s.schedule(func());
 
     token.resume(expected_result);
 
