@@ -187,9 +187,109 @@ enum class poll_op
 
 class scheduler
 {
+private:
     /// resume_token<T> needs to be able to call internal scheduler::resume()
     template<typename return_type>
     friend class resume_token;
+
+    struct task_data
+    {
+        /// The user's task, lifetime is maintained by the scheduler.
+        coro::task<void> m_user_task;
+        /// The post processing cleanup tasks to remove a completed task from the scheduler.
+        coro::task<void> m_cleanup_task;
+    };
+
+    class task_manager
+    {
+    public:
+        using task_pos = std::list<std::size_t>::iterator;
+
+        task_manager(const std::size_t reserve_size, const double growth_factor)
+            : m_growth_factor(growth_factor)
+        {
+            m_tasks.resize(reserve_size);
+            for(std::size_t i = 0; i < reserve_size; ++i)
+            {
+                m_task_indexes.emplace_back(i);
+            }
+            m_free_pos = m_task_indexes.begin();
+        }
+
+        auto store(coro::task<void> user_task) -> void
+        {
+            // Only grow if completely full and attempting to add more.
+            if(m_free_pos == m_task_indexes.end())
+            {
+                m_free_pos = grow();
+            }
+
+            // Store the user task with its cleanup task to maintain their lifetimes until completed.
+            auto index = *m_free_pos;
+            auto& task_data = *m_tasks.emplace(
+                m_tasks.begin() + index,
+                std::move(user_task),
+                cleanup_func(m_free_pos));
+
+            // Attach the cleanup task to be the continuation after the users task.
+            task_data.m_user_task.promise().continuation(task_data.m_cleanup_task.handle());
+
+            // Mark the current used slot as used.
+            std::advance(m_free_pos, 1);
+        }
+
+        auto gc() -> std::size_t
+        {
+            std::size_t deleted{0};
+            if(!m_tasks_to_delete.empty())
+            {
+                for(const auto& pos : m_tasks_to_delete)
+                {
+                    // This doesn't actually 'delete' the task, it'll get overwritten by a new user
+                    // task claims the free space.
+
+                    // Put the deleted position at the end of the free indexes list.
+                    m_task_indexes.splice(m_task_indexes.end(), m_task_indexes, pos);
+                }
+                deleted = m_tasks_to_delete.size();
+                m_tasks_to_delete.clear();
+            }
+            return deleted;
+        }
+
+    private:
+        auto grow() -> task_pos
+        {
+            // Save an index at the current last item.
+            auto last_pos = std::prev(m_task_indexes.end());
+            std::size_t new_size = m_tasks.size() * m_growth_factor;
+            for(std::size_t i = m_tasks.size(); i < new_size; ++i)
+            {
+                m_task_indexes.emplace_back(i);
+            }
+            m_tasks.resize(new_size);
+            // Set the free pos to the item just after the previous last item.
+            return std::next(last_pos);
+        }
+
+        auto cleanup_func(task_pos pos) -> coro::task<void>
+        {
+            // Mark this task for deletion, it cannot delete itself.
+            m_tasks_to_delete.push_back(pos);
+            co_return;
+        };
+
+        std::vector<task_data> m_tasks{};
+        std::list<std::size_t> m_task_indexes{};
+        std::vector<task_pos> m_tasks_to_delete{};
+        task_pos m_free_pos{};
+        double m_growth_factor{};
+    };
+
+    static constexpr const int m_submit_object{0};
+    static constexpr const int m_resume_object{0};
+    static constexpr const void* m_submit_ptr = &m_submit_object;
+    static constexpr const void* m_resume_ptr = &m_resume_object;
 
 public:
     using fd_type = int;
@@ -202,13 +302,6 @@ public:
         async
     };
 
-private:
-    static constexpr const int m_submit_object{0};
-    static constexpr const int m_resume_object{0};
-    static constexpr const void* m_submit_ptr = &m_submit_object;
-    static constexpr const void* m_resume_ptr = &m_resume_object;
-
-public:
     /**
      * @param reserve_size Reserve up-front this many tasks for concurrent execution.  The scheduler
      *                     will also automatically grow this if needed.
@@ -220,7 +313,8 @@ public:
     )
         :   m_epoll_fd(epoll_create1(EPOLL_CLOEXEC)),
             m_submit_fd(eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK)),
-            m_resume_fd(eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK))
+            m_resume_fd(eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK)),
+            m_task_manager(reserve_size, growth_factor)
     {
         struct epoll_event e{};
         e.events = EPOLLIN;
@@ -231,7 +325,7 @@ public:
         e.data.ptr = const_cast<void*>(m_resume_ptr);
         epoll_ctl(m_epoll_fd, EPOLL_CTL_ADD, m_resume_fd, &e);
 
-        m_background_thread = std::thread([this, reserve_size, growth_factor] { this->run(reserve_size, growth_factor); });
+        m_background_thread = std::thread([this] { this->run(); });
     }
 
     scheduler(const scheduler&) = delete;
@@ -252,10 +346,16 @@ public:
             close(m_submit_fd);
             m_submit_fd = -1;
         }
+        if(m_resume_fd != -1)
+        {
+            close(m_resume_fd);
+            m_resume_fd = -1;
+        }
     }
 
     // TODO:
-    // 1) schedule_afer(task, chrono<REP, RATIO>)
+    // 1) Migrate to use coroutines for schedule() and resume(), use resume_tokens!?
+    // 2) schedule_afer(task, chrono<REP, RATIO>)
 
     auto schedule(coro::task<void> task) -> bool
     {
@@ -466,6 +566,8 @@ private:
 
     std::atomic<std::size_t> m_size{0};
 
+    task_manager m_task_manager;
+
     template<typename return_type, std::invocable<resume_token<return_type>&> before_functor>
     auto unsafe_yield(before_functor before) -> coro::task<return_type>
     {
@@ -494,109 +596,11 @@ private:
         ::write(m_resume_fd, &value, sizeof(value));
     }
 
-    struct task_data
-    {
-        /// The user's task, lifetime is maintained by the scheduler.
-        coro::task<void> m_user_task;
-        /// The post processing cleanup tasks to remove a completed task from the scheduler.
-        coro::task<void> m_cleanup_task;
-    };
-
-    class task_manager
-    {
-    public:
-        using task_pos = std::list<std::size_t>::iterator;
-
-        task_manager(const std::size_t reserve_size, const double growth_factor)
-            : m_growth_factor(growth_factor)
-        {
-            m_tasks.resize(reserve_size);
-            for(std::size_t i = 0; i < reserve_size; ++i)
-            {
-                m_task_indexes.emplace_back(i);
-            }
-            m_free_pos = m_task_indexes.begin();
-        }
-
-        auto store(
-            coro::task<void> user_task
-        ) -> void
-        {
-            // Only grow if completely full and attempting to add more.
-            if(m_free_pos == m_task_indexes.end())
-            {
-                m_free_pos = grow();
-            }
-
-            // Store the user task with its cleanup task to maintain their lifetimes until completed.
-            auto index = *m_free_pos;
-            auto& task_data = *m_tasks.emplace(
-                m_tasks.begin() + index,
-                std::move(user_task),
-                cleanup_func(m_free_pos));
-
-            // Attach the cleanup task to be the continuation after the users task.
-            task_data.m_user_task.promise().set_continuation(task_data.m_cleanup_task.handle());
-
-            // Mark the current used slot as used.
-            std::advance(m_free_pos, 1);
-        }
-
-        auto gc() -> std::size_t
-        {
-            std::size_t deleted{0};
-            if(!m_tasks_to_delete.empty())
-            {
-                for(const auto& pos : m_tasks_to_delete)
-                {
-                    // This doesn't actually 'delete' the task, it'll get overwritten by a new user
-                    // task claims the free space.
-
-                    // Put the deleted position at the end of the free indexes list.
-                    m_task_indexes.splice(m_task_indexes.end(), m_task_indexes, pos);
-                }
-                deleted = m_tasks_to_delete.size();
-                m_tasks_to_delete.clear();
-            }
-            return deleted;
-        }
-
-    private:
-        auto grow() -> task_pos
-        {
-            // Save an index at the current last item.
-            auto last_pos = std::prev(m_task_indexes.end());
-            std::size_t new_size = m_tasks.size() * m_growth_factor;
-            for(std::size_t i = m_tasks.size(); i < new_size; ++i)
-            {
-                m_task_indexes.emplace_back(i);
-            }
-            m_tasks.resize(new_size);
-            // Set the free pos to the item just after the previous last item.
-            return std::next(last_pos);
-        }
-
-        auto cleanup_func(task_pos pos) -> coro::task<void>
-        {
-            // Mark this task for deletion, it cannot delete itself.
-            m_tasks_to_delete.push_back(pos);
-            co_return;
-        };
-
-        std::vector<task_data> m_tasks{};
-        std::list<std::size_t> m_task_indexes{};
-        std::vector<task_pos> m_tasks_to_delete{};
-        task_pos m_free_pos{};
-        double m_growth_factor{};
-    };
-
-    auto run(const std::size_t reserve_size, const double growth_factor) -> void
+    auto run() -> void
     {
         using namespace std::chrono_literals;
 
         m_is_running = true;
-
-        task_manager tm{reserve_size, growth_factor};
 
         constexpr std::chrono::milliseconds timeout{1000};
         constexpr std::size_t max_events = 8;
@@ -634,7 +638,7 @@ private:
 
                                 if(!task.is_ready())
                                 {
-                                    tm.store(std::move(task));
+                                    m_task_manager.store(std::move(task));
                                     // This task is now suspended waiting for an event.
                                 }
                                 else
@@ -671,7 +675,7 @@ private:
 
                 // Cleanup any tasks that marked themselves as completed and remove them from
                 // the active tasks in the scheduler.
-                m_size -= tm.gc();
+                m_size -= m_task_manager.gc();
             }
         }
 

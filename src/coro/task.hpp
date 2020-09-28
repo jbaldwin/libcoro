@@ -64,7 +64,7 @@ struct promise_base
         m_exception_ptr = std::current_exception();
     }
 
-    auto set_continuation(std::coroutine_handle<> continuation) noexcept -> void
+    auto continuation(std::coroutine_handle<> continuation) noexcept -> void
     {
         m_continuation = continuation;
     }
@@ -164,7 +164,7 @@ public:
 
         auto await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept -> std::coroutine_handle<>
         {
-            m_coroutine.promise().set_continuation(awaiting_coroutine);
+            m_coroutine.promise().continuation(awaiting_coroutine);
             return m_coroutine;
         }
 
