@@ -78,7 +78,8 @@ TEST_CASE("scheduler task with multiple yields on event")
 {
     std::atomic<uint64_t> counter{0};
     coro::scheduler s{};
-    coro::resume_token<uint64_t> token{s};
+    auto token = s.generate_resume_token<uint64_t>();
+    // coro::resume_token<uint64_t> token{s};
 
     auto func = [&]() -> coro::task<void>
     {
@@ -243,7 +244,7 @@ TEST_CASE("scheduler task with read and write pipe")
 
 static auto standalone_read(
     coro::scheduler& s,
-    coro::scheduler::fd_type socket,
+    coro::scheduler::fd_t socket,
     std::span<char> buffer
 ) -> coro::task<ssize_t>
 {
@@ -283,7 +284,8 @@ TEST_CASE("scheduler separate thread resume")
     auto func = [&]() -> coro::task<void>
     {
         // User manual resume token, create one specifically for each task being generated
-        coro::resume_token<void> token{s};
+        // coro::resume_token<void> token{s};
+        auto token = s.generate_resume_token<void>();
 
         // Normally this thread is probably already running for real world use cases, but in general
         // the 3rd party function api will be set, they should have "user data" void* or ability
@@ -462,11 +464,12 @@ TEST_CASE("scheduler yield with scheduler event uint64_t")
     REQUIRE(counter == 42);
 }
 
-TEST_CASE("scheduler yield user provided event")
+TEST_CASE("scheduler yield user event")
 {
     std::string expected_result = "Here I am!";
     coro::scheduler s{};
-    coro::resume_token<std::string> token{s};
+    auto token = s.generate_resume_token<std::string>();
+    // coro::resume_token<std::string> token{s};
 
     auto func = [&]() -> coro::task<void>
     {
@@ -480,4 +483,32 @@ TEST_CASE("scheduler yield user provided event")
     token.resume(expected_result);
 
     s.shutdown();
+}
+
+TEST_CASE("scheduler yield user event multiple waiters")
+{
+    std::atomic<int> counter{0};
+    coro::scheduler s{};
+    auto token = s.generate_resume_token<void>();
+
+    auto func = [&](int amount) -> coro::task<void>
+    {
+        co_await token;
+        counter += amount;
+    };
+
+    s.schedule(func(1));
+    s.schedule(func(2));
+    s.schedule(func(3));
+    s.schedule(func(4));
+    s.schedule(func(5));
+
+    token.resume();
+
+    // This will bypass co_await since its already resumed.
+    s.schedule(func(10));
+
+    s.shutdown();
+
+    REQUIRE(counter == 25);
 }

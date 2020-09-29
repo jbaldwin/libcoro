@@ -151,12 +151,12 @@ class resume_token final : public detail::resume_token_base
     {
 
     }
-public:
     resume_token(scheduler& s)
         : detail::resume_token_base(&s)
     {
 
     }
+public:
 
     ~resume_token() override = default;
 
@@ -189,13 +189,12 @@ class resume_token<void> final : public detail::resume_token_base
     {
 
     }
-public:
     resume_token(scheduler& s)
         : detail::resume_token_base(&s)
     {
 
     }
-
+public:
     ~resume_token() override = default;
 
     resume_token(const resume_token&) = delete;
@@ -325,7 +324,7 @@ private:
     static constexpr const void* m_resume_ptr = &m_resume_object;
 
 public:
-    using fd_type = int;
+    using fd_t = int;
 
     enum class shutdown_type
     {
@@ -386,6 +385,12 @@ public:
         }
     }
 
+    /**
+     * Schedules a task to be run as soon as possible.  This pushes the task into a FIFO queue.
+     * @param task The task to schedule as soon as possible.
+     * @return True if the task has been scheduled, false if scheduling failed.  Currently the only
+     *         way for this to fail is if the scheduler is trying to shutdown.
+     */
     auto schedule(coro::task<void> task) -> bool
     {
         if(m_shutdown)
@@ -406,6 +411,12 @@ public:
         return true;
     }
 
+    /**
+     * Schedules a task to be run after waiting for a certain period of time.
+     * @param task The task to schedule after waiting `after` amount of time.
+     * @return True if the task has been scheduled, false if scheduling failed.  Currently the only
+     *         way for this to fail is if the scheduler is trying to shutdown.
+     */
     auto schedule_after(coro::task<void> task, std::chrono::milliseconds after) -> bool
     {
         if(m_shutdown)
@@ -416,7 +427,12 @@ public:
         return schedule(scheduler_after_func(std::move(task), after));
     }
 
-    auto poll(fd_type fd, poll_op op) -> coro::task<void>
+    /**
+     * Polls a specific file descriptor for the given poll operation.
+     * @param fd The file descriptor to poll.
+     * @param op The type of poll operation to perform.
+     */
+    auto poll(fd_t fd, poll_op op) -> coro::task<void>
     {
         co_await unsafe_yield<void>(
             [&](resume_token<void>& token)
@@ -439,7 +455,7 @@ public:
      * @param buffer The buffer to place read bytes into.
      * @return The number of bytes read or an error code if negative.
      */
-    auto read(fd_type fd, std::span<char> buffer) -> coro::task<ssize_t>
+    auto read(fd_t fd, std::span<char> buffer) -> coro::task<ssize_t>
     {
         co_await poll(fd, poll_op::read);
         co_return ::read(fd, buffer.data(), buffer.size());
@@ -452,7 +468,7 @@ public:
      * @param buffer The data to write to `fd`.
      * @return The number of bytes written or an error code if negative.
      */
-    auto write(fd_type fd, const std::span<const char> buffer) -> coro::task<ssize_t>
+    auto write(fd_t fd, const std::span<const char> buffer) -> coro::task<ssize_t>
     {
         co_await poll(fd, poll_op::write);
         co_return ::write(fd, buffer.data(), buffer.size());;
@@ -465,7 +481,9 @@ public:
      * Normal usage of this might look like:
      *  \code
            scheduler.yield([](coro::resume_token<void>& t) {
-               auto on_service_complete = [&]() { t.resume(); };
+               auto on_service_complete = [&]() {
+                   t.resume();  // This resume call will resume the task on the scheduler thread.
+               };
                service.do_work(on_service_complete);
            });
      *  \endcode
@@ -494,6 +512,9 @@ public:
 
     /**
      * User provided resume token to yield the current coroutine until the token's resume is called.
+     * Its also possible to co_await a resume token inline without calling this yield function.
+     * @param token Resume token to await the current task on.  Use scheduer::generate_resume_token<T>() to
+     *              generate a resume token to use on this scheduer.
      */
     template<typename return_type>
     auto yield(resume_token<return_type>& token) -> coro::task<void>
@@ -509,7 +530,7 @@ public:
      */
     auto yield_for(std::chrono::milliseconds amount) -> coro::task<void>
     {
-        fd_type timer_fd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC);
+        fd_t timer_fd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC);
         if(timer_fd == -1)
         {
             std::string msg = "Failed to create timerfd errorno=[" + std::string{strerror(errno)} + "].";
@@ -535,6 +556,12 @@ public:
         co_await read(timer_fd, std::span<char>{reinterpret_cast<char*>(&value), sizeof(value)});
         close(timer_fd);
         co_return;
+    }
+
+    template<typename return_type>
+    auto generate_resume_token() -> resume_token<return_type>
+    {
+        return resume_token<return_type>(*this);
     }
 
     /**
@@ -586,9 +613,9 @@ public:
     auto thread_id() const -> std::thread::id { return m_background_thread.get_id(); }
 
 private:
-    fd_type m_epoll_fd{-1};
-    fd_type m_submit_fd{-1};
-    fd_type m_resume_fd{-1};
+    fd_t m_epoll_fd{-1};
+    fd_t m_submit_fd{-1};
+    fd_t m_resume_fd{-1};
 
     std::atomic<bool> m_is_running{false};
     std::atomic<bool> m_shutdown{false};

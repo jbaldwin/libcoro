@@ -104,11 +104,10 @@ TEST_CASE("benchmark counter task scheduler yield -> resume from main")
     constexpr std::size_t ops = iterations * 2; // the external resume is still a resume op
 
     coro::scheduler s{};
-    coro::resume_token<void> rt{s};
     std::vector<coro::resume_token<void>> tokens{};
     for(std::size_t i = 0; i < iterations; ++i)
     {
-        tokens.emplace_back(s);
+        tokens.emplace_back(s.generate_resume_token<void>());
     }
 
     std::atomic<uint64_t> counter{0};
@@ -149,7 +148,7 @@ TEST_CASE("benchmark counter task scheduler yield -> resume from coroutine")
     std::vector<coro::resume_token<void>> tokens{};
     for(std::size_t i = 0; i < iterations; ++i)
     {
-        tokens.emplace_back(s);
+        tokens.emplace_back(s.generate_resume_token<void>());
     }
 
     std::atomic<uint64_t> counter{0};
@@ -192,7 +191,7 @@ TEST_CASE("benchmark counter task scheduler resume from coroutine -> yield")
     std::vector<coro::resume_token<void>> tokens{};
     for(std::size_t i = 0; i < iterations; ++i)
     {
-        tokens.emplace_back(s);
+        tokens.emplace_back(s.generate_resume_token<void>());
     }
 
     std::atomic<uint64_t> counter{0};
@@ -235,7 +234,7 @@ TEST_CASE("benchmark counter task scheduler yield (all) -> resume (all) from cor
     std::vector<coro::resume_token<void>> tokens{};
     for(std::size_t i = 0; i < iterations; ++i)
     {
-        tokens.emplace_back(s);
+        tokens.emplace_back(s.generate_resume_token<void>());
     }
 
     std::atomic<uint64_t> counter{0};
