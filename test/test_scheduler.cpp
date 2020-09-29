@@ -396,7 +396,7 @@ TEST_CASE("scheduler trigger growth of internal tasks storage")
 {
     std::atomic<uint64_t> counter{0};
     constexpr std::size_t iterations{512};
-    coro::scheduler s{1};
+    coro::scheduler s{coro::scheduler::options{.reserve_size = 1}};
 
     auto wait_func = [&](uint64_t id, std::chrono::milliseconds wait_time) -> coro::task<void>
     {
@@ -494,6 +494,7 @@ TEST_CASE("scheduler yield user event multiple waiters")
     auto func = [&](int amount) -> coro::task<void>
     {
         co_await token;
+        std::cerr << "amount=" << amount << "\n";
         counter += amount;
     };
 
@@ -503,6 +504,8 @@ TEST_CASE("scheduler yield user event multiple waiters")
     s.schedule(func(4));
     s.schedule(func(5));
 
+    std::this_thread::sleep_for(20ms);
+
     token.resume();
 
     // This will bypass co_await since its already resumed.
@@ -511,4 +514,28 @@ TEST_CASE("scheduler yield user event multiple waiters")
     s.shutdown();
 
     REQUIRE(counter == 25);
+}
+
+TEST_CASE("scheduler manual process events with self generating coroutine (stack overflow check)")
+{
+    uint64_t counter{0};
+    coro::scheduler s{coro::scheduler::options{ .thread_strategy = coro::scheduler::thread_strategy_t::manual }};
+
+    auto func = [&](auto f) -> coro::task<void>
+    {
+        ++counter;
+
+        // this should detect stack overflows well enough
+        if(counter % 10'000'000 == 0)
+        {
+            co_return;
+        }
+
+        s.schedule(f(f));
+        co_return;
+    };
+
+    s.schedule(func(func));
+
+    while(s.process_events()) ;
 }

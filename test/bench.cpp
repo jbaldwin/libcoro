@@ -66,7 +66,7 @@ TEST_CASE("benchmark counter func coro::sync_wait(awaitable)")
 
     for(std::size_t i = 0; i < iterations; ++i)
     {
-        coro::sync_wait(func);
+        coro::sync_wait(func());
     }
 
     print_stats("benchmark counter func coro::sync_wait(awaitable)", iterations, start, sc::now());
@@ -230,7 +230,7 @@ TEST_CASE("benchmark counter task scheduler yield (all) -> resume (all) from cor
     constexpr std::size_t iterations = default_iterations;
     constexpr std::size_t ops = iterations * 2; // each iteration executes 2 coroutines.
 
-    coro::scheduler s{iterations};
+    coro::scheduler s{ coro::scheduler::options { .reserve_size = iterations } };
     std::vector<coro::resume_token<void>> tokens{};
     for(std::size_t i = 0; i < iterations; ++i)
     {

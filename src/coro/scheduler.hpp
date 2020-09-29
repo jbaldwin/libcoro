@@ -288,6 +288,7 @@ private:
 
         auto size() const -> std::size_t { return m_tasks_to_delete.size(); }
         auto empty() const -> bool { return m_tasks_to_delete.empty(); }
+        auto capacity() const -> std::size_t { return m_tasks.size(); }
 
     private:
         auto grow() -> task_pos
@@ -326,7 +327,7 @@ private:
 public:
     using fd_t = int;
 
-    enum class shutdown_type
+    enum class shutdown_t
     {
         /// Synchronously wait for all tasks to complete when calling shutdown.
         sync,
@@ -334,19 +335,36 @@ public:
         async
     };
 
+    enum class thread_strategy_t
+    {
+        /// Spawns a background thread for the scheduler to run on.
+        spawn,
+        /// Adopts this thread as the scheduler thread.
+        adopt,
+        /// Requires the user to call process_events() to drive the scheduler
+        manual
+    };
+
+    struct options
+    {
+        /// The number of tasks to reserve space for upon creating the scheduler.
+        std::size_t reserve_size{8};
+        /// The growth factor for task space when capacity is full.
+        double growth_factor{2};
+        thread_strategy_t thread_strategy{thread_strategy_t::spawn};
+    };
+
     /**
-     * @param reserve_size Reserve up-front this many tasks for concurrent execution.  The scheduler
-     *                     will also automatically grow this if needed.
-     * @param growth_factor The factor to grow by when the internal tasks are full.
+     * @param options Various scheduler options to tune how it behaves.
      */
     scheduler(
-        std::size_t reserve_size = 8,
-        double growth_factor = 2
+        const options opts = options{8, 2, thread_strategy_t::spawn}
     )
         :   m_epoll_fd(epoll_create1(EPOLL_CLOEXEC)),
             m_submit_fd(eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK)),
             m_resume_fd(eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK)),
-            m_task_manager(reserve_size, growth_factor)
+            m_thread_strategy(opts.thread_strategy),
+            m_task_manager(opts.reserve_size, opts.growth_factor)
     {
         struct epoll_event e{};
         e.events = EPOLLIN;
@@ -357,7 +375,15 @@ public:
         e.data.ptr = const_cast<void*>(m_resume_ptr);
         epoll_ctl(m_epoll_fd, EPOLL_CTL_ADD, m_resume_fd, &e);
 
-        m_background_thread = std::thread([this] { this->run(); });
+        if(m_thread_strategy == thread_strategy_t::spawn)
+        {
+            m_scheduler_thread = std::thread([this] { this->run(); });
+        }
+        else if(m_thread_strategy == thread_strategy_t::adopt)
+        {
+            run();
+        }
+        // else manual mode, the user must call process_events.
     }
 
     scheduler(const scheduler&) = delete;
@@ -385,6 +411,8 @@ public:
         }
     }
 
+    // TODO: try and trigger a stack overflow via chained resume'ed tasks on the process event thread.
+
     /**
      * Schedules a task to be run as soon as possible.  This pushes the task into a FIFO queue.
      * @param task The task to schedule as soon as possible.
@@ -398,13 +426,19 @@ public:
             return false;
         }
 
+        // This function intentionally does not check to see if its executing on the thread that is
+        // processing events.  If the given task recursively generates tasks it will result in a
+        // stack overflow very quickly.  Instead it takes the long path of adding it to the FIFO
+        // queue and processing through the normal pipeline.  This simplifies the code and also makes
+        // the order in which newly submitted tasks are more fair in regards to FIFO.
+
         ++m_size;
         {
             std::lock_guard<std::mutex> lock{m_submit_mutex};
             m_submitted_tasks.emplace_back(std::move(task));
         }
 
-        // Signal to the event loop there is a submitted task.
+        // Signal to the thread processing events there is a newly scheduled task.
         uint64_t value{1};
         ::write(m_submit_fd, &value, sizeof(value));
 
@@ -558,10 +592,21 @@ public:
         co_return;
     }
 
-    template<typename return_type>
+    /**
+     * Generates a resume token that can be used to resume an executing task.
+     * @tparam The return type of resuming the async operation.
+     * @return Resume token with the given return type.
+     */
+    template<typename return_type = void>
     auto generate_resume_token() -> resume_token<return_type>
     {
         return resume_token<return_type>(*this);
+    }
+
+    auto process_events(std::chrono::milliseconds timeout = std::chrono::milliseconds{1000}) -> std::size_t
+    {
+        process_events_internal_set_thread(timeout);
+        return m_size;
     }
 
     /**
@@ -575,9 +620,15 @@ public:
     auto empty() const -> bool { return m_size == 0; }
 
     /**
-     * @return True if this scheduler is currently running.
+     * @return The maximum number of tasks this scheduler can process without growing.
      */
-    auto is_running() const noexcept -> bool { return m_is_running; }
+    auto capacity() const -> std::size_t { return m_task_manager.capacity(); }
+
+    /**
+     * Is there a thread processing this schedulers events?
+     * If this is in thread strategy spawn or adopt this will always be true until shutdown.
+     */
+    auto is_running() const noexcept -> bool { return m_running; }
 
     /**
      * @return True if this scheduler has been requested to shutdown.
@@ -587,12 +638,12 @@ public:
     /**
      * Requests the scheduler to finish processing all of its current tasks and shutdown.
      * New tasks submitted via `scheduler::schedule()` will be rejected after this is called.
-     * @param wait_for_tasks This call will block until all tasks are complete if shutdown_type::sync
-     *                       is passed in, if shutdown_type::async is passed this function will tell
+     * @param wait_for_tasks This call will block until all tasks are complete if shutdown_t::sync
+     *                       is passed in, if shutdown_t::async is passed this function will tell
      *                       the scheduler to shutdown but not wait for all tasks to complete, it returns
      *                       immediately.
      */
-    auto shutdown(shutdown_type wait_for_tasks = shutdown_type::sync) -> void
+    auto shutdown(shutdown_t wait_for_tasks = shutdown_t::sync) -> void
     {
         if(!m_shutdown.exchange(true))
         {
@@ -600,26 +651,22 @@ public:
             uint64_t value{1};
             ::write(m_submit_fd, &value, sizeof(value));
 
-            if(wait_for_tasks == shutdown_type::sync && m_background_thread.joinable())
+            if(wait_for_tasks == shutdown_t::sync && m_scheduler_thread.joinable())
             {
-                m_background_thread.join();
+                m_scheduler_thread.join();
             }
         }
     }
-
-    /**
-     * @return The scheduler's thread id.
-     */
-    auto thread_id() const -> std::thread::id { return m_background_thread.get_id(); }
 
 private:
     fd_t m_epoll_fd{-1};
     fd_t m_submit_fd{-1};
     fd_t m_resume_fd{-1};
 
-    std::atomic<bool> m_is_running{false};
+    thread_strategy_t m_thread_strategy;
+    std::atomic<bool> m_running{false};
     std::atomic<bool> m_shutdown{false};
-    std::thread m_background_thread;
+    std::thread m_scheduler_thread;
 
     std::mutex m_submit_mutex{};
     std::deque<coro::task<void>> m_submitted_tasks{};
@@ -677,123 +724,143 @@ private:
         ::write(m_resume_fd, &value, sizeof(value));
     }
 
-    auto run() -> void
+    static constexpr std::chrono::milliseconds m_default_timeout{1000};
+    static constexpr std::chrono::milliseconds m_no_timeout{0};
+    static constexpr std::size_t m_max_events = 8;
+    std::array<struct epoll_event, m_max_events> m_events{};
+
+    auto process_events_internal_set_thread(std::chrono::milliseconds user_timeout) -> void
     {
-        using namespace std::chrono_literals;
-
-        m_is_running = true;
-
-        constexpr std::chrono::milliseconds default_timeout{1000};
-        constexpr std::chrono::milliseconds no_timeout{0};
-        constexpr std::size_t max_events = 8;
-        std::array<struct epoll_event, max_events> events{};
-
-        // Execute tasks until stopped or there are more tasks to complete.
-        while(!m_shutdown || m_size > 0)
+        // Do not allow two threads to process events at the same time.
+        bool expected{false};
+        if(m_running.compare_exchange_strong(expected, true))
         {
-            auto tasks_available = !m_resume_tasks.empty() || !m_submitted_tasks.empty();
-            auto timeout = tasks_available ? no_timeout : default_timeout;
-            auto event_count = epoll_wait(m_epoll_fd, events.data(), max_events, timeout.count());
+            process_events_internal(user_timeout);
+            m_running = false;
+        }
+    }
 
-            bool submit_event{false};
-            bool resume_event{false};
-            if(event_count > 0)
+    auto process_events_internal(std::chrono::milliseconds user_timeout) -> void
+    {
+        auto tasks_available = !m_resume_tasks.empty() || !m_submitted_tasks.empty();
+        auto timeout = tasks_available ? m_no_timeout : user_timeout;
+        auto event_count = epoll_wait(m_epoll_fd, m_events.data(), m_max_events, timeout.count());
+
+        bool submit_event{false};
+        bool resume_event{false};
+        if(event_count > 0)
+        {
+            for(std::size_t i = 0; i < event_count; ++i)
             {
-                for(std::size_t i = 0; i < event_count; ++i)
-                {
-                    void* handle_ptr = events[i].data.ptr;
+                void* handle_ptr = m_events[i].data.ptr;
 
-                    if(handle_ptr == m_submit_ptr)
-                    {
-                        uint64_t value{0};
-                        ::read(m_submit_fd, &value, sizeof(value));
-                        (void)value; // discard, the read merely resets the eventfd counter in the kernel.
-                        submit_event = true;
-                    }
-                    else if(handle_ptr == m_resume_ptr)
-                    {
-                        uint64_t value{0};
-                        ::read(m_resume_fd, &value, sizeof(value));
-                        (void)value; // discard, the read merely resets the eventfd counter in the kernel.
-                        resume_event = true;
-                    }
-                    else
-                    {
-                        // Individual poll task wake-up.
-                        auto* token_ptr = static_cast<resume_token<void>*>(handle_ptr);
-                        token_ptr->resume();
-                    }
+                if(handle_ptr == m_submit_ptr)
+                {
+                    uint64_t value{0};
+                    ::read(m_submit_fd, &value, sizeof(value));
+                    (void)value; // discard, the read merely resets the eventfd counter to zero.
+                    submit_event = true;
                 }
-            }
-
-            if(resume_event || !m_resume_tasks.empty())
-            {
-                do
+                else if(handle_ptr == m_resume_ptr)
                 {
-                    std::coroutine_handle<> handle;
-                    {
-                        std::lock_guard<std::mutex> lock{m_resume_mutex};
-                        if(m_resume_tasks.empty())
-                        {
-                            break;
-                        }
-                        handle = m_resume_tasks.front();
-                        m_resume_tasks.pop_front();
-                    }
-
-                    if(!handle.done())
-                    {
-                        handle.resume();
-                    }
-                } while(!m_resume_tasks.empty());
-            }
-
-            // Cleanup any tasks that marked themselves as completed and remove them from
-            // the active tasks in the scheduler, do this before starting new tasks that might
-            // need slots in the task manager.
-            if(!m_task_manager.empty())
-            {
-                m_size -= m_task_manager.gc();
-            }
-
-            // Now flush the submit queue.
-            if(submit_event || !m_submitted_tasks.empty())
-            {
-                while(true)
+                    uint64_t value{0};
+                    ::read(m_resume_fd, &value, sizeof(value));
+                    (void)value; // discard, the read merely resets the eventfd counter to zero.
+                    resume_event = true;
+                }
+                else
                 {
-                    std::optional<coro::task<void>> task_opt;
-                    {
-                        std::lock_guard<std::mutex> lock{m_submit_mutex};
-                        if(m_submitted_tasks.empty())
-                        {
-                            break;
-                        }
-                        task_opt = std::move(m_submitted_tasks.front());
-                        m_submitted_tasks.pop_front();
-                    }
-
-                    auto& task = task_opt.value();
-                    if(!task.is_ready()) // sanity check, the user could have manually resumed.
-                    {
-                        // Attempt to process the task synchronously before suspending.
-                        task.resume();
-
-                        if(!task.is_ready())
-                        {
-                            m_task_manager.store(std::move(task));
-                            // This task is now suspended waiting for an event.
-                        }
-                        else
-                        {
-                            // This task completed synchronously.
-                            --m_size;
-                        }
-                    }
+                    // Individual poll task wake-up.
+                    auto* token_ptr = static_cast<resume_token<void>*>(handle_ptr);
+                    token_ptr->resume();
                 }
             }
         }
 
-        m_is_running = false;
+        if(resume_event || !m_resume_tasks.empty())
+        {
+            do
+            {
+                std::coroutine_handle<> handle;
+                {
+                    std::lock_guard<std::mutex> lock{m_resume_mutex};
+                    if(m_resume_tasks.empty())
+                    {
+                        break;
+                    }
+                    handle = m_resume_tasks.front();
+                    m_resume_tasks.pop_front();
+                }
+
+                if(!handle.done())
+                {
+                    handle.resume();
+                }
+            } while(!m_resume_tasks.empty());
+        }
+
+        // Cleanup any tasks that marked themselves as completed and remove them from
+        // the active tasks in the scheduler, do this before starting new tasks that might
+        // need slots in the task manager.
+        if(!m_task_manager.empty())
+        {
+            m_size -= m_task_manager.gc();
+        }
+
+        // Now flush the submit queue.
+        if(submit_event || !m_submitted_tasks.empty())
+        {
+            while(true)
+            {
+                std::optional<coro::task<void>> task_opt;
+                {
+                    std::lock_guard<std::mutex> lock{m_submit_mutex};
+                    if(m_submitted_tasks.empty())
+                    {
+                        break;
+                    }
+                    task_opt = std::move(m_submitted_tasks.front());
+                    m_submitted_tasks.pop_front();
+                }
+
+                task_start(task_opt.value());
+            }
+        }
+    }
+
+    auto task_start(coro::task<void>& task) -> void
+    {
+        if(!task.is_ready()) // sanity check, the user could have manually resumed.
+        {
+            // Attempt to process the task synchronously before suspending.
+            task.resume();
+
+            if(!task.is_ready())
+            {
+                m_task_manager.store(std::move(task));
+                // This task is now suspended waiting for an event.
+            }
+            else
+            {
+                // This task completed synchronously.
+                --m_size;
+            }
+        }
+        else
+        {
+            --m_size;
+        }
+    }
+
+    auto run() -> void
+    {
+        m_running = true;
+        // Execute tasks until stopped or there are more tasks to complete.
+        while(!m_shutdown || m_size > 0)
+        {
+            process_events_internal(m_default_timeout);
+        }
+        m_running = false;
     }
 };
 
@@ -808,10 +875,15 @@ inline auto resume_token<return_type>::resume(return_type result) noexcept -> vo
         auto* waiters = static_cast<awaiter*>(old_value);
         while(waiters != nullptr)
         {
+            // Intentionally not checking if this is running on the scheduler process event thread
+            // as it can create a stack overflow if it triggers a 'resume chain'.  unsafe_yield()
+            // is guaranteed in this context to never be recursive and thus resuming directly
+            // on the process event thread should not be able to trigger a stack overflow.
+
             auto* next = waiters->m_next;
-            // If scheduler is nullptr this is an unsafe_yield() OR if this call is on the scheduler thread.
+            // If scheduler is nullptr this is an unsafe_yield()
             // If scheduler is present this is a yield()
-            if(m_scheduler == nullptr || std::this_thread::get_id() == m_scheduler->thread_id())
+            if(m_scheduler == nullptr)// || m_scheduler->this_thread_is_processing_events())
             {
                 waiters->m_awaiting_coroutine.resume();
             }
@@ -833,9 +905,7 @@ inline auto resume_token<void>::resume() noexcept -> void
         while(waiters != nullptr)
         {
             auto* next = waiters->m_next;
-            // If scheduler is nullptr this is an unsafe_yield() OR if this call is on the scheduler thread.
-            // If scheduler is present this is a yield()
-            if(m_scheduler == nullptr || std::this_thread::get_id() == m_scheduler->thread_id())
+            if(m_scheduler == nullptr)
             {
                 waiters->m_awaiting_coroutine.resume();
             }

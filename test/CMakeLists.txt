@@ -5,6 +5,7 @@ set(LIBCORO_TEST_SOURCE_FILES
     bench.cpp
     test_async_manual_reset_event.cpp
     test_scheduler.cpp
+    test_sync_wait.cpp
     test_task.cpp
 )
 

@@ -1,19 +1,29 @@
 #pragma once
 
 #include "coro/task.hpp"
+#include "coro/scheduler.hpp"
 
 namespace coro
 {
 
-template<typename awaitable_functor>
-auto sync_wait(awaitable_functor&& awaitable) -> decltype(auto)
+template<typename task_type>
+auto sync_wait(task_type&& task) -> decltype(auto)
 {
-    auto task = awaitable();
     while(!task.is_ready())
     {
         task.resume();
     }
     return task.promise().result();
+}
+
+template<typename ... tasks>
+auto sync_wait_all(tasks&& ...awaitables) -> void
+{
+    scheduler s{ scheduler::options { .thread_strategy = scheduler::thread_strategy_t::manual } };
+
+    (s.schedule(std::move(awaitables)), ...);
+
+    while(s.process_events() > 0) ;
 }
 
 } // namespace coro
