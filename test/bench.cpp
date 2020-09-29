@@ -101,6 +101,7 @@ TEST_CASE("benchmark counter task scheduler")
 TEST_CASE("benchmark counter task scheduler yield -> resume from main")
 {
     constexpr std::size_t iterations = default_iterations;
+    constexpr std::size_t ops = iterations * 2; // the external resume is still a resume op
 
     coro::scheduler s{};
     coro::resume_token<void> rt{s};
@@ -134,7 +135,7 @@ TEST_CASE("benchmark counter task scheduler yield -> resume from main")
     s.shutdown();
 
     auto stop = sc::now();
-    print_stats("benchmark counter task scheduler yield -> resume from main", iterations, start, stop);
+    print_stats("benchmark counter task scheduler yield -> resume from main", ops, start, stop);
     REQUIRE(s.empty());
     REQUIRE(counter == iterations);
 }

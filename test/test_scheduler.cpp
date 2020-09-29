@@ -106,7 +106,6 @@ TEST_CASE("scheduler task with multiple yields on event")
         token.resume(1);
         while(counter != expected)
         {
-            std::cerr << "counter=" << counter << "\n";
             std::this_thread::sleep_for(1ms);
         }
     };
@@ -367,6 +366,28 @@ TEST_CASE("scheduler with basic task")
     s.shutdown();
 
     REQUIRE(counter == expected_value);
+}
+
+TEST_CASE("schedule yield for")
+{
+    constexpr std::chrono::milliseconds wait_for{50};
+    std::atomic<uint64_t> counter{0};
+    coro::scheduler s{};
+
+    auto func = [&]() -> coro::task<void>
+    {
+        ++counter;
+        co_return;
+    };
+
+    auto start = std::chrono::steady_clock::now();
+    s.schedule_after(func(), wait_for);
+    s.shutdown();
+    auto stop = std::chrono::steady_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
+
+    REQUIRE(counter == 1);
+    REQUIRE(duration >= wait_for);
 }
 
 TEST_CASE("scheduler trigger growth of internal tasks storage")

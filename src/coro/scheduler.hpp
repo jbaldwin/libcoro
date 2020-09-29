@@ -386,10 +386,6 @@ public:
         }
     }
 
-    // TODO:
-    // 1) Migrate to use coroutines for schedule() and resume(), use resume_tokens!?
-    // 2) schedule_afer(task, chrono<REP, RATIO>)
-
     auto schedule(coro::task<void> task) -> bool
     {
         if(m_shutdown)
@@ -408,6 +404,16 @@ public:
         ::write(m_submit_fd, &value, sizeof(value));
 
         return true;
+    }
+
+    auto schedule_after(coro::task<void> task, std::chrono::milliseconds after) -> bool
+    {
+        if(m_shutdown)
+        {
+            return false;
+        }
+
+        return schedule(scheduler_after_func(std::move(task), after));
     }
 
     auto poll(fd_type fd, poll_op op) -> coro::task<void>
@@ -598,6 +604,24 @@ private:
 
     task_manager m_task_manager;
 
+    auto scheduler_after_func(coro::task<void> inner_task, std::chrono::milliseconds wait_time) -> coro::task<void>
+    {
+        // Seems to already be done.
+        if(inner_task.is_ready())
+        {
+            co_return;
+        }
+
+        // Wait for the period requested, and then resume their task.
+        co_await yield_for(wait_time);
+        inner_task.resume();
+        if(!inner_task.is_ready())
+        {
+            m_task_manager.store(std::move(inner_task));
+        }
+        co_return;
+    }
+
     template<typename return_type, std::invocable<resume_token<return_type>&> before_functor>
     auto unsafe_yield(before_functor before) -> coro::task<return_type>
     {
@@ -705,11 +729,10 @@ private:
                 m_size -= m_task_manager.gc();
             }
 
+            // Now flush the submit queue.
             if(submit_event || !m_submitted_tasks.empty())
             {
-                std::size_t remaining{16};
-
-                while(remaining > 0)
+                while(true)
                 {
                     std::optional<coro::task<void>> task_opt;
                     {
@@ -722,31 +745,22 @@ private:
                         m_submitted_tasks.pop_front();
                     }
 
-                    if(task_opt.has_value())
+                    auto& task = task_opt.value();
+                    if(!task.is_ready()) // sanity check, the user could have manually resumed.
                     {
-                        auto& task = task_opt.value();
-                        if(!task.is_ready()) // sanity check, the user could have manually resumed.
+                        // Attempt to process the task synchronously before suspending.
+                        task.resume();
+
+                        if(!task.is_ready())
                         {
-                            // Attempt to process the task synchronously before suspending.
-                            task.resume();
-
-                            if(!task.is_ready())
-                            {
-                                m_task_manager.store(std::move(task));
-                                // This task is now suspended waiting for an event.
-                            }
-                            else
-                            {
-                                // This task completed synchronously.
-                                --m_size;
-                            }
+                            m_task_manager.store(std::move(task));
+                            // This task is now suspended waiting for an event.
                         }
-
-                        --remaining;
-                    }
-                    else
-                    {
-                        break;
+                        else
+                        {
+                            // This task completed synchronously.
+                            --m_size;
+                        }
                     }
                 }
             }
@@ -770,7 +784,7 @@ inline auto resume_token<return_type>::resume(return_type result) noexcept -> vo
             auto* next = waiters->m_next;
             // If scheduler is nullptr this is an unsafe_yield() OR if this call is on the scheduler thread.
             // If scheduler is present this is a yield()
-            if(m_scheduler == nullptr)// || std::this_thread::get_id() == m_scheduler->thread_id())
+            if(m_scheduler == nullptr || std::this_thread::get_id() == m_scheduler->thread_id())
             {
                 waiters->m_awaiting_coroutine.resume();
             }
@@ -794,7 +808,7 @@ inline auto resume_token<void>::resume() noexcept -> void
             auto* next = waiters->m_next;
             // If scheduler is nullptr this is an unsafe_yield() OR if this call is on the scheduler thread.
             // If scheduler is present this is a yield()
-            if(m_scheduler == nullptr)// || std::this_thread::get_id() == m_scheduler->thread_id())
+            if(m_scheduler == nullptr || std::this_thread::get_id() == m_scheduler->thread_id())
             {
                 waiters->m_awaiting_coroutine.resume();
             }
