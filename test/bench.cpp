@@ -66,10 +66,32 @@ TEST_CASE("benchmark counter func coro::sync_wait(awaitable)")
 
     for(std::size_t i = 0; i < iterations; ++i)
     {
+
         coro::sync_wait(func());
     }
 
     print_stats("benchmark counter func coro::sync_wait(awaitable)", iterations, start, sc::now());
+    REQUIRE(counter == iterations);
+}
+
+TEST_CASE("benchmark counter func coro::sync_wait_all(awaitable)")
+{
+    constexpr std::size_t iterations = default_iterations;
+    std::atomic<uint64_t> counter{0};
+    auto func = [&]() -> coro::task<void>
+    {
+        ++counter;
+        co_return;
+    };
+
+    auto start = sc::now();
+
+    for(std::size_t i = 0; i < iterations; i += 10)
+    {
+        coro::sync_wait_all(func(), func(), func(), func(), func(), func(), func(), func(), func(), func());
+    }
+
+    print_stats("benchmark counter func coro::sync_wait_all(awaitable)", iterations, start, sc::now());
     REQUIRE(counter == iterations);
 }
 

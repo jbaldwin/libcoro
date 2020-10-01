@@ -19,7 +19,10 @@ auto sync_wait(task_type&& task) -> decltype(auto)
 template<typename ... tasks>
 auto sync_wait_all(tasks&& ...awaitables) -> void
 {
-    scheduler s{ scheduler::options { .thread_strategy = scheduler::thread_strategy_t::manual } };
+    scheduler s{ scheduler::options {
+        .reserve_size = sizeof...(awaitables),
+        .thread_strategy = scheduler::thread_strategy_t::manual }
+    };
 
     (s.schedule(std::move(awaitables)), ...);
 

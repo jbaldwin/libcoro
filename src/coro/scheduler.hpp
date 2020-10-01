@@ -9,9 +9,11 @@
 #include <mutex>
 #include <thread>
 #include <span>
-#include <type_traits>
 #include <list>
 #include <queue>
+#include <variant>
+#include <coroutine>
+#include <optional>
 
 #include <sys/epoll.h>
 #include <sys/eventfd.h>
@@ -19,12 +21,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <unistd.h>
-#include <iostream>
 #include <cstring>
-
-#include <atomic>
-#include <coroutine>
-#include <optional>
 
 #include <iostream>
 
@@ -218,6 +215,9 @@ enum class poll_op
 class scheduler
 {
 private:
+    using task_variant = std::variant<coro::task<void>, std::coroutine_handle<>>;
+    using task_queue = std::deque<task_variant>;
+
     /// resume_token<T> needs to be able to call internal scheduler::resume()
     template<typename return_type>
     friend class resume_token;
@@ -233,7 +233,7 @@ private:
     class task_manager
     {
     public:
-        using task_pos = std::list<std::size_t>::iterator;
+        using task_position = std::list<std::size_t>::iterator;
 
         task_manager(const std::size_t reserve_size, const double growth_factor)
             : m_growth_factor(growth_factor)
@@ -246,6 +246,12 @@ private:
             m_free_pos = m_task_indexes.begin();
         }
 
+        /**
+         * Stores a users task and sets a continuation coroutine to automatically mark the task
+         * as deleted upon the coroutines completion.
+         * @param user_task The scheduled user's task to store since it has suspended after its
+         *                  first execution.
+         */
         auto store(coro::task<void> user_task) -> void
         {
             // Only grow if completely full and attempting to add more.
@@ -267,6 +273,10 @@ private:
             std::advance(m_free_pos, 1);
         }
 
+        /**
+         * Garbage collects any tasks that are marked as deleted.
+         * @return The number of tasks that were deleted.
+         */
         auto gc() -> std::size_t
         {
             std::size_t deleted{0};
@@ -274,8 +284,12 @@ private:
             {
                 for(const auto& pos : m_tasks_to_delete)
                 {
-                    // This doesn't actually 'delete' the task, it'll get overwritten by a new user
-                    // task claims the free space.
+                    // This doesn't actually 'delete' the task, it'll get overwritten when a
+                    // new user task claims the free space.  It could be useful to actually
+                    // delete the tasks so the coroutine stack frames are destroyed.  The advantage
+                    // of letting a new task replace and old one though is that its a 1:1 exchange
+                    // on delete and create, rather than a large pause here to delete all the
+                    // completed tasks.
 
                     // Put the deleted position at the end of the free indexes list.
                     m_task_indexes.splice(m_task_indexes.end(), m_task_indexes, pos);
@@ -286,12 +300,27 @@ private:
             return deleted;
         }
 
-        auto size() const -> std::size_t { return m_tasks_to_delete.size(); }
-        auto empty() const -> bool { return m_tasks_to_delete.empty(); }
+        /**
+         * @return The number of tasks that are awaiting deletion.
+         */
+        auto delete_task_size() const -> std::size_t { return m_tasks_to_delete.size(); }
+
+        /**
+         * @return True if there are no tasks awaiting deletion.
+         */
+        auto delete_tasks_empty() const -> bool { return m_tasks_to_delete.empty(); }
+
+        /**
+         * @return The capacity of this task manager before it will need to grow in size.
+         */
         auto capacity() const -> std::size_t { return m_tasks.size(); }
 
     private:
-        auto grow() -> task_pos
+        /**
+         * Grows each task container by the growth factor.
+         * @return The position of the free index after growing.
+         */
+        auto grow() -> task_position
         {
             // Save an index at the current last item.
             auto last_pos = std::prev(m_task_indexes.end());
@@ -305,24 +334,34 @@ private:
             return std::next(last_pos);
         }
 
-        auto cleanup_func(task_pos pos) -> coro::task<void>
+        /**
+         * Each task the user schedules has this task chained as a continuation to execute after
+         * the user's task completes.  This function takes the task position in the indexes list
+         * and upon execution marks that slot for deletion.  It cannot self delete otherwise it
+         * would corrupt/double free its own coroutine stack frame.
+         */
+        auto cleanup_func(task_position pos) -> coro::task<void>
         {
             // Mark this task for deletion, it cannot delete itself.
             m_tasks_to_delete.push_back(pos);
             co_return;
         };
 
+        /// Maintains the lifetime of the tasks until they are completed.
         std::vector<task_data> m_tasks{};
+        /// The full set of indexes into `m_tasks`.
         std::list<std::size_t> m_task_indexes{};
-        std::vector<task_pos> m_tasks_to_delete{};
-        task_pos m_free_pos{};
+        /// The set of tasks that have completed and need to be deleted.
+        std::vector<task_position> m_tasks_to_delete{};
+        /// The current free position within the task indexes list.  Anything before
+        /// this point is used, itself and anything after is free.
+        task_position m_free_pos{};
+        /// The amount to grow the containers by when all spaces are taken.
         double m_growth_factor{};
     };
 
-    static constexpr const int m_submit_object{0};
-    static constexpr const int m_resume_object{0};
-    static constexpr const void* m_submit_ptr = &m_submit_object;
-    static constexpr const void* m_resume_ptr = &m_resume_object;
+    static constexpr const int m_accept_object{0};
+    static constexpr const void* m_accept_ptr = &m_accept_object;
 
 public:
     using fd_t = int;
@@ -351,6 +390,7 @@ public:
         std::size_t reserve_size{8};
         /// The growth factor for task space when capacity is full.
         double growth_factor{2};
+        /// The threading strategy.
         thread_strategy_t thread_strategy{thread_strategy_t::spawn};
     };
 
@@ -361,19 +401,15 @@ public:
         const options opts = options{8, 2, thread_strategy_t::spawn}
     )
         :   m_epoll_fd(epoll_create1(EPOLL_CLOEXEC)),
-            m_submit_fd(eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK)),
-            m_resume_fd(eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK)),
+            m_accept_fd(eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK)),
             m_thread_strategy(opts.thread_strategy),
             m_task_manager(opts.reserve_size, opts.growth_factor)
     {
         struct epoll_event e{};
         e.events = EPOLLIN;
 
-        e.data.ptr = const_cast<void*>(m_submit_ptr);
-        epoll_ctl(m_epoll_fd, EPOLL_CTL_ADD, m_submit_fd, &e);
-
-        e.data.ptr = const_cast<void*>(m_resume_ptr);
-        epoll_ctl(m_epoll_fd, EPOLL_CTL_ADD, m_resume_fd, &e);
+        e.data.ptr = const_cast<void*>(m_accept_ptr);
+        epoll_ctl(m_epoll_fd, EPOLL_CTL_ADD, m_accept_fd, &e);
 
         if(m_thread_strategy == thread_strategy_t::spawn)
         {
@@ -399,19 +435,12 @@ public:
             close(m_epoll_fd);
             m_epoll_fd = -1;
         }
-        if(m_submit_fd != -1)
+        if(m_accept_fd != -1)
         {
-            close(m_submit_fd);
-            m_submit_fd = -1;
-        }
-        if(m_resume_fd != -1)
-        {
-            close(m_resume_fd);
-            m_resume_fd = -1;
+            close(m_accept_fd);
+            m_accept_fd = -1;
         }
     }
-
-    // TODO: try and trigger a stack overflow via chained resume'ed tasks on the process event thread.
 
     /**
      * Schedules a task to be run as soon as possible.  This pushes the task into a FIFO queue.
@@ -421,7 +450,7 @@ public:
      */
     auto schedule(coro::task<void> task) -> bool
     {
-        if(m_shutdown)
+        if(m_shutdown_requested.load(std::memory_order_relaxed))
         {
             return false;
         }
@@ -432,15 +461,19 @@ public:
         // queue and processing through the normal pipeline.  This simplifies the code and also makes
         // the order in which newly submitted tasks are more fair in regards to FIFO.
 
-        ++m_size;
+        m_size.fetch_add(1, std::memory_order_relaxed);
         {
-            std::lock_guard<std::mutex> lock{m_submit_mutex};
-            m_submitted_tasks.emplace_back(std::move(task));
+            std::lock_guard<std::mutex> lk{m_accept_mutex};
+            m_accept_queue.emplace_back(std::move(task));
         }
 
-        // Signal to the thread processing events there is a newly scheduled task.
-        uint64_t value{1};
-        ::write(m_submit_fd, &value, sizeof(value));
+        // Send an event if one isn't already set.
+        bool expected{false};
+        if(m_event_set.compare_exchange_strong(expected, true, std::memory_order_release, std::memory_order_relaxed))
+        {
+            uint64_t value{1};
+            ::write(m_accept_fd, &value, sizeof(value));
+        }
 
         return true;
     }
@@ -453,7 +486,7 @@ public:
      */
     auto schedule_after(coro::task<void> task, std::chrono::milliseconds after) -> bool
     {
-        if(m_shutdown)
+        if(m_shutdown_requested.load(std::memory_order_relaxed))
         {
             return false;
         }
@@ -606,18 +639,18 @@ public:
     auto process_events(std::chrono::milliseconds timeout = std::chrono::milliseconds{1000}) -> std::size_t
     {
         process_events_internal_set_thread(timeout);
-        return m_size;
+        return m_size.load(std::memory_order_relaxed);
     }
 
     /**
      * @return The number of active tasks still executing and unprocessed submitted tasks.
      */
-    auto size() const -> std::size_t { return m_size.load(); }
+    auto size() const -> std::size_t { return m_size.load(std::memory_order_relaxed); }
 
     /**
      * @return True if there are no tasks executing or waiting to be executed in this scheduler.
      */
-    auto empty() const -> bool { return m_size == 0; }
+    auto empty() const -> bool { return size() == 0; }
 
     /**
      * @return The maximum number of tasks this scheduler can process without growing.
@@ -628,12 +661,12 @@ public:
      * Is there a thread processing this schedulers events?
      * If this is in thread strategy spawn or adopt this will always be true until shutdown.
      */
-    auto is_running() const noexcept -> bool { return m_running; }
+    auto is_running() const noexcept -> bool { return m_running.load(std::memory_order_relaxed); }
 
     /**
      * @return True if this scheduler has been requested to shutdown.
      */
-    auto is_shutdown() const noexcept -> bool { return m_shutdown; }
+    auto is_shutdown() const noexcept -> bool { return m_shutdown_requested.load(std::memory_order_relaxed); }
 
     /**
      * Requests the scheduler to finish processing all of its current tasks and shutdown.
@@ -645,11 +678,11 @@ public:
      */
     auto shutdown(shutdown_t wait_for_tasks = shutdown_t::sync) -> void
     {
-        if(!m_shutdown.exchange(true))
+        if(!m_shutdown_requested.exchange(true, std::memory_order_release))
         {
             // Signal the event loop to stop asap.
             uint64_t value{1};
-            ::write(m_submit_fd, &value, sizeof(value));
+            ::write(m_accept_fd, &value, sizeof(value));
 
             if(wait_for_tasks == shutdown_t::sync && m_scheduler_thread.joinable())
             {
@@ -659,22 +692,34 @@ public:
     }
 
 private:
+    /// The event loop epoll file descriptor.
     fd_t m_epoll_fd{-1};
-    fd_t m_submit_fd{-1};
-    fd_t m_resume_fd{-1};
+    /// The event loop accept new tasks and resume tasks file descriptor.
+    fd_t m_accept_fd{-1};
 
+    /// The threading strategy this scheduler is using.
     thread_strategy_t m_thread_strategy;
+    /// Is this scheduler currently running? Manual mode might not always be running.
     std::atomic<bool> m_running{false};
-    std::atomic<bool> m_shutdown{false};
+    /// Has the scheduler been requested to shutdown?
+    std::atomic<bool> m_shutdown_requested{false};
+    /// If running in threading mode spawn the background thread to process events.
     std::thread m_scheduler_thread;
 
-    std::mutex m_submit_mutex{};
-    std::deque<coro::task<void>> m_submitted_tasks{};
+    /// FIFO queue for new and resumed tasks to execute.
+    task_queue m_accept_queue{};
+    std::mutex m_accept_mutex{};
 
-    std::mutex m_resume_mutex{};
-    std::deque<std::coroutine_handle<>> m_resume_tasks{};
+    /// Has a thread sent an event? (E.g. avoid a kernel write/read?).
+    std::atomic<bool> m_event_set{false};
 
+    /// The total number of tasks that are being processed or suspended.
     std::atomic<std::size_t> m_size{0};
+
+    /// The maximum number of tasks to process inline before polling for more tasks.
+    static constexpr const std::size_t task_inline_process_amount{128};
+    /// Pre-allocated memory area for tasks to process.
+    std::array<task_variant, task_inline_process_amount> m_processing_tasks;
 
     task_manager m_task_manager;
 
@@ -699,134 +744,39 @@ private:
     template<typename return_type, std::invocable<resume_token<return_type>&> before_functor>
     auto unsafe_yield(before_functor before) -> coro::task<return_type>
     {
-        resume_token<return_type> e{};
-        before(e);
-        co_await e;
+        resume_token<return_type> token{};
+        before(token);
+        co_await token;
         if constexpr (std::is_same_v<return_type, void>)
         {
             co_return;
         }
         else
         {
-            co_return e.result();
+            co_return token.result();
         }
     }
 
     auto resume(std::coroutine_handle<> handle) -> void
     {
         {
-            std::lock_guard<std::mutex> lock{m_resume_mutex};
-            m_resume_tasks.emplace_back(handle);
+            std::lock_guard<std::mutex> lk{m_accept_mutex};
+            m_accept_queue.emplace_back(handle);
         }
 
-        // Signal to the event loop there is a task to resume.
-        uint64_t value{1};
-        ::write(m_resume_fd, &value, sizeof(value));
+        // Signal to the event loop there is a task to resume if one hasn't already been sent.
+        bool expected{false};
+        if(m_event_set.compare_exchange_strong(expected, true, std::memory_order_release, std::memory_order_relaxed))
+        {
+            uint64_t value{1};
+            ::write(m_accept_fd, &value, sizeof(value));
+        }
     }
 
     static constexpr std::chrono::milliseconds m_default_timeout{1000};
     static constexpr std::chrono::milliseconds m_no_timeout{0};
     static constexpr std::size_t m_max_events = 8;
     std::array<struct epoll_event, m_max_events> m_events{};
-
-    auto process_events_internal_set_thread(std::chrono::milliseconds user_timeout) -> void
-    {
-        // Do not allow two threads to process events at the same time.
-        bool expected{false};
-        if(m_running.compare_exchange_strong(expected, true))
-        {
-            process_events_internal(user_timeout);
-            m_running = false;
-        }
-    }
-
-    auto process_events_internal(std::chrono::milliseconds user_timeout) -> void
-    {
-        auto tasks_available = !m_resume_tasks.empty() || !m_submitted_tasks.empty();
-        auto timeout = tasks_available ? m_no_timeout : user_timeout;
-        auto event_count = epoll_wait(m_epoll_fd, m_events.data(), m_max_events, timeout.count());
-
-        bool submit_event{false};
-        bool resume_event{false};
-        if(event_count > 0)
-        {
-            for(std::size_t i = 0; i < event_count; ++i)
-            {
-                void* handle_ptr = m_events[i].data.ptr;
-
-                if(handle_ptr == m_submit_ptr)
-                {
-                    uint64_t value{0};
-                    ::read(m_submit_fd, &value, sizeof(value));
-                    (void)value; // discard, the read merely resets the eventfd counter to zero.
-                    submit_event = true;
-                }
-                else if(handle_ptr == m_resume_ptr)
-                {
-                    uint64_t value{0};
-                    ::read(m_resume_fd, &value, sizeof(value));
-                    (void)value; // discard, the read merely resets the eventfd counter to zero.
-                    resume_event = true;
-                }
-                else
-                {
-                    // Individual poll task wake-up.
-                    auto* token_ptr = static_cast<resume_token<void>*>(handle_ptr);
-                    token_ptr->resume();
-                }
-            }
-        }
-
-        if(resume_event || !m_resume_tasks.empty())
-        {
-            do
-            {
-                std::coroutine_handle<> handle;
-                {
-                    std::lock_guard<std::mutex> lock{m_resume_mutex};
-                    if(m_resume_tasks.empty())
-                    {
-                        break;
-                    }
-                    handle = m_resume_tasks.front();
-                    m_resume_tasks.pop_front();
-                }
-
-                if(!handle.done())
-                {
-                    handle.resume();
-                }
-            } while(!m_resume_tasks.empty());
-        }
-
-        // Cleanup any tasks that marked themselves as completed and remove them from
-        // the active tasks in the scheduler, do this before starting new tasks that might
-        // need slots in the task manager.
-        if(!m_task_manager.empty())
-        {
-            m_size -= m_task_manager.gc();
-        }
-
-        // Now flush the submit queue.
-        if(submit_event || !m_submitted_tasks.empty())
-        {
-            while(true)
-            {
-                std::optional<coro::task<void>> task_opt;
-                {
-                    std::lock_guard<std::mutex> lock{m_submit_mutex};
-                    if(m_submitted_tasks.empty())
-                    {
-                        break;
-                    }
-                    task_opt = std::move(m_submitted_tasks.front());
-                    m_submitted_tasks.pop_front();
-                }
-
-                task_start(task_opt.value());
-            }
-        }
-    }
 
     auto task_start(coro::task<void>& task) -> void
     {
@@ -843,24 +793,133 @@ private:
             else
             {
                 // This task completed synchronously.
-                --m_size;
+                m_size.fetch_sub(1, std::memory_order_relaxed);
             }
         }
         else
         {
-            --m_size;
+            m_size.fetch_sub(1, std::memory_order_relaxed);
+        }
+    }
+
+    auto process_task_queue() -> void
+    {
+        std::size_t amount{0};
+        {
+            std::lock_guard<std::mutex> lk{m_accept_mutex};
+            while(!m_accept_queue.empty() && amount < task_inline_process_amount)
+            {
+                m_processing_tasks[amount] = std::move(m_accept_queue.front());
+                m_accept_queue.pop_front();
+                ++amount;
+            }
+        }
+
+        // The queue is empty, we are done here.
+        if(amount == 0)
+        {
+            return; // no more pending tasks
+        }
+
+        for(std::size_t i = 0; i < amount; ++i)
+        {
+            auto& task_v = m_processing_tasks[i];
+            if(std::holds_alternative<coro::task<void>>(task_v))
+            {
+                auto& task = std::get<coro::task<void>>(task_v);
+                task_start(task);
+            }
+            else
+            {
+                auto handle = std::get<std::coroutine_handle<>>(task_v);
+                if(!handle.done())
+                {
+                    handle.resume();
+                }
+            }
+        }
+    }
+
+    auto process_events_internal(std::chrono::milliseconds user_timeout) -> void
+    {
+        std::atomic_thread_fence(std::memory_order_acquire);
+        bool tasks_ready = !m_accept_queue.empty();
+
+        // bool tasks_ready = m_event_set.load(std::memory_order_acquire);
+        auto timeout = (tasks_ready) ? m_no_timeout : user_timeout;
+
+        // Poll is run every iteration to make sure 'waiting' events are properly put into
+        // the FIFO queue for when they are ready.
+        auto event_count = epoll_wait(m_epoll_fd, m_events.data(), m_max_events, timeout.count());
+        if(event_count > 0)
+        {
+            for(std::size_t i = 0; i < event_count; ++i)
+            {
+                void* handle_ptr = m_events[i].data.ptr;
+
+                if(handle_ptr == m_accept_ptr)
+                {
+                    uint64_t value{0};
+                    ::read(m_accept_fd, &value, sizeof(value));
+                    (void)value; // discard, the read merely resets the eventfd counter to zero.
+
+                    // Let any threads scheduling work know that the event set has been consumed.
+                    // Important to do this after the accept file descriptor has been read.
+                    // This needs to succeed so best practice is to loop compare exchange weak.
+                    bool expected{true};
+                    while(!m_event_set.compare_exchange_weak(
+                        expected,
+                        false,
+                        std::memory_order_release,
+                        std::memory_order_relaxed)) { }
+
+                    tasks_ready = true;
+                }
+                else
+                {
+                    // Individual poll task wake-up, this will queue the coroutines waiting
+                    // on the resume token into the FIFO queue for processing.
+                    auto* token_ptr = static_cast<resume_token<void>*>(handle_ptr);
+                    token_ptr->resume();
+                }
+            }
+        }
+
+        if(tasks_ready)
+        {
+            process_task_queue();
+        }
+
+        if(!m_task_manager.delete_tasks_empty())
+        {
+            m_size.fetch_sub(m_task_manager.gc(), std::memory_order_relaxed);
+        }
+    }
+
+    auto process_events_internal_set_thread(std::chrono::milliseconds user_timeout) -> void
+    {
+        // Do not allow two threads to process events at the same time.
+        bool expected{false};
+        if(m_running.compare_exchange_strong(
+            expected,
+            true,
+            std::memory_order_release,
+            std::memory_order_relaxed))
+        {
+            process_events_internal(user_timeout);
+            m_running.exchange(false, std::memory_order_release);
         }
     }
 
     auto run() -> void
     {
-        m_running = true;
+        m_running.exchange(true, std::memory_order_release);
         // Execute tasks until stopped or there are more tasks to complete.
-        while(!m_shutdown || m_size > 0)
+        while(!m_shutdown_requested.load(std::memory_order_relaxed) || m_size.load(std::memory_order_relaxed) > 0)
         {
             process_events_internal(m_default_timeout);
         }
-        m_running = false;
+        m_running.exchange(false, std::memory_order_release);
     }
 };
 

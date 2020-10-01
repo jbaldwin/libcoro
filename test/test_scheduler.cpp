@@ -526,7 +526,7 @@ TEST_CASE("scheduler manual process events with self generating coroutine (stack
         ++counter;
 
         // this should detect stack overflows well enough
-        if(counter % 10'000'000 == 0)
+        if(counter % 1'000'000 == 0)
         {
             co_return;
         }
@@ -535,7 +535,9 @@ TEST_CASE("scheduler manual process events with self generating coroutine (stack
         co_return;
     };
 
+    std::cerr << "Scheduling recursive function.\n";
     s.schedule(func(func));
 
     while(s.process_events()) ;
+    std::cerr << "Recursive test done.\n";
 }
