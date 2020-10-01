@@ -37,7 +37,7 @@ TEST_CASE("benchmark counter func direct call")
     std::atomic<uint64_t> counter{0};
     auto func = [&]() -> void
     {
-        ++counter;
+        counter.fetch_add(1, std::memory_order::relaxed);
         return;
     };
 
@@ -58,7 +58,7 @@ TEST_CASE("benchmark counter func coro::sync_wait(awaitable)")
     std::atomic<uint64_t> counter{0};
     auto func = [&]() -> coro::task<void>
     {
-        ++counter;
+        counter.fetch_add(1, std::memory_order::relaxed);
         co_return;
     };
 
@@ -80,7 +80,7 @@ TEST_CASE("benchmark counter func coro::sync_wait_all(awaitable)")
     std::atomic<uint64_t> counter{0};
     auto func = [&]() -> coro::task<void>
     {
-        ++counter;
+        counter.fetch_add(1, std::memory_order::relaxed);
         co_return;
     };
 
@@ -103,7 +103,7 @@ TEST_CASE("benchmark counter task scheduler")
     std::atomic<uint64_t> counter{0};
     auto func = [&]() -> coro::task<void>
     {
-        ++counter;
+        counter.fetch_add(1, std::memory_order::relaxed);
         co_return;
     };
 
@@ -137,7 +137,7 @@ TEST_CASE("benchmark counter task scheduler yield -> resume from main")
     auto wait_func = [&](std::size_t index) -> coro::task<void>
     {
         co_await s.yield<void>(tokens[index]);
-        ++counter;
+        counter.fetch_add(1, std::memory_order::relaxed);
         co_return;
     };
 
@@ -178,7 +178,7 @@ TEST_CASE("benchmark counter task scheduler yield -> resume from coroutine")
     auto wait_func = [&](std::size_t index) -> coro::task<void>
     {
         co_await s.yield<void>(tokens[index]);
-        ++counter;
+        counter.fetch_add(1, std::memory_order::relaxed);
         co_return;
     };
 
@@ -221,7 +221,7 @@ TEST_CASE("benchmark counter task scheduler resume from coroutine -> yield")
     auto wait_func = [&](std::size_t index) -> coro::task<void>
     {
         co_await s.yield<void>(tokens[index]);
-        ++counter;
+        counter.fetch_add(1, std::memory_order::relaxed);
         co_return;
     };
 
@@ -264,7 +264,7 @@ TEST_CASE("benchmark counter task scheduler yield (all) -> resume (all) from cor
     auto wait_func = [&](std::size_t index) -> coro::task<void>
     {
         co_await s.yield<void>(tokens[index]);
-        ++counter;
+        counter.fetch_add(1, std::memory_order::relaxed);
         co_return;
     };
 

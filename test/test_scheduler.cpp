@@ -10,6 +10,17 @@
 
 using namespace std::chrono_literals;
 
+TEST_CASE("scheduler sizeof()")
+{
+    std::cerr << "sizeof(coro::scheduler)=[" << sizeof(coro::scheduler) << "]\n";
+    std::cerr << "sizeof(coro:task<void>)=[" << sizeof(coro::task<void>) << "]\n";
+
+    std::cerr << "sizeof(std::coroutine_handle<>)=[" << sizeof(std::coroutine_handle<>) << "]\n";
+    std::cerr << "sizeof(std::variant<std::coroutine_handle<>>)=[" << sizeof(std::variant<std::coroutine_handle<>>) << "]\n";
+
+    REQUIRE(true);
+}
+
 TEST_CASE("scheduler submit single task")
 {
     std::atomic<uint64_t> counter{0};
@@ -103,7 +114,7 @@ TEST_CASE("scheduler task with multiple yields on event")
         co_return;
     };
 
-    auto resume_task = [&](coro::resume_token<uint64_t>& token, int expected) {
+    auto resume_task = [&](coro::resume_token<uint64_t>& token, uint64_t expected) {
         token.resume(1);
         while(counter != expected)
         {
@@ -398,7 +409,7 @@ TEST_CASE("scheduler trigger growth of internal tasks storage")
     constexpr std::size_t iterations{512};
     coro::scheduler s{coro::scheduler::options{.reserve_size = 1}};
 
-    auto wait_func = [&](uint64_t id, std::chrono::milliseconds wait_time) -> coro::task<void>
+    auto wait_func = [&](std::chrono::milliseconds wait_time) -> coro::task<void>
     {
         co_await s.yield_for(wait_time);
         ++counter;
@@ -407,7 +418,7 @@ TEST_CASE("scheduler trigger growth of internal tasks storage")
 
     for(std::size_t i = 0; i < iterations; ++i)
     {
-        s.schedule(wait_func(i, std::chrono::milliseconds{50}));
+        s.schedule(wait_func(std::chrono::milliseconds{50}));
     }
 
     s.shutdown();

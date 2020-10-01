@@ -26,7 +26,7 @@ if(${CMAKE_CXX_COMPILER_ID} MATCHES "GNU")
         message(FATAL_ERROR "gcc version ${CMAKE_CXX_COMPILER_VERSION} is unsupported, please upgrade to at least 10.2.0")
     endif()
 
-    target_compile_options(${PROJECT_NAME} PUBLIC -fcoroutines)
+    target_compile_options(${PROJECT_NAME} PUBLIC -fcoroutines -Wall -Wextra -pipe)
 elseif(${CMAKE_CXX_COMPILER_ID} MATCHES "Clang")
     message(FATAL_ERROR "Clang is currently not supported.")
 endif()
