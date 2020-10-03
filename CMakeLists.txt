@@ -8,8 +8,9 @@ message("${PROJECT_NAME} CORO_BUILD_TESTS      = ${CORO_BUILD_TESTS}")
 message("${PROJECT_NAME} CORO_CODE_COVERAGE    = ${CORO_CODE_COVERAGE}")
 
 set(LIBCORO_SOURCE_FILES
-    src/coro/async_manual_reset_event.hpp
     src/coro/coro.hpp
+    src/coro/event.hpp
+    src/coro/latch.hpp
     src/coro/scheduler.hpp
     src/coro/sync_wait.hpp
     src/coro/task.hpp
