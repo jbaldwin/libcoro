@@ -4,6 +4,7 @@ project(libcoro_test)
 set(LIBCORO_TEST_SOURCE_FILES
     bench.cpp
     test_event.cpp
+    test_generator.cpp
     test_latch.cpp
     test_scheduler.cpp
     test_sync_wait.cpp
