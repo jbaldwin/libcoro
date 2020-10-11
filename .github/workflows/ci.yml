@@ -1,0 +1,96 @@
+name: build
+
+on: [push]
+
+jobs:
+    build-ubuntu-20-04:
+        name: ubuntu-20.04
+        runs-on: ubuntu-latest
+        container:
+            image: ubuntu:20.04
+            env:
+                TZ: America/New_York
+                DEBIAN_FRONTEND: noninteractive
+        steps:
+            -   name: Checkout
+                uses: actions/checkout@v2
+            -   name: apt
+                run: |
+                    apt-get update
+                    apt-get -y upgrade
+                    apt install -y build-essential software-properties-common
+                    add-apt-repository ppa:ubuntu-toolchain-r/test
+                    apt-get install -y \
+                        cmake \
+                        git \
+                        ninja-build \
+                        g++-10
+            -   name: build-release-g++
+                run: |
+                    mkdir build-release-g++
+                    cd build-release-g++
+                    cmake \
+                        -GNinja \
+                        -DCMAKE_BUILD_TYPE=Release \
+                        -DCMAKE_C_COMPILER=gcc-10 \
+                        -DCMAKE_CXX_COMPILER=g++-10 \
+                        ..
+                    ninja
+            -   name: test-release-g++
+                run: |
+                    cd build-release-g++
+                    ctest -VV
+    build-fedora-31:
+        name: fedora-32
+        runs-on: ubuntu-latest
+        container:
+            image: fedora:32
+        steps:
+            -   name: Checkout
+                uses: actions/checkout@v2
+            -   name: dnf
+                run: |
+                    sudo dnf install -y \
+                        cmake \
+                        git \
+                        ninja-build \
+                        gcc-c++-10.2.1 \
+                        lcov
+            -   name: build-debug-g++
+                run: |
+                    mkdir build-debug-g++
+                    cd build-debug-g++
+                    cmake \
+                        -GNinja \
+                        -DCORO_CODE_COVERAGE=ON \
+                        -DCMAKE_BUILD_TYPE=Debug \
+                        -DCMAKE_C_COMPILER=gcc \
+                        -DCMAKE_CXX_COMPILER=g++ \
+                        ..
+                    ninja
+            -   name: build-release-g++
+                run: |
+                    mkdir build-release-g++
+                    cd build-release-g++
+                    cmake \
+                        -GNinja \
+                        -DCMAKE_BUILD_TYPE=Release \
+                        -DCMAKE_C_COMPILER=gcc \
+                        -DCMAKE_CXX_COMPILER=g++ \
+                        ..
+                    ninja
+            -   name: test-release-g++
+                run: |
+                    cd build-release-g++
+                    ctest -VV
+            -   name: Build coverage info
+                run: |
+                    cd build-debug-g++
+                    ctest -VV
+                    gcov -o ./test/CMakeFiles/libcoro_tests.dir/main.cpp.o ./test/libcoro_tests
+                    lcov --include "*/inc/coro/*" --include "*/src/*" --exclude "test/*" -o libcoro_tests.info -c -d .
+            -   name: Coveralls GitHub Action
+                uses: coverallsapp/github-action@v1.0.1
+                with:
+                    github-token: ${{ secrets.GITHUB_TOKEN }}
+                    path-to-lcov: build-debug-g++/libcoro_tests.info

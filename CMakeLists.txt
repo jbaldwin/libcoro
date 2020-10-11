@@ -8,19 +8,19 @@ message("${PROJECT_NAME} CORO_BUILD_TESTS      = ${CORO_BUILD_TESTS}")
 message("${PROJECT_NAME} CORO_CODE_COVERAGE    = ${CORO_CODE_COVERAGE}")
 
 set(LIBCORO_SOURCE_FILES
-    src/coro/coro.hpp
-    src/coro/event.hpp
-    src/coro/generator.hpp
-    src/coro/latch.hpp
-    src/coro/scheduler.hpp
-    src/coro/sync_wait.hpp
-    src/coro/task.hpp
+    inc/coro/coro.hpp
+    inc/coro/event.hpp
+    inc/coro/generator.hpp
+    inc/coro/latch.hpp
+    inc/coro/scheduler.hpp
+    inc/coro/sync_wait.hpp
+    inc/coro/task.hpp
 )
 
 add_library(${PROJECT_NAME} STATIC ${LIBCORO_SOURCE_FILES})
 set_target_properties(${PROJECT_NAME} PROPERTIES LINKER_LANGUAGE CXX)
 target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_20)
-target_include_directories(${PROJECT_NAME} PUBLIC src)
+target_include_directories(${PROJECT_NAME} PUBLIC inc)
 target_link_libraries(${PROJECT_NAME} PUBLIC zmq pthread)
 
 if(${CMAKE_CXX_COMPILER_ID} MATCHES "GNU")
