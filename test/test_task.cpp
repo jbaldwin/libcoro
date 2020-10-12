@@ -209,12 +209,45 @@ TEST_CASE("task resume from promise to coroutine handles of different types")
     REQUIRE(coro_handle2.done());
 }
 
-TEST_CASE("task throws")
+TEST_CASE("task throws void")
+{
+    auto task = []() -> coro::task<void>
+    {
+        throw std::runtime_error{"I always throw."};
+        co_return;
+    }();
+
+    task.resume();
+    REQUIRE(task.is_ready());
+    REQUIRE_THROWS_AS(task.promise().return_value(), std::runtime_error);
+}
+
+TEST_CASE("task throws non-void l-value")
 {
     auto task = []() -> coro::task<int>
     {
         throw std::runtime_error{"I always throw."};
         co_return 42;
+    }();
+
+    task.resume();
+    REQUIRE(task.is_ready());
+    REQUIRE_THROWS_AS(task.promise().return_value(), std::runtime_error);
+}
+
+TEST_CASE("task throws non-void r-value")
+{
+    struct type
+    {
+        int m_value;
+    };
+
+    auto task = []() -> coro::task<type>
+    {
+        type return_value{42};
+
+        throw std::runtime_error{"I always throw."};
+        co_return std::move(return_value);
     }();
 
     task.resume();

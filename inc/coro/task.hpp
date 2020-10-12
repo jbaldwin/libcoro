@@ -121,7 +121,7 @@ struct promise<void> : public promise_base
 
     auto get_return_object() noexcept -> task_type;
 
-    auto return_void() -> void
+    auto return_void() noexcept -> void
     {
 
     }
