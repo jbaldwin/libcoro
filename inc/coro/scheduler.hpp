@@ -162,19 +162,19 @@ public:
     auto operator=(const resume_token&) -> resume_token& = delete;
     auto operator=(resume_token&&) -> resume_token& = default;
 
-    auto resume(return_type result) noexcept -> void;
+    auto resume(return_type value) noexcept -> void;
 
-    auto result() const & -> const return_type&
+    auto return_value() const & -> const return_type&
     {
-        return m_result;
+        return m_return_value;
     }
 
-    auto result() && -> return_type&&
+    auto return_value() && -> return_type&&
     {
-        return std::move(m_result);
+        return std::move(m_return_value);
     }
 private:
-    return_type m_result;
+    return_type m_return_value;
 };
 
 template<>
@@ -578,7 +578,7 @@ public:
         }
         else
         {
-            co_return token.result();
+            co_return token.return_value();
         }
     }
 
@@ -758,7 +758,7 @@ private:
         }
         else
         {
-            co_return token.result();
+            co_return token.return_value();
         }
     }
 
@@ -935,12 +935,12 @@ private:
 };
 
 template<typename return_type>
-inline auto resume_token<return_type>::resume(return_type result) noexcept -> void
+inline auto resume_token<return_type>::resume(return_type value) noexcept -> void
 {
     void* old_value = m_state.exchange(this, std::memory_order::acq_rel);
     if(old_value != this)
     {
-        m_result = std::move(result);
+        m_return_value = std::move(value);
 
         auto* waiters = static_cast<awaiter*>(old_value);
         while(waiters != nullptr)

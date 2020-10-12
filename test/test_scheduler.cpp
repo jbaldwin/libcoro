@@ -97,7 +97,7 @@ TEST_CASE("scheduler task with multiple yields on event")
         std::cerr << "1st suspend\n";
         co_await s.yield(token);
         std::cerr << "1st resume\n";
-        counter += token.result();
+        counter += token.return_value();
         token.reset();
         std::cerr << "never suspend\n";
         co_await std::suspend_never{};
@@ -105,12 +105,12 @@ TEST_CASE("scheduler task with multiple yields on event")
         co_await s.yield(token);
         token.reset();
         std::cerr << "2nd resume\n";
-        counter += token.result();
+        counter += token.return_value();
         std::cerr << "3rd suspend\n";
         co_await s.yield(token);
         token.reset();
         std::cerr << "3rd resume\n";
-        counter += token.result();
+        counter += token.return_value();
         co_return;
     };
 
@@ -485,7 +485,7 @@ TEST_CASE("scheduler yield user event")
     auto func = [&]() -> coro::task<void>
     {
         co_await s.yield(token);
-        REQUIRE(token.result() == expected_result);
+        REQUIRE(token.return_value() == expected_result);
         co_return;
     };
 
@@ -551,4 +551,22 @@ TEST_CASE("scheduler manual process events with self generating coroutine (stack
 
     while(s.process_events()) ;
     std::cerr << "Recursive test done.\n";
+}
+
+TEST_CASE("scheduler task throws")
+{
+    coro::scheduler s{};
+
+    auto func = []() -> coro::task<void>
+    {
+        // Is it possible to actually notify the user when running a task in a scheduler?
+        // Seems like the user will need to manually catch.
+        throw std::runtime_error{"I always throw."};
+        co_return;
+    };
+
+    s.schedule(func());
+
+    s.shutdown();
+    REQUIRE(s.empty());
 }

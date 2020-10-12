@@ -18,7 +18,7 @@ TEST_CASE("latch count=0")
 
     task.resume();
     REQUIRE(task.is_ready()); // The latch never waits due to zero count.
-    REQUIRE(task.promise().result() == 42);
+    REQUIRE(task.promise().return_value() == 42);
 }
 
 TEST_CASE("latch count=1")
@@ -37,7 +37,7 @@ TEST_CASE("latch count=1")
 
     l.count_down();
     REQUIRE(task.is_ready());
-    REQUIRE(task.promise().result() == 1);
+    REQUIRE(task.promise().return_value() == 1);
 }
 
 TEST_CASE("latch count=1 count_down=5")
@@ -56,7 +56,7 @@ TEST_CASE("latch count=1 count_down=5")
 
     l.count_down(5);
     REQUIRE(task.is_ready());
-    REQUIRE(task.promise().result() == 1);
+    REQUIRE(task.promise().return_value() == 1);
 }
 
 TEST_CASE("latch count=5 count_down=1 x5")
@@ -83,7 +83,7 @@ TEST_CASE("latch count=5 count_down=1 x5")
     REQUIRE_FALSE(task.is_ready());
     l.count_down(1);
     REQUIRE(task.is_ready());
-    REQUIRE(task.promise().result() == 5);
+    REQUIRE(task.promise().return_value() == 5);
 }
 
 TEST_CASE("latch count=5 count_down=5")
@@ -102,5 +102,5 @@ TEST_CASE("latch count=5 count_down=5")
 
     l.count_down(5);
     REQUIRE(task.is_ready());
-    REQUIRE(task.promise().result() == 5);
+    REQUIRE(task.promise().return_value() == 5);
 }

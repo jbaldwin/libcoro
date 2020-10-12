@@ -13,8 +13,8 @@ TEST_CASE("task hello world")
     auto h = []() -> task_type { co_return "Hello"; }();
     auto w = []() -> task_type { co_return "World"; }();
 
-    REQUIRE(h.promise().result().empty());
-    REQUIRE(w.promise().result().empty());
+    REQUIRE(h.promise().return_value().empty());
+    REQUIRE(w.promise().return_value().empty());
 
     h.resume(); // task suspends immediately
     w.resume();
@@ -22,11 +22,11 @@ TEST_CASE("task hello world")
     REQUIRE(h.is_ready());
     REQUIRE(w.is_ready());
 
-    auto w_value = std::move(w).promise().result();
+    auto w_value = std::move(w).promise().return_value();
 
-    REQUIRE(h.promise().result() == "Hello");
+    REQUIRE(h.promise().return_value() == "Hello");
     REQUIRE(w_value == "World");
-    REQUIRE(w.promise().result().empty());
+    REQUIRE(w.promise().return_value().empty());
 }
 
 TEST_CASE("task void")
@@ -61,7 +61,7 @@ TEST_CASE("task exception thrown")
     bool thrown{false};
     try
     {
-        auto value = task.promise().result();
+        auto value = task.promise().return_value();
     }
     catch(const std::exception& e)
     {
@@ -172,7 +172,7 @@ TEST_CASE("task multiple suspends return integer")
 
     task.resume(); // third internal suspend
     REQUIRE(task.is_ready());
-    REQUIRE(task.promise().result() == 11);
+    REQUIRE(task.promise().return_value() == 11);
 }
 
 TEST_CASE("task resume from promise to coroutine handles of different types")
@@ -203,8 +203,21 @@ TEST_CASE("task resume from promise to coroutine handles of different types")
 
     REQUIRE(task1.is_ready());
     REQUIRE(coro_handle1.done());
-    REQUIRE(task1.promise().result() == 42);
+    REQUIRE(task1.promise().return_value() == 42);
 
     REQUIRE(task2.is_ready());
     REQUIRE(coro_handle2.done());
+}
+
+TEST_CASE("task throws")
+{
+    auto task = []() -> coro::task<int>
+    {
+        throw std::runtime_error{"I always throw."};
+        co_return 42;
+    }();
+
+    task.resume();
+    REQUIRE(task.is_ready());
+    REQUIRE_THROWS_AS(task.promise().return_value(), std::runtime_error);
 }

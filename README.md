@@ -6,7 +6,7 @@ libcoro C++20 Coroutines
 [![language][badge.language]][language]
 [![license][badge.license]][license]
 
-[badge.language]: https://img.shields.io/badge/language-C%2B%2B17-yellow.svg
+[badge.language]: https://img.shields.io/badge/language-C%2B%2B20-yellow.svg
 [badge.license]: https://img.shields.io/badge/license-Apache--2.0-blue
 
 [language]: https://en.wikipedia.org/wiki/C%2B%2B17
@@ -19,3 +19,20 @@ Libcoro is a C++20 coroutine library.  So far most inspiration has been gleaned 
 
 # Goal
 Libcoro is currently more of a learning experience for myself but ultimately I'd like to turn this into a great linux coroutine base library with an easy to use HTTP scheduler/server.
+
+# Building
+There is a root makefile with various commands to help make building and running tests on this project easier.
+
+```bash
+# Build targets
+make debug|release-with-debug-info|release
+
+# Run tests targets
+make debug-test|release-with-debug-info-tests|release-tests
+
+# Clean all builds.
+make clean
+
+# clang-format the code
+make format
+```

@@ -13,7 +13,7 @@ auto sync_wait(task_type&& task) -> decltype(auto)
     {
         task.resume();
     }
-    return task.promise().result();
+    return task.promise().return_value();
 }
 
 template<typename ... tasks>

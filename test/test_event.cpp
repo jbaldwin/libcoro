@@ -20,7 +20,7 @@ TEST_CASE("event single awaiter")
     REQUIRE_FALSE(task.is_ready());
     e.set(); // this will automaticaly resume the task that is awaiting the event.
     REQUIRE(task.is_ready());
-    REQUIRE(task.promise().result() == 42);
+    REQUIRE(task.promise().return_value() == 42);
 }
 
 
@@ -47,7 +47,7 @@ TEST_CASE("event one watcher")
 
     producer(e);
 
-    REQUIRE(value.promise().result() == 42);
+    REQUIRE(value.promise().return_value() == 42);
 }
 
 TEST_CASE("event multiple watchers")
@@ -66,7 +66,7 @@ TEST_CASE("event multiple watchers")
 
     producer(e);
 
-    REQUIRE(value1.promise().result() == 42);
-    REQUIRE(value2.promise().result() == 42);
-    REQUIRE(value3.promise().result() == 42);
+    REQUIRE(value1.promise().return_value() == 42);
+    REQUIRE(value2.promise().return_value() == 42);
+    REQUIRE(value3.promise().return_value() == 42);
 }
