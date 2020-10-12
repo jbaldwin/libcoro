@@ -23,7 +23,6 @@ TEST_CASE("event single awaiter")
     REQUIRE(task.promise().return_value() == 42);
 }
 
-
 auto producer(coro::event& event) -> void
 {
     // Long running task that consumers are waiting for goes here...

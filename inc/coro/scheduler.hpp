@@ -3,43 +3,38 @@
 #include "coro/task.hpp"
 
 #include <atomic>
-#include <vector>
+#include <coroutine>
+#include <list>
 #include <map>
 #include <memory>
 #include <mutex>
-#include <thread>
-#include <span>
-#include <list>
-#include <queue>
-#include <variant>
-#include <coroutine>
 #include <optional>
+#include <queue>
+#include <span>
+#include <thread>
+#include <variant>
+#include <vector>
 
+#include <cstring>
 #include <sys/epoll.h>
 #include <sys/eventfd.h>
+#include <sys/socket.h>
 #include <sys/timerfd.h>
 #include <sys/types.h>
-#include <sys/socket.h>
 #include <unistd.h>
-#include <cstring>
 
 #include <iostream>
 
 namespace coro
 {
-
 class scheduler;
 
 namespace detail
 {
 class resume_token_base
 {
-public:
-    resume_token_base(scheduler* eng) noexcept
-        :   m_scheduler(eng),
-            m_state(nullptr)
-    {
-    }
+  public:
+    resume_token_base(scheduler* eng) noexcept : m_scheduler(eng), m_state(nullptr) {}
 
     virtual ~resume_token_base() = default;
 
@@ -47,18 +42,17 @@ public:
     resume_token_base(resume_token_base&& other)
     {
         m_scheduler = other.m_scheduler;
-        m_state = other.m_state.exchange(0);
+        m_state     = other.m_state.exchange(0);
 
         other.m_scheduler = nullptr;
-
     }
     auto operator=(const resume_token_base&) -> resume_token_base& = delete;
-    auto operator=(resume_token_base&& other) -> resume_token_base&
+    auto operator                                                  =(resume_token_base&& other) -> resume_token_base&
     {
-        if(std::addressof(other) != this)
+        if (std::addressof(other) != this)
         {
             m_scheduler = other.m_scheduler;
-            m_state = other.m_state.exchange(0);
+            m_state     = other.m_state.exchange(0);
 
             other.m_scheduler = nullptr;
         }
@@ -66,23 +60,13 @@ public:
         return *this;
     }
 
-    bool is_set() const noexcept
-    {
-        return m_state.load(std::memory_order::acquire) == this;
-    }
+    bool is_set() const noexcept { return m_state.load(std::memory_order::acquire) == this; }
 
     struct awaiter
     {
-        awaiter(const resume_token_base& token) noexcept
-            : m_token(token)
-        {
+        awaiter(const resume_token_base& token) noexcept : m_token(token) {}
 
-        }
-
-        auto await_ready() const noexcept -> bool
-        {
-            return m_token.is_set();
-        }
+        auto await_ready() const noexcept -> bool { return m_token.is_set(); }
 
         auto await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept -> bool
         {
@@ -95,17 +79,14 @@ public:
             do
             {
                 // Resume immediately if already in the set state.
-                if(old_value == set_state)
+                if (old_value == set_state)
                 {
                     return false;
                 }
 
                 m_next = static_cast<awaiter*>(old_value);
-            } while(!m_token.m_state.compare_exchange_weak(
-                old_value,
-                this,
-                std::memory_order::release,
-                std::memory_order::acquire));
+            } while (!m_token.m_state.compare_exchange_weak(
+                old_value, this, std::memory_order::release, std::memory_order::acquire));
 
             return true;
         }
@@ -116,14 +97,11 @@ public:
         }
 
         const resume_token_base& m_token;
-        std::coroutine_handle<> m_awaiting_coroutine;
-        awaiter* m_next{nullptr};
+        std::coroutine_handle<>  m_awaiting_coroutine;
+        awaiter*                 m_next{nullptr};
     };
 
-    auto operator co_await() const noexcept -> awaiter
-    {
-        return awaiter{*this};
-    }
+    auto operator co_await() const noexcept -> awaiter { return awaiter{*this}; }
 
     auto reset() noexcept -> void
     {
@@ -131,9 +109,9 @@ public:
         m_state.compare_exchange_strong(old_value, nullptr, std::memory_order::acquire);
     }
 
-protected:
+  protected:
     friend struct awaiter;
-    scheduler* m_scheduler{nullptr};
+    scheduler*                 m_scheduler{nullptr};
     mutable std::atomic<void*> m_state;
 };
 
@@ -143,37 +121,24 @@ template<typename return_type>
 class resume_token final : public detail::resume_token_base
 {
     friend scheduler;
-    resume_token()
-        : detail::resume_token_base(nullptr)
-    {
+    resume_token() : detail::resume_token_base(nullptr) {}
+    resume_token(scheduler& s) : detail::resume_token_base(&s) {}
 
-    }
-    resume_token(scheduler& s)
-        : detail::resume_token_base(&s)
-    {
-
-    }
-public:
-
+  public:
     ~resume_token() override = default;
 
     resume_token(const resume_token&) = delete;
-    resume_token(resume_token&&) = default;
+    resume_token(resume_token&&)      = default;
     auto operator=(const resume_token&) -> resume_token& = delete;
-    auto operator=(resume_token&&) -> resume_token& = default;
+    auto operator=(resume_token &&) -> resume_token& = default;
 
     auto resume(return_type value) noexcept -> void;
 
-    auto return_value() const & -> const return_type&
-    {
-        return m_return_value;
-    }
+    auto return_value() const& -> const return_type& { return m_return_value; }
 
-    auto return_value() && -> return_type&&
-    {
-        return std::move(m_return_value);
-    }
-private:
+    auto return_value() && -> return_type&& { return std::move(m_return_value); }
+
+  private:
     return_type m_return_value;
 };
 
@@ -181,23 +146,16 @@ template<>
 class resume_token<void> final : public detail::resume_token_base
 {
     friend scheduler;
-    resume_token()
-        : detail::resume_token_base(nullptr)
-    {
+    resume_token() : detail::resume_token_base(nullptr) {}
+    resume_token(scheduler& s) : detail::resume_token_base(&s) {}
 
-    }
-    resume_token(scheduler& s)
-        : detail::resume_token_base(&s)
-    {
-
-    }
-public:
+  public:
     ~resume_token() override = default;
 
     resume_token(const resume_token&) = delete;
-    resume_token(resume_token&&) = default;
+    resume_token(resume_token&&)      = default;
     auto operator=(const resume_token&) -> resume_token& = delete;
-    auto operator=(resume_token&&) -> resume_token& = default;
+    auto operator=(resume_token &&) -> resume_token& = default;
 
     auto resume() noexcept -> void;
 };
@@ -214,9 +172,9 @@ enum class poll_op
 
 class scheduler
 {
-private:
+  private:
     using task_variant = std::variant<coro::task<void>, std::coroutine_handle<>>;
-    using task_queue = std::deque<task_variant>;
+    using task_queue   = std::deque<task_variant>;
 
     /// resume_token<T> needs to be able to call internal scheduler::resume()
     template<typename return_type>
@@ -232,14 +190,13 @@ private:
 
     class task_manager
     {
-    public:
+      public:
         using task_position = std::list<std::size_t>::iterator;
 
-        task_manager(const std::size_t reserve_size, const double growth_factor)
-            : m_growth_factor(growth_factor)
+        task_manager(const std::size_t reserve_size, const double growth_factor) : m_growth_factor(growth_factor)
         {
             m_tasks.resize(reserve_size);
-            for(std::size_t i = 0; i < reserve_size; ++i)
+            for (std::size_t i = 0; i < reserve_size; ++i)
             {
                 m_task_indexes.emplace_back(i);
             }
@@ -255,15 +212,15 @@ private:
         auto store(coro::task<void> user_task) -> void
         {
             // Only grow if completely full and attempting to add more.
-            if(m_free_pos == m_task_indexes.end())
+            if (m_free_pos == m_task_indexes.end())
             {
                 m_free_pos = grow();
             }
 
             // Store the user task with its cleanup task to maintain their lifetimes until completed.
-            auto index = *m_free_pos;
-            auto& task_data = m_tasks[index];
-            task_data.m_user_task = std::move(user_task);
+            auto  index              = *m_free_pos;
+            auto& task_data          = m_tasks[index];
+            task_data.m_user_task    = std::move(user_task);
             task_data.m_cleanup_task = cleanup_func(m_free_pos);
 
             // Attach the cleanup task to be the continuation after the users task.
@@ -280,9 +237,9 @@ private:
         auto gc() -> std::size_t
         {
             std::size_t deleted{0};
-            if(!m_tasks_to_delete.empty())
+            if (!m_tasks_to_delete.empty())
             {
-                for(const auto& pos : m_tasks_to_delete)
+                for (const auto& pos : m_tasks_to_delete)
                 {
                     // This doesn't actually 'delete' the task, it'll get overwritten when a
                     // new user task claims the free space.  It could be useful to actually
@@ -315,7 +272,7 @@ private:
          */
         auto capacity() const -> std::size_t { return m_tasks.size(); }
 
-    private:
+      private:
         /**
          * Grows each task container by the growth factor.
          * @return The position of the free index after growing.
@@ -323,9 +280,9 @@ private:
         auto grow() -> task_position
         {
             // Save an index at the current last item.
-            auto last_pos = std::prev(m_task_indexes.end());
+            auto        last_pos = std::prev(m_task_indexes.end());
             std::size_t new_size = m_tasks.size() * m_growth_factor;
-            for(std::size_t i = m_tasks.size(); i < new_size; ++i)
+            for (std::size_t i = m_tasks.size(); i < new_size; ++i)
             {
                 m_task_indexes.emplace_back(i);
             }
@@ -360,10 +317,10 @@ private:
         double m_growth_factor{};
     };
 
-    static constexpr const int m_accept_object{0};
+    static constexpr const int   m_accept_object{0};
     static constexpr const void* m_accept_ptr = &m_accept_object;
 
-public:
+  public:
     using fd_t = int;
 
     enum class shutdown_t
@@ -397,25 +354,25 @@ public:
     /**
      * @param options Various scheduler options to tune how it behaves.
      */
-    scheduler(
-        const options opts = options{8, 2, thread_strategy_t::spawn}
-    )
-        :   m_epoll_fd(epoll_create1(EPOLL_CLOEXEC)),
-            m_accept_fd(eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK)),
-            m_thread_strategy(opts.thread_strategy),
-            m_task_manager(opts.reserve_size, opts.growth_factor)
+    scheduler(const options opts = options{8, 2, thread_strategy_t::spawn})
+        : m_epoll_fd(epoll_create1(EPOLL_CLOEXEC)),
+          m_accept_fd(eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK)),
+          m_thread_strategy(opts.thread_strategy),
+          m_task_manager(opts.reserve_size, opts.growth_factor)
     {
-        struct epoll_event e{};
+        struct epoll_event e
+        {
+        };
         e.events = EPOLLIN;
 
         e.data.ptr = const_cast<void*>(m_accept_ptr);
         epoll_ctl(m_epoll_fd, EPOLL_CTL_ADD, m_accept_fd, &e);
 
-        if(m_thread_strategy == thread_strategy_t::spawn)
+        if (m_thread_strategy == thread_strategy_t::spawn)
         {
             m_scheduler_thread = std::thread([this] { process_events_dedicated_thread(); });
         }
-        else if(m_thread_strategy == thread_strategy_t::adopt)
+        else if (m_thread_strategy == thread_strategy_t::adopt)
         {
             process_events_dedicated_thread();
         }
@@ -423,19 +380,19 @@ public:
     }
 
     scheduler(const scheduler&) = delete;
-    scheduler(scheduler&&) = delete;
+    scheduler(scheduler&&)      = delete;
     auto operator=(const scheduler&) -> scheduler& = delete;
-    auto operator=(scheduler&&) -> scheduler& = delete;
+    auto operator=(scheduler &&) -> scheduler& = delete;
 
     ~scheduler()
     {
         shutdown();
-        if(m_epoll_fd != -1)
+        if (m_epoll_fd != -1)
         {
             close(m_epoll_fd);
             m_epoll_fd = -1;
         }
-        if(m_accept_fd != -1)
+        if (m_accept_fd != -1)
         {
             close(m_accept_fd);
             m_accept_fd = -1;
@@ -450,7 +407,7 @@ public:
      */
     auto schedule(coro::task<void> task) -> bool
     {
-        if(m_shutdown_requested.load(std::memory_order::relaxed))
+        if (m_shutdown_requested.load(std::memory_order::relaxed))
         {
             return false;
         }
@@ -470,11 +427,7 @@ public:
         // Send an event if one isn't already set.  We use strong here to avoid spurious failures
         // but if it fails due to it actually being set we don't want to retry.
         bool expected{false};
-        if(m_event_set.compare_exchange_strong(
-            expected,
-            true,
-            std::memory_order::release,
-            std::memory_order::relaxed))
+        if (m_event_set.compare_exchange_strong(expected, true, std::memory_order::release, std::memory_order::relaxed))
         {
             uint64_t value{1};
             ::write(m_accept_fd, &value, sizeof(value));
@@ -491,7 +444,7 @@ public:
      */
     auto schedule_after(coro::task<void> task, std::chrono::milliseconds after) -> bool
     {
-        if(m_shutdown_requested.load(std::memory_order::relaxed))
+        if (m_shutdown_requested.load(std::memory_order::relaxed))
         {
             return false;
         }
@@ -506,15 +459,14 @@ public:
      */
     auto poll(fd_t fd, poll_op op) -> coro::task<void>
     {
-        co_await unsafe_yield<void>(
-            [&](resume_token<void>& token)
+        co_await unsafe_yield<void>([&](resume_token<void>& token) {
+            struct epoll_event e
             {
-                struct epoll_event e{};
-                e.events = static_cast<uint32_t>(op) | EPOLLONESHOT | EPOLLET;
-                e.data.ptr = &token;
-                epoll_ctl(m_epoll_fd, EPOLL_CTL_ADD, fd, &e);
-            }
-        );
+            };
+            e.events   = static_cast<uint32_t>(op) | EPOLLONESHOT | EPOLLET;
+            e.data.ptr = &token;
+            epoll_ctl(m_epoll_fd, EPOLL_CTL_ADD, fd, &e);
+        });
 
         epoll_ctl(m_epoll_fd, EPOLL_CTL_DEL, fd, nullptr);
     }
@@ -543,7 +495,8 @@ public:
     auto write(fd_t fd, const std::span<const char> buffer) -> coro::task<ssize_t>
     {
         co_await poll(fd, poll_op::write);
-        co_return ::write(fd, buffer.data(), buffer.size());;
+        co_return ::write(fd, buffer.data(), buffer.size());
+        ;
     }
 
     /**
@@ -603,22 +556,24 @@ public:
     auto yield_for(std::chrono::milliseconds amount) -> coro::task<void>
     {
         fd_t timer_fd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC);
-        if(timer_fd == -1)
+        if (timer_fd == -1)
         {
             std::string msg = "Failed to create timerfd errorno=[" + std::string{strerror(errno)} + "].";
             throw std::runtime_error(msg.data());
         }
 
-        struct itimerspec ts{};
+        struct itimerspec ts
+        {
+        };
 
         auto seconds = std::chrono::duration_cast<std::chrono::seconds>(amount);
         amount -= seconds;
         auto nanoseconds = std::chrono::duration_cast<std::chrono::nanoseconds>(amount);
 
-        ts.it_value.tv_sec = seconds.count();
+        ts.it_value.tv_sec  = seconds.count();
         ts.it_value.tv_nsec = nanoseconds.count();
 
-        if(timerfd_settime(timer_fd, 0, &ts, nullptr) == -1)
+        if (timerfd_settime(timer_fd, 0, &ts, nullptr) == -1)
         {
             std::string msg = "Failed to set timerfd errorno=[" + std::string{strerror(errno)} + "].";
             throw std::runtime_error(msg.data());
@@ -683,20 +638,20 @@ public:
      */
     auto shutdown(shutdown_t wait_for_tasks = shutdown_t::sync) -> void
     {
-        if(!m_shutdown_requested.exchange(true, std::memory_order::release))
+        if (!m_shutdown_requested.exchange(true, std::memory_order::release))
         {
             // Signal the event loop to stop asap.
             uint64_t value{1};
             ::write(m_accept_fd, &value, sizeof(value));
 
-            if(wait_for_tasks == shutdown_t::sync && m_scheduler_thread.joinable())
+            if (wait_for_tasks == shutdown_t::sync && m_scheduler_thread.joinable())
             {
                 m_scheduler_thread.join();
             }
         }
     }
 
-private:
+  private:
     /// The event loop epoll file descriptor.
     fd_t m_epoll_fd{-1};
     /// The event loop accept new tasks and resume tasks file descriptor.
@@ -731,7 +686,7 @@ private:
     auto scheduler_after_func(coro::task<void> inner_task, std::chrono::milliseconds wait_time) -> coro::task<void>
     {
         // Seems to already be done.
-        if(inner_task.is_ready())
+        if (inner_task.is_ready())
         {
             co_return;
         }
@@ -739,7 +694,7 @@ private:
         // Wait for the period requested, and then resume their task.
         co_await yield_for(wait_time);
         inner_task.resume();
-        if(!inner_task.is_ready())
+        if (!inner_task.is_ready())
         {
             m_task_manager.store(std::move(inner_task));
         }
@@ -771,26 +726,26 @@ private:
 
         // Signal to the event loop there is a task to resume if one hasn't already been sent.
         bool expected{false};
-        if(m_event_set.compare_exchange_strong(expected, true, std::memory_order::release, std::memory_order::relaxed))
+        if (m_event_set.compare_exchange_strong(expected, true, std::memory_order::release, std::memory_order::relaxed))
         {
             uint64_t value{1};
             ::write(m_accept_fd, &value, sizeof(value));
         }
     }
 
-    static constexpr std::chrono::milliseconds m_default_timeout{1000};
-    static constexpr std::chrono::milliseconds m_no_timeout{0};
-    static constexpr std::size_t m_max_events = 8;
+    static constexpr std::chrono::milliseconds   m_default_timeout{1000};
+    static constexpr std::chrono::milliseconds   m_no_timeout{0};
+    static constexpr std::size_t                 m_max_events = 8;
     std::array<struct epoll_event, m_max_events> m_events{};
 
     auto task_start(coro::task<void>& task) -> void
     {
-        if(!task.is_ready()) // sanity check, the user could have manually resumed.
+        if (!task.is_ready()) // sanity check, the user could have manually resumed.
         {
             // Attempt to process the task synchronously before suspending.
             task.resume();
 
-            if(!task.is_ready())
+            if (!task.is_ready())
             {
                 m_task_manager.store(std::move(task));
                 // This task is now suspended waiting for an event.
@@ -807,10 +762,9 @@ private:
         }
     }
 
-
     inline auto process_task_variant(task_variant& tv) -> void
     {
-        if(std::holds_alternative<coro::task<void>>(tv))
+        if (std::holds_alternative<coro::task<void>>(tv))
         {
             auto& task = std::get<coro::task<void>>(tv);
             task_start(task);
@@ -818,7 +772,7 @@ private:
         else
         {
             auto handle = std::get<std::coroutine_handle<>>(tv);
-            if(!handle.done())
+            if (!handle.done())
             {
                 handle.resume();
             }
@@ -830,7 +784,7 @@ private:
         std::size_t amount{0};
         {
             std::lock_guard<std::mutex> lk{m_accept_mutex};
-            while(!m_accept_queue.empty() && amount < task_inline_process_amount)
+            while (!m_accept_queue.empty() && amount < task_inline_process_amount)
             {
                 m_processing_tasks[amount] = std::move(m_accept_queue.front());
                 m_accept_queue.pop_front();
@@ -839,12 +793,12 @@ private:
         }
 
         // The queue is empty, we are done here.
-        if(amount == 0)
+        if (amount == 0)
         {
             return;
         }
 
-        for(std::size_t i = 0 ; i < amount; ++i)
+        for (std::size_t i = 0; i < amount; ++i)
         {
             process_task_variant(m_processing_tasks[i]);
         }
@@ -862,13 +816,13 @@ private:
         // Poll is run every iteration to make sure 'waiting' events are properly put into
         // the FIFO queue for when they are ready.
         auto event_count = epoll_wait(m_epoll_fd, m_events.data(), m_max_events, timeout.count());
-        if(event_count > 0)
+        if (event_count > 0)
         {
-            for(std::size_t i = 0; i < static_cast<std::size_t>(event_count); ++i)
+            for (std::size_t i = 0; i < static_cast<std::size_t>(event_count); ++i)
             {
                 void* handle_ptr = m_events[i].data.ptr;
 
-                if(handle_ptr == m_accept_ptr)
+                if (handle_ptr == m_accept_ptr)
                 {
                     uint64_t value{0};
                     ::read(m_accept_fd, &value, sizeof(value));
@@ -878,11 +832,9 @@ private:
                     // Important to do this after the accept file descriptor has been read.
                     // This needs to succeed so best practice is to loop compare exchange weak.
                     bool expected{true};
-                    while(!m_event_set.compare_exchange_weak(
-                        expected,
-                        false,
-                        std::memory_order::release,
-                        std::memory_order::relaxed)) { }
+                    while (!m_event_set.compare_exchange_weak(
+                        expected, false, std::memory_order::release, std::memory_order::relaxed))
+                    {}
 
                     tasks_ready = true;
                 }
@@ -896,12 +848,12 @@ private:
             }
         }
 
-        if(tasks_ready)
+        if (tasks_ready)
         {
             process_task_queue();
         }
 
-        if(!m_task_manager.delete_tasks_empty())
+        if (!m_task_manager.delete_tasks_empty())
         {
             m_size.fetch_sub(m_task_manager.gc(), std::memory_order::relaxed);
         }
@@ -911,11 +863,7 @@ private:
     {
         // Do not allow two threads to process events at the same time.
         bool expected{false};
-        if(m_running.compare_exchange_strong(
-            expected,
-            true,
-            std::memory_order::release,
-            std::memory_order::relaxed))
+        if (m_running.compare_exchange_strong(expected, true, std::memory_order::release, std::memory_order::relaxed))
         {
             process_events_poll_execute(user_timeout);
             m_running.exchange(false, std::memory_order::release);
@@ -926,7 +874,7 @@ private:
     {
         m_running.exchange(true, std::memory_order::release);
         // Execute tasks until stopped or there are more tasks to complete.
-        while(!m_shutdown_requested.load(std::memory_order::relaxed) || m_size.load(std::memory_order::relaxed) > 0)
+        while (!m_shutdown_requested.load(std::memory_order::relaxed) || m_size.load(std::memory_order::relaxed) > 0)
         {
             process_events_poll_execute(m_default_timeout);
         }
@@ -938,12 +886,12 @@ template<typename return_type>
 inline auto resume_token<return_type>::resume(return_type value) noexcept -> void
 {
     void* old_value = m_state.exchange(this, std::memory_order::acq_rel);
-    if(old_value != this)
+    if (old_value != this)
     {
         m_return_value = std::move(value);
 
         auto* waiters = static_cast<awaiter*>(old_value);
-        while(waiters != nullptr)
+        while (waiters != nullptr)
         {
             // Intentionally not checking if this is running on the scheduler process event thread
             // as it can create a stack overflow if it triggers a 'resume chain'.  unsafe_yield()
@@ -953,7 +901,7 @@ inline auto resume_token<return_type>::resume(return_type value) noexcept -> voi
             auto* next = waiters->m_next;
             // If scheduler is nullptr this is an unsafe_yield()
             // If scheduler is present this is a yield()
-            if(m_scheduler == nullptr)// || m_scheduler->this_thread_is_processing_events())
+            if (m_scheduler == nullptr) // || m_scheduler->this_thread_is_processing_events())
             {
                 waiters->m_awaiting_coroutine.resume();
             }
@@ -969,13 +917,13 @@ inline auto resume_token<return_type>::resume(return_type value) noexcept -> voi
 inline auto resume_token<void>::resume() noexcept -> void
 {
     void* old_value = m_state.exchange(this, std::memory_order::acq_rel);
-    if(old_value != this)
+    if (old_value != this)
     {
         auto* waiters = static_cast<awaiter*>(old_value);
-        while(waiters != nullptr)
+        while (waiters != nullptr)
         {
             auto* next = waiters->m_next;
-            if(m_scheduler == nullptr)
+            if (m_scheduler == nullptr)
             {
                 waiters->m_awaiting_coroutine.resume();
             }
@@ -989,4 +937,3 @@ inline auto resume_token<void>::resume() noexcept -> void
 }
 
 } // namespace coro
-

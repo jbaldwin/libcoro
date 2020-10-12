@@ -5,12 +5,9 @@
 TEST_CASE("generator single yield")
 {
     std::string msg{"Hello World Generator!"};
-    auto func = [&]() -> coro::generator<std::string>
-    {
-        co_yield msg;
-    };
+    auto        func = [&]() -> coro::generator<std::string> { co_yield msg; };
 
-    for(const auto& v : func())
+    for (const auto& v : func())
     {
         REQUIRE(v == msg);
     }
@@ -20,10 +17,9 @@ TEST_CASE("generator infinite incrementing integer yield")
 {
     constexpr const int64_t max = 1024;
 
-    auto func = []() -> coro::generator<int64_t>
-    {
+    auto func = []() -> coro::generator<int64_t> {
         int64_t i{0};
-        while(true)
+        while (true)
         {
             ++i;
             co_yield i;
@@ -31,12 +27,12 @@ TEST_CASE("generator infinite incrementing integer yield")
     };
 
     int64_t v{1};
-    for(const auto& v_1 : func())
+    for (const auto& v_1 : func())
     {
         REQUIRE(v == v_1);
         ++v;
 
-        if(v > max)
+        if (v > max)
         {
             break;
         }

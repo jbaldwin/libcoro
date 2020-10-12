@@ -4,29 +4,24 @@
 
 namespace coro
 {
-
 template<typename return_type = void>
 class task;
 
 namespace detail
 {
-
 struct promise_base
 {
     friend struct final_awaitable;
     struct final_awaitable
     {
-        auto await_ready() const noexcept -> bool
-        {
-            return false;
-        }
+        auto await_ready() const noexcept -> bool { return false; }
 
         template<typename promise_type>
         auto await_suspend(std::coroutine_handle<promise_type> coroutine) noexcept -> std::coroutine_handle<>
         {
             // // If there is a continuation call it, otherwise this is the end of the line.
             auto& promise = coroutine.promise();
-            if(promise.m_continuation != nullptr)
+            if (promise.m_continuation != nullptr)
             {
                 return promise.m_continuation;
             }
@@ -43,52 +38,37 @@ struct promise_base
     };
 
     promise_base() noexcept = default;
-    ~promise_base() = default;
+    ~promise_base()         = default;
 
-    auto initial_suspend()
-    {
-        return std::suspend_always{};
-    }
+    auto initial_suspend() { return std::suspend_always{}; }
 
-    auto final_suspend()
-    {
-        return final_awaitable{};
-    }
+    auto final_suspend() { return final_awaitable{}; }
 
-    auto unhandled_exception() -> void
-    {
-        m_exception_ptr = std::current_exception();
-    }
+    auto unhandled_exception() -> void { m_exception_ptr = std::current_exception(); }
 
-    auto continuation(std::coroutine_handle<> continuation) noexcept -> void
-    {
-        m_continuation = continuation;
-    }
+    auto continuation(std::coroutine_handle<> continuation) noexcept -> void { m_continuation = continuation; }
 
-protected:
+  protected:
     std::coroutine_handle<> m_continuation{nullptr};
-    std::exception_ptr m_exception_ptr{};
+    std::exception_ptr      m_exception_ptr{};
 };
 
 template<typename return_type>
 struct promise final : public promise_base
 {
-    using task_type = task<return_type>;
+    using task_type        = task<return_type>;
     using coroutine_handle = std::coroutine_handle<promise<return_type>>;
 
     promise() noexcept = default;
-    ~promise() = default;
+    ~promise()         = default;
 
     auto get_return_object() noexcept -> task_type;
 
-    auto return_value(return_type value) -> void
-    {
-        m_return_value = std::move(value);
-    }
+    auto return_value(return_type value) -> void { m_return_value = std::move(value); }
 
-    auto return_value() const & -> const return_type&
+    auto return_value() const& -> const return_type&
     {
-        if(m_exception_ptr)
+        if (m_exception_ptr)
         {
             std::rethrow_exception(m_exception_ptr);
         }
@@ -98,7 +78,7 @@ struct promise final : public promise_base
 
     auto return_value() && -> return_type&&
     {
-        if(m_exception_ptr)
+        if (m_exception_ptr)
         {
             std::rethrow_exception(m_exception_ptr);
         }
@@ -106,29 +86,26 @@ struct promise final : public promise_base
         return std::move(m_return_value);
     }
 
-private:
+  private:
     return_type m_return_value;
 };
 
 template<>
 struct promise<void> : public promise_base
 {
-    using task_type = task<void>;
+    using task_type        = task<void>;
     using coroutine_handle = std::coroutine_handle<promise<void>>;
 
     promise() noexcept = default;
-    ~promise() = default;
+    ~promise()         = default;
 
     auto get_return_object() noexcept -> task_type;
 
-    auto return_void() noexcept -> void
-    {
-
-    }
+    auto return_void() noexcept -> void {}
 
     auto return_value() const -> void
     {
-        if(m_exception_ptr)
+        if (m_exception_ptr)
         {
             std::rethrow_exception(m_exception_ptr);
         }
@@ -140,23 +117,16 @@ struct promise<void> : public promise_base
 template<typename return_type>
 class task
 {
-public:
-    using task_type = task<return_type>;
-    using promise_type = detail::promise<return_type>;
+  public:
+    using task_type        = task<return_type>;
+    using promise_type     = detail::promise<return_type>;
     using coroutine_handle = std::coroutine_handle<promise_type>;
 
     struct awaitable_base
     {
-        awaitable_base(coroutine_handle coroutine) noexcept
-            : m_coroutine(coroutine)
-        {
+        awaitable_base(coroutine_handle coroutine) noexcept : m_coroutine(coroutine) {}
 
-        }
-
-        auto await_ready() const noexcept -> bool
-        {
-            return !m_coroutine || m_coroutine.done();
-        }
+        auto await_ready() const noexcept -> bool { return !m_coroutine || m_coroutine.done(); }
 
         auto await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept -> std::coroutine_handle<>
         {
@@ -167,43 +137,31 @@ public:
         std::coroutine_handle<promise_type> m_coroutine{nullptr};
     };
 
-    task() noexcept
-        : m_coroutine(nullptr)
-    {
+    task() noexcept : m_coroutine(nullptr) {}
 
-    }
-
-    task(coroutine_handle handle)
-        : m_coroutine(handle)
-    {
-
-    }
+    task(coroutine_handle handle) : m_coroutine(handle) {}
     task(const task&) = delete;
-    task(task&& other) noexcept
-        : m_coroutine(other.m_coroutine)
-    {
-        other.m_coroutine = nullptr;
-    }
+    task(task&& other) noexcept : m_coroutine(other.m_coroutine) { other.m_coroutine = nullptr; }
 
     ~task()
     {
-        if(m_coroutine != nullptr)
+        if (m_coroutine != nullptr)
         {
             m_coroutine.destroy();
         }
     }
 
     auto operator=(const task&) -> task& = delete;
-    auto operator=(task&& other) noexcept -> task&
+    auto operator                        =(task&& other) noexcept -> task&
     {
-        if(std::addressof(other) != this)
+        if (std::addressof(other) != this)
         {
-            if(m_coroutine != nullptr)
+            if (m_coroutine != nullptr)
             {
                 m_coroutine.destroy();
             }
 
-            m_coroutine = other.m_coroutine;
+            m_coroutine       = other.m_coroutine;
             other.m_coroutine = nullptr;
         }
 
@@ -213,14 +171,11 @@ public:
     /**
      * @return True if the task is in its final suspend or if the task has been destroyed.
      */
-    auto is_ready() const noexcept -> bool
-    {
-        return m_coroutine == nullptr || m_coroutine.done();
-    }
+    auto is_ready() const noexcept -> bool { return m_coroutine == nullptr || m_coroutine.done(); }
 
     auto resume() -> bool
     {
-        if(!m_coroutine.done())
+        if (!m_coroutine.done())
         {
             m_coroutine.resume();
         }
@@ -229,7 +184,7 @@ public:
 
     auto destroy() -> bool
     {
-        if(m_coroutine != nullptr)
+        if (m_coroutine != nullptr)
         {
             m_coroutine.destroy();
             m_coroutine = nullptr;
@@ -243,41 +198,25 @@ public:
     {
         struct awaitable : public awaitable_base
         {
-            auto await_resume() noexcept -> decltype(auto)
-            {
-                return this->m_coroutine.promise().return_value();
-            }
+            auto await_resume() noexcept -> decltype(auto) { return this->m_coroutine.promise().return_value(); }
         };
 
         return awaitable{m_coroutine};
     }
 
-    auto promise() & -> promise_type&
-    {
-        return m_coroutine.promise();
-    }
+    auto promise() & -> promise_type& { return m_coroutine.promise(); }
 
-    auto promise() const & -> const promise_type&
-    {
-        return m_coroutine.promise();
-    }
-    auto promise() && -> promise_type&&
-    {
-        return std::move(m_coroutine.promise());
-    }
+    auto promise() const& -> const promise_type& { return m_coroutine.promise(); }
+    auto promise() && -> promise_type&& { return std::move(m_coroutine.promise()); }
 
-    auto handle() -> coroutine_handle
-    {
-        return m_coroutine;
-    }
+    auto handle() -> coroutine_handle { return m_coroutine; }
 
-private:
+  private:
     coroutine_handle m_coroutine{nullptr};
 };
 
 namespace detail
 {
-
 template<typename return_type>
 inline auto promise<return_type>::get_return_object() noexcept -> task<return_type>
 {

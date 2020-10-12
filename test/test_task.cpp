@@ -5,7 +5,6 @@
 #include <chrono>
 #include <thread>
 
-
 TEST_CASE("task hello world")
 {
     using task_type = coro::task<std::string>;
@@ -63,7 +62,7 @@ TEST_CASE("task exception thrown")
     {
         auto value = task.promise().return_value();
     }
-    catch(const std::exception& e)
+    catch (const std::exception& e)
     {
         thrown = true;
         REQUIRE(e.what() == throw_msg);
@@ -74,10 +73,8 @@ TEST_CASE("task exception thrown")
 
 TEST_CASE("task in a task")
 {
-    auto outer_task = []() -> coro::task<>
-    {
-        auto inner_task = []() -> coro::task<int>
-        {
+    auto outer_task = []() -> coro::task<> {
+        auto inner_task = []() -> coro::task<int> {
             std::cerr << "inner_task start\n";
             std::cerr << "inner_task stop\n";
             co_return 42;
@@ -96,14 +93,11 @@ TEST_CASE("task in a task")
 
 TEST_CASE("task in a task in a task")
 {
-    auto task1 = []() -> coro::task<>
-    {
+    auto task1 = []() -> coro::task<> {
         std::cerr << "task1 start\n";
-        auto task2 = []() -> coro::task<int>
-        {
+        auto task2 = []() -> coro::task<int> {
             std::cerr << "\ttask2 start\n";
-            auto task3 = []() -> coro::task<int>
-            {
+            auto task3 = []() -> coro::task<int> {
                 std::cerr << "\t\ttask3 start\n";
                 std::cerr << "\t\ttask3 stop\n";
                 co_return 3;
@@ -129,8 +123,7 @@ TEST_CASE("task in a task in a task")
 
 TEST_CASE("task multiple suspends return void")
 {
-    auto task = []() -> coro::task<void>
-    {
+    auto task = []() -> coro::task<void> {
         co_await std::suspend_always{};
         co_await std::suspend_never{};
         co_await std::suspend_always{};
@@ -153,8 +146,7 @@ TEST_CASE("task multiple suspends return void")
 
 TEST_CASE("task multiple suspends return integer")
 {
-    auto task = []() -> coro::task<int>
-    {
+    auto task = []() -> coro::task<int> {
         co_await std::suspend_always{};
         co_await std::suspend_always{};
         co_await std::suspend_always{};
@@ -177,14 +169,12 @@ TEST_CASE("task multiple suspends return integer")
 
 TEST_CASE("task resume from promise to coroutine handles of different types")
 {
-    auto task1 = [&]() -> coro::task<int>
-    {
+    auto task1 = [&]() -> coro::task<int> {
         std::cerr << "Task ran\n";
         co_return 42;
     }();
 
-    auto task2 = [&]() -> coro::task<void>
-    {
+    auto task2 = [&]() -> coro::task<void> {
         std::cerr << "Task 2 ran\n";
         co_return;
     }();
@@ -211,8 +201,7 @@ TEST_CASE("task resume from promise to coroutine handles of different types")
 
 TEST_CASE("task throws void")
 {
-    auto task = []() -> coro::task<void>
-    {
+    auto task = []() -> coro::task<void> {
         throw std::runtime_error{"I always throw."};
         co_return;
     }();
@@ -224,8 +213,7 @@ TEST_CASE("task throws void")
 
 TEST_CASE("task throws non-void l-value")
 {
-    auto task = []() -> coro::task<int>
-    {
+    auto task = []() -> coro::task<int> {
         throw std::runtime_error{"I always throw."};
         co_return 42;
     }();
@@ -242,8 +230,7 @@ TEST_CASE("task throws non-void r-value")
         int m_value;
     };
 
-    auto task = []() -> coro::task<type>
-    {
+    auto task = []() -> coro::task<type> {
         type return_value{42};
 
         throw std::runtime_error{"I always throw."};
