@@ -22,20 +22,9 @@ if(CORO_CODE_COVERAGE)
 endif()
 
 if(${CMAKE_CXX_COMPILER_ID} MATCHES "GNU")
-    target_compile_options(
-        ${PROJECT_NAME} PRIVATE
-        -Wno-unknown-pragmas
-    )
-endif()
-if(${CMAKE_CXX_COMPILER_ID} MATCHES "Clang")
-    target_compile_options(${PROJECT_NAME} PRIVATE
-        -Wall
-        -Wextra
-        -Weffc++
-        -Werror
-        -Wpedantic
-        -pedantic-errors
-    )
+    target_compile_options(${PROJECT_NAME} PUBLIC -fcoroutines -Wall -Wextra -pipe)
+elseif(${CMAKE_CXX_COMPILER_ID} MATCHES "Clang")
+    message(FATAL_ERROR "Clang is currently not supported.")
 endif()
 
 add_test(NAME corohttp_test COMMAND ${PROJECT_NAME})
