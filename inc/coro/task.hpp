@@ -1,10 +1,6 @@
 #pragma once
 
-#include <atomic>
 #include <coroutine>
-#include <optional>
-
-#include <iostream>
 
 namespace coro
 {
@@ -71,70 +67,70 @@ struct promise_base
 
 protected:
     std::coroutine_handle<> m_continuation{nullptr};
-    std::optional<std::exception_ptr> m_exception_ptr{std::nullopt};
+    std::exception_ptr m_exception_ptr{};
 };
 
 template<typename return_type>
 struct promise final : public promise_base
 {
     using task_type = task<return_type>;
-    using coro_handle = std::coroutine_handle<promise<return_type>>;
+    using coroutine_handle = std::coroutine_handle<promise<return_type>>;
 
     promise() noexcept = default;
     ~promise() = default;
 
     auto get_return_object() noexcept -> task_type;
 
-    auto return_value(return_type result) -> void
+    auto return_value(return_type value) -> void
     {
-        m_result = std::move(result);
+        m_return_value = std::move(value);
     }
 
-    auto result() const & -> const return_type&
+    auto return_value() const & -> const return_type&
     {
-        if(this->m_exception_ptr.has_value())
+        if(m_exception_ptr)
         {
-            std::rethrow_exception(this->m_exception_ptr.value());
+            std::rethrow_exception(m_exception_ptr);
         }
 
-        return m_result;
+        return m_return_value;
     }
 
-    auto result() && -> return_type&&
+    auto return_value() && -> return_type&&
     {
-        if(this->m_exception_ptr.has_value())
+        if(m_exception_ptr)
         {
-            std::rethrow_exception(this->m_exception_ptr.value());
+            std::rethrow_exception(m_exception_ptr);
         }
 
-        return std::move(m_result);
+        return std::move(m_return_value);
     }
 
 private:
-    return_type m_result;
+    return_type m_return_value;
 };
 
 template<>
 struct promise<void> : public promise_base
 {
     using task_type = task<void>;
-    using coro_handle = std::coroutine_handle<promise<void>>;
+    using coroutine_handle = std::coroutine_handle<promise<void>>;
 
     promise() noexcept = default;
     ~promise() = default;
 
     auto get_return_object() noexcept -> task_type;
 
-    auto return_void() -> void
+    auto return_void() noexcept -> void
     {
 
     }
 
-    auto result() const -> void
+    auto return_value() const -> void
     {
-        if(this->m_exception_ptr.has_value())
+        if(m_exception_ptr)
         {
-            std::rethrow_exception(this->m_exception_ptr.value());
+            std::rethrow_exception(m_exception_ptr);
         }
     }
 };
@@ -147,11 +143,11 @@ class task
 public:
     using task_type = task<return_type>;
     using promise_type = detail::promise<return_type>;
-    using coro_handle = std::coroutine_handle<promise_type>;
+    using coroutine_handle = std::coroutine_handle<promise_type>;
 
     struct awaitable_base
     {
-        awaitable_base(std::coroutine_handle<promise_type> coroutine) noexcept
+        awaitable_base(coroutine_handle coroutine) noexcept
             : m_coroutine(coroutine)
         {
 
@@ -177,7 +173,7 @@ public:
 
     }
 
-    task(coro_handle handle)
+    task(coroutine_handle handle)
         : m_coroutine(handle)
     {
 
@@ -249,7 +245,7 @@ public:
         {
             auto await_resume() noexcept -> decltype(auto)
             {
-                return this->m_coroutine.promise().result();
+                return this->m_coroutine.promise().return_value();
             }
         };
 
@@ -270,13 +266,13 @@ public:
         return std::move(m_coroutine.promise());
     }
 
-    auto handle() -> coro_handle
+    auto handle() -> coroutine_handle
     {
         return m_coroutine;
     }
 
 private:
-    coro_handle m_coroutine{nullptr};
+    coroutine_handle m_coroutine{nullptr};
 };
 
 namespace detail
@@ -285,15 +281,14 @@ namespace detail
 template<typename return_type>
 inline auto promise<return_type>::get_return_object() noexcept -> task<return_type>
 {
-    return task<return_type>{coro_handle::from_promise(*this)};
+    return task<return_type>{coroutine_handle::from_promise(*this)};
 }
 
 inline auto promise<void>::get_return_object() noexcept -> task<>
 {
-    return task<>{coro_handle::from_promise(*this)};
+    return task<>{coroutine_handle::from_promise(*this)};
 }
 
 } // namespace detail
-
 
 } // namespace coro
