@@ -19,7 +19,7 @@ struct promise_base
         template<typename promise_type>
         auto await_suspend(std::coroutine_handle<promise_type> coroutine) noexcept -> std::coroutine_handle<>
         {
-            // // If there is a continuation call it, otherwise this is the end of the line.
+            // If there is a continuation call it, otherwise this is the end of the line.
             auto& promise = coroutine.promise();
             if (promise.m_continuation != nullptr)
             {
@@ -48,7 +48,7 @@ struct promise_base
 
     auto continuation(std::coroutine_handle<> continuation) noexcept -> void { m_continuation = continuation; }
 
-  protected:
+protected:
     std::coroutine_handle<> m_continuation{nullptr};
     std::exception_ptr      m_exception_ptr{};
 };
@@ -86,7 +86,7 @@ struct promise final : public promise_base
         return std::move(m_return_value);
     }
 
-  private:
+private:
     return_type m_return_value;
 };
 
@@ -117,7 +117,7 @@ struct promise<void> : public promise_base
 template<typename return_type>
 class task
 {
-  public:
+public:
     using task_type        = task<return_type>;
     using promise_type     = detail::promise<return_type>;
     using coroutine_handle = std::coroutine_handle<promise_type>;
@@ -211,7 +211,7 @@ class task
 
     auto handle() -> coroutine_handle { return m_coroutine; }
 
-  private:
+private:
     coroutine_handle m_coroutine{nullptr};
 };
 

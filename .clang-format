@@ -1,4 +1,5 @@
 ---
+AccessModifierOffset: -4
 AlignAfterOpenBracket: AlwaysBreak
 AlignConsecutiveMacros: 'true'
 AlignConsecutiveAssignments: 'true'
@@ -64,7 +65,4 @@ SpacesInParentheses: 'false'
 SpacesInSquareBrackets: 'false'
 Standard: Cpp11
 UseTab: Never
-# clang-11 is supposed to support this
-#BraceWrapping:
-#    BeforeLambdaBody: 'true'
 ...

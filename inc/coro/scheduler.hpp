@@ -33,7 +33,7 @@ namespace detail
 {
 class resume_token_base
 {
-  public:
+public:
     resume_token_base(scheduler* eng) noexcept : m_scheduler(eng), m_state(nullptr) {}
 
     virtual ~resume_token_base() = default;
@@ -109,7 +109,7 @@ class resume_token_base
         m_state.compare_exchange_strong(old_value, nullptr, std::memory_order::acquire);
     }
 
-  protected:
+protected:
     friend struct awaiter;
     scheduler*                 m_scheduler{nullptr};
     mutable std::atomic<void*> m_state;
@@ -124,7 +124,7 @@ class resume_token final : public detail::resume_token_base
     resume_token() : detail::resume_token_base(nullptr) {}
     resume_token(scheduler& s) : detail::resume_token_base(&s) {}
 
-  public:
+public:
     ~resume_token() override = default;
 
     resume_token(const resume_token&) = delete;
@@ -138,7 +138,7 @@ class resume_token final : public detail::resume_token_base
 
     auto return_value() && -> return_type&& { return std::move(m_return_value); }
 
-  private:
+private:
     return_type m_return_value;
 };
 
@@ -149,7 +149,7 @@ class resume_token<void> final : public detail::resume_token_base
     resume_token() : detail::resume_token_base(nullptr) {}
     resume_token(scheduler& s) : detail::resume_token_base(&s) {}
 
-  public:
+public:
     ~resume_token() override = default;
 
     resume_token(const resume_token&) = delete;
@@ -172,7 +172,7 @@ enum class poll_op
 
 class scheduler
 {
-  private:
+private:
     using task_variant = std::variant<coro::task<void>, std::coroutine_handle<>>;
     using task_queue   = std::deque<task_variant>;
 
@@ -190,7 +190,7 @@ class scheduler
 
     class task_manager
     {
-      public:
+    public:
         using task_position = std::list<std::size_t>::iterator;
 
         task_manager(const std::size_t reserve_size, const double growth_factor) : m_growth_factor(growth_factor)
@@ -272,7 +272,7 @@ class scheduler
          */
         auto capacity() const -> std::size_t { return m_tasks.size(); }
 
-      private:
+    private:
         /**
          * Grows each task container by the growth factor.
          * @return The position of the free index after growing.
@@ -320,7 +320,7 @@ class scheduler
     static constexpr const int   m_accept_object{0};
     static constexpr const void* m_accept_ptr = &m_accept_object;
 
-  public:
+public:
     using fd_t = int;
 
     enum class shutdown_t
@@ -651,7 +651,7 @@ class scheduler
         }
     }
 
-  private:
+private:
     /// The event loop epoll file descriptor.
     fd_t m_epoll_fd{-1};
     /// The event loop accept new tasks and resume tasks file descriptor.

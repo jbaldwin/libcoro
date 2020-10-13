@@ -8,7 +8,7 @@ namespace coro
 {
 class latch
 {
-  public:
+public:
     latch(std::ptrdiff_t count) noexcept : m_count(count), m_event(count <= 0) {}
 
     latch(const latch&) = delete;
@@ -30,7 +30,7 @@ class latch
 
     auto operator co_await() const noexcept -> event::awaiter { return m_event.operator co_await(); }
 
-  private:
+private:
     std::atomic<std::ptrdiff_t> m_count;
     event                       m_event;
 };

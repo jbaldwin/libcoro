@@ -13,7 +13,7 @@ namespace detail
 template<typename T>
 class generator_promise
 {
-  public:
+public:
     using value_type     = std::remove_reference_t<T>;
     using reference_type = std::conditional_t<std::is_reference_v<T>, T, T&>;
     using pointer_type   = value_type*;
@@ -56,7 +56,7 @@ class generator_promise
         }
     }
 
-  private:
+private:
     pointer_type       m_value{nullptr};
     std::exception_ptr m_exception;
 };
@@ -70,7 +70,7 @@ class generator_iterator
 {
     using coroutine_handle = std::coroutine_handle<generator_promise<T>>;
 
-  public:
+public:
     using iterator_category = std::input_iterator_tag;
     using difference_type   = std::ptrdiff_t;
     using value_type        = typename generator_promise<T>::value_type;
@@ -109,7 +109,7 @@ class generator_iterator
 
     pointer operator->() const noexcept { return std::addressof(operator*()); }
 
-  private:
+private:
     coroutine_handle m_coroutine{nullptr};
 };
 
@@ -118,7 +118,7 @@ class generator_iterator
 template<typename T>
 class generator
 {
-  public:
+public:
     using promise_type = detail::generator_promise<T>;
     using iterator     = detail::generator_iterator<T>;
     using sentinel     = detail::generator_sentinel;
@@ -161,7 +161,7 @@ class generator
 
     auto end() noexcept -> sentinel { return sentinel{}; }
 
-  private:
+private:
     friend class detail::generator_promise<T>;
 
     explicit generator(std::coroutine_handle<promise_type> coroutine) noexcept : m_coroutine(coroutine) {}

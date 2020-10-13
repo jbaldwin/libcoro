@@ -69,3 +69,28 @@ TEST_CASE("event multiple watchers")
     REQUIRE(value2.promise().return_value() == 42);
     REQUIRE(value3.promise().return_value() == 42);
 }
+
+TEST_CASE("event reset")
+{
+    coro::event e{};
+
+    e.reset();
+    REQUIRE_FALSE(e.is_set());
+
+    auto value1 = consumer(e);
+    value1.resume(); // start co_awaiting event
+    REQUIRE_FALSE(value1.is_ready());
+
+    producer(e);
+    REQUIRE(value1.promise().return_value() == 42);
+
+    e.reset();
+
+    auto value2 = consumer(e);
+    value2.resume();
+    REQUIRE_FALSE(value2.is_ready());
+
+    producer(e);
+
+    REQUIRE(value2.promise().return_value() == 42);
+}
