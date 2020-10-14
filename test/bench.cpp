@@ -2,30 +2,26 @@
 
 #include <coro/coro.hpp>
 
-#include <chrono>
-#include <iostream>
 #include <atomic>
+#include <chrono>
 #include <iomanip>
+#include <iostream>
 
 using namespace std::chrono_literals;
 using sc = std::chrono::steady_clock;
 
 constexpr std::size_t default_iterations = 5'000'000;
 
-static auto print_stats(
-    const std::string& bench_name,
-    uint64_t operations,
-    sc::time_point start,
-    sc::time_point stop
-) -> void
+static auto print_stats(const std::string& bench_name, uint64_t operations, sc::time_point start, sc::time_point stop)
+    -> void
 {
     auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start);
-    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(duration);
+    auto ms       = std::chrono::duration_cast<std::chrono::milliseconds>(duration);
 
     std::cout << bench_name << "\n";
     std::cout << "    " << operations << " ops in " << ms.count() << "ms\n";
 
-    double seconds = duration.count() / 1'000'000'000.0;
+    double seconds     = duration.count() / 1'000'000'000.0;
     double ops_per_sec = static_cast<uint64_t>(operations / seconds);
 
     std::cout << "    ops/sec: " << std::fixed << ops_per_sec << "\n";
@@ -35,15 +31,14 @@ TEST_CASE("benchmark counter func direct call")
 {
     constexpr std::size_t iterations = default_iterations;
     std::atomic<uint64_t> counter{0};
-    auto func = [&]() -> void
-    {
+    auto                  func = [&]() -> void {
         counter.fetch_add(1, std::memory_order::relaxed);
         return;
     };
 
     auto start = sc::now();
 
-    for(std::size_t i = 0; i < iterations; ++i)
+    for (std::size_t i = 0; i < iterations; ++i)
     {
         func();
     }
@@ -56,17 +51,15 @@ TEST_CASE("benchmark counter func coro::sync_wait(awaitable)")
 {
     constexpr std::size_t iterations = default_iterations;
     std::atomic<uint64_t> counter{0};
-    auto func = [&]() -> coro::task<void>
-    {
+    auto                  func = [&]() -> coro::task<void> {
         counter.fetch_add(1, std::memory_order::relaxed);
         co_return;
     };
 
     auto start = sc::now();
 
-    for(std::size_t i = 0; i < iterations; ++i)
+    for (std::size_t i = 0; i < iterations; ++i)
     {
-
         coro::sync_wait(func());
     }
 
@@ -78,15 +71,14 @@ TEST_CASE("benchmark counter func coro::sync_wait_all(awaitable)")
 {
     constexpr std::size_t iterations = default_iterations;
     std::atomic<uint64_t> counter{0};
-    auto func = [&]() -> coro::task<void>
-    {
+    auto                  func = [&]() -> coro::task<void> {
         counter.fetch_add(1, std::memory_order::relaxed);
         co_return;
     };
 
     auto start = sc::now();
 
-    for(std::size_t i = 0; i < iterations; i += 10)
+    for (std::size_t i = 0; i < iterations; i += 10)
     {
         coro::sync_wait_all(func(), func(), func(), func(), func(), func(), func(), func(), func(), func());
     }
@@ -99,17 +91,16 @@ TEST_CASE("benchmark counter task scheduler")
 {
     constexpr std::size_t iterations = default_iterations;
 
-    coro::scheduler s1{};
+    coro::scheduler       s1{};
     std::atomic<uint64_t> counter{0};
-    auto func = [&]() -> coro::task<void>
-    {
+    auto                  func = [&]() -> coro::task<void> {
         counter.fetch_add(1, std::memory_order::relaxed);
         co_return;
     };
 
     auto start = sc::now();
 
-    for(std::size_t i = 0; i < iterations; ++i)
+    for (std::size_t i = 0; i < iterations; ++i)
     {
         s1.schedule(func());
     }
@@ -123,19 +114,18 @@ TEST_CASE("benchmark counter task scheduler")
 TEST_CASE("benchmark counter task scheduler yield -> resume from main")
 {
     constexpr std::size_t iterations = default_iterations;
-    constexpr std::size_t ops = iterations * 2; // the external resume is still a resume op
+    constexpr std::size_t ops        = iterations * 2; // the external resume is still a resume op
 
-    coro::scheduler s{};
+    coro::scheduler                       s{};
     std::vector<coro::resume_token<void>> tokens{};
-    for(std::size_t i = 0; i < iterations; ++i)
+    for (std::size_t i = 0; i < iterations; ++i)
     {
         tokens.emplace_back(s.generate_resume_token<void>());
     }
 
     std::atomic<uint64_t> counter{0};
 
-    auto wait_func = [&](std::size_t index) -> coro::task<void>
-    {
+    auto wait_func = [&](std::size_t index) -> coro::task<void> {
         co_await s.yield<void>(tokens[index]);
         counter.fetch_add(1, std::memory_order::relaxed);
         co_return;
@@ -143,12 +133,12 @@ TEST_CASE("benchmark counter task scheduler yield -> resume from main")
 
     auto start = sc::now();
 
-    for(std::size_t i = 0; i < iterations; ++i)
+    for (std::size_t i = 0; i < iterations; ++i)
     {
         s.schedule(wait_func(i));
     }
 
-    for(std::size_t i = 0; i < iterations; ++i)
+    for (std::size_t i = 0; i < iterations; ++i)
     {
         tokens[i].resume();
     }
@@ -164,33 +154,31 @@ TEST_CASE("benchmark counter task scheduler yield -> resume from main")
 TEST_CASE("benchmark counter task scheduler yield -> resume from coroutine")
 {
     constexpr std::size_t iterations = default_iterations;
-    constexpr std::size_t ops = iterations * 2; // each iteration executes 2 coroutines.
+    constexpr std::size_t ops        = iterations * 2; // each iteration executes 2 coroutines.
 
-    coro::scheduler s{};
+    coro::scheduler                       s{};
     std::vector<coro::resume_token<void>> tokens{};
-    for(std::size_t i = 0; i < iterations; ++i)
+    for (std::size_t i = 0; i < iterations; ++i)
     {
         tokens.emplace_back(s.generate_resume_token<void>());
     }
 
     std::atomic<uint64_t> counter{0};
 
-    auto wait_func = [&](std::size_t index) -> coro::task<void>
-    {
+    auto wait_func = [&](std::size_t index) -> coro::task<void> {
         co_await s.yield<void>(tokens[index]);
         counter.fetch_add(1, std::memory_order::relaxed);
         co_return;
     };
 
-    auto resume_func = [&](std::size_t index) -> coro::task<void>
-    {
+    auto resume_func = [&](std::size_t index) -> coro::task<void> {
         tokens[index].resume();
         co_return;
     };
 
     auto start = sc::now();
 
-    for(std::size_t i = 0; i < iterations; ++i)
+    for (std::size_t i = 0; i < iterations; ++i)
     {
         s.schedule(wait_func(i));
         s.schedule(resume_func(i));
@@ -207,33 +195,31 @@ TEST_CASE("benchmark counter task scheduler yield -> resume from coroutine")
 TEST_CASE("benchmark counter task scheduler resume from coroutine -> yield")
 {
     constexpr std::size_t iterations = default_iterations;
-    constexpr std::size_t ops = iterations * 2; // each iteration executes 2 coroutines.
+    constexpr std::size_t ops        = iterations * 2; // each iteration executes 2 coroutines.
 
-    coro::scheduler s{};
+    coro::scheduler                       s{};
     std::vector<coro::resume_token<void>> tokens{};
-    for(std::size_t i = 0; i < iterations; ++i)
+    for (std::size_t i = 0; i < iterations; ++i)
     {
         tokens.emplace_back(s.generate_resume_token<void>());
     }
 
     std::atomic<uint64_t> counter{0};
 
-    auto wait_func = [&](std::size_t index) -> coro::task<void>
-    {
+    auto wait_func = [&](std::size_t index) -> coro::task<void> {
         co_await s.yield<void>(tokens[index]);
         counter.fetch_add(1, std::memory_order::relaxed);
         co_return;
     };
 
-    auto resume_func = [&](std::size_t index) -> coro::task<void>
-    {
+    auto resume_func = [&](std::size_t index) -> coro::task<void> {
         tokens[index].resume();
         co_return;
     };
 
     auto start = sc::now();
 
-    for(std::size_t i = 0; i < iterations; ++i)
+    for (std::size_t i = 0; i < iterations; ++i)
     {
         s.schedule(resume_func(i));
         s.schedule(wait_func(i));
@@ -250,38 +236,36 @@ TEST_CASE("benchmark counter task scheduler resume from coroutine -> yield")
 TEST_CASE("benchmark counter task scheduler yield (all) -> resume (all) from coroutine with reserve")
 {
     constexpr std::size_t iterations = default_iterations;
-    constexpr std::size_t ops = iterations * 2; // each iteration executes 2 coroutines.
+    constexpr std::size_t ops        = iterations * 2; // each iteration executes 2 coroutines.
 
-    coro::scheduler s{ coro::scheduler::options { .reserve_size = iterations } };
+    coro::scheduler                       s{coro::scheduler::options{.reserve_size = iterations}};
     std::vector<coro::resume_token<void>> tokens{};
-    for(std::size_t i = 0; i < iterations; ++i)
+    for (std::size_t i = 0; i < iterations; ++i)
     {
         tokens.emplace_back(s.generate_resume_token<void>());
     }
 
     std::atomic<uint64_t> counter{0};
 
-    auto wait_func = [&](std::size_t index) -> coro::task<void>
-    {
+    auto wait_func = [&](std::size_t index) -> coro::task<void> {
         co_await s.yield<void>(tokens[index]);
         counter.fetch_add(1, std::memory_order::relaxed);
         co_return;
     };
 
-    auto resume_func = [&](std::size_t index) -> coro::task<void>
-    {
+    auto resume_func = [&](std::size_t index) -> coro::task<void> {
         tokens[index].resume();
         co_return;
     };
 
     auto start = sc::now();
 
-    for(std::size_t i = 0; i < iterations; ++i)
+    for (std::size_t i = 0; i < iterations; ++i)
     {
         s.schedule(wait_func(i));
     }
 
-    for(std::size_t i = 0; i < iterations; ++i)
+    for (std::size_t i = 0; i < iterations; ++i)
     {
         s.schedule(resume_func(i));
     }

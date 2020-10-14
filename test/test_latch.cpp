@@ -5,13 +5,11 @@
 #include <chrono>
 #include <thread>
 
-
 TEST_CASE("latch count=0")
 {
     coro::latch l{0};
 
-    auto task = [&]() -> coro::task<uint64_t>
-    {
+    auto task = [&]() -> coro::task<uint64_t> {
         co_await l;
         co_return 42;
     }();
@@ -25,8 +23,7 @@ TEST_CASE("latch count=1")
 {
     coro::latch l{1};
 
-    auto task = [&]() -> coro::task<uint64_t>
-    {
+    auto task = [&]() -> coro::task<uint64_t> {
         auto workers = l.remaining();
         co_await l;
         co_return workers;
@@ -44,8 +41,7 @@ TEST_CASE("latch count=1 count_down=5")
 {
     coro::latch l{1};
 
-    auto task = [&]() -> coro::task<uint64_t>
-    {
+    auto task = [&]() -> coro::task<uint64_t> {
         auto workers = l.remaining();
         co_await l;
         co_return workers;
@@ -63,8 +59,7 @@ TEST_CASE("latch count=5 count_down=1 x5")
 {
     coro::latch l{5};
 
-    auto task = [&]() -> coro::task<uint64_t>
-    {
+    auto task = [&]() -> coro::task<uint64_t> {
         auto workers = l.remaining();
         co_await l;
         co_return workers;
@@ -90,8 +85,7 @@ TEST_CASE("latch count=5 count_down=5")
 {
     coro::latch l{5};
 
-    auto task = [&]() -> coro::task<uint64_t>
-    {
+    auto task = [&]() -> coro::task<uint64_t> {
         auto workers = l.remaining();
         co_await l;
         co_return workers;

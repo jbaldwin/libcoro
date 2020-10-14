@@ -4,8 +4,7 @@
 
 TEST_CASE("sync_wait task multiple suspends return integer with sync_wait")
 {
-    auto func = []() -> coro::task<int>
-    {
+    auto func = []() -> coro::task<int> {
         co_await std::suspend_always{};
         co_await std::suspend_always{};
         co_await std::suspend_always{};
@@ -18,14 +17,12 @@ TEST_CASE("sync_wait task multiple suspends return integer with sync_wait")
 
 TEST_CASE("sync_wait task co_await single")
 {
-    auto answer = []() -> coro::task<int>
-    {
+    auto answer = []() -> coro::task<int> {
         std::cerr << "\tThinking deep thoughts...\n";
         co_return 42;
     };
 
-    auto await_answer = [&]() -> coro::task<int>
-    {
+    auto await_answer = [&]() -> coro::task<int> {
         std::cerr << "\tStarting to wait for answer.\n";
         auto a = answer();
         std::cerr << "\tGot the coroutine, getting the value.\n";
@@ -45,8 +42,7 @@ TEST_CASE("sync_wait task co_await single")
 TEST_CASE("sync_wait_all accumulate")
 {
     std::atomic<uint64_t> counter{0};
-    auto func = [&](uint64_t amount) -> coro::task<void>
-    {
+    auto                  func = [&](uint64_t amount) -> coro::task<void> {
         std::cerr << "amount=" << amount << "\n";
         counter += amount;
         co_return;

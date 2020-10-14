@@ -9,7 +9,7 @@ message("${PROJECT_NAME} CORO_CODE_COVERAGE    = ${CORO_CODE_COVERAGE}")
 
 set(LIBCORO_SOURCE_FILES
     inc/coro/coro.hpp
-    inc/coro/event.hpp
+    inc/coro/event.hpp src/event.cpp
     inc/coro/generator.hpp
     inc/coro/latch.hpp
     inc/coro/scheduler.hpp
