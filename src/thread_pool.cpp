@@ -9,12 +9,14 @@ thread_pool::operation::operation(thread_pool& tp) noexcept
 
 }
 
-auto thread_pool::operation::await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept -> bool
+auto thread_pool::operation::await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept -> void
 {
-    std::cerr << "thread_pool::operation::await_suspend()\n";
     m_awaiting_coroutine = awaiting_coroutine;
     m_thread_pool.schedule_impl(this);
-    return false;
+
+    // void return on await_suspend suspends the _this_ coroutine, which is now scheduled on the
+    // thread pool and returns control to the caller.  They could be sync_wait'ing or go do
+    // something else while this coroutine gets picked up by the thread pool.
 }
 
 thread_pool::thread_pool(uint32_t thread_count)
@@ -37,7 +39,6 @@ thread_pool::~thread_pool()
 
 auto thread_pool::schedule() noexcept -> std::optional<operation>
 {
-    std::cerr << "thread_pool::schedule()\n";
     if(!m_shutdown_requested.load(std::memory_order::relaxed))
     {
         m_size.fetch_add(1, std::memory_order::relaxed);
@@ -77,7 +78,6 @@ auto thread_pool::run(uint32_t worker_idx) -> void
                 std::lock_guard<std::mutex> lk{m_queue_mutex};
                 if(!m_queue.empty())
                 {
-                    std::cerr << "thread_pool::run m_queue.pop_front()\n";
                     op = m_queue.front();
                     m_queue.pop_front();
                 }
@@ -112,7 +112,6 @@ auto thread_pool::join() -> void
 
 auto thread_pool::schedule_impl(operation* op) -> void
 {
-    std::cerr << "thread_pool::schedule_impl()\n";
     {
         std::lock_guard<std::mutex> lk{m_queue_mutex};
         m_queue.emplace_back(op);

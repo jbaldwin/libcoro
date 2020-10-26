@@ -7,15 +7,15 @@
 namespace coro
 {
 
-template<typename T, typename return_type>
-concept promise_type = requires(T t)
+template<typename type, typename return_type>
+concept promise_type = requires(type t)
 {
     { t.get_return_object() } -> std::convertible_to<std::coroutine_handle<>>;
-    { t.initial_suspend() } -> awaiter_type;
-    { t.final_suspend() } -> awaiter_type;
-    { t.yield_value() } -> awaitable_type;
+    { t.initial_suspend() } -> awaiter;
+    { t.final_suspend() } -> awaiter;
+    { t.yield_value() } -> awaitable;
 } &&
-requires(T t, return_type return_value)
+requires(type t, return_type return_value)
 {
     std::same_as<decltype(t.return_void()), void> ||
     std::same_as<decltype(t.return_value(return_value)), void> ||

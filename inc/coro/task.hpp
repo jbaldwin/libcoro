@@ -140,9 +140,9 @@ public:
 
     task() noexcept : m_coroutine(nullptr) {}
 
-    task(coroutine_handle handle) : m_coroutine(handle) {}
+    explicit task(coroutine_handle handle) : m_coroutine(handle) {}
     task(const task&) = delete;
-    task(task&& other) noexcept : m_coroutine(other.m_coroutine) { other.m_coroutine = nullptr; }
+    task(task&& other) noexcept : m_coroutine(std::exchange(other.m_coroutine, nullptr)) { }
 
     ~task()
     {
@@ -153,7 +153,8 @@ public:
     }
 
     auto operator=(const task&) -> task& = delete;
-    auto operator                        =(task&& other) noexcept -> task&
+
+    auto operator=(task&& other) noexcept -> task&
     {
         if (std::addressof(other) != this)
         {
@@ -162,8 +163,7 @@ public:
                 m_coroutine.destroy();
             }
 
-            m_coroutine       = other.m_coroutine;
-            other.m_coroutine = nullptr;
+            m_coroutine = std::exchange(other.m_coroutine, nullptr);
         }
 
         return *this;

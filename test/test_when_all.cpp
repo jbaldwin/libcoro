@@ -49,7 +49,7 @@ TEST_CASE("when_all_awaitable single task with vector container")
     std::vector<coro::task<uint64_t>> input_tasks;
     input_tasks.emplace_back(make_task(100));
 
-    auto output_tasks = coro::sync_wait(coro::when_all_awaitable(std::move(input_tasks)));
+    auto output_tasks = coro::sync_wait(coro::when_all_awaitable(input_tasks));
     REQUIRE(output_tasks.size() == 1);
 
     uint64_t counter{0};
@@ -73,7 +73,7 @@ TEST_CASE("when_all_ready multple task withs vector container")
     input_tasks.emplace_back(make_task(550));
     input_tasks.emplace_back(make_task(1000));
 
-    auto output_tasks = coro::sync_wait(coro::when_all_awaitable(std::move(input_tasks)));
+    auto output_tasks = coro::sync_wait(coro::when_all_awaitable(input_tasks));
     REQUIRE(output_tasks.size() == 4);
 
     uint64_t counter{0};

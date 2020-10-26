@@ -27,9 +27,9 @@ public:
     public:
         explicit operation(thread_pool& tp) noexcept;
 
-        auto await_ready() noexcept -> bool { std::cerr << "thread_pool::operation::await_ready()\n"; return false; }
-        auto await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept -> bool;
-        auto await_resume() noexcept -> void { std::cerr << "thread_pool::operation::await_resume()\n";/* no-op */ }
+        auto await_ready() noexcept -> bool { return false; }
+        auto await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept -> void;
+        auto await_resume() noexcept -> void { /* no-op */ }
     private:
         thread_pool& m_thread_pool;
         std::coroutine_handle<> m_awaiting_coroutine{nullptr};
