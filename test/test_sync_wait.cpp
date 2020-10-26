@@ -2,17 +2,27 @@
 
 #include <coro/coro.hpp>
 
-TEST_CASE("sync_wait task multiple suspends return integer with sync_wait")
+TEST_CASE("sync_wait simple integer return")
 {
     auto func = []() -> coro::task<int> {
-        co_await std::suspend_always{};
-        co_await std::suspend_always{};
-        co_await std::suspend_always{};
         co_return 11;
     };
 
     auto result = coro::sync_wait(func());
     REQUIRE(result == 11);
+}
+
+TEST_CASE("sync_wait void")
+{
+    std::string output;
+
+    auto func = [&]() -> coro::task<void> {
+        output = "hello from sync_wait<void>\n";
+        co_return;
+    };
+
+    coro::sync_wait(func());
+    REQUIRE(output == "hello from sync_wait<void>\n");
 }
 
 TEST_CASE("sync_wait task co_await single")
@@ -37,18 +47,4 @@ TEST_CASE("sync_wait task co_await single")
 
     auto output = coro::sync_wait(await_answer());
     REQUIRE(output == 1337);
-}
-
-TEST_CASE("sync_wait_all accumulate")
-{
-    std::atomic<uint64_t> counter{0};
-    auto                  func = [&](uint64_t amount) -> coro::task<void> {
-        std::cerr << "amount=" << amount << "\n";
-        counter += amount;
-        co_return;
-    };
-
-    coro::sync_wait_all(func(100), func(10), func(50));
-
-    REQUIRE(counter == 160);
 }

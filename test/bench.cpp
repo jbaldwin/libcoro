@@ -50,40 +50,43 @@ TEST_CASE("benchmark counter func direct call")
 TEST_CASE("benchmark counter func coro::sync_wait(awaitable)")
 {
     constexpr std::size_t iterations = default_iterations;
-    std::atomic<uint64_t> counter{0};
-    auto                  func = [&]() -> coro::task<void> {
-        counter.fetch_add(1, std::memory_order::relaxed);
-        co_return;
+    uint64_t counter{0};
+    auto func = []() -> coro::task<uint64_t> {
+        co_return 1;
     };
 
     auto start = sc::now();
 
     for (std::size_t i = 0; i < iterations; ++i)
     {
-        coro::sync_wait(func());
+        counter += coro::sync_wait(func());
     }
 
     print_stats("benchmark counter func coro::sync_wait(awaitable)", iterations, start, sc::now());
     REQUIRE(counter == iterations);
 }
 
-TEST_CASE("benchmark counter func coro::sync_wait_all(awaitable)")
+TEST_CASE("benchmark counter func coro::sync_wait(coro::when_all_awaitable(awaitable)) x10")
 {
     constexpr std::size_t iterations = default_iterations;
-    std::atomic<uint64_t> counter{0};
-    auto                  func = [&]() -> coro::task<void> {
-        counter.fetch_add(1, std::memory_order::relaxed);
-        co_return;
+    uint64_t counter{0};
+    auto f = []() -> coro::task<uint64_t> {
+        co_return 1;
     };
 
     auto start = sc::now();
 
     for (std::size_t i = 0; i < iterations; i += 10)
     {
-        coro::sync_wait_all(func(), func(), func(), func(), func(), func(), func(), func(), func(), func());
+        auto tasks = coro::sync_wait(coro::when_all_awaitable(f(), f(), f(), f(), f(), f(), f(), f(), f(), f()));
+
+        std::apply([&counter](auto&&... t) {
+                ((counter += t.return_value()), ...);
+            },
+            tasks);
     }
 
-    print_stats("benchmark counter func coro::sync_wait_all(awaitable)", iterations, start, sc::now());
+    print_stats("benchmark counter func coro::sync_wait(coro::when_all_awaitable(awaitable))", iterations, start, sc::now());
     REQUIRE(counter == iterations);
 }
 
