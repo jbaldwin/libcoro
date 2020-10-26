@@ -1,6 +1,7 @@
 #pragma once
 
 #include "coro/task.hpp"
+#include "coro/shutdown.hpp"
 
 #include <atomic>
 #include <coroutine>
@@ -42,17 +43,18 @@ public:
     resume_token_base(resume_token_base&& other)
     {
         m_scheduler = other.m_scheduler;
-        m_state     = other.m_state.exchange(0);
+        m_state     = other.m_state.exchange(nullptr);
 
         other.m_scheduler = nullptr;
     }
     auto operator=(const resume_token_base&) -> resume_token_base& = delete;
-    auto operator                                                  =(resume_token_base&& other) -> resume_token_base&
+
+    auto operator=(resume_token_base&& other) -> resume_token_base&
     {
         if (std::addressof(other) != this)
         {
             m_scheduler = other.m_scheduler;
-            m_state     = other.m_state.exchange(0);
+            m_state     = other.m_state.exchange(nullptr);
 
             other.m_scheduler = nullptr;
         }
@@ -322,14 +324,6 @@ private:
 
 public:
     using fd_t = int;
-
-    enum class shutdown_t
-    {
-        /// Synchronously wait for all tasks to complete when calling shutdown.
-        sync,
-        /// Asynchronously let tasks finish on the background thread on shutdown.
-        async
-    };
 
     enum class thread_strategy_t
     {
@@ -810,7 +804,6 @@ private:
         std::atomic_thread_fence(std::memory_order::acquire);
         bool tasks_ready = !m_accept_queue.empty();
 
-        // bool tasks_ready = m_event_set.load(std::memory_order::acquire);
         auto timeout = (tasks_ready) ? m_no_timeout : user_timeout;
 
         // Poll is run every iteration to make sure 'waiting' events are properly put into

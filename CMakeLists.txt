@@ -8,13 +8,20 @@ message("${PROJECT_NAME} CORO_BUILD_TESTS      = ${CORO_BUILD_TESTS}")
 message("${PROJECT_NAME} CORO_CODE_COVERAGE    = ${CORO_CODE_COVERAGE}")
 
 set(LIBCORO_SOURCE_FILES
+    inc/coro/detail/void_value.hpp
+
+    inc/coro/awaitable.hpp
     inc/coro/coro.hpp
     inc/coro/event.hpp src/event.cpp
     inc/coro/generator.hpp
     inc/coro/latch.hpp
+    inc/coro/promise.hpp
     inc/coro/scheduler.hpp
-    inc/coro/sync_wait.hpp
+    inc/coro/shutdown.hpp
+    inc/coro/sync_wait.hpp src/sync_wait.cpp
     inc/coro/task.hpp
+    inc/coro/thread_pool.hpp src/thread_pool.cpp
+    inc/coro/when_all.hpp
 )
 
 add_library(${PROJECT_NAME} STATIC ${LIBCORO_SOURCE_FILES})

@@ -9,6 +9,8 @@ set(LIBCORO_TEST_SOURCE_FILES
     test_scheduler.cpp
     test_sync_wait.cpp
     test_task.cpp
+    test_thread_pool.cpp
+    test_when_all.cpp
 )
 
 add_executable(${PROJECT_NAME} main.cpp ${LIBCORO_TEST_SOURCE_FILES})

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <coroutine>
+#include <exception>
 
 namespace coro
 {
@@ -198,7 +199,7 @@ public:
     {
         struct awaitable : public awaitable_base
         {
-            auto await_resume() noexcept -> decltype(auto) { return this->m_coroutine.promise().return_value(); }
+            auto await_resume() -> decltype(auto) { return this->m_coroutine.promise().return_value(); }
         };
 
         return awaitable{m_coroutine};
