@@ -516,12 +516,32 @@ TEST_CASE("scheduler task throws")
 
     auto func = []() -> coro::task<void> {
         // Is it possible to actually notify the user when running a task in a scheduler?
-        // Seems like the user will need to manually catch.
+        // Seems like the user will need to manually catch within the task themselves.
         throw std::runtime_error{"I always throw."};
         co_return;
     };
 
     s.schedule(func());
+
+    s.shutdown();
+    REQUIRE(s.empty());
+}
+
+TEST_CASE("scheduler task throws after resume")
+{
+    coro::scheduler s{};
+    auto            token = s.generate_resume_token<void>();
+
+    auto func = [&]() -> coro::task<void> {
+        co_await token;
+        throw std::runtime_error{"I always throw."};
+        co_return;
+    };
+
+    s.schedule(func());
+
+    std::this_thread::sleep_for(50ms);
+    token.resume();
 
     s.shutdown();
     REQUIRE(s.empty());

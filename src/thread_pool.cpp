@@ -2,11 +2,8 @@
 
 namespace coro
 {
-
-thread_pool::operation::operation(thread_pool& tp) noexcept
-    : m_thread_pool(tp)
+thread_pool::operation::operation(thread_pool& tp) noexcept : m_thread_pool(tp)
 {
-
 }
 
 auto thread_pool::operation::await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept -> void
@@ -19,12 +16,11 @@ auto thread_pool::operation::await_suspend(std::coroutine_handle<> awaiting_coro
     // something else while this coroutine gets picked up by the thread pool.
 }
 
-thread_pool::thread_pool(options opts)
-    : m_opts(std::move(opts))
+thread_pool::thread_pool(options opts) : m_opts(std::move(opts))
 {
     m_threads.reserve(m_opts.thread_count);
 
-    for(uint32_t i = 0; i < m_opts.thread_count; ++i)
+    for (uint32_t i = 0; i < m_opts.thread_count; ++i)
     {
         m_threads.emplace_back([this, i](std::stop_token st) { executor(std::move(st), i); });
     }
@@ -37,7 +33,7 @@ thread_pool::~thread_pool()
 
 auto thread_pool::schedule() noexcept -> std::optional<operation>
 {
-    if(!m_shutdown_requested.load(std::memory_order::relaxed))
+    if (!m_shutdown_requested.load(std::memory_order::relaxed))
     {
         m_size.fetch_add(1, std::memory_order_relaxed);
         return {operation{*this}};
@@ -50,16 +46,16 @@ auto thread_pool::shutdown(shutdown_t wait_for_tasks) noexcept -> void
 {
     if (!m_shutdown_requested.exchange(true, std::memory_order::release))
     {
-        for(auto& thread : m_threads)
+        for (auto& thread : m_threads)
         {
             thread.request_stop();
         }
 
-        if(wait_for_tasks == shutdown_t::sync)
+        if (wait_for_tasks == shutdown_t::sync)
         {
-            for(auto& thread : m_threads)
+            for (auto& thread : m_threads)
             {
-                if(thread.joinable())
+                if (thread.joinable())
                 {
                     thread.join();
                 }
@@ -70,12 +66,12 @@ auto thread_pool::shutdown(shutdown_t wait_for_tasks) noexcept -> void
 
 auto thread_pool::executor(std::stop_token stop_token, std::size_t idx) -> void
 {
-    if(m_opts.on_thread_start_functor != nullptr)
+    if (m_opts.on_thread_start_functor != nullptr)
     {
         m_opts.on_thread_start_functor(idx);
     }
 
-    while(true)
+    while (true)
     {
         // Wait until the queue has operations to execute or shutdown has been requested.
         {
@@ -84,12 +80,12 @@ auto thread_pool::executor(std::stop_token stop_token, std::size_t idx) -> void
         }
 
         // Continue to pull operations from the global queue until its empty.
-        while(true)
+        while (true)
         {
             operation* op{nullptr};
             {
                 std::lock_guard<std::mutex> lk{m_queue_mutex};
-                if(!m_queue.empty())
+                if (!m_queue.empty())
                 {
                     op = m_queue.front();
                     m_queue.pop_front();
@@ -100,7 +96,7 @@ auto thread_pool::executor(std::stop_token stop_token, std::size_t idx) -> void
                 }
             }
 
-            if(op != nullptr && op->m_awaiting_coroutine != nullptr)
+            if (op != nullptr && op->m_awaiting_coroutine != nullptr)
             {
                 op->m_awaiting_coroutine.resume();
                 m_size.fetch_sub(1, std::memory_order_relaxed);
@@ -111,13 +107,13 @@ auto thread_pool::executor(std::stop_token stop_token, std::size_t idx) -> void
             }
         }
 
-        if(stop_token.stop_requested())
+        if (stop_token.stop_requested())
         {
             break; // while(true);
         }
     }
 
-    if(m_opts.on_thread_stop_functor != nullptr)
+    if (m_opts.on_thread_stop_functor != nullptr)
     {
         m_opts.on_thread_stop_functor(idx);
     }

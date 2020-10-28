@@ -4,18 +4,17 @@
 #include "coro/task.hpp"
 
 #include <atomic>
-#include <vector>
-#include <thread>
-#include <mutex>
 #include <condition_variable>
 #include <coroutine>
 #include <deque>
-#include <optional>
 #include <functional>
+#include <mutex>
+#include <optional>
+#include <thread>
+#include <vector>
 
 namespace coro
 {
-
 /**
  * Creates a thread pool that executes arbitrary coroutine tasks in a FIFO scheduler policy.
  * The thread pool by default will create an execution thread per available core on the system.
@@ -39,6 +38,7 @@ public:
          * @param tp The thread pool that created this operation.
          */
         explicit operation(thread_pool& tp) noexcept;
+
     public:
         /**
          * Operations always pause so the executing thread and be switched.
@@ -54,7 +54,8 @@ public:
         /**
          * no-op as this is the function called first by the thread pool's executing thread.
          */
-        auto await_resume() noexcept -> void { }
+        auto await_resume() noexcept -> void {}
+
     private:
         /// The thread pool that this operation will execute on.
         thread_pool& m_thread_pool;
@@ -76,16 +77,12 @@ public:
     /**
      * @param opts Thread pool configuration options.
      */
-    explicit thread_pool(options opts = options{
-        std::thread::hardware_concurrency(),
-        nullptr,
-        nullptr
-    });
+    explicit thread_pool(options opts = options{std::thread::hardware_concurrency(), nullptr, nullptr});
 
     thread_pool(const thread_pool&) = delete;
-    thread_pool(thread_pool&&) = delete;
+    thread_pool(thread_pool&&)      = delete;
     auto operator=(const thread_pool&) -> thread_pool& = delete;
-    auto operator=(thread_pool&&) -> thread_pool& = delete;
+    auto operator=(thread_pool &&) -> thread_pool& = delete;
 
     ~thread_pool();
 
@@ -98,8 +95,7 @@ public:
      *         pool thread.  This will return nullopt if the schedule fails, currently the only
      *         way for this to fail is if `shudown()` has been called.
      */
-    [[nodiscard]]
-    auto schedule() noexcept -> std::optional<operation>;
+    [[nodiscard]] auto schedule() noexcept -> std::optional<operation>;
 
     /**
      * @throw std::runtime_error If the thread pool is `shutdown()` scheduling new tasks is not permitted.
@@ -108,11 +104,11 @@ public:
      * @return A task that wraps the given functor to be executed on the thread pool.
      */
     template<typename functor, typename... arguments>
-    [[nodiscard]]
-    auto schedule(functor&& f, arguments... args) noexcept -> task<decltype(f(std::forward<arguments>(args)...))>
+    [[nodiscard]] auto schedule(functor&& f, arguments... args) noexcept
+        -> task<decltype(f(std::forward<arguments>(args)...))>
     {
         auto scheduled = schedule();
-        if(!scheduled.has_value())
+        if (!scheduled.has_value())
         {
             throw std::runtime_error("coro::thread_pool is shutting down, unable to schedule new tasks.");
         }
@@ -162,6 +158,7 @@ public:
      * @return True if the task queue is currently empty.
      */
     auto queue_empty() const noexcept -> bool { return queue_size() == 0; }
+
 private:
     /// The configuration options.
     options m_opts;

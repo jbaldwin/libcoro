@@ -2,7 +2,8 @@
 
 namespace coro::detail
 {
+struct void_value
+{
+};
 
-struct void_value{};
-
-} // coro::detail
+} // namespace coro::detail

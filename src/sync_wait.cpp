@@ -2,11 +2,8 @@
 
 namespace coro::detail
 {
-
-sync_wait_event::sync_wait_event(bool initially_set)
-    : m_set(initially_set)
+sync_wait_event::sync_wait_event(bool initially_set) : m_set(initially_set)
 {
-
 }
 
 auto sync_wait_event::set() noexcept -> void

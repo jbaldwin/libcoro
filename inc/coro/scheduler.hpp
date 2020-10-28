@@ -1,7 +1,7 @@
 #pragma once
 
-#include "coro/task.hpp"
 #include "coro/shutdown.hpp"
+#include "coro/task.hpp"
 
 #include <atomic>
 #include <coroutine>
@@ -182,14 +182,6 @@ private:
     template<typename return_type>
     friend class resume_token;
 
-    struct task_data
-    {
-        /// The user's task, lifetime is maintained by the scheduler.
-        coro::task<void> m_user_task;
-        /// The post processing cleanup tasks to remove a completed task from the scheduler.
-        coro::task<void> m_cleanup_task;
-    };
-
     class task_manager
     {
     public:
@@ -210,8 +202,9 @@ private:
          * as deleted upon the coroutines completion.
          * @param user_task The scheduled user's task to store since it has suspended after its
          *                  first execution.
+         * @return The task just stored wrapped in the self cleanup task.
          */
-        auto store(coro::task<void> user_task) -> void
+        auto store(coro::task<void> user_task) -> task<void>&
         {
             // Only grow if completely full and attempting to add more.
             if (m_free_pos == m_task_indexes.end())
@@ -219,17 +212,14 @@ private:
                 m_free_pos = grow();
             }
 
-            // Store the user task with its cleanup task to maintain their lifetimes until completed.
-            auto  index              = *m_free_pos;
-            auto& task_data          = m_tasks[index];
-            task_data.m_user_task    = std::move(user_task);
-            task_data.m_cleanup_task = cleanup_func(m_free_pos);
-
-            // Attach the cleanup task to be the continuation after the users task.
-            task_data.m_user_task.promise().continuation(task_data.m_cleanup_task.handle());
+            // Store the task inside a cleanup task for self deletion.
+            auto index     = *m_free_pos;
+            m_tasks[index] = make_cleanup_task(std::move(user_task), m_free_pos);
 
             // Mark the current used slot as used.
             std::advance(m_free_pos, 1);
+
+            return m_tasks[index];
         }
 
         /**
@@ -294,20 +284,34 @@ private:
         }
 
         /**
-         * Each task the user schedules has this task chained as a continuation to execute after
-         * the user's task completes.  This function takes the task position in the indexes list
-         * and upon execution marks that slot for deletion.  It cannot self delete otherwise it
-         * would corrupt/double free its own coroutine stack frame.
+         * Encapsulate the users tasks in a cleanup task which marks itself for deletion upon
+         * completion.  Simply co_await the users task until its completed and then mark the given
+         * position within the task manager as being deletable.  The scheduler's next iteration
+         * in its event loop will then free that position up to be re-used.
+         *
+         * This function will also unconditionally catch all unhandled exceptions by the user's
+         * task to prevent the scheduler from throwing exceptions.
+         * @param user_task The user's task.
+         * @param pos The position where the task data will be stored in the task manager.
+         * @return The user's task wrapped in a self cleanup task.
          */
-        auto cleanup_func(task_position pos) -> coro::task<void>
+        auto make_cleanup_task(task<void> user_task, task_position pos) -> task<void>
         {
-            // Mark this task for deletion, it cannot delete itself.
+            try
+            {
+                co_await user_task;
+            }
+            catch (const std::runtime_error& e)
+            {
+                std::cerr << "scheduler user_task had an unhandled exception e.what()= " << e.what() << "\n";
+            }
+
             m_tasks_to_delete.push_back(pos);
             co_return;
-        };
+        }
 
         /// Maintains the lifetime of the tasks until they are completed.
-        std::vector<task_data> m_tasks{};
+        std::vector<task<void>> m_tasks{};
         /// The full set of indexes into `m_tasks`.
         std::list<std::size_t> m_task_indexes{};
         /// The set of tasks that have completed and need to be deleted.
@@ -732,44 +736,19 @@ private:
     static constexpr std::size_t                 m_max_events = 8;
     std::array<struct epoll_event, m_max_events> m_events{};
 
-    auto task_start(coro::task<void>& task) -> void
-    {
-        if (!task.is_ready()) // sanity check, the user could have manually resumed.
-        {
-            // Attempt to process the task synchronously before suspending.
-            task.resume();
-
-            if (!task.is_ready())
-            {
-                m_task_manager.store(std::move(task));
-                // This task is now suspended waiting for an event.
-            }
-            else
-            {
-                // This task completed synchronously.
-                m_size.fetch_sub(1, std::memory_order::relaxed);
-            }
-        }
-        else
-        {
-            m_size.fetch_sub(1, std::memory_order::relaxed);
-        }
-    }
-
     inline auto process_task_variant(task_variant& tv) -> void
     {
         if (std::holds_alternative<coro::task<void>>(tv))
         {
             auto& task = std::get<coro::task<void>>(tv);
-            task_start(task);
+            // Store the users task and immediately start executing it.
+            m_task_manager.store(std::move(task)).resume();
         }
         else
         {
             auto handle = std::get<std::coroutine_handle<>>(tv);
-            if (!handle.done())
-            {
-                handle.resume();
-            }
+            // The cleanup wrapper task will catch all thrown exceptions unconditionally.
+            handle.resume();
         }
     }
 
