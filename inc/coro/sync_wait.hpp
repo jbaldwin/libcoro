@@ -194,10 +194,17 @@ public:
         m_coroutine.promise().start(event);
     }
 
-    // todo specialize for type void
-    auto return_value() -> return_type
+    auto return_value() -> decltype(auto)
     {
-        return m_coroutine.promise().return_value();
+        if constexpr (std::is_same_v<void, return_type>)
+        {
+            m_coroutine.promise().return_value();
+            return;
+        }
+        else
+        {
+            return m_coroutine.promise().return_value();
+        }
     }
 
 private:

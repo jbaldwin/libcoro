@@ -3,6 +3,7 @@
 #include <concepts>
 #include <coroutine>
 #include <type_traits>
+#include <utility>
 
 namespace coro
 {
@@ -43,7 +44,7 @@ struct awaitable_traits
 template<awaitable awaitable>
 static auto get_awaiter(awaitable&& value)
 {
-    return static_cast<awaitable&&>(value).operator co_await();
+    return std::forward<awaitable>(value).operator co_await();
 }
 
 template<awaitable awaitable>

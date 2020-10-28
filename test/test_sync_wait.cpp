@@ -48,3 +48,14 @@ TEST_CASE("sync_wait task co_await single")
     auto output = coro::sync_wait(await_answer());
     REQUIRE(output == 1337);
 }
+
+TEST_CASE("sync_wait task that throws")
+{
+    auto f = []() -> coro::task<uint64_t>
+    {
+        throw std::runtime_error("I always throw!");
+        co_return 1;
+    };
+
+    REQUIRE_THROWS(coro::sync_wait(f()));
+}
