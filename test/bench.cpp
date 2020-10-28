@@ -90,6 +90,70 @@ TEST_CASE("benchmark counter func coro::sync_wait(coro::when_all_awaitable(await
     REQUIRE(counter == iterations);
 }
 
+TEST_CASE("benchmark thread_pool{1} counter task")
+{
+    constexpr std::size_t iterations = default_iterations;
+
+    coro::thread_pool tp{coro::thread_pool::options{1}};
+    std::atomic<uint64_t> counter{0};
+
+    auto make_task = [](coro::thread_pool& tp, std::atomic<uint64_t>& c) -> coro::task<void>
+    {
+        co_await tp.schedule().value();
+        c.fetch_add(1, std::memory_order::relaxed);
+        co_return;
+    };
+
+    std::vector<coro::task<void>> tasks;
+    tasks.reserve(iterations);
+
+    auto start = sc::now();
+
+    for (std::size_t i = 0; i < iterations; ++i)
+    {
+        tasks.emplace_back(make_task(tp, counter));
+        tasks.back().resume();
+    }
+
+    tp.shutdown();
+
+    print_stats("benchmark thread_pool{1} counter task", iterations, start, sc::now());
+    REQUIRE(counter == iterations);
+    REQUIRE(tp.empty());
+}
+
+TEST_CASE("benchmark thread_pool{2} counter task")
+{
+    constexpr std::size_t iterations = default_iterations;
+
+    coro::thread_pool tp{coro::thread_pool::options{2}};
+    std::atomic<uint64_t> counter{0};
+
+    auto make_task = [](coro::thread_pool& tp, std::atomic<uint64_t>& c) -> coro::task<void>
+    {
+        co_await tp.schedule().value();
+        c.fetch_add(1, std::memory_order::relaxed);
+        co_return;
+    };
+
+    std::vector<coro::task<void>> tasks;
+    tasks.reserve(iterations);
+
+    auto start = sc::now();
+
+    for (std::size_t i = 0; i < iterations; ++i)
+    {
+        tasks.emplace_back(make_task(tp, counter));
+        tasks.back().resume();
+    }
+
+    tp.shutdown();
+
+    print_stats("benchmark thread_pool{n} counter task", iterations, start, sc::now());
+    REQUIRE(counter == iterations);
+    REQUIRE(tp.empty());
+}
+
 TEST_CASE("benchmark counter task scheduler")
 {
     constexpr std::size_t iterations = default_iterations;

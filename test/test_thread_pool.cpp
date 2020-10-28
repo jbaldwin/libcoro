@@ -4,9 +4,9 @@
 
 #include <iostream>
 
-TEST_CASE("thread_pool one worker, one task")
+TEST_CASE("thread_pool one worker one task")
 {
-    coro::thread_pool tp{1};
+    coro::thread_pool tp{coro::thread_pool::options{1}};
 
     auto func = [&tp]() -> coro::task<uint64_t>
     {
@@ -18,9 +18,9 @@ TEST_CASE("thread_pool one worker, one task")
     REQUIRE(result == 42);
 }
 
-TEST_CASE("thread_pool one worker, many tasks tuple")
+TEST_CASE("thread_pool one worker many tasks tuple")
 {
-    coro::thread_pool tp{1};
+    coro::thread_pool tp{coro::thread_pool::options{1}};
 
     auto f = [&tp]() -> coro::task<uint64_t>
     {
@@ -40,9 +40,9 @@ TEST_CASE("thread_pool one worker, many tasks tuple")
     REQUIRE(counter == 250);
 }
 
-TEST_CASE("thread_pool one worker, many tasks vector")
+TEST_CASE("thread_pool one worker many tasks vector")
 {
-    coro::thread_pool tp{1};
+    coro::thread_pool tp{coro::thread_pool::options{1}};
 
     auto f = [&tp]() -> coro::task<uint64_t>
     {
@@ -68,7 +68,7 @@ TEST_CASE("thread_pool one worker, many tasks vector")
     REQUIRE(counter == 150);
 }
 
-TEST_CASE("thread_pool N workers, 1 million tasks")
+TEST_CASE("thread_pool N workers 100k tasks")
 {
     constexpr const std::size_t iterations = 100'000;
     coro::thread_pool tp{};
@@ -98,9 +98,9 @@ TEST_CASE("thread_pool N workers, 1 million tasks")
     REQUIRE(counter == iterations);
 }
 
-TEST_CASE("thread pool 1 worker, task spawns another task")
+TEST_CASE("thread_pool 1 worker task spawns another task")
 {
-    coro::thread_pool tp{};
+    coro::thread_pool tp{coro::thread_pool::options{1}};
 
     auto f1 = [](coro::thread_pool& tp) -> coro::task<uint64_t>
     {
@@ -116,4 +116,54 @@ TEST_CASE("thread pool 1 worker, task spawns another task")
     };
 
     REQUIRE(coro::sync_wait(f1(tp)) == 6);
+}
+
+TEST_CASE("thread_pool shutdown")
+{
+    coro::thread_pool tp{coro::thread_pool::options{1}};
+
+    auto f = [](coro::thread_pool& tp) -> coro::task<bool>
+    {
+        auto scheduled = tp.schedule();
+        if(!scheduled.has_value())
+        {
+            co_return true;
+        }
+
+        co_await scheduled.value();
+        co_return false;
+    };
+
+    tp.shutdown(coro::shutdown_t::async);
+
+    REQUIRE(coro::sync_wait(f(tp)) == true);
+}
+
+TEST_CASE("thread_pool schedule functor")
+{
+    coro::thread_pool tp{coro::thread_pool::options{1}};
+
+    auto f = []() -> uint64_t { return 1; };
+
+    auto result = coro::sync_wait(tp.schedule(f));
+    REQUIRE(result == 1);
+
+    tp.shutdown();
+
+    REQUIRE_THROWS(coro::sync_wait(tp.schedule(f)));
+}
+
+TEST_CASE("thread_pool schedule functor return_type = void")
+{
+    coro::thread_pool tp{coro::thread_pool::options{1}};
+
+    std::atomic<uint64_t> counter{0};
+    auto f = [](std::atomic<uint64_t>& c) -> void { c++; };
+
+    coro::sync_wait(tp.schedule(f, std::ref(counter)));
+    REQUIRE(counter == 1);
+
+    tp.shutdown();
+
+    REQUIRE_THROWS(coro::sync_wait(tp.schedule(f, std::ref(counter))));
 }
