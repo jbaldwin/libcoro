@@ -2,7 +2,6 @@
 
 namespace coro
 {
-
 enum class shutdown_t
 {
     /// Synchronously wait for all tasks to complete when calling shutdown.

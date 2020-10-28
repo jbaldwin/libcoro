@@ -4,9 +4,7 @@
 
 TEST_CASE("sync_wait simple integer return")
 {
-    auto func = []() -> coro::task<int> {
-        co_return 11;
-    };
+    auto func = []() -> coro::task<int> { co_return 11; };
 
     auto result = coro::sync_wait(func());
     REQUIRE(result == 11);
@@ -51,8 +49,7 @@ TEST_CASE("sync_wait task co_await single")
 
 TEST_CASE("sync_wait task that throws")
 {
-    auto f = []() -> coro::task<uint64_t>
-    {
+    auto f = []() -> coro::task<uint64_t> {
         throw std::runtime_error("I always throw!");
         co_return 1;
     };

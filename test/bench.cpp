@@ -50,10 +50,8 @@ TEST_CASE("benchmark counter func direct call")
 TEST_CASE("benchmark counter func coro::sync_wait(awaitable)")
 {
     constexpr std::size_t iterations = default_iterations;
-    uint64_t counter{0};
-    auto func = []() -> coro::task<uint64_t> {
-        co_return 1;
-    };
+    uint64_t              counter{0};
+    auto                  func = []() -> coro::task<uint64_t> { co_return 1; };
 
     auto start = sc::now();
 
@@ -69,10 +67,8 @@ TEST_CASE("benchmark counter func coro::sync_wait(awaitable)")
 TEST_CASE("benchmark counter func coro::sync_wait(coro::when_all_awaitable(awaitable)) x10")
 {
     constexpr std::size_t iterations = default_iterations;
-    uint64_t counter{0};
-    auto f = []() -> coro::task<uint64_t> {
-        co_return 1;
-    };
+    uint64_t              counter{0};
+    auto                  f = []() -> coro::task<uint64_t> { co_return 1; };
 
     auto start = sc::now();
 
@@ -80,13 +76,11 @@ TEST_CASE("benchmark counter func coro::sync_wait(coro::when_all_awaitable(await
     {
         auto tasks = coro::sync_wait(coro::when_all_awaitable(f(), f(), f(), f(), f(), f(), f(), f(), f(), f()));
 
-        std::apply([&counter](auto&&... t) {
-                ((counter += t.return_value()), ...);
-            },
-            tasks);
+        std::apply([&counter](auto&&... t) { ((counter += t.return_value()), ...); }, tasks);
     }
 
-    print_stats("benchmark counter func coro::sync_wait(coro::when_all_awaitable(awaitable))", iterations, start, sc::now());
+    print_stats(
+        "benchmark counter func coro::sync_wait(coro::when_all_awaitable(awaitable))", iterations, start, sc::now());
     REQUIRE(counter == iterations);
 }
 
@@ -94,11 +88,10 @@ TEST_CASE("benchmark thread_pool{1} counter task")
 {
     constexpr std::size_t iterations = default_iterations;
 
-    coro::thread_pool tp{coro::thread_pool::options{1}};
+    coro::thread_pool     tp{coro::thread_pool::options{1}};
     std::atomic<uint64_t> counter{0};
 
-    auto make_task = [](coro::thread_pool& tp, std::atomic<uint64_t>& c) -> coro::task<void>
-    {
+    auto make_task = [](coro::thread_pool& tp, std::atomic<uint64_t>& c) -> coro::task<void> {
         co_await tp.schedule().value();
         c.fetch_add(1, std::memory_order::relaxed);
         co_return;
@@ -126,11 +119,10 @@ TEST_CASE("benchmark thread_pool{2} counter task")
 {
     constexpr std::size_t iterations = default_iterations;
 
-    coro::thread_pool tp{coro::thread_pool::options{2}};
+    coro::thread_pool     tp{coro::thread_pool::options{2}};
     std::atomic<uint64_t> counter{0};
 
-    auto make_task = [](coro::thread_pool& tp, std::atomic<uint64_t>& c) -> coro::task<void>
-    {
+    auto make_task = [](coro::thread_pool& tp, std::atomic<uint64_t>& c) -> coro::task<void> {
         co_await tp.schedule().value();
         c.fetch_add(1, std::memory_order::relaxed);
         co_return;

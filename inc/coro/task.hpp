@@ -143,7 +143,7 @@ public:
 
     explicit task(coroutine_handle handle) : m_coroutine(handle) {}
     task(const task&) = delete;
-    task(task&& other) noexcept : m_coroutine(std::exchange(other.m_coroutine, nullptr)) { }
+    task(task&& other) noexcept : m_coroutine(std::exchange(other.m_coroutine, nullptr)) {}
 
     ~task()
     {
