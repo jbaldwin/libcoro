@@ -4,7 +4,7 @@
 
 #include <iostream>
 
-TEST_CASE("thread_pool one worker, one task")
+TEST_CASE("thread_pool one worker one task")
 {
     coro::thread_pool tp{coro::thread_pool::options{1}};
 
@@ -18,7 +18,7 @@ TEST_CASE("thread_pool one worker, one task")
     REQUIRE(result == 42);
 }
 
-TEST_CASE("thread_pool one worker, many tasks tuple")
+TEST_CASE("thread_pool one worker many tasks tuple")
 {
     coro::thread_pool tp{coro::thread_pool::options{1}};
 
@@ -40,7 +40,7 @@ TEST_CASE("thread_pool one worker, many tasks tuple")
     REQUIRE(counter == 250);
 }
 
-TEST_CASE("thread_pool one worker, many tasks vector")
+TEST_CASE("thread_pool one worker many tasks vector")
 {
     coro::thread_pool tp{coro::thread_pool::options{1}};
 
@@ -68,7 +68,7 @@ TEST_CASE("thread_pool one worker, many tasks vector")
     REQUIRE(counter == 150);
 }
 
-TEST_CASE("thread_pool N workers, 100k tasks")
+TEST_CASE("thread_pool N workers 100k tasks")
 {
     constexpr const std::size_t iterations = 100'000;
     coro::thread_pool tp{};
@@ -98,7 +98,7 @@ TEST_CASE("thread_pool N workers, 100k tasks")
     REQUIRE(counter == iterations);
 }
 
-TEST_CASE("thread_pool 1 worker, task spawns another task")
+TEST_CASE("thread_pool 1 worker task spawns another task")
 {
     coro::thread_pool tp{coro::thread_pool::options{1}};
 

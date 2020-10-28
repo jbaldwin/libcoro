@@ -12,7 +12,7 @@ thread_pool::operation::operation(thread_pool& tp) noexcept
 auto thread_pool::operation::await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept -> void
 {
     m_awaiting_coroutine = awaiting_coroutine;
-    m_thread_pool.schedule(this);
+    m_thread_pool.schedule_impl(this);
 
     // void return on await_suspend suspends the _this_ coroutine, which is now scheduled on the
     // thread pool and returns control to the caller.  They could be sync_wait'ing or go do
@@ -59,7 +59,10 @@ auto thread_pool::shutdown(shutdown_t wait_for_tasks) noexcept -> void
         {
             for(auto& thread : m_threads)
             {
-                thread.join();
+                if(thread.joinable())
+                {
+                    thread.join();
+                }
             }
         }
     }
@@ -77,7 +80,7 @@ auto thread_pool::executor(std::stop_token stop_token, std::size_t idx) -> void
         // Wait until the queue has operations to execute or shutdown has been requested.
         {
             std::unique_lock<std::mutex> lk{m_wait_mutex};
-            m_wait_cv.wait(lk, stop_token, [this] { return m_queue.empty(); });
+            m_wait_cv.wait(lk, stop_token, [this] { return !m_queue.empty(); });
         }
 
         // Continue to pull operations from the global queue until its empty.
@@ -120,7 +123,7 @@ auto thread_pool::executor(std::stop_token stop_token, std::size_t idx) -> void
     }
 }
 
-auto thread_pool::schedule(operation* op) noexcept -> void
+auto thread_pool::schedule_impl(operation* op) noexcept -> void
 {
     {
         std::lock_guard<std::mutex> lk{m_queue_mutex};

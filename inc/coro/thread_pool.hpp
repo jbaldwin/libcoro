@@ -195,7 +195,7 @@ private:
     /**
      * @param op Schedules the given operation to be executed upon the first available thread.
      */
-    auto schedule(operation* op) noexcept -> void;
+    auto schedule_impl(operation* op) noexcept -> void;
 };
 
 } // namespace coro
