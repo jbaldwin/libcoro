@@ -28,14 +28,14 @@
 
 namespace coro
 {
-class scheduler;
+class io_scheduler;
 
 namespace detail
 {
 class resume_token_base
 {
 public:
-    resume_token_base(scheduler* eng) noexcept : m_scheduler(eng), m_state(nullptr) {}
+    resume_token_base(io_scheduler* s) noexcept : m_scheduler(s), m_state(nullptr) {}
 
     virtual ~resume_token_base() = default;
 
@@ -113,7 +113,7 @@ public:
 
 protected:
     friend struct awaiter;
-    scheduler*                 m_scheduler{nullptr};
+    io_scheduler*              m_scheduler{nullptr};
     mutable std::atomic<void*> m_state;
 };
 
@@ -122,9 +122,9 @@ protected:
 template<typename return_type>
 class resume_token final : public detail::resume_token_base
 {
-    friend scheduler;
+    friend io_scheduler;
     resume_token() : detail::resume_token_base(nullptr) {}
-    resume_token(scheduler& s) : detail::resume_token_base(&s) {}
+    resume_token(io_scheduler& s) : detail::resume_token_base(&s) {}
 
 public:
     ~resume_token() override = default;
@@ -147,9 +147,9 @@ private:
 template<>
 class resume_token<void> final : public detail::resume_token_base
 {
-    friend scheduler;
+    friend io_scheduler;
     resume_token() : detail::resume_token_base(nullptr) {}
-    resume_token(scheduler& s) : detail::resume_token_base(&s) {}
+    resume_token(io_scheduler& s) : detail::resume_token_base(&s) {}
 
 public:
     ~resume_token() override = default;
@@ -172,7 +172,7 @@ enum class poll_op
     read_write = EPOLLIN | EPOLLOUT
 };
 
-class scheduler
+class io_scheduler
 {
 private:
     using task_variant = std::variant<coro::task<void>, std::coroutine_handle<>>;
@@ -352,7 +352,7 @@ public:
     /**
      * @param options Various scheduler options to tune how it behaves.
      */
-    scheduler(const options opts = options{8, 2, thread_strategy_t::spawn})
+    io_scheduler(const options opts = options{8, 2, thread_strategy_t::spawn})
         : m_epoll_fd(epoll_create1(EPOLL_CLOEXEC)),
           m_accept_fd(eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK)),
           m_thread_strategy(opts.thread_strategy),
@@ -377,12 +377,12 @@ public:
         // else manual mode, the user must call process_events.
     }
 
-    scheduler(const scheduler&) = delete;
-    scheduler(scheduler&&)      = delete;
-    auto operator=(const scheduler&) -> scheduler& = delete;
-    auto operator=(scheduler &&) -> scheduler& = delete;
+    io_scheduler(const io_scheduler&) = delete;
+    io_scheduler(io_scheduler&&)      = delete;
+    auto operator=(const io_scheduler&) -> io_scheduler& = delete;
+    auto operator=(io_scheduler &&) -> io_scheduler& = delete;
 
-    ~scheduler()
+    ~io_scheduler()
     {
         shutdown();
         if (m_epoll_fd != -1)
@@ -458,9 +458,7 @@ public:
     auto poll(fd_t fd, poll_op op) -> coro::task<void>
     {
         co_await unsafe_yield<void>([&](resume_token<void>& token) {
-            struct epoll_event e
-            {
-            };
+            epoll_event e{};
             e.events   = static_cast<uint32_t>(op) | EPOLLONESHOT | EPOLLET;
             e.data.ptr = &token;
             epoll_ctl(m_epoll_fd, EPOLL_CTL_ADD, fd, &e);
@@ -494,7 +492,6 @@ public:
     {
         co_await poll(fd, poll_op::write);
         co_return ::write(fd, buffer.data(), buffer.size());
-        ;
     }
 
     /**

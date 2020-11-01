@@ -5,8 +5,8 @@ set(LIBCORO_TEST_SOURCE_FILES
     bench.cpp
     test_event.cpp
     test_generator.cpp
+    test_io_scheduler.cpp
     test_latch.cpp
-    test_scheduler.cpp
     test_sync_wait.cpp
     test_task.cpp
     test_thread_pool.cpp
