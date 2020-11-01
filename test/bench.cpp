@@ -146,11 +146,11 @@ TEST_CASE("benchmark thread_pool{2} counter task")
     REQUIRE(tp.empty());
 }
 
-TEST_CASE("benchmark counter task scheduler")
+TEST_CASE("benchmark counter task io_scheduler")
 {
     constexpr std::size_t iterations = default_iterations;
 
-    coro::scheduler       s1{};
+    coro::io_scheduler    s1{};
     std::atomic<uint64_t> counter{0};
     auto                  func = [&]() -> coro::task<void> {
         counter.fetch_add(1, std::memory_order::relaxed);
@@ -165,17 +165,17 @@ TEST_CASE("benchmark counter task scheduler")
     }
 
     s1.shutdown();
-    print_stats("benchmark counter task through scheduler", iterations, start, sc::now());
+    print_stats("benchmark counter task through io_scheduler", iterations, start, sc::now());
     REQUIRE(s1.empty());
     REQUIRE(counter == iterations);
 }
 
-TEST_CASE("benchmark counter task scheduler yield -> resume from main")
+TEST_CASE("benchmark counter task io_scheduler yield -> resume from main")
 {
     constexpr std::size_t iterations = default_iterations;
     constexpr std::size_t ops        = iterations * 2; // the external resume is still a resume op
 
-    coro::scheduler                       s{};
+    coro::io_scheduler                    s{};
     std::vector<coro::resume_token<void>> tokens{};
     for (std::size_t i = 0; i < iterations; ++i)
     {
@@ -205,17 +205,17 @@ TEST_CASE("benchmark counter task scheduler yield -> resume from main")
     s.shutdown();
 
     auto stop = sc::now();
-    print_stats("benchmark counter task scheduler yield -> resume from main", ops, start, stop);
+    print_stats("benchmark counter task io_scheduler yield -> resume from main", ops, start, stop);
     REQUIRE(s.empty());
     REQUIRE(counter == iterations);
 }
 
-TEST_CASE("benchmark counter task scheduler yield -> resume from coroutine")
+TEST_CASE("benchmark counter task io_scheduler yield -> resume from coroutine")
 {
     constexpr std::size_t iterations = default_iterations;
     constexpr std::size_t ops        = iterations * 2; // each iteration executes 2 coroutines.
 
-    coro::scheduler                       s{};
+    coro::io_scheduler                    s{};
     std::vector<coro::resume_token<void>> tokens{};
     for (std::size_t i = 0; i < iterations; ++i)
     {
@@ -246,17 +246,17 @@ TEST_CASE("benchmark counter task scheduler yield -> resume from coroutine")
     s.shutdown();
 
     auto stop = sc::now();
-    print_stats("benchmark counter task scheduler yield -> resume from coroutine", ops, start, stop);
+    print_stats("benchmark counter task io_scheduler yield -> resume from coroutine", ops, start, stop);
     REQUIRE(s.empty());
     REQUIRE(counter == iterations);
 }
 
-TEST_CASE("benchmark counter task scheduler resume from coroutine -> yield")
+TEST_CASE("benchmark counter task io_scheduler resume from coroutine -> yield")
 {
     constexpr std::size_t iterations = default_iterations;
     constexpr std::size_t ops        = iterations * 2; // each iteration executes 2 coroutines.
 
-    coro::scheduler                       s{};
+    coro::io_scheduler                    s{};
     std::vector<coro::resume_token<void>> tokens{};
     for (std::size_t i = 0; i < iterations; ++i)
     {
@@ -287,17 +287,17 @@ TEST_CASE("benchmark counter task scheduler resume from coroutine -> yield")
     s.shutdown();
 
     auto stop = sc::now();
-    print_stats("benchmark counter task scheduler resume from coroutine -> yield", ops, start, stop);
+    print_stats("benchmark counter task io_scheduler resume from coroutine -> yield", ops, start, stop);
     REQUIRE(s.empty());
     REQUIRE(counter == iterations);
 }
 
-TEST_CASE("benchmark counter task scheduler yield (all) -> resume (all) from coroutine with reserve")
+TEST_CASE("benchmark counter task io_scheduler yield (all) -> resume (all) from coroutine with reserve")
 {
     constexpr std::size_t iterations = default_iterations;
     constexpr std::size_t ops        = iterations * 2; // each iteration executes 2 coroutines.
 
-    coro::scheduler                       s{coro::scheduler::options{.reserve_size = iterations}};
+    coro::io_scheduler                    s{coro::io_scheduler::options{.reserve_size = iterations}};
     std::vector<coro::resume_token<void>> tokens{};
     for (std::size_t i = 0; i < iterations; ++i)
     {
@@ -332,7 +332,7 @@ TEST_CASE("benchmark counter task scheduler yield (all) -> resume (all) from cor
     s.shutdown();
 
     auto stop = sc::now();
-    print_stats("benchmark counter task scheduler yield -> resume from coroutine with reserve", ops, start, stop);
+    print_stats("benchmark counter task io_scheduler yield -> resume from coroutine with reserve", ops, start, stop);
     REQUIRE(s.empty());
     REQUIRE(counter == iterations);
 }

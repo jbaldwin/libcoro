@@ -14,9 +14,9 @@ set(LIBCORO_SOURCE_FILES
     inc/coro/coro.hpp
     inc/coro/event.hpp src/event.cpp
     inc/coro/generator.hpp
+    inc/coro/io_scheduler.hpp
     inc/coro/latch.hpp
     inc/coro/promise.hpp
-    inc/coro/scheduler.hpp
     inc/coro/shutdown.hpp
     inc/coro/sync_wait.hpp src/sync_wait.cpp
     inc/coro/task.hpp
