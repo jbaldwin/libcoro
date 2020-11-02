@@ -141,8 +141,8 @@ TEST_CASE("io_scheduler task with read poll")
 
     auto func = [&]() -> coro::task<void> {
         // Poll will block until there is data to read.
-        co_await s.poll(trigger_fd, coro::poll_op::read);
-        REQUIRE(true);
+        /*auto status =*/co_await s.poll(trigger_fd, coro::poll_op::read);
+        /*REQUIRE(status == coro::poll_status::success);*/
         co_return;
     };
 
@@ -152,6 +152,7 @@ TEST_CASE("io_scheduler task with read poll")
     write(trigger_fd, &value, sizeof(value));
 
     s.shutdown();
+    REQUIRE(s.empty());
     close(trigger_fd);
 }
 
@@ -545,4 +546,47 @@ TEST_CASE("io_scheduler task throws after resume")
 
     s.shutdown();
     REQUIRE(s.empty());
+}
+
+TEST_CASE("io_scheduler schedule parameter pack tasks")
+{
+    coro::io_scheduler s{};
+
+    std::atomic<uint64_t> counter{0};
+    auto                  make_task = [&]() -> coro::task<void> {
+        counter.fetch_add(1, std::memory_order::relaxed);
+        co_return;
+    };
+
+    s.schedule(make_task(), make_task(), make_task(), make_task(), make_task());
+
+    s.shutdown();
+    REQUIRE(s.empty());
+    REQUIRE(counter == 5);
+}
+
+TEST_CASE("io_scheduler schedule vector<task>")
+{
+    coro::io_scheduler s{};
+
+    std::atomic<uint64_t> counter{0};
+    auto                  make_task = [&]() -> coro::task<void> {
+        counter.fetch_add(1, std::memory_order::relaxed);
+        co_return;
+    };
+
+    std::vector<coro::task<void>> tasks;
+    tasks.reserve(4);
+    tasks.emplace_back(make_task());
+    tasks.emplace_back(make_task());
+    tasks.emplace_back(make_task());
+    tasks.emplace_back(make_task());
+
+    s.schedule(tasks);
+
+    REQUIRE(tasks.empty());
+
+    s.shutdown();
+    REQUIRE(s.empty());
+    REQUIRE(counter == 4);
 }

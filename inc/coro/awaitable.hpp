@@ -15,14 +15,13 @@ namespace coro
  *      await_resume() -> decltype(auto)
  *          Where the return type on await_resume is the requested return of the awaitable.
  */
+// clang-format off
 template<typename type>
 concept awaiter = requires(type t, std::coroutine_handle<> c)
 {
-    {
-        t.await_ready()
-    }
-    ->std::same_as<bool>;
-    std::same_as<decltype(t.await_suspend(c)), void> || std::same_as<decltype(t.await_suspend(c)), bool> ||
+    { t.await_ready() } -> std::same_as<bool>;
+    std::same_as<decltype(t.await_suspend(c)), void> ||
+        std::same_as<decltype(t.await_suspend(c)), bool> ||
         std::same_as<decltype(t.await_suspend(c)), std::coroutine_handle<>>;
     {t.await_resume()};
 };
@@ -34,10 +33,24 @@ template<typename type>
 concept awaitable = requires(type t)
 {
     // operator co_await()
-    {
-        t.operator co_await()
-    }
-    ->awaiter;
+    { t.operator co_await() } -> awaiter;
+};
+
+template<typename type>
+concept awaiter_void = requires(type t, std::coroutine_handle<> c)
+{
+    { t.await_ready() } -> std::same_as<bool>;
+    std::same_as<decltype(t.await_suspend(c)), void> ||
+        std::same_as<decltype(t.await_suspend(c)), bool> ||
+        std::same_as<decltype(t.await_suspend(c)), std::coroutine_handle<>>;
+    {t.await_resume()} -> std::same_as<void>;
+};
+
+template<typename type>
+concept awaitable_void = requires(type t)
+{
+    // operator co_await()
+    { t.operator co_await() } -> awaiter_void;
 };
 
 template<awaitable awaitable, typename = void>
@@ -57,5 +70,6 @@ struct awaitable_traits<awaitable>
     using awaiter_type        = decltype(get_awaiter(std::declval<awaitable>()));
     using awaiter_return_type = decltype(std::declval<awaiter_type>().await_resume());
 };
+// clang-format on
 
 } // namespace coro

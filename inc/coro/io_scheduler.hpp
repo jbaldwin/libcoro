@@ -1,5 +1,6 @@
 #pragma once
 
+#include "coro/poll.hpp"
 #include "coro/shutdown.hpp"
 #include "coro/task.hpp"
 
@@ -160,16 +161,6 @@ public:
     auto operator=(resume_token &&) -> resume_token& = default;
 
     auto resume() noexcept -> void;
-};
-
-enum class poll_op
-{
-    /// Poll for read operations.
-    read = EPOLLIN,
-    /// Poll for write operations.
-    write = EPOLLOUT,
-    /// Poll for read and write operations.
-    read_write = EPOLLIN | EPOLLOUT
 };
 
 class io_scheduler
@@ -382,7 +373,7 @@ public:
     auto operator=(const io_scheduler&) -> io_scheduler& = delete;
     auto operator=(io_scheduler &&) -> io_scheduler& = delete;
 
-    ~io_scheduler()
+    virtual ~io_scheduler()
     {
         shutdown();
         if (m_epoll_fd != -1)
@@ -405,7 +396,7 @@ public:
      */
     auto schedule(coro::task<void> task) -> bool
     {
-        if (m_shutdown_requested.load(std::memory_order::relaxed))
+        if (is_shutdown())
         {
             return false;
         }
@@ -424,6 +415,58 @@ public:
 
         // Send an event if one isn't already set.  We use strong here to avoid spurious failures
         // but if it fails due to it actually being set we don't want to retry.
+        bool expected{false};
+        if (m_event_set.compare_exchange_strong(expected, true, std::memory_order::release, std::memory_order::relaxed))
+        {
+            uint64_t value{1};
+            ::write(m_accept_fd, &value, sizeof(value));
+        }
+
+        return true;
+    }
+
+    template<awaitable_void... tasks_type>
+    auto schedule(tasks_type&&... tasks) -> bool
+    {
+        if (is_shutdown())
+        {
+            return false;
+        }
+
+        m_size.fetch_add(sizeof...(tasks), std::memory_order::relaxed);
+        {
+            std::lock_guard<std::mutex> lk{m_accept_mutex};
+            ((m_accept_queue.emplace_back(std::forward<tasks_type>(tasks))), ...);
+        }
+
+        bool expected{false};
+        if (m_event_set.compare_exchange_strong(expected, true, std::memory_order::release, std::memory_order::relaxed))
+        {
+            uint64_t value{1};
+            ::write(m_accept_fd, &value, sizeof(value));
+        }
+
+        return true;
+    }
+
+    auto schedule(std::vector<task<void>>& tasks)
+    {
+        if (is_shutdown())
+        {
+            return false;
+        }
+
+        m_size.fetch_add(tasks.size(), std::memory_order::relaxed);
+        {
+            std::lock_guard<std::mutex> lk{m_accept_mutex};
+            m_accept_queue.insert(
+                m_accept_queue.end(), std::make_move_iterator(tasks.begin()), std::make_move_iterator(tasks.end()));
+
+            // std::move(tasks.begin(), tasks.end(), std::back_inserter(m_accept_queue));
+        }
+
+        tasks.clear();
+
         bool expected{false};
         if (m_event_set.compare_exchange_strong(expected, true, std::memory_order::release, std::memory_order::relaxed))
         {
@@ -459,7 +502,7 @@ public:
     {
         co_await unsafe_yield<void>([&](resume_token<void>& token) {
             epoll_event e{};
-            e.events   = static_cast<uint32_t>(op) | EPOLLONESHOT | EPOLLET;
+            e.events   = static_cast<uint32_t>(op) | EPOLLONESHOT | EPOLLET | EPOLLRDHUP;
             e.data.ptr = &token;
             epoll_ctl(m_epoll_fd, EPOLL_CTL_ADD, fd, &e);
         });
@@ -477,8 +520,15 @@ public:
      */
     auto read(fd_t fd, std::span<char> buffer) -> coro::task<ssize_t>
     {
-        co_await poll(fd, poll_op::read);
+        /*auto status =*/co_await poll(fd, poll_op::read);
         co_return ::read(fd, buffer.data(), buffer.size());
+        // switch(status)
+        // {
+        //     case poll_status::success:
+        //         co_return ::read(fd, buffer.data(), buffer.size());
+        //     default:
+        //         co_return 0;
+        // }
     }
 
     /**
@@ -490,8 +540,15 @@ public:
      */
     auto write(fd_t fd, const std::span<const char> buffer) -> coro::task<ssize_t>
     {
-        co_await poll(fd, poll_op::write);
+        /*auto status =*/co_await poll(fd, poll_op::write);
         co_return ::write(fd, buffer.data(), buffer.size());
+        // switch(status)
+        // {
+        //     case poll_status::success:
+        //         co_return ::write(fd, buffer.data(), buffer.size());
+        //     default:
+        //         co_return 0;
+        // }
     }
 
     /**
@@ -631,7 +688,7 @@ public:
      *                       the scheduler to shutdown but not wait for all tasks to complete, it returns
      *                       immediately.
      */
-    auto shutdown(shutdown_t wait_for_tasks = shutdown_t::sync) -> void
+    virtual auto shutdown(shutdown_t wait_for_tasks = shutdown_t::sync) -> void
     {
         if (!m_shutdown_requested.exchange(true, std::memory_order::release))
         {
