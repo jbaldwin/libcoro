@@ -9,6 +9,7 @@ set(LIBCORO_TEST_SOURCE_FILES
     test_latch.cpp
     test_sync_wait.cpp
     test_task.cpp
+    test_tcp_scheduler.cpp
     test_thread_pool.cpp
     test_when_all.cpp
 )
@@ -29,4 +30,4 @@ elseif(${CMAKE_CXX_COMPILER_ID} MATCHES "Clang")
     message(FATAL_ERROR "Clang is currently not supported.")
 endif()
 
-add_test(NAME corohttp_test COMMAND ${PROJECT_NAME})
+add_test(NAME coro_test COMMAND ${PROJECT_NAME})
