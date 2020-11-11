@@ -355,7 +355,7 @@ TEST_CASE("io_scheduler with basic task")
     REQUIRE(counter == expected_value);
 }
 
-TEST_CASE("io_scheduler yield for")
+TEST_CASE("io_scheduler scheduler_after")
 {
     constexpr std::chrono::milliseconds wait_for{50};
     std::atomic<uint64_t>               counter{0};
@@ -374,6 +374,34 @@ TEST_CASE("io_scheduler yield for")
 
     REQUIRE(counter == 1);
     REQUIRE(duration >= wait_for);
+}
+
+TEST_CASE("io_scheduler schedule_at")
+{
+    // Because schedule_at() will take its own time internally the wait_for might be off by a bit.
+    constexpr std::chrono::milliseconds epsilon{3};
+    constexpr std::chrono::milliseconds wait_for{50};
+    std::atomic<uint64_t>               counter{0};
+    coro::io_scheduler                  s{};
+
+    auto func = [&]() -> coro::task<void> {
+        ++counter;
+        co_return;
+    };
+
+
+    // now or in the past will be rejected.
+    REQUIRE_FALSE(s.schedule_at(func(), std::chrono::steady_clock::now()));
+    REQUIRE_FALSE(s.schedule_at(func(), std::chrono::steady_clock::now() - std::chrono::seconds{1}));
+
+    auto start = std::chrono::steady_clock::now();
+    s.schedule_at(func(), std::chrono::steady_clock::now() + wait_for);
+    s.shutdown();
+    auto stop     = std::chrono::steady_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
+
+    REQUIRE(counter == 1);
+    REQUIRE(duration >= (wait_for - epsilon));
 }
 
 TEST_CASE("io_scheduler trigger growth of internal tasks storage")
@@ -589,4 +617,65 @@ TEST_CASE("io_scheduler schedule vector<task>")
     s.shutdown();
     REQUIRE(s.empty());
     REQUIRE(counter == 4);
+}
+
+TEST_CASE("io_scheduler yield()")
+{
+    std::atomic<uint64_t> counter{0};
+    coro::io_scheduler s{};
+
+    // This task will check the counter and yield if it isn't 5.
+    auto make_wait_task = [&]() -> coro::task<void> {
+        while(counter.load(std::memory_order::relaxed) < 5)
+        {
+            std::cerr << "count = " << counter.load(std::memory_order::relaxed) << "\n";
+            co_await s.yield();
+        }
+        co_return;
+    };
+
+    // This task will increment counter by 1 and yield after each increment.
+    auto make_inc_task = [&]() -> coro::task<void> {
+        while(counter.load(std::memory_order::relaxed) < 5)
+        {
+            std::cerr << "increment!\n";
+            counter.fetch_add(1, std::memory_order::relaxed);
+            co_await s.yield();
+        }
+        co_return;
+    };
+
+    s.schedule(make_wait_task());
+    s.schedule(make_inc_task());
+    s.shutdown();
+
+    REQUIRE(counter == 5);
+}
+
+TEST_CASE("io_scheduler multiple timed waits")
+{
+    std::atomic<uint64_t> counter{0};
+    coro::io_scheduler s{};
+
+    auto start_point = std::chrono::steady_clock::now();
+
+    auto make_task = [&]() -> coro::task<void> {
+        auto now = std::chrono::steady_clock::now();
+        auto epoch = std::chrono::duration_cast<std::chrono::milliseconds>(now - start_point);
+        std::cerr << "task counter = " << counter.load(std::memory_order::relaxed) << " elapsed = " << epoch.count() << "\n";
+        counter.fetch_add(1, std::memory_order::relaxed);
+        co_return;
+    };
+
+    auto start = std::chrono::steady_clock::now();
+    s.schedule_after(make_task(), std::chrono::milliseconds{5});
+    s.schedule_after(make_task(), std::chrono::milliseconds{5});
+    s.schedule_after(make_task(), std::chrono::milliseconds{20});
+    s.schedule_after(make_task(), std::chrono::milliseconds{50});
+    s.schedule_after(make_task(), std::chrono::milliseconds{50});
+    s.shutdown();
+    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start);
+
+    REQUIRE(counter == 5);
+    REQUIRE(elapsed.count() >= 50);
 }

@@ -166,6 +166,8 @@ public:
 class io_scheduler
 {
 private:
+    using clock        = std::chrono::steady_clock;
+    using time_point   = clock::time_point;
     using task_variant = std::variant<coro::task<void>, std::coroutine_handle<>>;
     using task_queue   = std::deque<task_variant>;
 
@@ -317,7 +319,59 @@ private:
     static constexpr const int   m_accept_object{0};
     static constexpr const void* m_accept_ptr = &m_accept_object;
 
+    static constexpr const int   m_timer_object{0};
+    static constexpr const void* m_timer_ptr = &m_timer_object;
+
+    /**
+     * An operation is an awaitable type with a coroutine to resume the task scheduled on one of
+     * the executor threads.
+     */
+    class operation
+    {
+        friend class io_scheduler;
+        /**
+         * Only io_schedulers can create operations when a task is being scheduled.
+         * @param tp The io scheduler that created this operation.
+         */
+        explicit operation(io_scheduler& ios) noexcept
+            : m_io_scheduler(ios)
+        {
+        }
+
+    public:
+        /**
+         * Operations always pause so the executing thread and be switched.
+         */
+        auto await_ready() noexcept -> bool { return false; }
+
+        /**
+         * Suspending always returns to the caller (using void return of await_suspend()) and
+         * stores the coroutine internally for the executing thread to resume from.
+         */
+        auto await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept -> void
+        {
+            // m_awaiting_coroutine = awaiting_coroutine;
+            m_io_scheduler.resume(awaiting_coroutine);
+        }
+
+        /**
+         * no-op as this is the function called first by the io_scheduler's executing thread.
+         */
+        auto await_resume() noexcept -> void {}
+
+    private:
+        /// The io_scheduler that this operation will execute on.
+        io_scheduler& m_io_scheduler;
+        // // The coroutine awaiting execution.
+        // std::coroutine_handle<> m_awaiting_coroutine{nullptr};
+    };
+
+    auto schedule() -> operation
+    {
+        return operation{*this};
+    }
 public:
+
     using fd_t = int;
 
     enum class thread_strategy_t
@@ -346,16 +400,18 @@ public:
     io_scheduler(const options opts = options{8, 2, thread_strategy_t::spawn})
         : m_epoll_fd(epoll_create1(EPOLL_CLOEXEC)),
           m_accept_fd(eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK)),
+          m_timer_fd(timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC)),
           m_thread_strategy(opts.thread_strategy),
           m_task_manager(opts.reserve_size, opts.growth_factor)
     {
-        struct epoll_event e
-        {
-        };
+        epoll_event e{};
         e.events = EPOLLIN;
 
         e.data.ptr = const_cast<void*>(m_accept_ptr);
         epoll_ctl(m_epoll_fd, EPOLL_CTL_ADD, m_accept_fd, &e);
+
+        e.data.ptr = const_cast<void*>(m_timer_ptr);
+        epoll_ctl(m_epoll_fd, EPOLL_CTL_ADD, m_timer_fd, &e);
 
         if (m_thread_strategy == thread_strategy_t::spawn)
         {
@@ -385,6 +441,11 @@ public:
         {
             close(m_accept_fd);
             m_accept_fd = -1;
+        }
+        if (m_timer_fd != -1)
+        {
+            close(m_timer_fd);
+            m_timer_fd = -1;
         }
     }
 
@@ -490,7 +551,28 @@ public:
             return false;
         }
 
-        return schedule(scheduler_after_func(std::move(task), after));
+        return schedule(make_scheduler_after_task(std::move(task), after));
+    }
+
+    /**
+     * Schedules a task to be run at a specific time in the future.
+     * @param task
+     * @param time
+     * @return True if the task is scheduled.  False if time is in the past or the scheduler is
+     *         trying to shutdown.
+     */
+    auto schedule_at(coro::task<void> task, time_point time) -> bool
+    {
+        auto now = std::chrono::steady_clock::now();
+
+        // If the requested time is in the past (or now!) bail out!
+        if(time <= now)
+        {
+            return false;
+        }
+
+        auto amount = std::chrono::duration_cast<std::chrono::milliseconds>(time - now);
+        return schedule_after(std::move(task), amount);
     }
 
     /**
@@ -552,6 +634,18 @@ public:
     }
 
     /**
+     * Immediately yields the current task and places it at the end of the queue of tasks waiting
+     * to be processed.  This will immediately be picked up again once it naturally goes through the
+     * FIFO task queue.  This function is useful to yielding long processing tasks to let other tasks
+     * get processing time.
+     */
+    auto yield() -> coro::task<void>
+    {
+        co_await schedule();
+        co_return;
+    }
+
+    /**
      * Immediately yields the current task and provides a resume token to resume this yielded
      * coroutine when the async operation has completed.
      *
@@ -602,38 +696,55 @@ public:
 
     /**
      * Yields the current coroutine for `amount` of time.
-     * @throw std::runtime_error If the internal system failed to setup required resources to wait.
      * @param amount The amount of time to wait.
      */
     auto yield_for(std::chrono::milliseconds amount) -> coro::task<void>
     {
-        fd_t timer_fd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC);
-        if (timer_fd == -1)
+        resume_token<void> token{};
+
+        auto now = std::chrono::steady_clock::now();
+        auto tp = now + amount;
+
+        if(m_timer_tasks.empty())
         {
-            std::string msg = "Failed to create timerfd errorno=[" + std::string{strerror(errno)} + "].";
-            throw std::runtime_error(msg.data());
+            // Since timer tasks is empty the timer must be set.
+            m_timer_tasks.emplace(tp, &token);
+            update_timeout(now);
+        }
+        else
+        {
+            auto first = m_timer_tasks.begin();
+            m_timer_tasks.emplace(tp, &token);
+
+            // If the first item changed the timer needs to be udpated.
+            if(first != m_timer_tasks.begin())
+            {
+                update_timeout(now);
+            }
         }
 
-        struct itimerspec ts
+        // Wait for the token timer to trigger.
+        co_await token;
+        co_return;
+    }
+
+    /**
+     * Yields the current coroutine until `time`.  If time is in the past this function will
+     * return immediately.
+     * @param time The time point in the future to yield until.
+     */
+    auto yield_until(time_point time) -> coro::task<void>
+    {
+        auto now = std::chrono::steady_clock::now();
+
+        // If the requested time is in the past (or now!) just return.
+        if(time <= now)
         {
-        };
-
-        auto seconds = std::chrono::duration_cast<std::chrono::seconds>(amount);
-        amount -= seconds;
-        auto nanoseconds = std::chrono::duration_cast<std::chrono::nanoseconds>(amount);
-
-        ts.it_value.tv_sec  = seconds.count();
-        ts.it_value.tv_nsec = nanoseconds.count();
-
-        if (timerfd_settime(timer_fd, 0, &ts, nullptr) == -1)
-        {
-            std::string msg = "Failed to set timerfd errorno=[" + std::string{strerror(errno)} + "].";
-            throw std::runtime_error(msg.data());
+            co_return;
         }
 
-        uint64_t value{0};
-        co_await read(timer_fd, std::span<char>{reinterpret_cast<char*>(&value), sizeof(value)});
-        close(timer_fd);
+        auto amount = std::chrono::duration_cast<std::chrono::milliseconds>(time - now);
+        co_await yield_for(amount);
         co_return;
     }
 
@@ -708,6 +819,10 @@ private:
     fd_t m_epoll_fd{-1};
     /// The event loop accept new tasks and resume tasks file descriptor.
     fd_t m_accept_fd{-1};
+    /// The event loop timer fd for timed events.
+    fd_t m_timer_fd{-1};
+
+    std::multimap<time_point, resume_token<void>*> m_timer_tasks;
 
     /// The threading strategy this scheduler is using.
     thread_strategy_t m_thread_strategy;
@@ -735,21 +850,11 @@ private:
 
     task_manager m_task_manager;
 
-    auto scheduler_after_func(coro::task<void> inner_task, std::chrono::milliseconds wait_time) -> coro::task<void>
+    auto make_scheduler_after_task(coro::task<void> task, std::chrono::milliseconds wait_time) -> coro::task<void>
     {
-        // Seems to already be done.
-        if (inner_task.is_ready())
-        {
-            co_return;
-        }
-
         // Wait for the period requested, and then resume their task.
         co_await yield_for(wait_time);
-        inner_task.resume();
-        if (!inner_task.is_ready())
-        {
-            m_task_manager.store(std::move(inner_task));
-        }
+        co_await task;
         co_return;
     }
 
@@ -790,13 +895,18 @@ private:
     static constexpr std::size_t                 m_max_events = 8;
     std::array<struct epoll_event, m_max_events> m_events{};
 
+    auto process_task_and_start(task<void>& task) -> void
+    {
+        m_task_manager.store(std::move(task)).resume();
+    }
+
     inline auto process_task_variant(task_variant& tv) -> void
     {
         if (std::holds_alternative<coro::task<void>>(tv))
         {
             auto& task = std::get<coro::task<void>>(tv);
             // Store the users task and immediately start executing it.
-            m_task_manager.store(std::move(task)).resume();
+            process_task_and_start(task);
         }
         else
         {
@@ -864,6 +974,28 @@ private:
 
                     tasks_ready = true;
                 }
+                else if (handle_ptr == m_timer_ptr)
+                {
+                    auto now = std::chrono::steady_clock::now();
+                    // If the timer fd triggered, loop and call every task that has a wait time < now.
+                    while(!m_timer_tasks.empty())
+                    {
+                        auto [tp, token_ptr] = *m_timer_tasks.begin();
+
+                        if(tp <= now)
+                        {
+                            m_timer_tasks.erase(m_timer_tasks.begin());
+                            token_ptr->resume();
+                        }
+                        else
+                        {
+                            break;
+                        }
+                    }
+
+                    // Update the time to the next smallest time point.
+                    update_timeout(now);
+                }
                 else
                 {
                     // Individual poll task wake-up, this will queue the coroutines waiting
@@ -905,6 +1037,30 @@ private:
             process_events_poll_execute(m_default_timeout);
         }
         m_running.exchange(false, std::memory_order::release);
+    }
+
+    auto update_timeout(time_point now) -> void
+    {
+        if(!m_timer_tasks.empty())
+        {
+            auto& [tp, task] = *m_timer_tasks.begin();
+
+            auto amount = tp - now;
+
+            auto seconds = std::chrono::duration_cast<std::chrono::seconds>(amount);
+            amount -= seconds;
+            auto nanoseconds = std::chrono::duration_cast<std::chrono::nanoseconds>(amount);
+
+            itimerspec ts{};
+            ts.it_value.tv_sec  = seconds.count();
+            ts.it_value.tv_nsec = nanoseconds.count();
+
+            if (timerfd_settime(m_timer_fd, 0, &ts, nullptr) == -1)
+            {
+                std::string msg = "Failed to set timerfd errorno=[" + std::string{strerror(errno)} + "].";
+                throw std::runtime_error(msg.data());
+            }
+        }
     }
 };
 
