@@ -389,7 +389,6 @@ TEST_CASE("io_scheduler schedule_at")
         co_return;
     };
 
-
     // now or in the past will be rejected.
     REQUIRE_FALSE(s.schedule_at(func(), std::chrono::steady_clock::now()));
     REQUIRE_FALSE(s.schedule_at(func(), std::chrono::steady_clock::now() - std::chrono::seconds{1}));
@@ -622,11 +621,11 @@ TEST_CASE("io_scheduler schedule vector<task>")
 TEST_CASE("io_scheduler yield()")
 {
     std::atomic<uint64_t> counter{0};
-    coro::io_scheduler s{};
+    coro::io_scheduler    s{};
 
     // This task will check the counter and yield if it isn't 5.
     auto make_wait_task = [&]() -> coro::task<void> {
-        while(counter.load(std::memory_order::relaxed) < 5)
+        while (counter.load(std::memory_order::relaxed) < 5)
         {
             std::cerr << "count = " << counter.load(std::memory_order::relaxed) << "\n";
             co_await s.yield();
@@ -636,7 +635,7 @@ TEST_CASE("io_scheduler yield()")
 
     // This task will increment counter by 1 and yield after each increment.
     auto make_inc_task = [&]() -> coro::task<void> {
-        while(counter.load(std::memory_order::relaxed) < 5)
+        while (counter.load(std::memory_order::relaxed) < 5)
         {
             std::cerr << "increment!\n";
             counter.fetch_add(1, std::memory_order::relaxed);
@@ -655,14 +654,15 @@ TEST_CASE("io_scheduler yield()")
 TEST_CASE("io_scheduler multiple timed waits")
 {
     std::atomic<uint64_t> counter{0};
-    coro::io_scheduler s{};
+    coro::io_scheduler    s{};
 
     auto start_point = std::chrono::steady_clock::now();
 
     auto make_task = [&]() -> coro::task<void> {
-        auto now = std::chrono::steady_clock::now();
+        auto now   = std::chrono::steady_clock::now();
         auto epoch = std::chrono::duration_cast<std::chrono::milliseconds>(now - start_point);
-        std::cerr << "task counter = " << counter.load(std::memory_order::relaxed) << " elapsed = " << epoch.count() << "\n";
+        std::cerr << "task counter = " << counter.load(std::memory_order::relaxed) << " elapsed = " << epoch.count()
+                  << "\n";
         counter.fetch_add(1, std::memory_order::relaxed);
         co_return;
     };

@@ -17,7 +17,7 @@ enum class poll_op
 enum class poll_status
 {
     /// The poll operation was was successful.
-    success,
+    event,
     /// The poll operation timed out.
     timeout,
     /// The file descriptor had an error while polling.
