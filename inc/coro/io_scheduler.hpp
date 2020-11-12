@@ -165,9 +165,16 @@ public:
 
 class io_scheduler
 {
+public:
+    using fd_t = int;
+
 private:
+    using clock        = std::chrono::steady_clock;
+    using time_point   = clock::time_point;
     using task_variant = std::variant<coro::task<void>, std::coroutine_handle<>>;
     using task_queue   = std::deque<task_variant>;
+
+    using timer_tokens = std::multimap<time_point, resume_token<poll_status>*>;
 
     /// resume_token<T> needs to be able to call internal scheduler::resume()
     template<typename return_type>
@@ -317,9 +324,58 @@ private:
     static constexpr const int   m_accept_object{0};
     static constexpr const void* m_accept_ptr = &m_accept_object;
 
-public:
-    using fd_t = int;
+    static constexpr const int   m_timer_object{0};
+    static constexpr const void* m_timer_ptr = &m_timer_object;
 
+    /**
+     * An operation is an awaitable type with a coroutine to resume the task scheduled on one of
+     * the executor threads.
+     */
+    class operation
+    {
+        friend class io_scheduler;
+        /**
+         * Only io_schedulers can create operations when a task is being scheduled.
+         * @param tp The io scheduler that created this operation.
+         */
+        explicit operation(io_scheduler& ios) noexcept : m_io_scheduler(ios) {}
+
+    public:
+        /**
+         * Operations always pause so the executing thread and be switched.
+         */
+        auto await_ready() noexcept -> bool { return false; }
+
+        /**
+         * Suspending always returns to the caller (using void return of await_suspend()) and
+         * stores the coroutine internally for the executing thread to resume from.
+         */
+        auto await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept -> void
+        {
+            // m_awaiting_coroutine = awaiting_coroutine;
+            m_io_scheduler.resume(awaiting_coroutine);
+        }
+
+        /**
+         * no-op as this is the function called first by the io_scheduler's executing thread.
+         */
+        auto await_resume() noexcept -> void {}
+
+    private:
+        /// The io_scheduler that this operation will execute on.
+        io_scheduler& m_io_scheduler;
+        // // The coroutine awaiting execution.
+        // std::coroutine_handle<> m_awaiting_coroutine{nullptr};
+    };
+
+    /**
+     * Schedules the currently executing task onto this io_scheduler, effectively placing it at
+     * the end of the FIFO queue.
+     * `co_await s.yield()`
+     */
+    auto schedule() -> operation { return operation{*this}; }
+
+public:
     enum class thread_strategy_t
     {
         /// Spawns a background thread for the scheduler to run on.
@@ -346,16 +402,18 @@ public:
     io_scheduler(const options opts = options{8, 2, thread_strategy_t::spawn})
         : m_epoll_fd(epoll_create1(EPOLL_CLOEXEC)),
           m_accept_fd(eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK)),
+          m_timer_fd(timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC)),
           m_thread_strategy(opts.thread_strategy),
           m_task_manager(opts.reserve_size, opts.growth_factor)
     {
-        struct epoll_event e
-        {
-        };
+        epoll_event e{};
         e.events = EPOLLIN;
 
         e.data.ptr = const_cast<void*>(m_accept_ptr);
         epoll_ctl(m_epoll_fd, EPOLL_CTL_ADD, m_accept_fd, &e);
+
+        e.data.ptr = const_cast<void*>(m_timer_ptr);
+        epoll_ctl(m_epoll_fd, EPOLL_CTL_ADD, m_timer_fd, &e);
 
         if (m_thread_strategy == thread_strategy_t::spawn)
         {
@@ -385,6 +443,11 @@ public:
         {
             close(m_accept_fd);
             m_accept_fd = -1;
+        }
+        if (m_timer_fd != -1)
+        {
+            close(m_timer_fd);
+            m_timer_fd = -1;
         }
     }
 
@@ -490,24 +553,78 @@ public:
             return false;
         }
 
-        return schedule(scheduler_after_func(std::move(task), after));
+        return schedule(make_scheduler_after_task(std::move(task), after));
+    }
+
+    /**
+     * Schedules a task to be run at a specific time in the future.
+     * @param task
+     * @param time
+     * @return True if the task is scheduled.  False if time is in the past or the scheduler is
+     *         trying to shutdown.
+     */
+    auto schedule_at(coro::task<void> task, time_point time) -> bool
+    {
+        auto now = clock::now();
+
+        // If the requested time is in the past (or now!) bail out!
+        if (time <= now)
+        {
+            return false;
+        }
+
+        auto amount = std::chrono::duration_cast<std::chrono::milliseconds>(time - now);
+        return schedule_after(std::move(task), amount);
     }
 
     /**
      * Polls a specific file descriptor for the given poll operation.
      * @param fd The file descriptor to poll.
      * @param op The type of poll operation to perform.
+     * @param timeout The timeout for this poll operation, if timeout <= 0 then poll will block
+     *                indefinitely until the event is triggered.
      */
-    auto poll(fd_t fd, poll_op op) -> coro::task<void>
+    auto poll(fd_t fd, poll_op op, std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
+        -> coro::task<poll_status>
     {
-        co_await unsafe_yield<void>([&](resume_token<void>& token) {
-            epoll_event e{};
-            e.events   = static_cast<uint32_t>(op) | EPOLLONESHOT | EPOLLET | EPOLLRDHUP;
-            e.data.ptr = &token;
-            epoll_ctl(m_epoll_fd, EPOLL_CTL_ADD, fd, &e);
-        });
+        // Setup two events, a timeout event and the actual poll for op event.
+        // Whichever triggers first will delete the other to guarantee only one wins.
+        // The resume token will be set by the scheduler to what the event turned out to be.
+
+        using namespace std::chrono_literals;
+        bool timeout_requested = (timeout > 0ms);
+
+        resume_token<poll_status> token{};
+        timer_tokens::iterator    timer_pos;
+
+        if (timeout_requested)
+        {
+            timer_pos = add_timer_token(clock::now() + timeout, &token);
+        }
+
+        epoll_event e{};
+        e.events   = static_cast<uint32_t>(op) | EPOLLONESHOT | EPOLLET | EPOLLRDHUP;
+        e.data.ptr = &token;
+        epoll_ctl(m_epoll_fd, EPOLL_CTL_ADD, fd, &e);
+
+        auto status = co_await unsafe_yield<poll_status>(token);
+        switch (status)
+        {
+            // The event triggered first, delete the timeout.
+            case poll_status::event:
+                if (timeout_requested)
+                {
+                    remove_timer_token(timer_pos);
+                }
+                break;
+            default:
+                // Deleting the event is done regardless below in epoll_ctl()
+                break;
+        }
 
         epoll_ctl(m_epoll_fd, EPOLL_CTL_DEL, fd, nullptr);
+
+        co_return status;
     }
 
     /**
@@ -516,19 +633,21 @@ public:
      * size of data.  The number of bytes read is returned.
      * @param fd The file desriptor to read from.
      * @param buffer The buffer to place read bytes into.
+     * @param timeout The timeout for the read operation, if timeout <= 0 then read will block
+     *                indefinitely until the event is triggered.
      * @return The number of bytes read or an error code if negative.
      */
-    auto read(fd_t fd, std::span<char> buffer) -> coro::task<ssize_t>
+    auto read(fd_t fd, std::span<char> buffer, std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
+        -> coro::task<std::pair<poll_status, ssize_t>>
     {
-        /*auto status =*/co_await poll(fd, poll_op::read);
-        co_return ::read(fd, buffer.data(), buffer.size());
-        // switch(status)
-        // {
-        //     case poll_status::success:
-        //         co_return ::read(fd, buffer.data(), buffer.size());
-        //     default:
-        //         co_return 0;
-        // }
+        auto status = co_await poll(fd, poll_op::read, timeout);
+        switch (status)
+        {
+            case poll_status::event:
+                co_return {status, ::read(fd, buffer.data(), buffer.size())};
+            default:
+                co_return {status, 0};
+        }
     }
 
     /**
@@ -538,17 +657,28 @@ public:
      * @param buffer The data to write to `fd`.
      * @return The number of bytes written or an error code if negative.
      */
-    auto write(fd_t fd, const std::span<const char> buffer) -> coro::task<ssize_t>
+    auto write(fd_t fd, const std::span<const char> buffer) -> coro::task<std::pair<poll_status, ssize_t>>
     {
-        /*auto status =*/co_await poll(fd, poll_op::write);
-        co_return ::write(fd, buffer.data(), buffer.size());
-        // switch(status)
-        // {
-        //     case poll_status::success:
-        //         co_return ::write(fd, buffer.data(), buffer.size());
-        //     default:
-        //         co_return 0;
-        // }
+        auto status = co_await poll(fd, poll_op::write);
+        switch (status)
+        {
+            case poll_status::event:
+                co_return {status, ::write(fd, buffer.data(), buffer.size())};
+            default:
+                co_return {status, 0};
+        }
+    }
+
+    /**
+     * Immediately yields the current task and places it at the end of the queue of tasks waiting
+     * to be processed.  This will immediately be picked up again once it naturally goes through the
+     * FIFO task queue.  This function is useful to yielding long processing tasks to let other tasks
+     * get processing time.
+     */
+    auto yield() -> coro::task<void>
+    {
+        co_await schedule();
+        co_return;
     }
 
     /**
@@ -602,38 +732,43 @@ public:
 
     /**
      * Yields the current coroutine for `amount` of time.
-     * @throw std::runtime_error If the internal system failed to setup required resources to wait.
      * @param amount The amount of time to wait.
      */
     auto yield_for(std::chrono::milliseconds amount) -> coro::task<void>
     {
-        fd_t timer_fd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC);
-        if (timer_fd == -1)
+        // If the requested amount of time is negative or zero just return.
+        using namespace std::chrono_literals;
+        if (amount <= 0ms)
         {
-            std::string msg = "Failed to create timerfd errorno=[" + std::string{strerror(errno)} + "].";
-            throw std::runtime_error(msg.data());
+            co_return;
         }
 
-        struct itimerspec ts
+        resume_token<poll_status> token{};
+
+        add_timer_token(clock::now() + amount, &token);
+
+        // Wait for the token timer to trigger.
+        co_await token;
+        co_return;
+    }
+
+    /**
+     * Yields the current coroutine until `time`.  If time is in the past this function will
+     * return immediately.
+     * @param time The time point in the future to yield until.
+     */
+    auto yield_until(time_point time) -> coro::task<void>
+    {
+        auto now = clock::now();
+
+        // If the requested time is in the past (or now!) just return.
+        if (time <= now)
         {
-        };
-
-        auto seconds = std::chrono::duration_cast<std::chrono::seconds>(amount);
-        amount -= seconds;
-        auto nanoseconds = std::chrono::duration_cast<std::chrono::nanoseconds>(amount);
-
-        ts.it_value.tv_sec  = seconds.count();
-        ts.it_value.tv_nsec = nanoseconds.count();
-
-        if (timerfd_settime(timer_fd, 0, &ts, nullptr) == -1)
-        {
-            std::string msg = "Failed to set timerfd errorno=[" + std::string{strerror(errno)} + "].";
-            throw std::runtime_error(msg.data());
+            co_return;
         }
 
-        uint64_t value{0};
-        co_await read(timer_fd, std::span<char>{reinterpret_cast<char*>(&value), sizeof(value)});
-        close(timer_fd);
+        auto amount = std::chrono::duration_cast<std::chrono::milliseconds>(time - now);
+        co_await yield_for(amount);
         co_return;
     }
 
@@ -648,6 +783,13 @@ public:
         return resume_token<return_type>(*this);
     }
 
+    /**
+     * If runnint in mode thread_strategy_t::manual this function must be called at regular
+     * intervals to process events on the io_scheduler.  This function will do nothing in any
+     * other thread_strategy_t mode.
+     * @param timeout The timeout to wait for events.
+     * @return The number of executing tasks.
+     */
     auto process_events(std::chrono::milliseconds timeout = std::chrono::milliseconds{1000}) -> std::size_t
     {
         process_events_external_thread(timeout);
@@ -708,6 +850,12 @@ private:
     fd_t m_epoll_fd{-1};
     /// The event loop accept new tasks and resume tasks file descriptor.
     fd_t m_accept_fd{-1};
+    /// The event loop timer fd for timed events, e.g. yield_for() or scheduler_after().
+    fd_t m_timer_fd{-1};
+
+    /// The map of time point's to resume tokens for tasks that are yielding for a period of time
+    /// or for tasks that are polling with timeouts.
+    timer_tokens m_timer_tokens;
 
     /// The threading strategy this scheduler is using.
     thread_strategy_t m_thread_strategy;
@@ -735,29 +883,17 @@ private:
 
     task_manager m_task_manager;
 
-    auto scheduler_after_func(coro::task<void> inner_task, std::chrono::milliseconds wait_time) -> coro::task<void>
+    auto make_scheduler_after_task(coro::task<void> task, std::chrono::milliseconds wait_time) -> coro::task<void>
     {
-        // Seems to already be done.
-        if (inner_task.is_ready())
-        {
-            co_return;
-        }
-
         // Wait for the period requested, and then resume their task.
         co_await yield_for(wait_time);
-        inner_task.resume();
-        if (!inner_task.is_ready())
-        {
-            m_task_manager.store(std::move(inner_task));
-        }
+        co_await task;
         co_return;
     }
 
-    template<typename return_type, std::invocable<resume_token<return_type>&> before_functor>
-    auto unsafe_yield(before_functor before) -> coro::task<return_type>
+    template<typename return_type>
+    auto unsafe_yield(resume_token<return_type>& token) -> coro::task<return_type>
     {
-        resume_token<return_type> token{};
-        before(token);
         co_await token;
         if constexpr (std::is_same_v<return_type, void>)
         {
@@ -766,6 +902,34 @@ private:
         else
         {
             co_return token.return_value();
+        }
+    }
+
+    auto add_timer_token(time_point tp, resume_token<poll_status>* token_ptr) -> timer_tokens::iterator
+    {
+        auto pos = m_timer_tokens.emplace(tp, token_ptr);
+
+        // If this item was inserted as the smallest time point, update the timeout.
+        if (pos == m_timer_tokens.begin())
+        {
+            update_timeout(clock::now());
+        }
+
+        return pos;
+    }
+
+    auto remove_timer_token(timer_tokens::iterator pos) -> void
+    {
+        auto is_first = (m_timer_tokens.begin() == pos);
+
+        m_timer_tokens.erase(pos);
+
+        // If this was the first item, update the timeout.  It would be acceptable to just let it
+        // also fire the timeout as the event loop will ignore it since nothing will have timed
+        // out but it feels like the right thing to do to update it to the correct timeout value.
+        if (is_first)
+        {
+            update_timeout(clock::now());
         }
     }
 
@@ -790,13 +954,15 @@ private:
     static constexpr std::size_t                 m_max_events = 8;
     std::array<struct epoll_event, m_max_events> m_events{};
 
+    auto process_task_and_start(task<void>& task) -> void { m_task_manager.store(std::move(task)).resume(); }
+
     inline auto process_task_variant(task_variant& tv) -> void
     {
         if (std::holds_alternative<coro::task<void>>(tv))
         {
             auto& task = std::get<coro::task<void>>(tv);
             // Store the users task and immediately start executing it.
-            m_task_manager.store(std::move(task)).resume();
+            process_task_and_start(task);
         }
         else
         {
@@ -846,7 +1012,8 @@ private:
         {
             for (std::size_t i = 0; i < static_cast<std::size_t>(event_count); ++i)
             {
-                void* handle_ptr = m_events[i].data.ptr;
+                epoll_event& event      = m_events[i];
+                void*        handle_ptr = event.data.ptr;
 
                 if (handle_ptr == m_accept_ptr)
                 {
@@ -864,12 +1031,42 @@ private:
 
                     tasks_ready = true;
                 }
+                else if (handle_ptr == m_timer_ptr)
+                {
+                    // If the timer fd triggered, loop and call every task that has a wait time <= now.
+                    while (!m_timer_tokens.empty())
+                    {
+                        // Now is continuously calculated since resuming tasks could take a fairly
+                        // significant amount of time and might 'trigger' more timeouts.
+                        auto now = clock::now();
+
+                        auto first           = m_timer_tokens.begin();
+                        auto [tp, token_ptr] = *first;
+
+                        if (tp <= now)
+                        {
+                            // Important to erase first so if any timers are updated after resume
+                            // this timer won't be taken into account.
+                            m_timer_tokens.erase(first);
+                            // Every event triggered on the timer tokens is *always* a timeout.
+                            token_ptr->resume(poll_status::timeout);
+                        }
+                        else
+                        {
+                            break;
+                        }
+                    }
+
+                    // Update the time to the next smallest time point, re-take the current now time
+                    // since processing tasks could shit the time.
+                    update_timeout(clock::now());
+                }
                 else
                 {
                     // Individual poll task wake-up, this will queue the coroutines waiting
                     // on the resume token into the FIFO queue for processing.
-                    auto* token_ptr = static_cast<resume_token<void>*>(handle_ptr);
-                    token_ptr->resume();
+                    auto* token_ptr = static_cast<resume_token<poll_status>*>(handle_ptr);
+                    token_ptr->resume(event_to_poll_status(event.events));
                 }
             }
         }
@@ -883,6 +1080,24 @@ private:
         {
             m_size.fetch_sub(m_task_manager.gc(), std::memory_order::relaxed);
         }
+    }
+
+    auto event_to_poll_status(uint32_t events) -> poll_status
+    {
+        if (events & EPOLLIN || events & EPOLLOUT)
+        {
+            return poll_status::event;
+        }
+        else if (events & EPOLLERR)
+        {
+            return poll_status::error;
+        }
+        else if (events & EPOLLRDHUP || events & EPOLLHUP)
+        {
+            return poll_status::closed;
+        }
+
+        throw std::runtime_error{"invalid epoll state"};
     }
 
     auto process_events_external_thread(std::chrono::milliseconds user_timeout) -> void
@@ -905,6 +1120,52 @@ private:
             process_events_poll_execute(m_default_timeout);
         }
         m_running.exchange(false, std::memory_order::release);
+    }
+
+    auto update_timeout(time_point now) -> void
+    {
+        using namespace std::chrono_literals;
+        if (!m_timer_tokens.empty())
+        {
+            auto& [tp, task] = *m_timer_tokens.begin();
+
+            auto amount = tp - now;
+
+            auto seconds = std::chrono::duration_cast<std::chrono::seconds>(amount);
+            amount -= seconds;
+            auto nanoseconds = std::chrono::duration_cast<std::chrono::nanoseconds>(amount);
+
+            // As a safeguard if both values end up as zero (or negative) then trigger the timeout
+            // immediately as zero disarms timerfd according to the man pages and negative valeues
+            // will result in an error return value.
+            if (seconds <= 0s)
+            {
+                seconds = 0s;
+                if (nanoseconds <= 0ns)
+                {
+                    // just trigger immediately!
+                    nanoseconds = 1ns;
+                }
+            }
+
+            itimerspec ts{};
+            ts.it_value.tv_sec  = seconds.count();
+            ts.it_value.tv_nsec = nanoseconds.count();
+
+            if (timerfd_settime(m_timer_fd, 0, &ts, nullptr) == -1)
+            {
+                std::string msg = "Failed to set timerfd errorno=[" + std::string{strerror(errno)} + "].";
+                throw std::runtime_error(msg.data());
+            }
+        }
+        else
+        {
+            // Setting these values to zero disables the timer.
+            itimerspec ts{};
+            ts.it_value.tv_sec  = 0;
+            ts.it_value.tv_nsec = 0;
+            timerfd_settime(m_timer_fd, 0, &ts, nullptr);
+        }
     }
 };
 

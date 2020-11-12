@@ -34,7 +34,7 @@ public:
     {
         friend class thread_pool;
         /**
-         * Only thread_pool's can create operations when a task is being scheduled.
+         * Only thread_pools can create operations when a task is being scheduled.
          * @param tp The thread pool that created this operation.
          */
         explicit operation(thread_pool& tp) noexcept;

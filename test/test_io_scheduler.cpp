@@ -141,8 +141,8 @@ TEST_CASE("io_scheduler task with read poll")
 
     auto func = [&]() -> coro::task<void> {
         // Poll will block until there is data to read.
-        /*auto status =*/co_await s.poll(trigger_fd, coro::poll_op::read);
-        /*REQUIRE(status == coro::poll_status::success);*/
+        auto status = co_await s.poll(trigger_fd, coro::poll_op::read);
+        REQUIRE(status == coro::poll_status::event);
         co_return;
     };
 
@@ -150,6 +150,49 @@ TEST_CASE("io_scheduler task with read poll")
 
     uint64_t value{42};
     write(trigger_fd, &value, sizeof(value));
+
+    s.shutdown();
+    REQUIRE(s.empty());
+    close(trigger_fd);
+}
+
+TEST_CASE("io_scheduler task with read poll with timeout")
+{
+    using namespace std::chrono_literals;
+    auto               trigger_fd = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
+    coro::io_scheduler s{};
+
+    auto func = [&]() -> coro::task<void> {
+        // Poll with a timeout (but don't timeout).
+        auto status = co_await s.poll(trigger_fd, coro::poll_op::read, 50ms);
+        REQUIRE(status == coro::poll_status::event);
+        co_return;
+    };
+
+    s.schedule(func());
+
+    uint64_t value{42};
+    write(trigger_fd, &value, sizeof(value));
+
+    s.shutdown();
+    REQUIRE(s.empty());
+    close(trigger_fd);
+}
+
+TEST_CASE("io_scheduler task with read poll timeout")
+{
+    using namespace std::chrono_literals;
+    auto               trigger_fd = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
+    coro::io_scheduler s{};
+
+    auto func = [&]() -> coro::task<void> {
+        // Poll with a timeout (but don't timeout).
+        auto status = co_await s.poll(trigger_fd, coro::poll_op::read, 10ms);
+        REQUIRE(status == coro::poll_status::timeout);
+        co_return;
+    };
+
+    s.schedule(func());
 
     s.shutdown();
     REQUIRE(s.empty());
@@ -164,8 +207,10 @@ TEST_CASE("io_scheduler task with read")
 
     auto func = [&]() -> coro::task<void> {
         uint64_t val{0};
-        auto     bytes_read = co_await s.read(trigger_fd, std::span<char>(reinterpret_cast<char*>(&val), sizeof(val)));
+        auto [status, bytes_read] =
+            co_await s.read(trigger_fd, std::span<char>(reinterpret_cast<char*>(&val), sizeof(val)));
 
+        REQUIRE(status == coro::poll_status::event);
         REQUIRE(bytes_read == sizeof(uint64_t));
         REQUIRE(val == expected_value);
         co_return;
@@ -174,6 +219,55 @@ TEST_CASE("io_scheduler task with read")
     s.schedule(func());
 
     write(trigger_fd, &expected_value, sizeof(expected_value));
+
+    s.shutdown();
+    close(trigger_fd);
+}
+
+TEST_CASE("io_scheduler task with read with timeout")
+{
+    using namespace std::chrono_literals;
+    constexpr uint64_t expected_value{42};
+    auto               trigger_fd = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
+    coro::io_scheduler s{};
+
+    auto func = [&]() -> coro::task<void> {
+        uint64_t val{0};
+        auto [status, bytes_read] =
+            co_await s.read(trigger_fd, std::span<char>(reinterpret_cast<char*>(&val), sizeof(val)), 50ms);
+
+        REQUIRE(status == coro::poll_status::event);
+        REQUIRE(bytes_read == sizeof(uint64_t));
+        REQUIRE(val == expected_value);
+        co_return;
+    };
+
+    s.schedule(func());
+
+    write(trigger_fd, &expected_value, sizeof(expected_value));
+
+    s.shutdown();
+    close(trigger_fd);
+}
+
+TEST_CASE("io_scheduler task with read timeout")
+{
+    using namespace std::chrono_literals;
+    auto               trigger_fd = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
+    coro::io_scheduler s{};
+
+    auto func = [&]() -> coro::task<void> {
+        uint64_t val{0};
+        auto [status, bytes_read] =
+            co_await s.read(trigger_fd, std::span<char>(reinterpret_cast<char*>(&val), sizeof(val)), 10ms);
+
+        REQUIRE(status == coro::poll_status::timeout);
+        REQUIRE(bytes_read == 0);
+        REQUIRE(val == 0);
+        co_return;
+    };
+
+    s.schedule(func());
 
     s.shutdown();
     close(trigger_fd);
@@ -192,14 +286,17 @@ TEST_CASE("io_scheduler task with read and write same fd")
     coro::io_scheduler s{};
 
     auto func = [&]() -> coro::task<void> {
-        auto bytes_written = co_await s.write(
+        auto [read_status, bytes_written] = co_await s.write(
             trigger_fd, std::span<const char>(reinterpret_cast<const char*>(&expected_value), sizeof(expected_value)));
 
+        REQUIRE(read_status == coro::poll_status::event);
         REQUIRE(bytes_written == sizeof(uint64_t));
 
         uint64_t val{0};
-        auto     bytes_read = co_await s.read(trigger_fd, std::span<char>(reinterpret_cast<char*>(&val), sizeof(val)));
+        auto [write_status, bytes_read] =
+            co_await s.read(trigger_fd, std::span<char>(reinterpret_cast<char*>(&val), sizeof(val)));
 
+        REQUIRE(write_status == coro::poll_status::event);
         REQUIRE(bytes_read == sizeof(uint64_t));
         REQUIRE(val == expected_value);
         co_return;
@@ -222,7 +319,9 @@ TEST_CASE("io_scheduler task with read and write pipe")
     auto read_func = [&]() -> coro::task<void> {
         std::string     buffer(4096, '0');
         std::span<char> view{buffer.data(), buffer.size()};
-        auto            bytes_read = co_await s.read(pipe_fd[0], view);
+        auto [status, bytes_read] = co_await s.read(pipe_fd[0], view);
+
+        REQUIRE(status == coro::poll_status::event);
         REQUIRE(bytes_read == msg.size());
         buffer.resize(bytes_read);
         REQUIRE(buffer == msg);
@@ -230,7 +329,9 @@ TEST_CASE("io_scheduler task with read and write pipe")
 
     auto write_func = [&]() -> coro::task<void> {
         std::span<const char> view{msg.data(), msg.size()};
-        auto                  bytes_written = co_await s.write(pipe_fd[1], view);
+        auto [status, bytes_written] = co_await s.write(pipe_fd[1], view);
+
+        REQUIRE(status == coro::poll_status::event);
         REQUIRE(bytes_written == msg.size());
     };
 
@@ -243,7 +344,7 @@ TEST_CASE("io_scheduler task with read and write pipe")
 }
 
 static auto standalone_read(coro::io_scheduler& s, coro::io_scheduler::fd_t socket, std::span<char> buffer)
-    -> coro::task<ssize_t>
+    -> coro::task<std::pair<coro::poll_status, ssize_t>>
 {
     // do other stuff in larger function
     co_return co_await s.read(socket, buffer);
@@ -258,10 +359,11 @@ TEST_CASE("io_scheduler standalone read task")
 
     auto func = [&]() -> coro::task<void> {
         ssize_t v{0};
-        auto    bytes_read =
+        auto [status, bytes_read] =
             co_await standalone_read(s, trigger_fd, std::span<char>(reinterpret_cast<char*>(&v), sizeof(v)));
-        REQUIRE(bytes_read == sizeof(ssize_t));
 
+        REQUIRE(status == coro::poll_status::event);
+        REQUIRE(bytes_read == sizeof(ssize_t));
         REQUIRE(v == expected_value);
         co_return;
     };
@@ -355,7 +457,7 @@ TEST_CASE("io_scheduler with basic task")
     REQUIRE(counter == expected_value);
 }
 
-TEST_CASE("io_scheduler yield for")
+TEST_CASE("io_scheduler scheduler_after")
 {
     constexpr std::chrono::milliseconds wait_for{50};
     std::atomic<uint64_t>               counter{0};
@@ -374,6 +476,33 @@ TEST_CASE("io_scheduler yield for")
 
     REQUIRE(counter == 1);
     REQUIRE(duration >= wait_for);
+}
+
+TEST_CASE("io_scheduler schedule_at")
+{
+    // Because schedule_at() will take its own time internally the wait_for might be off by a bit.
+    constexpr std::chrono::milliseconds epsilon{3};
+    constexpr std::chrono::milliseconds wait_for{50};
+    std::atomic<uint64_t>               counter{0};
+    coro::io_scheduler                  s{};
+
+    auto func = [&]() -> coro::task<void> {
+        ++counter;
+        co_return;
+    };
+
+    // now or in the past will be rejected.
+    REQUIRE_FALSE(s.schedule_at(func(), std::chrono::steady_clock::now()));
+    REQUIRE_FALSE(s.schedule_at(func(), std::chrono::steady_clock::now() - std::chrono::seconds{1}));
+
+    auto start = std::chrono::steady_clock::now();
+    s.schedule_at(func(), std::chrono::steady_clock::now() + wait_for);
+    s.shutdown();
+    auto stop     = std::chrono::steady_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
+
+    REQUIRE(counter == 1);
+    REQUIRE(duration >= (wait_for - epsilon));
 }
 
 TEST_CASE("io_scheduler trigger growth of internal tasks storage")
@@ -589,4 +718,66 @@ TEST_CASE("io_scheduler schedule vector<task>")
     s.shutdown();
     REQUIRE(s.empty());
     REQUIRE(counter == 4);
+}
+
+TEST_CASE("io_scheduler yield()")
+{
+    std::atomic<uint64_t> counter{0};
+    coro::io_scheduler    s{};
+
+    // This task will check the counter and yield if it isn't 5.
+    auto make_wait_task = [&]() -> coro::task<void> {
+        while (counter.load(std::memory_order::relaxed) < 5)
+        {
+            std::cerr << "count = " << counter.load(std::memory_order::relaxed) << "\n";
+            co_await s.yield();
+        }
+        co_return;
+    };
+
+    // This task will increment counter by 1 and yield after each increment.
+    auto make_inc_task = [&]() -> coro::task<void> {
+        while (counter.load(std::memory_order::relaxed) < 5)
+        {
+            std::cerr << "increment!\n";
+            counter.fetch_add(1, std::memory_order::relaxed);
+            co_await s.yield();
+        }
+        co_return;
+    };
+
+    s.schedule(make_wait_task());
+    s.schedule(make_inc_task());
+    s.shutdown();
+
+    REQUIRE(counter == 5);
+}
+
+TEST_CASE("io_scheduler multiple timed waits")
+{
+    std::atomic<uint64_t> counter{0};
+    coro::io_scheduler    s{};
+
+    auto start_point = std::chrono::steady_clock::now();
+
+    auto make_task = [&]() -> coro::task<void> {
+        auto now   = std::chrono::steady_clock::now();
+        auto epoch = std::chrono::duration_cast<std::chrono::milliseconds>(now - start_point);
+        std::cerr << "task counter = " << counter.load(std::memory_order::relaxed) << " elapsed = " << epoch.count()
+                  << "\n";
+        counter.fetch_add(1, std::memory_order::relaxed);
+        co_return;
+    };
+
+    auto start = std::chrono::steady_clock::now();
+    s.schedule_after(make_task(), std::chrono::milliseconds{5});
+    s.schedule_after(make_task(), std::chrono::milliseconds{5});
+    s.schedule_after(make_task(), std::chrono::milliseconds{20});
+    s.schedule_after(make_task(), std::chrono::milliseconds{50});
+    s.schedule_after(make_task(), std::chrono::milliseconds{50});
+    s.shutdown();
+    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start);
+
+    REQUIRE(counter == 5);
+    REQUIRE(elapsed.count() >= 50);
 }
