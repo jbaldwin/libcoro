@@ -633,19 +633,21 @@ public:
      * size of data.  The number of bytes read is returned.
      * @param fd The file desriptor to read from.
      * @param buffer The buffer to place read bytes into.
+     * @param timeout The timeout for the read operation, if timeout <= 0 then read will block
+     *                indefinitely until the event is triggered.
      * @return The number of bytes read or an error code if negative.
      */
-    auto read(fd_t fd, std::span<char> buffer) -> coro::task<ssize_t>
+    auto read(fd_t fd, std::span<char> buffer, std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
+        -> coro::task<std::pair<poll_status, ssize_t>>
     {
-        /*auto status =*/co_await poll(fd, poll_op::read);
-        co_return ::read(fd, buffer.data(), buffer.size());
-        // switch(status)
-        // {
-        //     case poll_status::success:
-        //         co_return ::read(fd, buffer.data(), buffer.size());
-        //     default:
-        //         co_return 0;
-        // }
+        auto status = co_await poll(fd, poll_op::read, timeout);
+        switch (status)
+        {
+            case poll_status::event:
+                co_return {status, ::read(fd, buffer.data(), buffer.size())};
+            default:
+                co_return {status, 0};
+        }
     }
 
     /**
@@ -655,17 +657,16 @@ public:
      * @param buffer The data to write to `fd`.
      * @return The number of bytes written or an error code if negative.
      */
-    auto write(fd_t fd, const std::span<const char> buffer) -> coro::task<ssize_t>
+    auto write(fd_t fd, const std::span<const char> buffer) -> coro::task<std::pair<poll_status, ssize_t>>
     {
-        /*auto status =*/co_await poll(fd, poll_op::write);
-        co_return ::write(fd, buffer.data(), buffer.size());
-        // switch(status)
-        // {
-        //     case poll_status::success:
-        //         co_return ::write(fd, buffer.data(), buffer.size());
-        //     default:
-        //         co_return 0;
-        // }
+        auto status = co_await poll(fd, poll_op::write);
+        switch (status)
+        {
+            case poll_status::event:
+                co_return {status, ::write(fd, buffer.data(), buffer.size())};
+            default:
+                co_return {status, 0};
+        }
     }
 
     /**
