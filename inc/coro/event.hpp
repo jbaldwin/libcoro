@@ -36,7 +36,7 @@ public:
     event(const event&) = delete;
     event(event&&)      = delete;
     auto operator=(const event&) -> event& = delete;
-    auto operator=(event &&) -> event& = delete;
+    auto operator=(event&&) -> event& = delete;
 
     /**
      * @return True if this event is currently in the set state.

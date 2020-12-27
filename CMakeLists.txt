@@ -11,6 +11,7 @@ set(LIBCORO_SOURCE_FILES
     inc/coro/detail/void_value.hpp
 
     inc/coro/awaitable.hpp
+    inc/coro/connect.hpp src/connect.cpp
     inc/coro/coro.hpp
     inc/coro/event.hpp src/event.cpp
     inc/coro/generator.hpp
@@ -22,6 +23,7 @@ set(LIBCORO_SOURCE_FILES
     inc/coro/socket.hpp
     inc/coro/sync_wait.hpp src/sync_wait.cpp
     inc/coro/task.hpp
+    inc/coro/tcp_client.hpp src/tcp_client.cpp
     inc/coro/tcp_scheduler.hpp
     inc/coro/thread_pool.hpp src/thread_pool.cpp
     inc/coro/when_all.hpp

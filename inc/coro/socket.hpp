@@ -4,6 +4,8 @@
 
 #include <arpa/inet.h>
 #include <fcntl.h>
+#include <span>
+#include <unistd.h>
 #include <utility>
 
 #include <iostream>
@@ -74,7 +76,7 @@ public:
 
         if (opts.blocking == blocking_t::no)
         {
-            if (!s.blocking(blocking_t::no))
+            if (s.blocking(blocking_t::no) == false)
             {
                 throw std::runtime_error{"Failed to set socket to non-blocking mode."};
             }
@@ -98,9 +100,13 @@ public:
         }
 
         sockaddr_in server{};
-        server.sin_family      = domain_to_os(opts.domain);
-        server.sin_addr.s_addr = htonl(inet_addr(address.data()));
-        server.sin_port        = htons(port);
+        server.sin_family = domain_to_os(opts.domain);
+        server.sin_port   = htons(port);
+
+        if (inet_pton(server.sin_family, address.data(), &server.sin_addr) <= 0)
+        {
+            throw std::runtime_error{"Failed to translate IP Address."};
+        }
 
         if (bind(s.native_handle(), (struct sockaddr*)&server, sizeof(server)) < 0)
         {

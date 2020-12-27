@@ -8,6 +8,7 @@
 #include "coro/promise.hpp"
 #include "coro/sync_wait.hpp"
 #include "coro/task.hpp"
+#include "coro/tcp_client.hpp"
 #include "coro/tcp_scheduler.hpp"
 #include "coro/thread_pool.hpp"
 #include "coro/when_all.hpp"

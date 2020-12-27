@@ -82,7 +82,7 @@ public:
     thread_pool(const thread_pool&) = delete;
     thread_pool(thread_pool&&)      = delete;
     auto operator=(const thread_pool&) -> thread_pool& = delete;
-    auto operator=(thread_pool &&) -> thread_pool& = delete;
+    auto operator=(thread_pool&&) -> thread_pool& = delete;
 
     ~thread_pool();
 
