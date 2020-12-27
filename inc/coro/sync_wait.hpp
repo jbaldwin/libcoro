@@ -16,8 +16,8 @@ public:
     sync_wait_event(const sync_wait_event&) = delete;
     sync_wait_event(sync_wait_event&&)      = delete;
     auto operator=(const sync_wait_event&) -> sync_wait_event& = delete;
-    auto operator=(sync_wait_event &&) -> sync_wait_event& = delete;
-    ~sync_wait_event()                                     = default;
+    auto operator=(sync_wait_event&&) -> sync_wait_event& = delete;
+    ~sync_wait_event()                                    = default;
 
     auto set() noexcept -> void;
     auto reset() noexcept -> void;

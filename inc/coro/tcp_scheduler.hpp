@@ -53,9 +53,18 @@ public:
     tcp_scheduler(const tcp_scheduler&) = delete;
     tcp_scheduler(tcp_scheduler&&)      = delete;
     auto operator=(const tcp_scheduler&) -> tcp_scheduler& = delete;
-    auto operator=(tcp_scheduler &&) -> tcp_scheduler& = delete;
+    auto operator=(tcp_scheduler&&) -> tcp_scheduler& = delete;
 
-    ~tcp_scheduler() override = default;
+    ~tcp_scheduler() override { shutdown(); }
+
+    auto empty() const -> bool { return size() == 0; }
+
+    auto size() const -> size_t
+    {
+        // Take one off for the accept task so the user doesn't have to account for the hidden task.
+        auto size = io_scheduler::size();
+        return (size > 0) ? size - 1 : 0;
+    }
 
     auto shutdown(shutdown_t wait_for_tasks = shutdown_t::sync) -> void override
     {
@@ -63,9 +72,9 @@ public:
         {
             m_accept_socket.shutdown(); // wake it up by shutting down read/write operations.
 
-            while (m_accept_task_exited.load(std::memory_order_acquire) == false)
+            while (m_accept_task_exited.load(std::memory_order::acquire) == false)
             {
-                std::this_thread::sleep_for(std::chrono::milliseconds{10});
+                std::this_thread::sleep_for(std::chrono::milliseconds{1});
             }
 
             io_scheduler::shutdown(wait_for_tasks);
@@ -75,6 +84,7 @@ public:
 private:
     options m_opts;
 
+    /// Should the accept task continue accepting new connections?
     std::atomic<bool> m_accept_new_connections{true};
     std::atomic<bool> m_accept_task_exited{false};
     socket            m_accept_socket{-1};

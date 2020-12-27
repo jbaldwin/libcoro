@@ -1,7 +1,9 @@
 #pragma once
 
+#include "coro/awaitable.hpp"
 #include "coro/poll.hpp"
 #include "coro/shutdown.hpp"
+#include "coro/socket.hpp"
 #include "coro/task.hpp"
 
 #include <atomic>
@@ -133,7 +135,7 @@ public:
     resume_token(const resume_token&) = delete;
     resume_token(resume_token&&)      = default;
     auto operator=(const resume_token&) -> resume_token& = delete;
-    auto operator=(resume_token &&) -> resume_token& = default;
+    auto operator=(resume_token&&) -> resume_token& = default;
 
     auto resume(return_type value) noexcept -> void;
 
@@ -158,7 +160,7 @@ public:
     resume_token(const resume_token&) = delete;
     resume_token(resume_token&&)      = default;
     auto operator=(const resume_token&) -> resume_token& = delete;
-    auto operator=(resume_token &&) -> resume_token& = default;
+    auto operator=(resume_token&&) -> resume_token& = default;
 
     auto resume() noexcept -> void;
 };
@@ -429,7 +431,7 @@ public:
     io_scheduler(const io_scheduler&) = delete;
     io_scheduler(io_scheduler&&)      = delete;
     auto operator=(const io_scheduler&) -> io_scheduler& = delete;
-    auto operator=(io_scheduler &&) -> io_scheduler& = delete;
+    auto operator=(io_scheduler&&) -> io_scheduler& = delete;
 
     virtual ~io_scheduler()
     {
@@ -650,16 +652,28 @@ public:
         }
     }
 
+    auto read(
+        const coro::socket&       sock,
+        std::span<char>           buffer,
+        std::chrono::milliseconds timeout = std::chrono::milliseconds{0}) -> coro::task<std::pair<poll_status, ssize_t>>
+    {
+        return read(sock.native_handle(), buffer, timeout);
+    }
+
     /**
      * This function will first poll the given `fd` to make sure it can be written to.  Once notified
      * that the `fd` can be written to the given buffer's contents are written to the `fd`.
      * @param fd The file descriptor to write the contents of `buffer` to.
      * @param buffer The data to write to `fd`.
+     * @param timeout The timeout for the write operation, if timeout <= 0 then write will block
+     *                indefinitely until the event is triggered.
      * @return The number of bytes written or an error code if negative.
      */
-    auto write(fd_t fd, const std::span<const char> buffer) -> coro::task<std::pair<poll_status, ssize_t>>
+    auto write(
+        fd_t fd, const std::span<const char> buffer, std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
+        -> coro::task<std::pair<poll_status, ssize_t>>
     {
-        auto status = co_await poll(fd, poll_op::write);
+        auto status = co_await poll(fd, poll_op::write, timeout);
         switch (status)
         {
             case poll_status::event:
@@ -667,6 +681,14 @@ public:
             default:
                 co_return {status, 0};
         }
+    }
+
+    auto write(
+        const coro::socket&         sock,
+        const std::span<const char> buffer,
+        std::chrono::milliseconds timeout = std::chrono::milliseconds{0}) -> coro::task<std::pair<poll_status, ssize_t>>
+    {
+        return write(sock.native_handle(), buffer, timeout);
     }
 
     /**
@@ -1027,7 +1049,8 @@ private:
                     bool expected{true};
                     while (!m_event_set.compare_exchange_weak(
                         expected, false, std::memory_order::release, std::memory_order::relaxed))
-                    {}
+                    {
+                    }
 
                     tasks_ready = true;
                 }

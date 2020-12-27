@@ -14,7 +14,7 @@ public:
     latch(const latch&) = delete;
     latch(latch&&)      = delete;
     auto operator=(const latch&) -> latch& = delete;
-    auto operator=(latch &&) -> latch& = delete;
+    auto operator=(latch&&) -> latch& = delete;
 
     auto is_ready() const noexcept -> bool { return m_event.is_set(); }
 

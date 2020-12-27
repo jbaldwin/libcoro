@@ -103,7 +103,7 @@ public:
     }
 
     auto operator=(const when_all_ready_awaitable&) -> when_all_ready_awaitable& = delete;
-    auto operator=(when_all_ready_awaitable &&) -> when_all_ready_awaitable& = delete;
+    auto operator=(when_all_ready_awaitable&&) -> when_all_ready_awaitable& = delete;
 
     auto operator co_await() & noexcept
     {
@@ -379,7 +379,7 @@ public:
     }
 
     auto operator=(const when_all_task&) -> when_all_task& = delete;
-    auto operator=(when_all_task &&) -> when_all_task& = delete;
+    auto operator=(when_all_task&&) -> when_all_task& = delete;
 
     ~when_all_task()
     {
@@ -435,7 +435,7 @@ private:
 };
 
 template<awaitable awaitable, typename return_type = awaitable_traits<awaitable&&>::awaiter_return_type>
-static auto make_when_all_task(awaitable a) -> when_all_task<return_type>
+static auto make_when_all_task(awaitable&& a) -> when_all_task<return_type>
 {
     if constexpr (std::is_void_v<return_type>)
     {

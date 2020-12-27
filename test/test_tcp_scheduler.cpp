@@ -7,64 +7,70 @@ TEST_CASE("tcp_scheduler no on connection throws")
     REQUIRE_THROWS(coro::tcp_scheduler{coro::tcp_scheduler::options{.on_connection = nullptr}});
 }
 
-TEST_CASE("tcp_scheduler ping")
+TEST_CASE("tcp_scheduler echo server")
 {
-    std::string msg{"Hello from client"};
+    const std::string msg{"Hello from client"};
 
-    auto on_connection = [&](coro::tcp_scheduler& tcp, coro::socket sock) -> coro::task<void> {
-        /*auto status =*/co_await tcp.poll(sock.native_handle(), coro::poll_op::read);
-        /*REQUIRE(status == coro::poll_status::success);*/
+    auto on_connection = [&msg](coro::tcp_scheduler& scheduler, coro::socket sock) -> coro::task<void> {
+        std::string in(64, '\0');
 
-        std::string in{};
-        in.resize(2048, '\0');
-        auto read_bytes = sock.recv(std::span<char>{in.data(), in.size()});
-        REQUIRE(read_bytes == msg.length());
-        in.resize(read_bytes);
+        auto [rstatus, rbytes] = co_await scheduler.read(sock, std::span<char>{in.data(), in.size()});
+        REQUIRE(rstatus == coro::poll_status::event);
+
+        in.resize(rbytes);
         REQUIRE(in == msg);
 
-        /*status =*/co_await tcp.poll(sock.native_handle(), coro::poll_op::write);
-        /*REQUIRE(status == coro::poll_status::success);*/
-
-        auto written_bytes = sock.send(std::span<const char>(in.data(), in.length()));
-        REQUIRE(written_bytes == in.length());
+        auto [wstatus, wbytes] = co_await scheduler.write(sock, std::span<const char>(in.data(), in.length()));
+        REQUIRE(wstatus == coro::poll_status::event);
+        REQUIRE(wbytes == in.length());
 
         co_return;
     };
 
-    coro::tcp_scheduler tcp{coro::tcp_scheduler::options{
+    coro::tcp_scheduler scheduler{coro::tcp_scheduler::options{
         .address       = "0.0.0.0",
         .port          = 8080,
         .backlog       = 128,
         .on_connection = on_connection,
-        .io_options    = coro::io_scheduler::options{8, 2, coro::io_scheduler::thread_strategy_t::spawn}}};
+        .io_options    = coro::io_scheduler::options{.thread_strategy = coro::io_scheduler::thread_strategy_t::spawn}}};
 
-    int         client_socket = ::socket(AF_INET, SOCK_STREAM, 0);
-    sockaddr_in server{};
-    server.sin_family = AF_INET;
-    server.sin_port   = htons(8080);
+    auto make_client_task = [&scheduler, &msg]() -> coro::task<void> {
+        coro::tcp_client client{
+            scheduler,
+            coro::tcp_client::options{.address = "127.0.0.1", .port = 8080, .domain = coro::socket::domain_t::ipv4}};
 
-    if (inet_pton(AF_INET, "127.0.0.1", &server.sin_addr) <= 0)
+        auto cstatus = co_await client.connect();
+        REQUIRE(cstatus == coro::connect_status::connected);
+
+        auto [wstatus, wbytes] =
+            co_await scheduler.write(client.socket(), std::span<const char>{msg.data(), msg.length()});
+
+        REQUIRE(wstatus == coro::poll_status::event);
+        REQUIRE(wbytes == msg.length());
+
+        std::string response(64, '\0');
+
+        auto [rstatus, rbytes] =
+            co_await scheduler.read(client.socket(), std::span<char>{response.data(), response.length()});
+
+        REQUIRE(rstatus == coro::poll_status::event);
+        REQUIRE(rbytes == msg.length());
+        response.resize(rbytes);
+        REQUIRE(response == msg);
+
+        co_return;
+    };
+
+    scheduler.schedule(make_client_task());
+
+    // Shutting down the scheduler will cause it to stop accepting new connections, to avoid requiring
+    // another scheduler for this test the main thread can spin sleep until the tcp scheduler reports
+    // that it is empty.  tcp schedulers do not report their accept task as a task in its size/empty count.
+    while (!scheduler.empty())
     {
-        perror("failed to set sin_addr=127.0.0.1");
-        REQUIRE(false);
+        std::this_thread::sleep_for(std::chrono::milliseconds{1});
     }
 
-    if (connect(client_socket, (struct sockaddr*)&server, sizeof(server)) < 0)
-    {
-        perror("Failed to connect to tcp scheduler server");
-        REQUIRE(false);
-    }
-    ::send(client_socket, msg.data(), msg.length(), 0);
-
-    std::string response{};
-    response.resize(256, '\0');
-    auto bytes_recv = ::recv(client_socket, response.data(), response.length(), 0);
-    REQUIRE(bytes_recv == msg.length());
-    response.resize(bytes_recv);
-    REQUIRE(response == msg);
-
-    tcp.shutdown();
-    REQUIRE(tcp.empty());
-
-    close(client_socket);
+    scheduler.shutdown();
+    REQUIRE(scheduler.empty());
 }
