@@ -1,6 +1,12 @@
 #pragma once
 
+#include "coro/net/hostname.hpp"
+#include "coro/net/ip_address.hpp"
+#include "coro/net/socket.hpp"
+
 #include "coro/awaitable.hpp"
+#include "coro/connect.hpp"
+#include "coro/dns_client.hpp"
 #include "coro/event.hpp"
 #include "coro/generator.hpp"
 #include "coro/io_scheduler.hpp"

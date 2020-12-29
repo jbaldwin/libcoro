@@ -1,5 +1,6 @@
 #pragma once
 
+#include "coro/net/ip_address.hpp"
 #include "coro/poll.hpp"
 
 #include <arpa/inet.h>
@@ -10,17 +11,11 @@
 
 #include <iostream>
 
-namespace coro
+namespace coro::net
 {
 class socket
 {
 public:
-    enum class domain_t
-    {
-        ipv4,
-        ipv6
-    };
-
     enum class type_t
     {
         udp,
@@ -40,19 +35,6 @@ public:
         blocking_t blocking;
     };
 
-    static auto domain_to_os(const domain_t& domain) -> int
-    {
-        switch (domain)
-        {
-            case domain_t::ipv4:
-                return AF_INET;
-            case domain_t::ipv6:
-                return AF_INET6;
-            default:
-                throw std::runtime_error{"Unknown socket::domain_t."};
-        }
-    }
-
     static auto type_to_os(const type_t& type) -> int
     {
         switch (type)
@@ -68,7 +50,7 @@ public:
 
     static auto make_socket(const options& opts) -> socket
     {
-        socket s{::socket(domain_to_os(opts.domain), type_to_os(opts.type), 0)};
+        socket s{::socket(static_cast<int>(opts.domain), type_to_os(opts.type), 0)};
         if (s.native_handle() < 0)
         {
             throw std::runtime_error{"Failed to create socket."};
@@ -86,10 +68,10 @@ public:
     }
 
     static auto make_accept_socket(
-        const options&     opts,
-        const std::string& address, // force string to guarantee null terminated.
-        uint16_t           port,
-        int32_t            backlog = 128) -> socket
+        const options&         opts,
+        const net::ip_address& address,
+        uint16_t               port,
+        int32_t                backlog = 128) -> socket
     {
         socket s = make_socket(opts);
 
@@ -100,13 +82,14 @@ public:
         }
 
         sockaddr_in server{};
-        server.sin_family = domain_to_os(opts.domain);
+        server.sin_family = static_cast<int>(opts.domain);
         server.sin_port   = htons(port);
+        server.sin_addr   = *reinterpret_cast<const in_addr*>(address.data().data());
 
-        if (inet_pton(server.sin_family, address.data(), &server.sin_addr) <= 0)
-        {
-            throw std::runtime_error{"Failed to translate IP Address."};
-        }
+        // if (inet_pton(server.sin_family, address.data(), &server.sin_addr) <= 0)
+        // {
+        //     throw std::runtime_error{"Failed to translate IP Address."};
+        // }
 
         if (bind(s.native_handle(), (struct sockaddr*)&server, sizeof(server)) < 0)
         {
@@ -202,4 +185,4 @@ private:
     int m_fd{-1};
 };
 
-} // namespace coro
+} // namespace coro::net

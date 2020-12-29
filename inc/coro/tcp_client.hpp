@@ -1,11 +1,15 @@
 #pragma once
 
+#include "coro/net/ip_address.hpp"
+#include "coro/net/hostname.hpp"
+#include "coro/net/socket.hpp"
 #include "coro/connect.hpp"
 #include "coro/poll.hpp"
-#include "coro/socket.hpp"
 #include "coro/task.hpp"
 
 #include <chrono>
+#include <optional>
+#include <variant>
 
 namespace coro
 {
@@ -16,12 +20,12 @@ class tcp_client
 public:
     struct options
     {
-        std::string      address{"127.0.0.1"};
-        int16_t          port{8080};
-        socket::domain_t domain{socket::domain_t::ipv4};
+        std::variant<net::hostname, net::ip_address> address{net::ip_address::from_string("127.0.0.1")};
+        int16_t       port{8080};
+        net::domain_t domain{net::domain_t::ipv4};
     };
 
-    tcp_client(io_scheduler& scheduler, options opts = options{"127.0.0.1", 8080, socket::domain_t::ipv4});
+    tcp_client(io_scheduler& scheduler, options opts = options{{net::ip_address::from_string("127.0.0.1")}, 8080, net::domain_t::ipv4});
     tcp_client(const tcp_client&) = delete;
     tcp_client(tcp_client&&)      = default;
     auto operator=(const tcp_client&) noexcept -> tcp_client& = delete;
@@ -30,13 +34,18 @@ public:
 
     auto connect(std::chrono::milliseconds timeout = std::chrono::milliseconds{0}) -> coro::task<connect_status>;
 
-    auto socket() const -> const coro::socket& { return m_socket; }
-    auto socket() -> coro::socket& { return m_socket; }
+    auto socket() const -> const net::socket& { return m_socket; }
+    auto socket() -> net::socket& { return m_socket; }
 
 private:
+    /// The scheduler that will drive this tcp client.
     io_scheduler& m_io_scheduler;
-    options       m_options;
-    coro::socket  m_socket;
+    /// Options for what server to connect to.
+    options m_options;
+    /// The tcp socket.
+    net::socket m_socket;
+    /// Cache the status of the connect in the event the user calls connect() again.
+    std::optional<connect_status> m_connect_status{std::nullopt};
 };
 
 } // namespace coro

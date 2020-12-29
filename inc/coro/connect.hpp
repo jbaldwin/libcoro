@@ -16,6 +16,10 @@ enum class connect_status
     error
 };
 
+/**
+ * @param status String representation of the connection status.
+ * @throw std::logic_error If provided an invalid connect_status enum value.
+ */
 auto to_string(const connect_status& status) -> const std::string&;
 
 } // namespace coro

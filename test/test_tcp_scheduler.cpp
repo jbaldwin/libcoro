@@ -11,7 +11,7 @@ TEST_CASE("tcp_scheduler echo server")
 {
     const std::string msg{"Hello from client"};
 
-    auto on_connection = [&msg](coro::tcp_scheduler& scheduler, coro::socket sock) -> coro::task<void> {
+    auto on_connection = [&msg](coro::tcp_scheduler& scheduler, coro::net::socket sock) -> coro::task<void> {
         std::string in(64, '\0');
 
         auto [rstatus, rbytes] = co_await scheduler.read(sock, std::span<char>{in.data(), in.size()});
@@ -28,7 +28,7 @@ TEST_CASE("tcp_scheduler echo server")
     };
 
     coro::tcp_scheduler scheduler{coro::tcp_scheduler::options{
-        .address       = "0.0.0.0",
+        .address       = coro::net::ip_address::from_string("0.0.0.0"),
         .port          = 8080,
         .backlog       = 128,
         .on_connection = on_connection,
@@ -37,7 +37,7 @@ TEST_CASE("tcp_scheduler echo server")
     auto make_client_task = [&scheduler, &msg]() -> coro::task<void> {
         coro::tcp_client client{
             scheduler,
-            coro::tcp_client::options{.address = "127.0.0.1", .port = 8080, .domain = coro::socket::domain_t::ipv4}};
+            coro::tcp_client::options{.address = coro::net::ip_address::from_string("127.0.0.1"), .port = 8080, .domain = coro::net::domain_t::ipv4}};
 
         auto cstatus = co_await client.connect();
         REQUIRE(cstatus == coro::connect_status::connected);

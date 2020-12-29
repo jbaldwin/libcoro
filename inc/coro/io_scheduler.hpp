@@ -3,7 +3,7 @@
 #include "coro/awaitable.hpp"
 #include "coro/poll.hpp"
 #include "coro/shutdown.hpp"
-#include "coro/socket.hpp"
+#include "coro/net/socket.hpp"
 #include "coro/task.hpp"
 
 #include <atomic>
@@ -653,7 +653,7 @@ public:
     }
 
     auto read(
-        const coro::socket&       sock,
+        const net::socket&       sock,
         std::span<char>           buffer,
         std::chrono::milliseconds timeout = std::chrono::milliseconds{0}) -> coro::task<std::pair<poll_status, ssize_t>>
     {
@@ -684,7 +684,7 @@ public:
     }
 
     auto write(
-        const coro::socket&         sock,
+        const net::socket&         sock,
         const std::span<const char> buffer,
         std::chrono::milliseconds timeout = std::chrono::milliseconds{0}) -> coro::task<std::pair<poll_status, ssize_t>>
     {

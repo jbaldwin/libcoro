@@ -1,5 +1,7 @@
 #include "coro/connect.hpp"
 
+#include <stdexcept>
+
 namespace coro
 {
 static std::string connect_status_connected{"connected"};
@@ -20,6 +22,8 @@ auto to_string(const connect_status& status) -> const std::string&
         case connect_status::error:
             return connect_status_error;
     }
+
+    throw std::logic_error{"Invalid/unknown connect status."};
 }
 
 } // namespace coro
