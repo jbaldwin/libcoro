@@ -12,8 +12,6 @@ jobs:
                 TZ: America/New_York
                 DEBIAN_FRONTEND: noninteractive
         steps:
-            -   name: Checkout
-                uses: actions/checkout@v2
             -   name: apt
                 run: |
                     apt-get update
@@ -25,6 +23,10 @@ jobs:
                         git \
                         ninja-build \
                         g++-10
+            -   name: Checkout # recurisve checkout requires git to be installed first
+                uses: actions/checkout@v2
+                with:
+                    submodules: recursive
             -   name: build-release-g++
                 run: |
                     mkdir build-release-g++
@@ -46,8 +48,6 @@ jobs:
         container:
             image: fedora:32
         steps:
-            -   name: Checkout
-                uses: actions/checkout@v2
             -   name: dnf
                 run: |
                     sudo dnf install -y \
@@ -56,6 +56,10 @@ jobs:
                         ninja-build \
                         gcc-c++-10.2.1 \
                         lcov
+            -   name: Checkout # recurisve checkout requires git to be installed first
+                uses: actions/checkout@v2
+                with:
+                    submodules: recursive
             -   name: build-debug-g++
                 run: |
                     mkdir build-debug-g++

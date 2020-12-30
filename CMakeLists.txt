@@ -7,12 +7,23 @@ option(CORO_CODE_COVERAGE  "Enable code coverage, tests must also be enabled, De
 message("${PROJECT_NAME} CORO_BUILD_TESTS      = ${CORO_BUILD_TESTS}")
 message("${PROJECT_NAME} CORO_CODE_COVERAGE    = ${CORO_CODE_COVERAGE}")
 
+set(CARES_STATIC    ON  CACHE INTERNAL "")
+set(CARES_SHARED    OFF CACHE INTERNAL "")
+set(CARES_INSTALL   OFF CACHE INTERNAL "")
+
+add_subdirectory(vendor/c-ares/c-ares)
+
 set(LIBCORO_SOURCE_FILES
     inc/coro/detail/void_value.hpp
+
+    inc/coro/net/hostname.hpp
+    inc/coro/net/ip_address.hpp src/net/ip_address.cpp
+    inc/coro/net/socket.hpp
 
     inc/coro/awaitable.hpp
     inc/coro/connect.hpp src/connect.cpp
     inc/coro/coro.hpp
+    inc/coro/dns_client.hpp src/dns_client.cpp
     inc/coro/event.hpp src/event.cpp
     inc/coro/generator.hpp
     inc/coro/io_scheduler.hpp
@@ -20,11 +31,10 @@ set(LIBCORO_SOURCE_FILES
     inc/coro/poll.hpp
     inc/coro/promise.hpp
     inc/coro/shutdown.hpp
-    inc/coro/socket.hpp
     inc/coro/sync_wait.hpp src/sync_wait.cpp
     inc/coro/task.hpp
     inc/coro/tcp_client.hpp src/tcp_client.cpp
-    inc/coro/tcp_scheduler.hpp
+    inc/coro/tcp_scheduler.hpp src/tcp_scheduler.cpp
     inc/coro/thread_pool.hpp src/thread_pool.cpp
     inc/coro/when_all.hpp
 )
@@ -33,7 +43,7 @@ add_library(${PROJECT_NAME} STATIC ${LIBCORO_SOURCE_FILES})
 set_target_properties(${PROJECT_NAME} PROPERTIES LINKER_LANGUAGE CXX)
 target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_20)
 target_include_directories(${PROJECT_NAME} PUBLIC inc)
-target_link_libraries(${PROJECT_NAME} PUBLIC pthread)
+target_link_libraries(${PROJECT_NAME} PUBLIC pthread c-ares)
 
 if(${CMAKE_CXX_COMPILER_ID} MATCHES "GNU")
     if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "10.2.0")

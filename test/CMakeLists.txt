@@ -2,7 +2,10 @@ cmake_minimum_required(VERSION 3.16)
 project(libcoro_test)
 
 set(LIBCORO_TEST_SOURCE_FILES
+    net/test_ip_address.cpp
+
     bench.cpp
+    test_dns_client.cpp
     test_event.cpp
     test_generator.cpp
     test_io_scheduler.cpp
@@ -16,6 +19,7 @@ set(LIBCORO_TEST_SOURCE_FILES
 
 add_executable(${PROJECT_NAME} main.cpp ${LIBCORO_TEST_SOURCE_FILES})
 target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_20)
+target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(${PROJECT_NAME} PRIVATE coro)
 target_compile_options(${PROJECT_NAME} PUBLIC -fcoroutines)
 

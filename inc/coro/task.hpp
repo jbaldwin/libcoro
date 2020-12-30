@@ -196,11 +196,21 @@ public:
         return false;
     }
 
-    auto operator co_await() const noexcept
+    auto operator co_await() const & noexcept
     {
         struct awaitable : public awaitable_base
         {
             auto await_resume() -> decltype(auto) { return this->m_coroutine.promise().return_value(); }
+        };
+
+        return awaitable{m_coroutine};
+    }
+
+    auto operator co_await() const && noexcept
+    {
+        struct awaitable : public awaitable_base
+        {
+            auto await_resume() -> decltype(auto) { return std::move(this->m_coroutine.promise()).return_value(); }
         };
 
         return awaitable{m_coroutine};

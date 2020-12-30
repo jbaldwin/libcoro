@@ -1,30 +1,67 @@
 #include "coro/tcp_client.hpp"
 #include "coro/io_scheduler.hpp"
 
+#include <ares.h>
+
 namespace coro
 {
 tcp_client::tcp_client(io_scheduler& scheduler, options opts)
     : m_io_scheduler(scheduler),
       m_options(std::move(opts)),
-      m_socket(socket::make_socket(socket::options{m_options.domain, socket::type_t::tcp, socket::blocking_t::yes}))
+      m_socket(net::socket::make_socket(net::socket::options{m_options.domain, net::socket::type_t::tcp, net::socket::blocking_t::yes}))
 {
 }
 
 auto tcp_client::connect(std::chrono::milliseconds timeout) -> coro::task<connect_status>
 {
-    sockaddr_in server{};
-    server.sin_family = socket::domain_to_os(m_options.domain);
-    server.sin_port   = htons(m_options.port);
-
-    if (inet_pton(server.sin_family, m_options.address.data(), &server.sin_addr) <= 0)
+    if(m_connect_status.has_value() && m_connect_status.value() == connect_status::connected)
     {
-        co_return connect_status::invalid_ip_address;
+        co_return m_connect_status.value();
     }
+
+    const net::ip_address* ip_addr{nullptr};
+    std::unique_ptr<dns_result> result_ptr{nullptr};
+
+    if(std::holds_alternative<net::hostname>(m_options.address))
+    {
+        if(m_options.dns == nullptr)
+        {
+            m_connect_status = connect_status::dns_client_required;
+            co_return connect_status::dns_client_required;
+        }
+        const auto& hn = std::get<net::hostname>(m_options.address);
+        result_ptr = co_await m_options.dns->host_by_name(hn);
+        if(result_ptr->status() != dns_status::complete)
+        {
+            m_connect_status = connect_status::dns_lookup_failure;
+            co_return connect_status::dns_lookup_failure;
+        }
+
+        if(result_ptr->ip_addresses().empty())
+        {
+            m_connect_status = connect_status::dns_lookup_failure;
+            co_return connect_status::dns_lookup_failure;
+        }
+
+        // TODO: for now we'll just take the first ip address given, but should probably allow the
+        // user to take preference on ipv4/ipv6 addresses.
+        ip_addr = &result_ptr->ip_addresses().front();
+    }
+    else
+    {
+        ip_addr = &std::get<net::ip_address>(m_options.address);
+    }
+
+    sockaddr_in server{};
+    server.sin_family = static_cast<int>(m_options.domain);
+    server.sin_port   = htons(m_options.port);
+    server.sin_addr   = *reinterpret_cast<const in_addr*>(ip_addr->data().data());
 
     auto cret = ::connect(m_socket.native_handle(), (struct sockaddr*)&server, sizeof(server));
     if (cret == 0)
     {
         // Immediate connect.
+        m_connect_status = connect_status::connected;
         co_return connect_status::connected;
     }
     else if (cret == -1)
@@ -46,16 +83,19 @@ auto tcp_client::connect(std::chrono::milliseconds timeout) -> coro::task<connec
                 if (result == 0)
                 {
                     // success, connected
+                    m_connect_status = connect_status::connected;
                     co_return connect_status::connected;
                 }
             }
             else if (pstatus == poll_status::timeout)
             {
+                m_connect_status = connect_status::timeout;
                 co_return connect_status::timeout;
             }
         }
     }
 
+    m_connect_status = connect_status::error;
     co_return connect_status::error;
 }
 
