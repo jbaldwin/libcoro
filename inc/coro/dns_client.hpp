@@ -33,16 +33,10 @@ class dns_result
 public:
     explicit dns_result(coro::resume_token<void>& token, uint64_t pending_dns_requests);
     ~dns_result() = default;
-    // dns_result(const dns_result& other) = default;
-    // dns_result(dns_result&& other) = default;
-    // auto operator=(const dns_result& other) noexcept -> dns_result& = default;
-    // auto operator=(dns_result&& other) noexcept -> dns_result& = default;
 
     auto status() const -> dns_status { return m_status; }
-
     auto ip_addresses() const -> const std::vector<coro::net::ip_address>& { return m_ip_addresses; }
 private:
-
     coro::resume_token<void>& m_token;
     uint64_t m_pending_dns_requests{0};
     dns_status m_status{dns_status::complete};

@@ -6,10 +6,12 @@
 #include "coro/connect.hpp"
 #include "coro/poll.hpp"
 #include "coro/task.hpp"
+#include "coro/dns_client.hpp"
 
 #include <chrono>
 #include <optional>
 #include <variant>
+#include <memory>
 
 namespace coro
 {
@@ -20,12 +22,22 @@ class tcp_client
 public:
     struct options
     {
+        /// The hostname or ip address to connect to.  If using hostname then a dns client must be provided.
         std::variant<net::hostname, net::ip_address> address{net::ip_address::from_string("127.0.0.1")};
+        /// The port to connect to.
         int16_t       port{8080};
+        /// The protocol domain to connect with.
         net::domain_t domain{net::domain_t::ipv4};
+        /// If using a hostname to connect to then provide a dns client to lookup the host's ip address.
+        /// This is optional if using ip addresses directly.
+        dns_client*   dns{nullptr};
     };
 
-    tcp_client(io_scheduler& scheduler, options opts = options{{net::ip_address::from_string("127.0.0.1")}, 8080, net::domain_t::ipv4});
+    tcp_client(io_scheduler& scheduler, options opts = options{
+        .address = {net::ip_address::from_string("127.0.0.1")},
+        .port = 8080,
+        .domain = net::domain_t::ipv4,
+        .dns = nullptr});
     tcp_client(const tcp_client&) = delete;
     tcp_client(tcp_client&&)      = default;
     auto operator=(const tcp_client&) noexcept -> tcp_client& = delete;

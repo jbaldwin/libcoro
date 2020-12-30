@@ -19,24 +19,43 @@ auto tcp_client::connect(std::chrono::milliseconds timeout) -> coro::task<connec
         co_return m_connect_status.value();
     }
 
+    const net::ip_address* ip_addr{nullptr};
+    std::unique_ptr<dns_result> result_ptr{nullptr};
+
     if(std::holds_alternative<net::hostname>(m_options.address))
     {
+        if(m_options.dns == nullptr)
+        {
+            m_connect_status = connect_status::dns_client_required;
+            co_return connect_status::dns_client_required;
+        }
         const auto& hn = std::get<net::hostname>(m_options.address);
-        (void)hn;
-    }
+        result_ptr = co_await m_options.dns->host_by_name(hn);
+        if(result_ptr->status() != dns_status::complete)
+        {
+            m_connect_status = connect_status::dns_lookup_failure;
+            co_return connect_status::dns_lookup_failure;
+        }
 
-    const auto& ip_addr = std::get<net::ip_address>(m_options.address);
+        if(result_ptr->ip_addresses().empty())
+        {
+            m_connect_status = connect_status::dns_lookup_failure;
+            co_return connect_status::dns_lookup_failure;
+        }
+
+        // TODO: for now we'll just take the first ip address given, but should probably allow the
+        // user to take preference on ipv4/ipv6 addresses.
+        ip_addr = &result_ptr->ip_addresses().front();
+    }
+    else
+    {
+        ip_addr = &std::get<net::ip_address>(m_options.address);
+    }
 
     sockaddr_in server{};
     server.sin_family = static_cast<int>(m_options.domain);
     server.sin_port   = htons(m_options.port);
-    server.sin_addr   = *reinterpret_cast<const in_addr*>(ip_addr.data().data());
-
-    // if (inet_pton(server.sin_family, m_options.address.data(), &server.sin_addr) <= 0)
-    // {
-    //     m_connect_status = connect_status::invalid_ip_address;
-    //     co_return connect_status::invalid_ip_address;
-    // }
+    server.sin_addr   = *reinterpret_cast<const in_addr*>(ip_addr->data().data());
 
     auto cret = ::connect(m_socket.native_handle(), (struct sockaddr*)&server, sizeof(server));
     if (cret == 0)
