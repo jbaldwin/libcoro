@@ -2,17 +2,17 @@
 
 #include <coro/coro.hpp>
 
-TEST_CASE("tcp_scheduler no on connection throws")
+TEST_CASE("tcp_server no on connection throws")
 {
-    REQUIRE_THROWS(coro::net::tcp_scheduler{coro::net::tcp_scheduler::options{.on_connection = nullptr}});
+    REQUIRE_THROWS(coro::net::tcp_server{coro::net::tcp_server::options{.on_connection = nullptr}});
 }
 
-static auto tcp_scheduler_echo_server(
+static auto tcp_server_echo(
     const std::variant<coro::net::hostname, coro::net::ip_address> address,
     const std::string msg
 ) -> void
 {
-    auto on_connection = [&msg](coro::net::tcp_scheduler& scheduler, coro::net::socket sock) -> coro::task<void> {
+    auto on_connection = [&msg](coro::net::tcp_server& scheduler, coro::net::socket sock) -> coro::task<void> {
         std::string in(64, '\0');
 
         auto [rstatus, rbytes] = co_await scheduler.read(sock, std::span<char>{in.data(), in.size()});
@@ -28,7 +28,7 @@ static auto tcp_scheduler_echo_server(
         co_return;
     };
 
-    coro::net::tcp_scheduler scheduler{coro::net::tcp_scheduler::options{
+    coro::net::tcp_server scheduler{coro::net::tcp_server::options{
         .address       = coro::net::ip_address::from_string("0.0.0.0"),
         .port          = 8080,
         .backlog       = 128,
@@ -82,10 +82,10 @@ static auto tcp_scheduler_echo_server(
     REQUIRE(scheduler.empty());
 }
 
-TEST_CASE("tcp_scheduler echo server")
+TEST_CASE("tcp_server echo server")
 {
     const std::string msg{"Hello from client"};
 
-    tcp_scheduler_echo_server(coro::net::ip_address::from_string("127.0.0.1"), msg);
-    tcp_scheduler_echo_server(coro::net::hostname{"localhost"}, msg);
+    tcp_server_echo(coro::net::ip_address::from_string("127.0.0.1"), msg);
+    tcp_server_echo(coro::net::hostname{"localhost"}, msg);
 }

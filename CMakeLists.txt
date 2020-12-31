@@ -22,7 +22,7 @@ set(LIBCORO_SOURCE_FILES
     inc/coro/net/ip_address.hpp src/net/ip_address.cpp
     inc/coro/net/socket.hpp
     inc/coro/net/tcp_client.hpp src/net/tcp_client.cpp
-    inc/coro/net/tcp_scheduler.hpp src/net/tcp_scheduler.cpp
+    inc/coro/net/tcp_server.hpp src/net/tcp_server.cpp
 
     inc/coro/awaitable.hpp
     inc/coro/coro.hpp

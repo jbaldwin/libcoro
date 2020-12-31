@@ -11,10 +11,10 @@
 
 namespace coro::net
 {
-class tcp_scheduler : public io_scheduler
+class tcp_server : public io_scheduler
 {
 public:
-    using on_connection_t = std::function<task<void>(tcp_scheduler&, net::socket)>;
+    using on_connection_t = std::function<task<void>(tcp_server&, net::socket)>;
 
     struct options
     {
@@ -25,21 +25,21 @@ public:
         io_scheduler::options io_options{};
     };
 
-    explicit tcp_scheduler(
+    explicit tcp_server(
         options opts =
             options{
                 net::ip_address::from_string("0.0.0.0"),
                 8080,
                 128,
-                [](tcp_scheduler&, net::socket) -> task<void> { co_return; },
+                [](tcp_server&, net::socket) -> task<void> { co_return; },
                 io_scheduler::options{9, 2, io_scheduler::thread_strategy_t::spawn}});
 
-    tcp_scheduler(const tcp_scheduler&) = delete;
-    tcp_scheduler(tcp_scheduler&&)      = delete;
-    auto operator=(const tcp_scheduler&) -> tcp_scheduler& = delete;
-    auto operator=(tcp_scheduler&&) -> tcp_scheduler& = delete;
+    tcp_server(const tcp_server&) = delete;
+    tcp_server(tcp_server&&)      = delete;
+    auto operator=(const tcp_server&) -> tcp_server& = delete;
+    auto operator=(tcp_server&&) -> tcp_server& = delete;
 
-    ~tcp_scheduler() override;
+    ~tcp_server() override;
 
     auto empty() const -> bool { return size() == 0; }
 

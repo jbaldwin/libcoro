@@ -1,9 +1,9 @@
-#include "coro/net/tcp_scheduler.hpp"
+#include "coro/net/tcp_server.hpp"
 
 namespace coro::net
 {
 
-tcp_scheduler::tcp_scheduler(options opts)
+tcp_server::tcp_server(options opts)
     : io_scheduler(std::move(opts.io_options)),
         m_opts(std::move(opts)),
         m_accept_socket(net::socket::make_accept_socket(
@@ -20,12 +20,12 @@ tcp_scheduler::tcp_scheduler(options opts)
     schedule(make_accept_task());
 }
 
-tcp_scheduler::~tcp_scheduler()
+tcp_server::~tcp_server()
 {
     shutdown();
 }
 
-auto tcp_scheduler::shutdown(shutdown_t wait_for_tasks) -> void
+auto tcp_server::shutdown(shutdown_t wait_for_tasks) -> void
 {
     if (m_accept_new_connections.exchange(false, std::memory_order::release))
     {
@@ -40,7 +40,7 @@ auto tcp_scheduler::shutdown(shutdown_t wait_for_tasks) -> void
     }
 }
 
-auto tcp_scheduler::make_accept_task() -> coro::task<void>
+auto tcp_server::make_accept_task() -> coro::task<void>
 {
     sockaddr_in         client{};
     constexpr const int len = sizeof(struct sockaddr_in);
