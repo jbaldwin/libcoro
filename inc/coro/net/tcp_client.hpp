@@ -1,12 +1,12 @@
 #pragma once
 
+#include "coro/net/dns_client.hpp"
 #include "coro/net/ip_address.hpp"
 #include "coro/net/hostname.hpp"
 #include "coro/net/socket.hpp"
-#include "coro/connect.hpp"
+#include "coro/net/connect.hpp"
 #include "coro/poll.hpp"
 #include "coro/task.hpp"
-#include "coro/dns_client.hpp"
 
 #include <chrono>
 #include <optional>
@@ -16,6 +16,10 @@
 namespace coro
 {
 class io_scheduler;
+} // namespace coro
+
+namespace coro::net
+{
 
 class tcp_client
 {
@@ -30,7 +34,7 @@ public:
         net::domain_t domain{net::domain_t::ipv4};
         /// If using a hostname to connect to then provide a dns client to lookup the host's ip address.
         /// This is optional if using ip addresses directly.
-        dns_client*   dns{nullptr};
+        net::dns_client*   dns{nullptr};
     };
 
     tcp_client(io_scheduler& scheduler, options opts = options{
@@ -44,7 +48,7 @@ public:
     auto operator=(tcp_client&&) noexcept -> tcp_client& = default;
     ~tcp_client()                                        = default;
 
-    auto connect(std::chrono::milliseconds timeout = std::chrono::milliseconds{0}) -> coro::task<connect_status>;
+    auto connect(std::chrono::milliseconds timeout = std::chrono::milliseconds{0}) -> coro::task<net::connect_status>;
 
     auto socket() const -> const net::socket& { return m_socket; }
     auto socket() -> net::socket& { return m_socket; }
@@ -57,7 +61,7 @@ private:
     /// The tcp socket.
     net::socket m_socket;
     /// Cache the status of the connect in the event the user calls connect() again.
-    std::optional<connect_status> m_connect_status{std::nullopt};
+    std::optional<net::connect_status> m_connect_status{std::nullopt};
 };
 
-} // namespace coro
+} // namespace coro::net

@@ -2,17 +2,17 @@ cmake_minimum_required(VERSION 3.16)
 project(libcoro_test)
 
 set(LIBCORO_TEST_SOURCE_FILES
+    net/test_dns_client.cpp
     net/test_ip_address.cpp
+    net/test_tcp_scheduler.cpp
 
     bench.cpp
-    test_dns_client.cpp
     test_event.cpp
     test_generator.cpp
     test_io_scheduler.cpp
     test_latch.cpp
     test_sync_wait.cpp
     test_task.cpp
-    test_tcp_scheduler.cpp
     test_thread_pool.cpp
     test_when_all.cpp
 )

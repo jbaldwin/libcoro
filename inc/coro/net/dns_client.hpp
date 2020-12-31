@@ -16,7 +16,7 @@
 #include <unordered_set>
 #include <sys/epoll.h>
 
-namespace coro
+namespace coro::net
 {
 
 class dns_client;
@@ -84,4 +84,4 @@ private:
     auto make_poll_task(io_scheduler::fd_t fd, poll_op ops) -> coro::task<void>;
 };
 
-} // namespace coro
+} // namespace coro::net

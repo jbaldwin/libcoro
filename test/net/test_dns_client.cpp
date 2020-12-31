@@ -10,7 +10,7 @@ TEST_CASE("dns_client basic")
         coro::io_scheduler::options{.thread_strategy = coro::io_scheduler::thread_strategy_t::spawn}
     };
 
-    coro::dns_client dns_client{scheduler, std::chrono::milliseconds{5000}};
+    coro::net::dns_client dns_client{scheduler, std::chrono::milliseconds{5000}};
 
     std::atomic<bool> done{false};
 
@@ -18,7 +18,7 @@ TEST_CASE("dns_client basic")
     {
         auto result_ptr = co_await std::move(dns_client.host_by_name(hn));
 
-        if(result_ptr->status() == coro::dns_status::complete)
+        if(result_ptr->status() == coro::net::dns_status::complete)
         {
             for(const auto& ip_addr : result_ptr->ip_addresses())
             {

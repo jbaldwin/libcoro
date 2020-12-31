@@ -9,7 +9,7 @@
 #include <functional>
 #include <sys/socket.h>
 
-namespace coro
+namespace coro::net
 {
 class tcp_scheduler : public io_scheduler
 {
@@ -63,4 +63,4 @@ private:
     auto make_accept_task() -> coro::task<void>;
 };
 
-} // namespace coro
+} // namespace coro::net
