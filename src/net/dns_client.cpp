@@ -1,10 +1,10 @@
-#include "coro/dns_client.hpp"
+#include "coro/net/dns_client.hpp"
 
 #include <iostream>
 #include <netdb.h>
 #include <arpa/inet.h>
 
-namespace coro
+namespace coro::net
 {
 
 uint64_t dns_client::m_ares_count{0};
@@ -97,7 +97,7 @@ dns_client::~dns_client()
 
 auto dns_client::host_by_name(const net::hostname& hn) -> coro::task<std::unique_ptr<dns_result>>
 {
-    auto token = m_scheduler.generate_resume_token<void>();
+    auto token = m_scheduler.make_resume_token<void>();
     auto result_ptr = std::make_unique<dns_result>(token, 2);
 
     ares_gethostbyname(m_ares_channel, hn.data().data(), AF_INET, ares_dns_callback, result_ptr.get());
@@ -190,4 +190,4 @@ auto dns_client::make_poll_task(io_scheduler::fd_t fd, poll_op ops) -> coro::tas
     co_return;
 };
 
-} // namespace coro
+} // namespace coro::net

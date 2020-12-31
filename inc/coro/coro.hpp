@@ -1,12 +1,14 @@
 #pragma once
 
+#include "coro/net/connect.hpp"
+#include "coro/net/dns_client.hpp"
 #include "coro/net/hostname.hpp"
 #include "coro/net/ip_address.hpp"
 #include "coro/net/socket.hpp"
+#include "coro/net/tcp_client.hpp"
+#include "coro/net/tcp_scheduler.hpp"
 
 #include "coro/awaitable.hpp"
-#include "coro/connect.hpp"
-#include "coro/dns_client.hpp"
 #include "coro/event.hpp"
 #include "coro/generator.hpp"
 #include "coro/io_scheduler.hpp"
@@ -14,7 +16,5 @@
 #include "coro/promise.hpp"
 #include "coro/sync_wait.hpp"
 #include "coro/task.hpp"
-#include "coro/tcp_client.hpp"
-#include "coro/tcp_scheduler.hpp"
 #include "coro/thread_pool.hpp"
 #include "coro/when_all.hpp"

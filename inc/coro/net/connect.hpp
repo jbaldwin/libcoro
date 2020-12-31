@@ -2,7 +2,7 @@
 
 #include <string>
 
-namespace coro
+namespace coro::net
 {
 enum class connect_status
 {
@@ -26,4 +26,4 @@ enum class connect_status
  */
 auto to_string(const connect_status& status) -> const std::string&;
 
-} // namespace coro
+} // namespace coro::net

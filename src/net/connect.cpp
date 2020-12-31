@@ -1,8 +1,8 @@
-#include "coro/connect.hpp"
+#include "coro/net/connect.hpp"
 
 #include <stdexcept>
 
-namespace coro
+namespace coro::net
 {
 static std::string connect_status_connected{"connected"};
 static std::string connect_status_invalid_ip_address{"invalid_ip_address"};
@@ -32,4 +32,4 @@ auto to_string(const connect_status& status) -> const std::string&
     throw std::logic_error{"Invalid/unknown connect status."};
 }
 
-} // namespace coro
+} // namespace coro::net

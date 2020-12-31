@@ -1,9 +1,9 @@
-#include "coro/tcp_client.hpp"
+#include "coro/net/tcp_client.hpp"
 #include "coro/io_scheduler.hpp"
 
 #include <ares.h>
 
-namespace coro
+namespace coro::net
 {
 tcp_client::tcp_client(io_scheduler& scheduler, options opts)
     : m_io_scheduler(scheduler),
@@ -20,8 +20,9 @@ auto tcp_client::connect(std::chrono::milliseconds timeout) -> coro::task<connec
     }
 
     const net::ip_address* ip_addr{nullptr};
-    std::unique_ptr<dns_result> result_ptr{nullptr};
+    std::unique_ptr<net::dns_result> result_ptr{nullptr};
 
+    // If the user provided a hostname then perform the dns lookup.
     if(std::holds_alternative<net::hostname>(m_options.address))
     {
         if(m_options.dns == nullptr)
@@ -31,7 +32,7 @@ auto tcp_client::connect(std::chrono::milliseconds timeout) -> coro::task<connec
         }
         const auto& hn = std::get<net::hostname>(m_options.address);
         result_ptr = co_await m_options.dns->host_by_name(hn);
-        if(result_ptr->status() != dns_status::complete)
+        if(result_ptr->status() != net::dns_status::complete)
         {
             m_connect_status = connect_status::dns_lookup_failure;
             co_return connect_status::dns_lookup_failure;
@@ -99,4 +100,4 @@ auto tcp_client::connect(std::chrono::milliseconds timeout) -> coro::task<connec
     co_return connect_status::error;
 }
 
-} // namespace coro
+} // namespace coro::net

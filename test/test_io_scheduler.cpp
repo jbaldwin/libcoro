@@ -91,8 +91,7 @@ TEST_CASE("io_scheduler task with multiple yields on event")
 {
     std::atomic<uint64_t> counter{0};
     coro::io_scheduler    s{};
-    auto                  token = s.generate_resume_token<uint64_t>();
-    // coro::resume_token<uint64_t> token{s};
+    auto                  token = s.make_resume_token<uint64_t>();
 
     auto func = [&]() -> coro::task<void> {
         std::cerr << "1st suspend\n";
@@ -383,7 +382,7 @@ TEST_CASE("io_scheduler separate thread resume")
     auto func = [&]() -> coro::task<void> {
         // User manual resume token, create one specifically for each task being generated
         // coro::resume_token<void> token{s};
-        auto token = s.generate_resume_token<void>();
+        auto token = s.make_resume_token<void>();
 
         // Normally this thread is probably already running for real world use cases, but in general
         // the 3rd party function api will be set, they should have "user data" void* or ability
@@ -568,8 +567,7 @@ TEST_CASE("io_scheduler yield user event")
 {
     std::string        expected_result = "Here I am!";
     coro::io_scheduler s{};
-    auto               token = s.generate_resume_token<std::string>();
-    // coro::resume_token<std::string> token{s};
+    auto               token = s.make_resume_token<std::string>();
 
     auto func = [&]() -> coro::task<void> {
         co_await s.yield(token);
@@ -588,7 +586,7 @@ TEST_CASE("io_scheduler yield user event multiple waiters")
 {
     std::atomic<int>   counter{0};
     coro::io_scheduler s{};
-    auto               token = s.generate_resume_token<void>();
+    auto               token = s.make_resume_token<void>();
 
     auto func = [&](int amount) -> coro::task<void> {
         co_await token;
@@ -660,7 +658,7 @@ TEST_CASE("io_scheduler task throws")
 TEST_CASE("io_scheduler task throws after resume")
 {
     coro::io_scheduler s{};
-    auto               token = s.generate_resume_token<void>();
+    auto               token = s.make_resume_token<void>();
 
     auto func = [&]() -> coro::task<void> {
         co_await token;
@@ -711,7 +709,7 @@ TEST_CASE("io_scheduler schedule vector<task>")
     tasks.emplace_back(make_task());
     tasks.emplace_back(make_task());
 
-    s.schedule(tasks);
+    s.schedule(std::move(tasks));
 
     REQUIRE(tasks.empty());
 

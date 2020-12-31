@@ -16,25 +16,25 @@ add_subdirectory(vendor/c-ares/c-ares)
 set(LIBCORO_SOURCE_FILES
     inc/coro/detail/void_value.hpp
 
+    inc/coro/net/connect.hpp src/net/connect.cpp
+    inc/coro/net/dns_client.hpp src/net/dns_client.cpp
     inc/coro/net/hostname.hpp
     inc/coro/net/ip_address.hpp src/net/ip_address.cpp
     inc/coro/net/socket.hpp
+    inc/coro/net/tcp_client.hpp src/net/tcp_client.cpp
+    inc/coro/net/tcp_scheduler.hpp src/net/tcp_scheduler.cpp
 
     inc/coro/awaitable.hpp
-    inc/coro/connect.hpp src/connect.cpp
     inc/coro/coro.hpp
-    inc/coro/dns_client.hpp src/dns_client.cpp
     inc/coro/event.hpp src/event.cpp
     inc/coro/generator.hpp
-    inc/coro/io_scheduler.hpp
+    inc/coro/io_scheduler.hpp src/io_scheduler.cpp
     inc/coro/latch.hpp
     inc/coro/poll.hpp
     inc/coro/promise.hpp
     inc/coro/shutdown.hpp
     inc/coro/sync_wait.hpp src/sync_wait.cpp
     inc/coro/task.hpp
-    inc/coro/tcp_client.hpp src/tcp_client.cpp
-    inc/coro/tcp_scheduler.hpp src/tcp_scheduler.cpp
     inc/coro/thread_pool.hpp src/thread_pool.cpp
     inc/coro/when_all.hpp
 )

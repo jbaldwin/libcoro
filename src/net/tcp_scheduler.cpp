@@ -1,6 +1,6 @@
-#include "coro/tcp_scheduler.hpp"
+#include "coro/net/tcp_scheduler.hpp"
 
-namespace coro
+namespace coro::net
 {
 
 tcp_scheduler::tcp_scheduler(options opts)
@@ -68,8 +68,7 @@ auto tcp_scheduler::make_accept_task() -> coro::task<void>
 
         if (!tasks.empty())
         {
-            schedule(tasks);
-            tasks.clear();
+            schedule(std::move(tasks));
         }
     }
 
@@ -78,4 +77,4 @@ auto tcp_scheduler::make_accept_task() -> coro::task<void>
     co_return;
 };
 
-} // namespace coro
+} // namespace coro::net
