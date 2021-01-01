@@ -336,3 +336,104 @@ TEST_CASE("benchmark counter task io_scheduler yield (all) -> resume (all) from 
     REQUIRE(s.empty());
     REQUIRE(counter == iterations);
 }
+
+TEST_CASE("benchmark tcp_client and tcp_server")
+{
+    /**
+     * This test *requires* two schedulers since polling on read/write of the sockets involved
+     * will reset/trample on each other when each side of the client + server go to poll().
+     */
+
+    const constexpr std::size_t connections = 256;
+    const constexpr std::size_t messages_per_connection = 1'000;
+    const constexpr std::size_t ops        = connections * messages_per_connection;
+
+    const std::string msg = "im a data point in a stream of bytes";
+    const std::string done_msg = "done";
+    auto address = coro::net::ip_address::from_string("127.0.0.1");
+
+    auto on_connection = [&msg, &done_msg](coro::net::tcp_server& scheduler, coro::net::socket sock) -> coro::task<void> {
+        std::string in(64, '\0');
+
+        do
+        {
+            auto [rstatus, rbytes] = co_await scheduler.read(sock, std::span<char>{in.data(), in.size()});
+            REQUIRE(rstatus == coro::poll_status::event);
+
+            in.resize(rbytes);
+
+            auto [wstatus, wbytes] = co_await scheduler.write(sock, std::span<const char>(in.data(), in.length()));
+            REQUIRE(wstatus == coro::poll_status::event);
+            REQUIRE(wbytes == in.length());
+        } while(in != done_msg);
+
+        co_return;
+    };
+
+    coro::net::tcp_server scheduler{coro::net::tcp_server::options{
+        .address       = coro::net::ip_address::from_string("0.0.0.0"),
+        .port          = 8080,
+        .backlog       = 128,
+        .on_connection = on_connection,
+        .io_options    = coro::io_scheduler::options{.thread_strategy = coro::io_scheduler::thread_strategy_t::spawn}}};
+
+    coro::io_scheduler client_scheduler{
+        coro::io_scheduler::options{.thread_strategy = coro::io_scheduler::thread_strategy_t::spawn}};
+
+    auto make_client_task = [&client_scheduler, &address, &msg, &done_msg, &messages_per_connection]() -> coro::task<void> {
+        coro::net::tcp_client client{
+            client_scheduler,
+            coro::net::tcp_client::options{
+                .address = address,
+                .port = 8080,
+                .domain = coro::net::domain_t::ipv4}};
+
+        auto cstatus = co_await client.connect();
+        REQUIRE(cstatus == coro::net::connect_status::connected);
+
+        for(size_t i = 1; i <= messages_per_connection; ++i)
+        {
+            const std::string* msg_ptr = &msg;
+            if(i == messages_per_connection)
+            {
+                msg_ptr = &done_msg;
+            }
+
+            auto [wstatus, wbytes] =
+            co_await client_scheduler.write(client.socket(), std::span<const char>{msg_ptr->data(), msg_ptr->length()});
+
+            REQUIRE(wstatus == coro::poll_status::event);
+            REQUIRE(wbytes == msg_ptr->length());
+
+            std::string response(64, '\0');
+
+            auto [rstatus, rbytes] =
+                co_await client_scheduler.read(client.socket(), std::span<char>{response.data(), response.length()});
+
+            REQUIRE(rstatus == coro::poll_status::event);
+            REQUIRE(rbytes == msg_ptr->length());
+            response.resize(rbytes);
+            REQUIRE(response == *msg_ptr);
+        }
+
+        co_return;
+    };
+
+    auto start = sc::now();
+
+    for(size_t i = 0; i < connections; ++i)
+    {
+        REQUIRE(client_scheduler.schedule(make_client_task()));
+    }
+
+    while (!client_scheduler.empty())
+    {
+        std::this_thread::sleep_for(std::chrono::milliseconds{1});
+    }
+
+    auto stop = sc::now();
+    print_stats("benchmark tcp_client and tcp_server", ops, start, stop);
+
+    scheduler.shutdown();
+    REQUIRE(scheduler.empty());
+}

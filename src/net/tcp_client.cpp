@@ -8,7 +8,7 @@ namespace coro::net
 tcp_client::tcp_client(io_scheduler& scheduler, options opts)
     : m_io_scheduler(scheduler),
       m_options(std::move(opts)),
-      m_socket(net::socket::make_socket(net::socket::options{m_options.domain, net::socket::type_t::tcp, net::socket::blocking_t::yes}))
+      m_socket(net::socket::make_socket(net::socket::options{m_options.domain, net::socket::type_t::tcp, net::socket::blocking_t::no}))
 {
 }
 
