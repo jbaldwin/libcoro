@@ -5,10 +5,12 @@
 
 namespace coro::net
 {
+using namespace std::chrono_literals;
+
 tcp_client::tcp_client(io_scheduler& scheduler, options opts)
     : m_io_scheduler(scheduler),
       m_options(std::move(opts)),
-      m_socket(net::socket::make_socket(net::socket::options{m_options.domain, net::socket::type_t::tcp, net::socket::blocking_t::no}))
+      m_socket(net::make_socket(net::socket::options{m_options.domain, net::socket::type_t::tcp, net::socket::blocking_t::no}))
 {
 }
 
@@ -98,6 +100,30 @@ auto tcp_client::connect(std::chrono::milliseconds timeout) -> coro::task<connec
 
     m_connect_status = connect_status::error;
     co_return connect_status::error;
+}
+
+auto tcp_client::recv(std::span<char> buffer, std::chrono::milliseconds timeout) -> coro::task<std::pair<poll_status, ssize_t>>
+{
+    auto pstatus = co_await m_io_scheduler.poll(m_socket, poll_op::read, timeout);
+    ssize_t bread{0};
+    if(pstatus == poll_status::event)
+    {
+        bread = ::read(m_socket.native_handle(), buffer.data(), buffer.size());
+    }
+
+    co_return {pstatus, bread};
+}
+
+auto tcp_client::send(const std::span<const char> buffer, std::chrono::milliseconds timeout) -> coro::task<std::pair<poll_status, ssize_t>>
+{
+    auto pstatus = co_await m_io_scheduler.poll(m_socket, poll_op::write, timeout);
+    ssize_t bwrite{0};
+    if(pstatus == poll_status::event)
+    {
+        bwrite = ::write(m_socket.native_handle(), buffer.data(), buffer.size());
+    }
+
+    co_return {pstatus, bwrite};
 }
 
 } // namespace coro::net

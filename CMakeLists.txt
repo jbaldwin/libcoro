@@ -20,9 +20,11 @@ set(LIBCORO_SOURCE_FILES
     inc/coro/net/dns_client.hpp src/net/dns_client.cpp
     inc/coro/net/hostname.hpp
     inc/coro/net/ip_address.hpp src/net/ip_address.cpp
-    inc/coro/net/socket.hpp
+    inc/coro/net/socket.hpp src/net/socket.cpp
     inc/coro/net/tcp_client.hpp src/net/tcp_client.cpp
     inc/coro/net/tcp_server.hpp src/net/tcp_server.cpp
+    inc/coro/net/udp_client.hpp src/net/udp_client.cpp
+    inc/coro/net/udp_server.hpp src/net/udp_server.cpp
 
     inc/coro/awaitable.hpp
     inc/coro/coro.hpp

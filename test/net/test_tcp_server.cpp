@@ -49,16 +49,14 @@ static auto tcp_server_echo(
         auto cstatus = co_await client.connect();
         REQUIRE(cstatus == coro::net::connect_status::connected);
 
-        auto [wstatus, wbytes] =
-            co_await scheduler.write(client.socket(), std::span<const char>{msg.data(), msg.length()});
+        auto [wstatus, wbytes] = co_await client.send(std::span<const char>{msg.data(), msg.length()});
 
         REQUIRE(wstatus == coro::poll_status::event);
         REQUIRE(wbytes == msg.length());
 
         std::string response(64, '\0');
 
-        auto [rstatus, rbytes] =
-            co_await scheduler.read(client.socket(), std::span<char>{response.data(), response.length()});
+        auto [rstatus, rbytes] = co_await client.recv(std::span<char>{response.data(), response.length()});
 
         REQUIRE(rstatus == coro::poll_status::event);
         REQUIRE(rbytes == msg.length());

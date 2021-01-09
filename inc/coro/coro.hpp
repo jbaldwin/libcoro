@@ -7,6 +7,8 @@
 #include "coro/net/socket.hpp"
 #include "coro/net/tcp_client.hpp"
 #include "coro/net/tcp_server.hpp"
+#include "coro/net/udp_client.hpp"
+#include "coro/net/udp_server.hpp"
 
 #include "coro/awaitable.hpp"
 #include "coro/event.hpp"

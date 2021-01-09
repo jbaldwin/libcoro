@@ -399,16 +399,14 @@ TEST_CASE("benchmark tcp_client and tcp_server")
                 msg_ptr = &done_msg;
             }
 
-            auto [wstatus, wbytes] =
-            co_await client_scheduler.write(client.socket(), std::span<const char>{msg_ptr->data(), msg_ptr->length()});
+            auto [wstatus, wbytes] = co_await client.send(std::span<const char>{msg_ptr->data(), msg_ptr->length()});
 
             REQUIRE(wstatus == coro::poll_status::event);
             REQUIRE(wbytes == msg_ptr->length());
 
             std::string response(64, '\0');
 
-            auto [rstatus, rbytes] =
-                co_await client_scheduler.read(client.socket(), std::span<char>{response.data(), response.length()});
+            auto [rstatus, rbytes] = co_await client.recv(std::span<char>{response.data(), response.length()});
 
             REQUIRE(rstatus == coro::poll_status::event);
             REQUIRE(rbytes == msg_ptr->length());
