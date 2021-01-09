@@ -28,11 +28,11 @@ public:
     explicit tcp_server(
         options opts =
             options{
-                net::ip_address::from_string("0.0.0.0"),
-                8080,
-                128,
-                [](tcp_server&, net::socket) -> task<void> { co_return; },
-                io_scheduler::options{9, 2, io_scheduler::thread_strategy_t::spawn}});
+                .address = net::ip_address::from_string("0.0.0.0"),
+                .port = 8080,
+                .backlog = 128,
+                .on_connection = [](tcp_server&, net::socket) -> task<void> { co_return; },
+                .io_options = io_scheduler::options{}});
 
     tcp_server(const tcp_server&) = delete;
     tcp_server(tcp_server&&)      = delete;
@@ -53,7 +53,7 @@ public:
     auto shutdown(shutdown_t wait_for_tasks = shutdown_t::sync) -> void override;
 
 private:
-    options m_opts;
+    options m_options;
 
     /// Should the accept task continue accepting new connections?
     std::atomic<bool> m_accept_new_connections{true};

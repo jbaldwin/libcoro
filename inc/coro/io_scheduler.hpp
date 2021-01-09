@@ -350,6 +350,12 @@ public:
     auto poll(fd_t fd, poll_op op, std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
         -> coro::task<poll_status>;
 
+    auto poll(
+        const net::socket& sock,
+        poll_op op,
+        std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
+        -> coro::task<poll_status>;
+
     /**
      * This function will first poll the given `fd` to make sure it can be read from.  Once notified
      * that the `fd` has data available to read the given `buffer` is filled with up to the buffer's

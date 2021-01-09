@@ -12,6 +12,7 @@
 #include <optional>
 #include <variant>
 #include <memory>
+#include <chrono>
 
 namespace coro
 {
@@ -50,8 +51,12 @@ public:
 
     auto connect(std::chrono::milliseconds timeout = std::chrono::milliseconds{0}) -> coro::task<net::connect_status>;
 
-    auto socket() const -> const net::socket& { return m_socket; }
-    auto socket() -> net::socket& { return m_socket; }
+    auto recv(
+        std::span<char> buffer,
+        std::chrono::milliseconds timeout = std::chrono::milliseconds{0}) -> coro::task<std::pair<poll_status, ssize_t>>;
+    auto send(
+        const std::span<const char> buffer,
+        std::chrono::milliseconds timeout = std::chrono::milliseconds{0}) -> coro::task<std::pair<poll_status, ssize_t>>;
 
 private:
     /// The scheduler that will drive this tcp client.

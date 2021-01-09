@@ -5,6 +5,7 @@ set(LIBCORO_TEST_SOURCE_FILES
     net/test_dns_client.cpp
     net/test_ip_address.cpp
     net/test_tcp_server.cpp
+    net/test_udp_peers.cpp
 
     bench.cpp
     test_event.cpp

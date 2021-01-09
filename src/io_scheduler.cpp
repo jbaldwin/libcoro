@@ -318,6 +318,15 @@ auto io_scheduler::poll(fd_t fd, poll_op op, std::chrono::milliseconds timeout) 
     co_return status;
 }
 
+auto io_scheduler::poll(
+    const net::socket& sock,
+    poll_op op,
+    std::chrono::milliseconds timeout)
+    -> coro::task<poll_status>
+{
+    return poll(sock.native_handle(), op, timeout);
+}
+
 auto io_scheduler::read(fd_t fd, std::span<char> buffer, std::chrono::milliseconds timeout)
     -> coro::task<std::pair<poll_status, ssize_t>>
 {

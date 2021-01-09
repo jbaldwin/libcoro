@@ -5,14 +5,14 @@ namespace coro::net
 
 tcp_server::tcp_server(options opts)
     : io_scheduler(std::move(opts.io_options)),
-        m_opts(std::move(opts)),
-        m_accept_socket(net::socket::make_accept_socket(
+        m_options(std::move(opts)),
+        m_accept_socket(net::make_accept_socket(
             net::socket::options{net::domain_t::ipv4, net::socket::type_t::tcp, net::socket::blocking_t::no},
-            m_opts.address,
-            m_opts.port,
-            m_opts.backlog))
+            m_options.address,
+            m_options.port,
+            m_options.backlog))
 {
-    if (m_opts.on_connection == nullptr)
+    if (m_options.on_connection == nullptr)
     {
         throw std::runtime_error{"options::on_connection cannot be nullptr."};
     }
@@ -50,25 +50,25 @@ auto tcp_server::make_accept_task() -> coro::task<void>
 
     while (m_accept_new_connections.load(std::memory_order::acquire))
     {
-        co_await poll(m_accept_socket.native_handle(), coro::poll_op::read);
-        // auto status = co_await poll(m_accept_socket.native_handle(), coro::poll_op::read);
-        // (void)status; // TODO: introduce timeouts on io_scheduer.poll();
-
-        // On accept socket read drain the listen accept queue.
-        while (true)
+        auto pstatus = co_await poll(m_accept_socket, coro::poll_op::read, std::chrono::seconds{1});
+        if(pstatus == poll_status::event)
         {
-            net::socket s{::accept(m_accept_socket.native_handle(), (struct sockaddr*)&client, (socklen_t*)&len)};
-            if (s.native_handle() < 0)
+            // On accept socket read drain the listen accept queue.
+            while (true)
             {
-                break;
+                net::socket s{::accept(m_accept_socket.native_handle(), (struct sockaddr*)&client, (socklen_t*)&len)};
+                if (s.native_handle() < 0)
+                {
+                    break;
+                }
+
+                tasks.emplace_back(m_options.on_connection(std::ref(*this), std::move(s)));
             }
 
-            tasks.emplace_back(m_opts.on_connection(std::ref(*this), std::move(s)));
-        }
-
-        if (!tasks.empty())
-        {
-            schedule(std::move(tasks));
+            if (!tasks.empty())
+            {
+                schedule(std::move(tasks));
+            }
         }
     }
 
