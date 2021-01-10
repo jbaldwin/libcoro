@@ -1,6 +1,6 @@
 #pragma once
 
-#include "coro/awaitable.hpp"
+#include "coro/concepts/awaitable.hpp"
 
 #include <condition_variable>
 #include <mutex>
@@ -182,7 +182,7 @@ private:
     coroutine_type m_coroutine;
 };
 
-template<awaitable awaitable, typename return_type = awaitable_traits<awaitable>::awaiter_return_type>
+template<concepts::awaitable awaitable, typename return_type = concepts::awaitable_traits<awaitable>::awaiter_return_type>
 static auto make_sync_wait_task(awaitable&& a) -> sync_wait_task<return_type>
 {
     if constexpr (std::is_void_v<return_type>)
@@ -198,7 +198,7 @@ static auto make_sync_wait_task(awaitable&& a) -> sync_wait_task<return_type>
 
 } // namespace detail
 
-template<awaitable awaitable>
+template<concepts::awaitable awaitable>
 auto sync_wait(awaitable&& a) -> decltype(auto)
 {
     detail::sync_wait_event e{};

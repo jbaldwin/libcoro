@@ -337,7 +337,7 @@ TEST_CASE("benchmark counter task io_scheduler yield (all) -> resume (all) from 
     REQUIRE(counter == iterations);
 }
 
-TEST_CASE("benchmark tcp_client and tcp_server")
+TEST_CASE("benchmark tcp_server echo server")
 {
     /**
      * This test *requires* two schedulers since polling on read/write of the sockets involved
@@ -349,69 +349,79 @@ TEST_CASE("benchmark tcp_client and tcp_server")
     const constexpr std::size_t ops        = connections * messages_per_connection;
 
     const std::string msg = "im a data point in a stream of bytes";
-    const std::string done_msg = "done";
-    auto address = coro::net::ip_address::from_string("127.0.0.1");
 
-    auto on_connection = [&msg, &done_msg](coro::net::tcp_server& scheduler, coro::net::socket sock) -> coro::task<void> {
+    coro::io_scheduler server_scheduler{};
+    coro::io_scheduler client_scheduler{};
+
+    auto make_on_connection_task = [&](coro::net::tcp_client client) -> coro::task<void> {
         std::string in(64, '\0');
 
-        do
+        // Echo the messages until the socket is closed. a 'done' message arrives.
+        while(true)
         {
-            auto [rstatus, rbytes] = co_await scheduler.read(sock, std::span<char>{in.data(), in.size()});
-            REQUIRE(rstatus == coro::poll_status::event);
+            auto pstatus = co_await client.poll(coro::poll_op::read);
+            REQUIRE(pstatus == coro::poll_status::event);
 
-            in.resize(rbytes);
+            auto [rstatus, rspan] = client.recv(in);
+            if(rstatus == coro::net::recv_status::closed)
+            {
+                REQUIRE(rspan.empty());
+                break;
+            }
 
-            auto [wstatus, wbytes] = co_await scheduler.write(sock, std::span<const char>(in.data(), in.length()));
-            REQUIRE(wstatus == coro::poll_status::event);
-            REQUIRE(wbytes == in.length());
-        } while(in != done_msg);
+            REQUIRE(rstatus == coro::net::recv_status::ok);
+
+            in.resize(rspan.size());
+
+            auto [sstatus, remaining] = client.send(in);
+            REQUIRE(sstatus == coro::net::send_status::ok);
+            REQUIRE(remaining.empty());
+        }
 
         co_return;
     };
 
-    coro::net::tcp_server scheduler{coro::net::tcp_server::options{
-        .address       = coro::net::ip_address::from_string("0.0.0.0"),
-        .port          = 8080,
-        .backlog       = 128,
-        .on_connection = on_connection,
-        .io_options    = coro::io_scheduler::options{.thread_strategy = coro::io_scheduler::thread_strategy_t::spawn}}};
+    auto make_server_task = [&]() -> coro::task<void> {
+        coro::net::tcp_server server{server_scheduler};
 
-    coro::io_scheduler client_scheduler{
-        coro::io_scheduler::options{.thread_strategy = coro::io_scheduler::thread_strategy_t::spawn}};
+        uint64_t accepted{0};
+        while(accepted < connections)
+        {
+            auto pstatus = co_await server.poll();
+            REQUIRE(pstatus == coro::poll_status::event);
 
-    auto make_client_task = [&client_scheduler, &address, &msg, &done_msg, &messages_per_connection]() -> coro::task<void> {
-        coro::net::tcp_client client{
-            client_scheduler,
-            coro::net::tcp_client::options{
-                .address = address,
-                .port = 8080,
-                .domain = coro::net::domain_t::ipv4}};
+            auto client = server.accept();
+            REQUIRE(client.socket().is_valid());
+
+            server_scheduler.schedule(make_on_connection_task(std::move(client)));
+
+            ++accepted;
+        }
+
+        co_return;
+    };
+
+    auto make_client_task = [&]() -> coro::task<void> {
+        coro::net::tcp_client client{client_scheduler};
 
         auto cstatus = co_await client.connect();
         REQUIRE(cstatus == coro::net::connect_status::connected);
 
         for(size_t i = 1; i <= messages_per_connection; ++i)
         {
-            const std::string* msg_ptr = &msg;
-            if(i == messages_per_connection)
-            {
-                msg_ptr = &done_msg;
-            }
+            auto [sstatus, remaining] = client.send(msg);
+            REQUIRE(sstatus == coro::net::send_status::ok);
+            REQUIRE(remaining.empty());
 
-            auto [wstatus, wbytes] = co_await client.send(std::span<const char>{msg_ptr->data(), msg_ptr->length()});
-
-            REQUIRE(wstatus == coro::poll_status::event);
-            REQUIRE(wbytes == msg_ptr->length());
+            auto pstatus = co_await client.poll(coro::poll_op::read);
+            REQUIRE(pstatus == coro::poll_status::event);
 
             std::string response(64, '\0');
-
-            auto [rstatus, rbytes] = co_await client.recv(std::span<char>{response.data(), response.length()});
-
-            REQUIRE(rstatus == coro::poll_status::event);
-            REQUIRE(rbytes == msg_ptr->length());
-            response.resize(rbytes);
-            REQUIRE(response == *msg_ptr);
+            auto [rstatus, rspan] = client.recv(response);
+            REQUIRE(rstatus == coro::net::recv_status::ok);
+            REQUIRE(rspan.size() == msg.size());
+            response.resize(rspan.size());
+            REQUIRE(response == msg);
         }
 
         co_return;
@@ -419,11 +429,16 @@ TEST_CASE("benchmark tcp_client and tcp_server")
 
     auto start = sc::now();
 
+    // Create the server to accept incoming tcp connections.
+    server_scheduler.schedule(make_server_task());
+
+    // Spawn N client connections.
     for(size_t i = 0; i < connections; ++i)
     {
         REQUIRE(client_scheduler.schedule(make_client_task()));
     }
 
+    // Wait for all the connections to complete their work.
     while (!client_scheduler.empty())
     {
         std::this_thread::sleep_for(std::chrono::milliseconds{1});
@@ -432,6 +447,9 @@ TEST_CASE("benchmark tcp_client and tcp_server")
     auto stop = sc::now();
     print_stats("benchmark tcp_client and tcp_server", ops, start, stop);
 
-    scheduler.shutdown();
-    REQUIRE(scheduler.empty());
+    server_scheduler.shutdown();
+    REQUIRE(server_scheduler.empty());
+
+    client_scheduler.shutdown();
+    REQUIRE(client_scheduler.empty());
 }

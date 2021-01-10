@@ -5,7 +5,7 @@
 #include <type_traits>
 #include <utility>
 
-namespace coro
+namespace coro::concepts
 {
 /**
  * This concept declares a type that is required to meet the c++20 coroutine operator co_await()
@@ -72,4 +72,4 @@ struct awaitable_traits<awaitable>
 };
 // clang-format on
 
-} // namespace coro
+} // namespace coro::concepts

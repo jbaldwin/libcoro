@@ -98,6 +98,8 @@ public:
         return output;
     }
 
+    auto operator<=>(const ip_address& other) const = default;
+
 private:
     domain_t m_domain{domain_t::ipv4};
     std::array<uint8_t, ipv6_len> m_data{};

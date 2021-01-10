@@ -10,8 +10,20 @@ using namespace std::chrono_literals;
 tcp_client::tcp_client(io_scheduler& scheduler, options opts)
     : m_io_scheduler(scheduler),
       m_options(std::move(opts)),
-      m_socket(net::make_socket(net::socket::options{m_options.domain, net::socket::type_t::tcp, net::socket::blocking_t::no}))
+      m_socket(net::make_socket(net::socket::options{
+          m_options.address.domain(),
+          net::socket::type_t::tcp,
+          net::socket::blocking_t::no}))
 {
+}
+
+tcp_client::tcp_client(io_scheduler& scheduler, net::socket socket, options opts)
+    : m_io_scheduler(scheduler),
+      m_options(std::move(opts)),
+      m_socket(std::move(socket)),
+      m_connect_status(connect_status::connected)
+{
+
 }
 
 auto tcp_client::connect(std::chrono::milliseconds timeout) -> coro::task<connect_status>
@@ -21,44 +33,10 @@ auto tcp_client::connect(std::chrono::milliseconds timeout) -> coro::task<connec
         co_return m_connect_status.value();
     }
 
-    const net::ip_address* ip_addr{nullptr};
-    std::unique_ptr<net::dns_result> result_ptr{nullptr};
-
-    // If the user provided a hostname then perform the dns lookup.
-    if(std::holds_alternative<net::hostname>(m_options.address))
-    {
-        if(m_options.dns == nullptr)
-        {
-            m_connect_status = connect_status::dns_client_required;
-            co_return connect_status::dns_client_required;
-        }
-        const auto& hn = std::get<net::hostname>(m_options.address);
-        result_ptr = co_await m_options.dns->host_by_name(hn);
-        if(result_ptr->status() != net::dns_status::complete)
-        {
-            m_connect_status = connect_status::dns_lookup_failure;
-            co_return connect_status::dns_lookup_failure;
-        }
-
-        if(result_ptr->ip_addresses().empty())
-        {
-            m_connect_status = connect_status::dns_lookup_failure;
-            co_return connect_status::dns_lookup_failure;
-        }
-
-        // TODO: for now we'll just take the first ip address given, but should probably allow the
-        // user to take preference on ipv4/ipv6 addresses.
-        ip_addr = &result_ptr->ip_addresses().front();
-    }
-    else
-    {
-        ip_addr = &std::get<net::ip_address>(m_options.address);
-    }
-
     sockaddr_in server{};
-    server.sin_family = static_cast<int>(m_options.domain);
+    server.sin_family = static_cast<int>(m_options.address.domain());
     server.sin_port   = htons(m_options.port);
-    server.sin_addr   = *reinterpret_cast<const in_addr*>(ip_addr->data().data());
+    server.sin_addr   = *reinterpret_cast<const in_addr*>(m_options.address.data().data());
 
     auto cret = ::connect(m_socket.native_handle(), (struct sockaddr*)&server, sizeof(server));
     if (cret == 0)
@@ -100,30 +78,6 @@ auto tcp_client::connect(std::chrono::milliseconds timeout) -> coro::task<connec
 
     m_connect_status = connect_status::error;
     co_return connect_status::error;
-}
-
-auto tcp_client::recv(std::span<char> buffer, std::chrono::milliseconds timeout) -> coro::task<std::pair<poll_status, ssize_t>>
-{
-    auto pstatus = co_await m_io_scheduler.poll(m_socket, poll_op::read, timeout);
-    ssize_t bread{0};
-    if(pstatus == poll_status::event)
-    {
-        bread = ::read(m_socket.native_handle(), buffer.data(), buffer.size());
-    }
-
-    co_return {pstatus, bread};
-}
-
-auto tcp_client::send(const std::span<const char> buffer, std::chrono::milliseconds timeout) -> coro::task<std::pair<poll_status, ssize_t>>
-{
-    auto pstatus = co_await m_io_scheduler.poll(m_socket, poll_op::write, timeout);
-    ssize_t bwrite{0};
-    if(pstatus == poll_status::event)
-    {
-        bwrite = ::write(m_socket.native_handle(), buffer.data(), buffer.size());
-    }
-
-    co_return {pstatus, bwrite};
 }
 
 } // namespace coro::net
