@@ -344,14 +344,16 @@ TEST_CASE("benchmark tcp_server echo server")
      * will reset/trample on each other when each side of the client + server go to poll().
      */
 
-    const constexpr std::size_t connections = 256;
-    const constexpr std::size_t messages_per_connection = 1'000;
+    const constexpr std::size_t connections = 64;
+    const constexpr std::size_t messages_per_connection = 10'000;
     const constexpr std::size_t ops        = connections * messages_per_connection;
 
     const std::string msg = "im a data point in a stream of bytes";
 
     coro::io_scheduler server_scheduler{};
     coro::io_scheduler client_scheduler{};
+
+    std::atomic<bool> listening{false};
 
     auto make_on_connection_task = [&](coro::net::tcp_client client) -> coro::task<void> {
         std::string in(64, '\0');
@@ -383,6 +385,8 @@ TEST_CASE("benchmark tcp_server echo server")
 
     auto make_server_task = [&]() -> coro::task<void> {
         coro::net::tcp_server server{server_scheduler};
+
+        listening = true;
 
         uint64_t accepted{0};
         while(accepted < connections)
@@ -431,6 +435,13 @@ TEST_CASE("benchmark tcp_server echo server")
 
     // Create the server to accept incoming tcp connections.
     server_scheduler.schedule(make_server_task());
+
+    // The server can take a small bit of time to start up, if we don't wait for it to notify then
+    // the first few connections can easily fail to connect causing this test to fail.
+    while(!listening)
+    {
+        std::this_thread::sleep_for(std::chrono::milliseconds{1});
+    }
 
     // Spawn N client connections.
     for(size_t i = 0; i < connections; ++i)
