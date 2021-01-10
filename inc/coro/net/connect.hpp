@@ -14,8 +14,6 @@ enum class connect_status
     timeout,
     /// There was an error, use errno to get more information on the specific error.
     error,
-    /// The client was given a hostname but no dns client to resolve the ip address.
-    dns_client_required,
     /// The dns hostname lookup failed
     dns_lookup_failure
 };

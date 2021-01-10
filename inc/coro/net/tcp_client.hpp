@@ -1,18 +1,22 @@
 #pragma once
 
-#include "coro/net/dns_client.hpp"
+#include "coro/concepts/buffer.hpp"
 #include "coro/net/ip_address.hpp"
-#include "coro/net/hostname.hpp"
+#include "coro/net/recv_status.hpp"
+#include "coro/net/send_status.hpp"
 #include "coro/net/socket.hpp"
 #include "coro/net/connect.hpp"
 #include "coro/poll.hpp"
 #include "coro/task.hpp"
+#include "coro/io_scheduler.hpp"
 
 #include <chrono>
 #include <optional>
 #include <variant>
 #include <memory>
 #include <chrono>
+#include <string>
+#include <vector>
 
 namespace coro
 {
@@ -22,49 +26,150 @@ class io_scheduler;
 namespace coro::net
 {
 
+class tcp_server;
+
 class tcp_client
 {
 public:
     struct options
     {
-        /// The hostname or ip address to connect to.  If using hostname then a dns client must be provided.
-        std::variant<net::hostname, net::ip_address> address{net::ip_address::from_string("127.0.0.1")};
+        /// The  ip address to connect to.  Use a dns_resolver to turn hostnames into ip addresses.
+        net::ip_address address{net::ip_address::from_string("127.0.0.1")};
         /// The port to connect to.
-        int16_t       port{8080};
-        /// The protocol domain to connect with.
-        net::domain_t domain{net::domain_t::ipv4};
-        /// If using a hostname to connect to then provide a dns client to lookup the host's ip address.
-        /// This is optional if using ip addresses directly.
-        net::dns_client*   dns{nullptr};
+        uint16_t port{8080};
     };
 
-    tcp_client(io_scheduler& scheduler, options opts = options{
-        .address = {net::ip_address::from_string("127.0.0.1")},
-        .port = 8080,
-        .domain = net::domain_t::ipv4,
-        .dns = nullptr});
+    /**
+     * Creates a new tcp client that can connect to an ip address + port.  By default the socket
+     * created will be in non-blocking mode, meaning that any sending or receiving of data should
+     * poll for event readiness prior.
+     * @param scheduler The io scheduler to drive the tcp client.
+     * @param opts See tcp_client::options for more information.
+     */
+    tcp_client(
+        io_scheduler& scheduler,
+        options opts = options{
+            .address = {net::ip_address::from_string("127.0.0.1")},
+            .port = 8080});
     tcp_client(const tcp_client&) = delete;
     tcp_client(tcp_client&&)      = default;
     auto operator=(const tcp_client&) noexcept -> tcp_client& = delete;
     auto operator=(tcp_client&&) noexcept -> tcp_client& = default;
     ~tcp_client()                                        = default;
 
-    auto connect(std::chrono::milliseconds timeout = std::chrono::milliseconds{0}) -> coro::task<net::connect_status>;
+    /**
+     * @return The tcp socket this client is using.
+     * @{
+     **/
+    auto socket() -> net::socket& { return m_socket; }
+    auto socket() const -> const net::socket& { return m_socket; }
+    /** @} */
 
+    /**
+     * Connects to the address+port with the given timeout.  Once connected calling this function
+     * only returns the connected status, it will not reconnect.
+     * @param timeout How long to wait for the connection to establish? Timeout of zero is indefinite.
+     * @return The result status of trying to connect.
+     */
+    auto connect(
+        std::chrono::milliseconds timeout = std::chrono::milliseconds{0}) -> coro::task<net::connect_status>;
+
+    /**
+     * Polls for the given operation on this client's tcp socket.  This should be done prior to
+     * calling recv and after a send that doesn't send the entire buffer.
+     * @param op The poll operation to perform, use read for incoming data and write for outgoing.
+     * @param timeout The amount of time to wait for the poll event to be ready.  Use zero for infinte timeout.
+     * @return The status result of th poll operation.  When poll_status::event is returned then the
+     *         event operation is ready.
+     */
+    auto poll(
+        coro::poll_op op,
+        std::chrono::milliseconds timeout = std::chrono::milliseconds{0}) -> coro::task<poll_status>
+    {
+        co_return co_await m_io_scheduler.poll(m_socket, op, timeout);
+    }
+
+    /**
+     * Receives incoming data into the given buffer.  By default since all tcp client sockets are set
+     * to non-blocking use co_await poll() to determine when data is ready to be received.
+     * @param buffer Received bytes are written into this buffer up to the buffers size.
+     * @return The status of the recv call and a span of the bytes recevied (if any).  The span of
+     *         bytes will be a subspan or full span of the given input buffer.
+     */
+    template<concepts::mutable_buffer buffer_type>
     auto recv(
-        std::span<char> buffer,
-        std::chrono::milliseconds timeout = std::chrono::milliseconds{0}) -> coro::task<std::pair<poll_status, ssize_t>>;
+        buffer_type&& buffer) -> std::pair<recv_status, std::span<char>>
+    {
+        // If the user requested zero bytes, just return.
+        if(buffer.empty())
+        {
+            return {recv_status::ok, std::span<char>{}};
+        }
+
+        auto bytes_recv = ::recv(m_socket.native_handle(), buffer.data(), buffer.size(), 0);
+        if(bytes_recv > 0)
+        {
+            // Ok, we've recieved some data.
+            return {recv_status::ok, std::span<char>{buffer.data(), static_cast<size_t>(bytes_recv)}};
+        }
+        else if (bytes_recv == 0)
+        {
+            // On TCP stream sockets 0 indicates the connection has been closed by the peer.
+            return {recv_status::closed, std::span<char>{}};
+        }
+        else
+        {
+            // Report the error to the user.
+            return {static_cast<recv_status>(errno), std::span<char>{}};
+        }
+    }
+
+    /**
+     * Sends outgoing data from the given buffer.  If a partial write occurs then use co_await poll()
+     * to determine when the tcp client socket is ready to be written to again.  On partial writes
+     * the status will be 'ok' and the span returned will be non-empty, it will contain the buffer
+     * span data that was not written to the client's socket.
+     * @param buffer The data to write on the tcp socket.
+     * @return The status of the send call and a span of any remaining bytes not sent.  If all bytes
+     *         were successfully sent the status will be 'ok' and the remaining span will be empty.
+     */
+    template<concepts::const_buffer buffer_type>
     auto send(
-        const std::span<const char> buffer,
-        std::chrono::milliseconds timeout = std::chrono::milliseconds{0}) -> coro::task<std::pair<poll_status, ssize_t>>;
+        const buffer_type& buffer) -> std::pair<send_status, std::span<const char>>
+    {
+        // If the user requested zero bytes, just return.
+        if(buffer.empty())
+        {
+            return {send_status::ok, std::span<const char>{buffer.data(), buffer.size()}};
+        }
+
+        auto bytes_sent = ::send(m_socket.native_handle(), buffer.data(), buffer.size(), 0);
+        if(bytes_sent >= 0)
+        {
+            // Some or all of the bytes were written.
+            return {send_status::ok, std::span<const char>{buffer.data() + bytes_sent, buffer.size() - bytes_sent}};
+        }
+        else
+        {
+            // Due to the error none of the bytes were written.
+            return {static_cast<send_status>(errno), std::span<const char>{buffer.data(), buffer.size()}};
+        }
+    }
 
 private:
+    /// The tcp_server creates already connected clients and provides a tcp socket pre-built.
+    friend tcp_server;
+    tcp_client(
+        io_scheduler& scheduler,
+        net::socket socket,
+        options opts);
+
     /// The scheduler that will drive this tcp client.
     io_scheduler& m_io_scheduler;
     /// Options for what server to connect to.
-    options m_options;
+    options m_options{};
     /// The tcp socket.
-    net::socket m_socket;
+    net::socket m_socket{-1};
     /// Cache the status of the connect in the event the user calls connect() again.
     std::optional<net::connect_status> m_connect_status{std::nullopt};
 };

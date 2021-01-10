@@ -2,53 +2,114 @@
 
 #include <coro/coro.hpp>
 
-TEST_CASE("udp echo peers")
+TEST_CASE("udp one way")
 {
-    const std::string client_msg{"Hello from client!"};
-    const std::string server_msg{"Hello from server!!"};
+    const std::string msg{"aaaaaaaaaaaaaaaaaaaaabbbbbbbbbbbbbbbbbcccccccccccccccccc"};
 
     coro::io_scheduler scheduler{};
 
-    auto make_client_task = [&](uint16_t client_port, uint16_t server_port) -> coro::task<void> {
-        std::string owning_buffer(4096, '\0');
+    auto make_send_task = [&]() -> coro::task<void> {
+        coro::net::udp_peer peer{scheduler};
+        coro::net::udp_peer::info peer_info{};
 
-        coro::net::udp_client client{scheduler, coro::net::udp_client::options{.port = client_port}};
-        auto wbytes = co_await client.sendto(std::span<const char>{client_msg.data(), client_msg.length()});
-        REQUIRE(wbytes == client_msg.length());
-
-        coro::net::udp_server server{scheduler, coro::net::udp_server::options{.port = server_port}};
-        std::span<char> buffer{owning_buffer.data(), owning_buffer.length()};
-        auto client_opt = co_await server.recvfrom(buffer);
-        REQUIRE(client_opt.has_value());
-        REQUIRE(buffer.size() == server_msg.length());
-        owning_buffer.resize(buffer.size());
-        REQUIRE(owning_buffer == server_msg);
+        auto [sstatus, remaining] = peer.sendto(peer_info, msg);
+        REQUIRE(sstatus == coro::net::send_status::ok);
+        REQUIRE(remaining.empty());
 
         co_return;
     };
 
-    auto make_server_task = [&](uint16_t server_port, uint16_t client_port) -> coro::task<void> {
-        std::string owning_buffer(4096, '\0');
+    auto make_recv_task = [&]() -> coro::task<void> {
+        coro::net::udp_peer::info self_info{
+            .address = coro::net::ip_address::from_string("0.0.0.0")
+        };
 
-        coro::net::udp_server server{scheduler, coro::net::udp_server::options{.port = server_port}};
+        coro::net::udp_peer self{scheduler, self_info};
 
-        std::span<char> buffer{owning_buffer.data(), owning_buffer.length()};
-        auto client_opt = co_await server.recvfrom(buffer);
-        REQUIRE(client_opt.has_value());
-        REQUIRE(buffer.size() == client_msg.length());
-        owning_buffer.resize(buffer.size());
-        REQUIRE(owning_buffer == client_msg);
+        auto pstatus = co_await self.poll(coro::poll_op::read);
+        REQUIRE(pstatus == coro::poll_status::event);
 
-
-        auto options = client_opt.value();
-        options.port = client_port; // we'll change the port for this test since its the same host
-        coro::net::udp_client client{scheduler, options};
-        auto wbytes = co_await client.sendto(std::span<const char>{server_msg.data(), server_msg.length()});
-        REQUIRE(wbytes == server_msg.length());
+        std::string buffer(64, '\0');
+        auto [rstatus, peer_info, rspan] = self.recvfrom(buffer);
+        REQUIRE(rstatus == coro::net::recv_status::ok);
+        REQUIRE(peer_info.address == coro::net::ip_address::from_string("127.0.0.1"));
+        // The peer's port will be randomly picked by the kernel since it wasn't bound.
+        REQUIRE(rspan.size() == msg.size());
+        buffer.resize(rspan.size());
+        REQUIRE(buffer == msg);
 
         co_return;
     };
 
-    scheduler.schedule(make_server_task(8080, 8081));
-    scheduler.schedule(make_client_task(8080, 8081));
+    scheduler.schedule(make_recv_task());
+    scheduler.schedule(make_send_task());
+}
+
+TEST_CASE("udp echo peers")
+{
+    const std::string peer1_msg{"Hello from peer1!"};
+    const std::string peer2_msg{"Hello from peer2!!"};
+
+    coro::io_scheduler scheduler{};
+
+    auto make_peer_task = [&scheduler](
+        uint16_t my_port,
+        uint16_t peer_port,
+        bool send_first,
+        const std::string my_msg,
+        const std::string peer_msg) -> coro::task<void> {
+
+        coro::net::udp_peer::info my_info{.address = coro::net::ip_address::from_string("0.0.0.0"), .port = my_port};
+        coro::net::udp_peer::info peer_info{.address = coro::net::ip_address::from_string("127.0.0.1"), .port = peer_port};
+
+        coro::net::udp_peer me{scheduler, my_info};
+
+        if(send_first)
+        {
+            // Send my message to my peer first.
+            auto [sstatus, remaining] = me.sendto(peer_info, my_msg);
+            REQUIRE(sstatus == coro::net::send_status::ok);
+            REQUIRE(remaining.empty());
+        }
+        else
+        {
+            // Poll for my peers message first.
+            auto pstatus = co_await me.poll(coro::poll_op::read);
+            REQUIRE(pstatus == coro::poll_status::event);
+
+            std::string buffer(64, '\0');
+            auto [rstatus, recv_peer_info, rspan] = me.recvfrom(buffer);
+            REQUIRE(rstatus == coro::net::recv_status::ok);
+            REQUIRE(recv_peer_info == peer_info);
+            REQUIRE(rspan.size() == peer_msg.size());
+            buffer.resize(rspan.size());
+            REQUIRE(buffer == peer_msg);
+        }
+
+        if(send_first)
+        {
+            // I sent first so now I need to await my peer's message.
+            auto pstatus = co_await me.poll(coro::poll_op::read);
+            REQUIRE(pstatus == coro::poll_status::event);
+
+            std::string buffer(64, '\0');
+            auto [rstatus, recv_peer_info, rspan] = me.recvfrom(buffer);
+            REQUIRE(rstatus == coro::net::recv_status::ok);
+            REQUIRE(recv_peer_info == peer_info);
+            REQUIRE(rspan.size() == peer_msg.size());
+            buffer.resize(rspan.size());
+            REQUIRE(buffer == peer_msg);
+        }
+        else
+        {
+            auto [sstatus, remaining] = me.sendto(peer_info, my_msg);
+            REQUIRE(sstatus == coro::net::send_status::ok);
+            REQUIRE(remaining.empty());
+        }
+
+        co_return;
+    };
+
+    scheduler.schedule(make_peer_task(8081, 8080, false, peer2_msg, peer1_msg));
+    scheduler.schedule(make_peer_task(8080, 8081, true,  peer1_msg, peer2_msg));
 }

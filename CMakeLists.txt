@@ -14,26 +14,29 @@ set(CARES_INSTALL   OFF CACHE INTERNAL "")
 add_subdirectory(vendor/c-ares/c-ares)
 
 set(LIBCORO_SOURCE_FILES
+    inc/coro/concepts/awaitable.hpp
+    inc/coro/concepts/buffer.hpp
+    inc/coro/concepts/promise.hpp
+
     inc/coro/detail/void_value.hpp
 
     inc/coro/net/connect.hpp src/net/connect.cpp
-    inc/coro/net/dns_client.hpp src/net/dns_client.cpp
+    inc/coro/net/dns_resolver.hpp src/net/dns_resolver.cpp
     inc/coro/net/hostname.hpp
     inc/coro/net/ip_address.hpp src/net/ip_address.cpp
+    inc/coro/net/recv_status.hpp src/net/recv_status.cpp
+    inc/coro/net/send_status.hpp src/net/send_status.cpp
     inc/coro/net/socket.hpp src/net/socket.cpp
     inc/coro/net/tcp_client.hpp src/net/tcp_client.cpp
     inc/coro/net/tcp_server.hpp src/net/tcp_server.cpp
-    inc/coro/net/udp_client.hpp src/net/udp_client.cpp
-    inc/coro/net/udp_server.hpp src/net/udp_server.cpp
+    inc/coro/net/udp_peer.hpp src/net/udp_peer.cpp
 
-    inc/coro/awaitable.hpp
     inc/coro/coro.hpp
     inc/coro/event.hpp src/event.cpp
     inc/coro/generator.hpp
     inc/coro/io_scheduler.hpp src/io_scheduler.cpp
     inc/coro/latch.hpp
     inc/coro/poll.hpp
-    inc/coro/promise.hpp
     inc/coro/shutdown.hpp
     inc/coro/sync_wait.hpp src/sync_wait.cpp
     inc/coro/task.hpp

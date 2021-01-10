@@ -19,7 +19,7 @@
 namespace coro::net
 {
 
-class dns_client;
+class dns_resolver;
 
 enum class dns_status
 {
@@ -29,12 +29,20 @@ enum class dns_status
 
 class dns_result
 {
-    friend dns_client;
+    friend dns_resolver;
 public:
     explicit dns_result(coro::resume_token<void>& token, uint64_t pending_dns_requests);
     ~dns_result() = default;
 
+    /**
+     * @return The status of the dns lookup.
+     */
     auto status() const -> dns_status { return m_status; }
+
+    /**
+     * @return If the result of the dns looked was successful then the list of ip addresses that
+     *         were resolved from the hostname.
+     */
     auto ip_addresses() const -> const std::vector<coro::net::ip_address>& { return m_ip_addresses; }
 private:
     coro::resume_token<void>& m_token;
@@ -50,16 +58,19 @@ private:
     ) -> void;
 };
 
-class dns_client
+class dns_resolver
 {
 public:
-    explicit dns_client(io_scheduler& scheduler, std::chrono::milliseconds timeout);
-    dns_client(const dns_client&) = delete;
-    dns_client(dns_client&&) = delete;
-    auto operator=(const dns_client&) noexcept -> dns_client& = delete;
-    auto operator=(dns_client&&) noexcept -> dns_client& = delete;
-    ~dns_client();
+    explicit dns_resolver(io_scheduler& scheduler, std::chrono::milliseconds timeout);
+    dns_resolver(const dns_resolver&) = delete;
+    dns_resolver(dns_resolver&&) = delete;
+    auto operator=(const dns_resolver&) noexcept -> dns_resolver& = delete;
+    auto operator=(dns_resolver&&) noexcept -> dns_resolver& = delete;
+    ~dns_resolver();
 
+    /**
+     * @param hn The hostname to resolve its ip addresses.
+     */
     auto host_by_name(const net::hostname& hn) -> coro::task<std::unique_ptr<dns_result>>;
 private:
     /// The io scheduler to drive the events for dns lookups.

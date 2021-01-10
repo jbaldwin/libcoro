@@ -1,4 +1,4 @@
-#include "coro/net/dns_client.hpp"
+#include "coro/net/dns_resolver.hpp"
 
 #include <iostream>
 #include <netdb.h>
@@ -7,8 +7,8 @@
 namespace coro::net
 {
 
-uint64_t dns_client::m_ares_count{0};
-std::mutex dns_client::m_ares_mutex{};
+uint64_t dns_resolver::m_ares_count{0};
+std::mutex dns_resolver::m_ares_mutex{};
 
 auto ares_dns_callback(
     void* arg,
@@ -53,7 +53,7 @@ dns_result::dns_result(coro::resume_token<void>& token, uint64_t pending_dns_req
 
 }
 
-dns_client::dns_client(io_scheduler& scheduler, std::chrono::milliseconds timeout)
+dns_resolver::dns_resolver(io_scheduler& scheduler, std::chrono::milliseconds timeout)
     : m_scheduler(scheduler),
       m_timeout(timeout)
 {
@@ -77,7 +77,7 @@ dns_client::dns_client(io_scheduler& scheduler, std::chrono::milliseconds timeou
     }
 }
 
-dns_client::~dns_client()
+dns_resolver::~dns_resolver()
 {
     if(m_ares_channel != nullptr)
     {
@@ -95,7 +95,7 @@ dns_client::~dns_client()
     }
 }
 
-auto dns_client::host_by_name(const net::hostname& hn) -> coro::task<std::unique_ptr<dns_result>>
+auto dns_resolver::host_by_name(const net::hostname& hn) -> coro::task<std::unique_ptr<dns_result>>
 {
     auto token = m_scheduler.make_resume_token<void>();
     auto result_ptr = std::make_unique<dns_result>(token, 2);
@@ -111,7 +111,7 @@ auto dns_client::host_by_name(const net::hostname& hn) -> coro::task<std::unique
     co_return result_ptr;
 }
 
-auto dns_client::ares_poll() -> void
+auto dns_resolver::ares_poll() -> void
 {
     std::array<ares_socket_t, ARES_GETSOCK_MAXNUM> ares_sockets{};
     std::array<poll_op, ARES_GETSOCK_MAXNUM> poll_ops{};
@@ -158,7 +158,7 @@ auto dns_client::ares_poll() -> void
     }
 }
 
-auto dns_client::make_poll_task(io_scheduler::fd_t fd, poll_op ops) -> coro::task<void>
+auto dns_resolver::make_poll_task(io_scheduler::fd_t fd, poll_op ops) -> coro::task<void>
 {
     auto result = co_await m_scheduler.poll(fd, ops, m_timeout);
     switch(result)

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "coro/awaitable.hpp"
+#include "coro/concepts/awaitable.hpp"
 #include "coro/poll.hpp"
 #include "coro/shutdown.hpp"
 #include "coro/net/socket.hpp"
@@ -299,7 +299,7 @@ public:
 
     auto schedule(std::vector<task<void>> tasks) -> bool;
 
-    template<awaitable_void... tasks_type>
+    template<concepts::awaitable_void... tasks_type>
     auto schedule(tasks_type&&... tasks) -> bool
     {
         if (is_shutdown())

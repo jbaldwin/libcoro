@@ -2,88 +2,70 @@
 
 #include <coro/coro.hpp>
 
-TEST_CASE("tcp_server no on connection throws")
+TEST_CASE("tcp_server ping server")
 {
-    REQUIRE_THROWS(coro::net::tcp_server{coro::net::tcp_server::options{.on_connection = nullptr}});
-}
+    const std::string client_msg{"Hello from client"};
+    const std::string server_msg{"Reply from server!"};
 
-static auto tcp_server_echo(
-    const std::variant<coro::net::hostname, coro::net::ip_address> address,
-    const std::string msg
-) -> void
-{
-    auto on_connection = [&msg](coro::net::tcp_server& scheduler, coro::net::socket sock) -> coro::task<void> {
-        std::string in(64, '\0');
+    coro::io_scheduler scheduler{};
 
-        auto [rstatus, rbytes] = co_await scheduler.read(sock, std::span<char>{in.data(), in.size()});
-        REQUIRE(rstatus == coro::poll_status::event);
-
-        in.resize(rbytes);
-        REQUIRE(in == msg);
-
-        auto [wstatus, wbytes] = co_await scheduler.write(sock, std::span<const char>(in.data(), in.length()));
-        REQUIRE(wstatus == coro::poll_status::event);
-        REQUIRE(wbytes == in.length());
-
-        co_return;
-    };
-
-    coro::net::tcp_server scheduler{coro::net::tcp_server::options{
-        .address       = coro::net::ip_address::from_string("0.0.0.0"),
-        .port          = 8080,
-        .backlog       = 128,
-        .on_connection = on_connection,
-        .io_options    = coro::io_scheduler::options{.thread_strategy = coro::io_scheduler::thread_strategy_t::spawn}}};
-
-    coro::net::dns_client dns_client{scheduler, std::chrono::seconds{5}};
-
-    auto make_client_task = [&scheduler, &dns_client, &address, &msg]() -> coro::task<void> {
-        coro::net::tcp_client client{
-            scheduler,
-            coro::net::tcp_client::options{
-                .address = address,
-                .port = 8080,
-                .domain = coro::net::domain_t::ipv4,
-                .dns = &dns_client}};
+    auto make_client_task = [&]() -> coro::task<void> {
+        coro::net::tcp_client client{scheduler};
 
         auto cstatus = co_await client.connect();
         REQUIRE(cstatus == coro::net::connect_status::connected);
 
-        auto [wstatus, wbytes] = co_await client.send(std::span<const char>{msg.data(), msg.length()});
+        // Skip polling for write, should really only poll if the write is partial, shouldn't be
+        // required for this test.
+        auto [sstatus, remaining] = client.send(client_msg);
+        REQUIRE(sstatus == coro::net::send_status::ok);
+        REQUIRE(remaining.empty());
 
-        REQUIRE(wstatus == coro::poll_status::event);
-        REQUIRE(wbytes == msg.length());
+        // Poll for the server's response.
+        auto pstatus = co_await client.poll(coro::poll_op::read);
+        REQUIRE(pstatus == coro::poll_status::event);
 
-        std::string response(64, '\0');
-
-        auto [rstatus, rbytes] = co_await client.recv(std::span<char>{response.data(), response.length()});
-
-        REQUIRE(rstatus == coro::poll_status::event);
-        REQUIRE(rbytes == msg.length());
-        response.resize(rbytes);
-        REQUIRE(response == msg);
+        std::string buffer(256, '\0');
+        auto [rstatus, rspan] = client.recv(buffer);
+        REQUIRE(rstatus == coro::net::recv_status::ok);
+        REQUIRE(rspan.size() == server_msg.length());
+        buffer.resize(rspan.size());
+        REQUIRE(buffer == server_msg);
 
         co_return;
     };
 
-    REQUIRE(scheduler.schedule(make_client_task()));
+    auto make_server_task = [&]() -> coro::task<void> {
+        coro::net::tcp_server server{scheduler};
 
-    // Shutting down the scheduler will cause it to stop accepting new connections, to avoid requiring
-    // another scheduler for this test the main thread can spin sleep until the tcp scheduler reports
-    // that it is empty.  tcp schedulers do not report their accept task as a task in its size/empty count.
-    while (!scheduler.empty())
+        // Poll for client connection.
+        auto pstatus = co_await server.poll();
+        REQUIRE(pstatus == coro::poll_status::event);
+        auto client = server.accept();
+        REQUIRE(client.socket().is_valid());
+
+        // Poll for client request.
+        pstatus = co_await client.poll(coro::poll_op::read);
+        REQUIRE(pstatus == coro::poll_status::event);
+
+        std::string buffer(256, '\0');
+        auto [rstatus, rspan] = client.recv(buffer);
+        REQUIRE(rstatus == coro::net::recv_status::ok);
+        REQUIRE(rspan.size() == client_msg.size());
+        buffer.resize(rspan.size());
+        REQUIRE(buffer == client_msg);
+
+        // Respond to client.
+        auto [sstatus, remaining] = client.send(server_msg);
+        REQUIRE(sstatus == coro::net::send_status::ok);
+        REQUIRE(remaining.empty());
+    };
+
+    scheduler.schedule(make_server_task());
+    scheduler.schedule(make_client_task());
+
+    while(!scheduler.empty())
     {
         std::this_thread::sleep_for(std::chrono::milliseconds{1});
     }
-
-    scheduler.shutdown();
-    REQUIRE(scheduler.empty());
-}
-
-TEST_CASE("tcp_server echo server")
-{
-    const std::string msg{"Hello from client"};
-
-    tcp_server_echo(coro::net::ip_address::from_string("127.0.0.1"), msg);
-    tcp_server_echo(coro::net::hostname{"localhost"}, msg);
 }

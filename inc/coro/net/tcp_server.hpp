@@ -1,6 +1,7 @@
 #pragma once
 
 #include "coro/net/ip_address.hpp"
+#include "coro/net/tcp_client.hpp"
 #include "coro/io_scheduler.hpp"
 #include "coro/net/socket.hpp"
 #include "coro/task.hpp"
@@ -14,53 +15,52 @@ namespace coro::net
 class tcp_server : public io_scheduler
 {
 public:
-    using on_connection_t = std::function<task<void>(tcp_server&, net::socket)>;
-
     struct options
     {
-        net::ip_address       address       = net::ip_address::from_string("0.0.0.0");
-        uint16_t              port          = 8080;
-        int32_t               backlog       = 128;
-        on_connection_t       on_connection = nullptr;
-        io_scheduler::options io_options{};
+        /// The ip address for the tcp server to bind and listen on.
+        net::ip_address       address{net::ip_address::from_string("0.0.0.0")};
+        /// The port for the tcp server to bind and listen on.
+        uint16_t              port{8080};
+        /// The kernel backlog of connections to buffer.
+        int32_t               backlog{128};
     };
 
-    explicit tcp_server(
+    tcp_server(
+        io_scheduler& scheduler,
         options opts =
             options{
                 .address = net::ip_address::from_string("0.0.0.0"),
                 .port = 8080,
-                .backlog = 128,
-                .on_connection = [](tcp_server&, net::socket) -> task<void> { co_return; },
-                .io_options = io_scheduler::options{}});
+                .backlog = 128});
 
     tcp_server(const tcp_server&) = delete;
     tcp_server(tcp_server&&)      = delete;
     auto operator=(const tcp_server&) -> tcp_server& = delete;
     auto operator=(tcp_server&&) -> tcp_server& = delete;
+    ~tcp_server() = default;
 
-    ~tcp_server() override;
+    /**
+     * Polls for new incoming tcp connections.
+     * @param timeout How long to wait for a new connection before timing out, zero waits indefinitely.
+     * @return The result of the poll, 'event' means the poll was successful and there is at least 1
+     *         connection ready to be accepted.
+     */
+    auto poll(std::chrono::milliseconds timeout = std::chrono::milliseconds{0}) -> coro::task<coro::poll_status>;
 
-    auto empty() const -> bool { return size() == 0; }
-
-    auto size() const -> size_t
-    {
-        // Take one off for the accept task so the user doesn't have to account for the hidden task.
-        auto size = io_scheduler::size();
-        return (size > 0) ? size - 1 : 0;
-    }
-
-    auto shutdown(shutdown_t wait_for_tasks = shutdown_t::sync) -> void override;
+    /**
+     * Accepts an incoming tcp client connection.  On failure the tcp clients socket will be set to
+     * and invalid state, use the socket.is_value() to verify the client was correctly accepted.
+     * @return The newly connected tcp client connection.
+     */
+    auto accept() -> coro::net::tcp_client;
 
 private:
+    /// The io scheduler for awaiting new connections.
+    io_scheduler& m_io_scheduler;
+    /// The bind and listen options for this server.
     options m_options;
-
-    /// Should the accept task continue accepting new connections?
-    std::atomic<bool> m_accept_new_connections{true};
-    std::atomic<bool> m_accept_task_exited{false};
-    net::socket       m_accept_socket{-1};
-
-    auto make_accept_task() -> coro::task<void>;
+    /// The socket for accepting new tcp connections on.
+    net::socket m_accept_socket{-1};
 };
 
 } // namespace coro::net

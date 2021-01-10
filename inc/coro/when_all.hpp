@@ -1,6 +1,6 @@
 #pragma once
 
-#include "coro/awaitable.hpp"
+#include "coro/concepts/awaitable.hpp"
 #include "coro/detail/void_value.hpp"
 
 #include <atomic>
@@ -434,7 +434,7 @@ private:
     coroutine_handle_type m_coroutine;
 };
 
-template<awaitable awaitable, typename return_type = awaitable_traits<awaitable&&>::awaiter_return_type>
+template<concepts::awaitable awaitable, typename return_type = concepts::awaitable_traits<awaitable&&>::awaiter_return_type>
 static auto make_when_all_task(awaitable&& a) -> when_all_task<return_type>
 {
     if constexpr (std::is_void_v<return_type>)
@@ -450,15 +450,15 @@ static auto make_when_all_task(awaitable&& a) -> when_all_task<return_type>
 
 } // namespace detail
 
-template<awaitable... awaitables_type>
+template<concepts::awaitable... awaitables_type>
 [[nodiscard]] auto when_all_awaitable(awaitables_type&&... awaitables)
 {
     return detail::when_all_ready_awaitable<
-        std::tuple<detail::when_all_task<typename awaitable_traits<awaitables_type>::awaiter_return_type>...>>(
+        std::tuple<detail::when_all_task<typename concepts::awaitable_traits<awaitables_type>::awaiter_return_type>...>>(
         std::make_tuple(detail::make_when_all_task(std::forward<awaitables_type>(awaitables))...));
 }
 
-template<awaitable awaitable, typename return_type = awaitable_traits<awaitable>::awaiter_return_type>
+template<concepts::awaitable awaitable, typename return_type = concepts::awaitable_traits<awaitable>::awaiter_return_type>
 [[nodiscard]] auto when_all_awaitable(std::vector<awaitable>& awaitables)
     -> detail::when_all_ready_awaitable<std::vector<detail::when_all_task<return_type>>>
 {
