@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.0)
 project(libcoro CXX)
 
 # Set the githooks directory to auto format and update the readme.
