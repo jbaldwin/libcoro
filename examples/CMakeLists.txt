@@ -5,8 +5,13 @@ add_executable(coro_event coro_event.cpp)
 target_compile_features(coro_event PUBLIC cxx_std_20)
 target_link_libraries(coro_event PUBLIC libcoro)
 
+add_executable(coro_latch coro_latch.cpp)
+target_compile_features(coro_latch PUBLIC cxx_std_20)
+target_link_libraries(coro_latch PUBLIC libcoro)
+
 if(${CMAKE_CXX_COMPILER_ID} MATCHES "GNU")
     target_compile_options(coro_event PUBLIC -fcoroutines -Wall -Wextra -pipe)
+    target_compile_options(coro_latch PUBLIC -fcoroutines -Wall -Wextra -pipe)
 elseif(${CMAKE_CXX_COMPILER_ID} MATCHES "Clang")
     message(FATAL_ERROR "Clang is currently not supported.")
 else()

@@ -50,7 +50,7 @@ ${EXAMPLE_CORO_EVENT_CPP}
 
 Expected output:
 ```bash
-$ ./Debug/examples/coro_event
+$ ./examples/coro_event
 task 1 is waiting on the event...
 task 2 is waiting on the event...
 task 3 is waiting on the event...
@@ -58,6 +58,31 @@ set task is triggering the event
 task 3 event triggered, now resuming.
 task 2 event triggered, now resuming.
 task 1 event triggered, now resuming.
+```
+
+### coro::latch
+The `coro::latch` is a thread safe async tool to have 1 waiter suspend until all outstanding events
+have completed before proceeding.
+
+```C++
+${EXAMPLE_CORO_LATCH_CPP}
+```
+
+Expected output:
+```bash
+$ ./examples/coro_latch
+latch task is now waiting on all children tasks...
+work task 1 is working...
+work task 1 is done, counting down on the latch
+work task 2 is working...
+work task 2 is done, counting down on the latch
+work task 3 is working...
+work task 3 is done, counting down on the latch
+work task 4 is working...
+work task 4 is done, counting down on the latch
+work task 5 is working...
+work task 5 is done, counting down on the latch
+latch task children tasks completed, resuming.
 ```
 
 ## Usage

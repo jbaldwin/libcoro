@@ -52,12 +52,12 @@ int main()
 {
     coro::event e;
 
-    // This task will wait until the given event has been set before advancings
-    auto make_wait_task = [](const coro::event& e, int i) -> coro::task<int> {
+    // These tasks will wait until the given event has been set before advancing.
+    auto make_wait_task = [](const coro::event& e, uint64_t i) -> coro::task<void> {
         std::cout << "task " << i << " is waiting on the event...\n";
         co_await e;
         std::cout << "task " << i << " event triggered, now resuming.\n";
-        co_return i;
+        co_return;
     };
 
     // This task will trigger the event allowing all waiting tasks to proceed.
@@ -68,7 +68,8 @@ int main()
     };
 
     // Synchronously wait until all the tasks are completed, this is intentionally
-    // starting the first 3 wait tasks prior to the final set task.
+    // starting the first 3 wait tasks prior to the final set task so the waiters suspend
+    // their coroutine before being resumed.
     coro::sync_wait(
         coro::when_all_awaitable(make_wait_task(e, 1), make_wait_task(e, 2), make_wait_task(e, 3), make_set_task(e)));
 }
@@ -76,7 +77,7 @@ int main()
 
 Expected output:
 ```bash
-$ ./Debug/examples/coro_event
+$ ./examples/coro_event
 task 1 is waiting on the event...
 task 2 is waiting on the event...
 task 3 is waiting on the event...
@@ -84,6 +85,78 @@ set task is triggering the event
 task 3 event triggered, now resuming.
 task 2 event triggered, now resuming.
 task 1 event triggered, now resuming.
+```
+
+### coro::latch
+The `coro::latch` is a thread safe async tool to have 1 waiter suspend until all outstanding events
+have completed before proceeding.
+
+```C++
+#include <coro/coro.hpp>
+#include <iostream>
+
+int main()
+{
+    // This task will wait until the given latch setters have completed.
+    auto make_latch_task = [](coro::latch& l) -> coro::task<void> {
+        std::cout << "latch task is now waiting on all children tasks...\n";
+        co_await l;
+        std::cout << "latch task children tasks completed, resuming.\n";
+        co_return;
+    };
+
+    // This task does 'work' and counts down on the latch when completed.  The final child task to
+    // complete will end up resuming the latch task when the latch's count reaches zero.
+    auto make_worker_task = [](coro::latch& l, int64_t i) -> coro::task<void> {
+        std::cout << "work task " << i << " is working...\n";
+        std::cout << "work task " << i << " is done, counting down on the latch\n";
+        l.count_down();
+        co_return;
+    };
+
+    // It is important to note that the latch task must not 'own' the worker tasks within its
+    // coroutine stack frame because the final worker task thread will execute the latch task upon
+    // setting the latch counter to zero.  This means that:
+    //     1) final worker task calls count_down() => 0
+    //     2) resume execution of latch task to its next suspend point or completion, IF completed
+    //        then this coroutine's stack frame is destroyed!
+    //     3) final worker task continues exection
+    // If the latch task 'own's the worker task objects then they will destruct prior to step (3)
+    // if the latch task completes on that resume, and it will be attempting to execute an already
+    // destructed coroutine frame.
+    // This example correctly has the latch task and all its waiting tasks on the same scope/frame
+    // to avoid this issue.
+    const int64_t                 num_tasks{5};
+    coro::latch                   l{num_tasks};
+    std::vector<coro::task<void>> tasks{};
+
+    // Make the latch task first so it correctly waits for all worker tasks to count down.
+    tasks.emplace_back(make_latch_task(l));
+    for (int64_t i = 1; i <= num_tasks; ++i)
+    {
+        tasks.emplace_back(make_worker_task(l, i));
+    }
+
+    // Wait for all tasks to complete.
+    coro::sync_wait(coro::when_all_awaitable(tasks));
+}
+```
+
+Expected output:
+```bash
+$ ./examples/coro_latch
+latch task is now waiting on all children tasks...
+work task 1 is working...
+work task 1 is done, counting down on the latch
+work task 2 is working...
+work task 2 is done, counting down on the latch
+work task 3 is working...
+work task 3 is done, counting down on the latch
+work task 4 is working...
+work task 4 is done, counting down on the latch
+work task 5 is working...
+work task 5 is done, counting down on the latch
+latch task children tasks completed, resuming.
 ```
 
 ## Usage
