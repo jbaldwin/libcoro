@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.0)
 project(libcoro_examples)
 
 add_executable(coro_event coro_event.cpp)
