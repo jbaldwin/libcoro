@@ -2,5 +2,4 @@
 
 namespace coro::net
 {
-
 } // namespace coro::net

@@ -13,7 +13,6 @@
 
 namespace coro::net
 {
-
 class socket
 {
 public:
@@ -36,9 +35,9 @@ public:
     struct options
     {
         /// The domain for the socket.
-        domain_t   domain;
+        domain_t domain;
         /// The type of socket.
-        type_t     type;
+        type_t type;
         /// If the socket should be blocking or non-blocking.
         blocking_t blocking;
     };
@@ -51,7 +50,7 @@ public:
     socket(const socket&) = delete;
     socket(socket&& other) : m_fd(std::exchange(other.m_fd, -1)) {}
     auto operator=(const socket&) -> socket& = delete;
-    auto operator=(socket&& other) noexcept -> socket&;
+    auto operator                            =(socket&& other) noexcept -> socket&;
 
     ~socket() { close(); }
 
@@ -105,9 +104,6 @@ auto make_socket(const socket::options& opts) -> socket;
  *                for udp types.
  */
 auto make_accept_socket(
-    const socket::options& opts,
-    const net::ip_address& address,
-    uint16_t               port,
-    int32_t                backlog = 128) -> socket;
+    const socket::options& opts, const net::ip_address& address, uint16_t port, int32_t backlog = 128) -> socket;
 
 } // namespace coro::net

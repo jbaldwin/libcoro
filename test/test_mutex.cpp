@@ -1,0 +1,82 @@
+#include "catch.hpp"
+
+#include <coro/coro.hpp>
+
+#include <chrono>
+#include <thread>
+
+TEST_CASE("mutex single waiter not locked")
+{
+    std::vector<uint64_t> output;
+
+    coro::mutex m;
+
+    auto make_emplace_task = [&](coro::mutex& m) -> coro::task<void> {
+        std::cerr << "Acquiring lock\n";
+        auto scoped_lock = co_await m.lock();
+        std::cerr << "lock acquired, emplacing back 1\n";
+        output.emplace_back(1);
+        std::cerr << "coroutine done\n";
+        co_return;
+    };
+
+    coro::sync_wait(make_emplace_task(m));
+
+    REQUIRE(m.try_lock());
+    m.unlock();
+
+    REQUIRE(output.size() == 1);
+    REQUIRE(output[0] == 1);
+}
+
+TEST_CASE("mutex many waiters until event")
+{
+    std::atomic<uint64_t>         value{0};
+    std::vector<coro::task<void>> tasks;
+
+    coro::thread_pool tp{coro::thread_pool::options{.thread_count = 1}};
+
+    coro::mutex m; // acquires and holds the lock until the event is triggered
+    coro::event e; // triggers the blocking thread to release the lock
+
+    auto make_task = [&](uint64_t id) -> coro::task<void> {
+        co_await tp.schedule().value();
+        std::cerr << "id = " << id << " waiting to acquire the lock\n";
+        auto scoped_lock = co_await m.lock();
+        std::cerr << "id = " << id << " lock acquired\n";
+        value.fetch_add(1, std::memory_order::relaxed);
+        std::cerr << "id = " << id << " coroutine done\n";
+        co_return;
+    };
+
+    auto make_block_task = [&]() -> coro::task<void> {
+        co_await tp.schedule().value();
+        std::cerr << "block task acquiring lock\n";
+        auto scoped_lock = co_await m.lock();
+        std::cerr << "block task acquired lock, waiting on event\n";
+        co_await e;
+        co_return;
+    };
+
+    auto make_set_task = [&]() -> coro::task<void> {
+        co_await tp.schedule().value();
+        std::cerr << "set task setting event\n";
+        e.set();
+        co_return;
+    };
+
+    // Grab mutex so all threads block.
+    tasks.emplace_back(make_block_task());
+
+    // Create N tasks that attempt to lock the mutex.
+    for (uint64_t i = 1; i <= 4; ++i)
+    {
+        tasks.emplace_back(make_task(i));
+    }
+
+    tasks.emplace_back(make_set_task());
+
+    coro::sync_wait(coro::when_all_awaitable(tasks));
+
+    REQUIRE(value == 4);
+}

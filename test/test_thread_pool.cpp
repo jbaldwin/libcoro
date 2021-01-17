@@ -157,3 +157,36 @@ TEST_CASE("thread_pool schedule functor return_type = void")
 
     REQUIRE_THROWS(coro::sync_wait(tp.schedule(f, std::ref(counter))));
 }
+
+TEST_CASE("thread_pool event jump threads")
+{
+    // This test verifies that the thread that sets the event ends up executing every waiter on the event
+
+    coro::thread_pool tp1{coro::thread_pool::options{.thread_count = 1}};
+    coro::thread_pool tp2{coro::thread_pool::options{.thread_count = 1}};
+
+    coro::event e{};
+
+    auto make_tp1_task = [&]() -> coro::task<void> {
+        co_await tp1.schedule().value();
+        auto before_thread_id = std::this_thread::get_id();
+        std::cerr << "before event thread_id = " << before_thread_id << "\n";
+        co_await e;
+        auto after_thread_id = std::this_thread::get_id();
+        std::cerr << "after event thread_id = " << after_thread_id << "\n";
+
+        REQUIRE(before_thread_id != after_thread_id);
+
+        co_return;
+    };
+
+    auto make_tp2_task = [&]() -> coro::task<void> {
+        co_await tp2.schedule().value();
+        std::this_thread::sleep_for(std::chrono::milliseconds{10});
+        std::cerr << "setting event\n";
+        e.set();
+        co_return;
+    };
+
+    coro::sync_wait(coro::when_all_awaitable(make_tp1_task(), make_tp2_task()));
+}

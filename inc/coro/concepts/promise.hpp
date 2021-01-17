@@ -6,7 +6,6 @@
 
 namespace coro::concepts
 {
-
 // clang-format off
 template<typename type, typename return_type>
 concept promise = requires(type t)

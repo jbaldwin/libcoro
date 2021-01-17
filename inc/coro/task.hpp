@@ -198,7 +198,7 @@ public:
         return false;
     }
 
-    auto operator co_await() const & noexcept
+    auto operator co_await() const& noexcept
     {
         struct awaitable : public awaitable_base
         {
@@ -208,7 +208,7 @@ public:
         return awaitable{m_coroutine};
     }
 
-    auto operator co_await() const && noexcept
+    auto operator co_await() const&& noexcept
     {
         struct awaitable : public awaitable_base
         {

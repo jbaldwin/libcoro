@@ -99,7 +99,7 @@ auto thread_pool::executor(std::stop_token stop_token, std::size_t idx) -> void
             if (op != nullptr && op->m_awaiting_coroutine != nullptr)
             {
                 op->m_awaiting_coroutine.resume();
-                m_size.fetch_sub(1, std::memory_order_relaxed);
+                m_size.fetch_sub(1, std::memory_order::relaxed);
             }
             else
             {

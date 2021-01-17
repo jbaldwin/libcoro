@@ -1,21 +1,20 @@
 #pragma once
 
 #include "coro/concepts/buffer.hpp"
+#include "coro/io_scheduler.hpp"
+#include "coro/net/connect.hpp"
 #include "coro/net/ip_address.hpp"
 #include "coro/net/recv_status.hpp"
 #include "coro/net/send_status.hpp"
 #include "coro/net/socket.hpp"
-#include "coro/net/connect.hpp"
 #include "coro/poll.hpp"
 #include "coro/task.hpp"
-#include "coro/io_scheduler.hpp"
 
 #include <chrono>
-#include <optional>
-#include <variant>
 #include <memory>
-#include <chrono>
+#include <optional>
 #include <string>
+#include <variant>
 #include <vector>
 
 namespace coro
@@ -25,7 +24,6 @@ class io_scheduler;
 
 namespace coro::net
 {
-
 class tcp_server;
 
 class tcp_client
@@ -48,9 +46,7 @@ public:
      */
     tcp_client(
         io_scheduler& scheduler,
-        options opts = options{
-            .address = {net::ip_address::from_string("127.0.0.1")},
-            .port = 8080});
+        options       opts = options{.address = {net::ip_address::from_string("127.0.0.1")}, .port = 8080});
     tcp_client(const tcp_client&) = delete;
     tcp_client(tcp_client&&)      = default;
     auto operator=(const tcp_client&) noexcept -> tcp_client& = delete;
@@ -71,8 +67,7 @@ public:
      * @param timeout How long to wait for the connection to establish? Timeout of zero is indefinite.
      * @return The result status of trying to connect.
      */
-    auto connect(
-        std::chrono::milliseconds timeout = std::chrono::milliseconds{0}) -> coro::task<net::connect_status>;
+    auto connect(std::chrono::milliseconds timeout = std::chrono::milliseconds{0}) -> coro::task<net::connect_status>;
 
     /**
      * Polls for the given operation on this client's tcp socket.  This should be done prior to
@@ -82,9 +77,8 @@ public:
      * @return The status result of th poll operation.  When poll_status::event is returned then the
      *         event operation is ready.
      */
-    auto poll(
-        coro::poll_op op,
-        std::chrono::milliseconds timeout = std::chrono::milliseconds{0}) -> coro::task<poll_status>
+    auto poll(coro::poll_op op, std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
+        -> coro::task<poll_status>
     {
         co_return co_await m_io_scheduler.poll(m_socket, op, timeout);
     }
@@ -97,17 +91,16 @@ public:
      *         bytes will be a subspan or full span of the given input buffer.
      */
     template<concepts::mutable_buffer buffer_type>
-    auto recv(
-        buffer_type&& buffer) -> std::pair<recv_status, std::span<char>>
+    auto recv(buffer_type&& buffer) -> std::pair<recv_status, std::span<char>>
     {
         // If the user requested zero bytes, just return.
-        if(buffer.empty())
+        if (buffer.empty())
         {
             return {recv_status::ok, std::span<char>{}};
         }
 
         auto bytes_recv = ::recv(m_socket.native_handle(), buffer.data(), buffer.size(), 0);
-        if(bytes_recv > 0)
+        if (bytes_recv > 0)
         {
             // Ok, we've recieved some data.
             return {recv_status::ok, std::span<char>{buffer.data(), static_cast<size_t>(bytes_recv)}};
@@ -134,17 +127,16 @@ public:
      *         were successfully sent the status will be 'ok' and the remaining span will be empty.
      */
     template<concepts::const_buffer buffer_type>
-    auto send(
-        const buffer_type& buffer) -> std::pair<send_status, std::span<const char>>
+    auto send(const buffer_type& buffer) -> std::pair<send_status, std::span<const char>>
     {
         // If the user requested zero bytes, just return.
-        if(buffer.empty())
+        if (buffer.empty())
         {
             return {send_status::ok, std::span<const char>{buffer.data(), buffer.size()}};
         }
 
         auto bytes_sent = ::send(m_socket.native_handle(), buffer.data(), buffer.size(), 0);
-        if(bytes_sent >= 0)
+        if (bytes_sent >= 0)
         {
             // Some or all of the bytes were written.
             return {send_status::ok, std::span<const char>{buffer.data() + bytes_sent, buffer.size() - bytes_sent}};
@@ -159,10 +151,7 @@ public:
 private:
     /// The tcp_server creates already connected clients and provides a tcp socket pre-built.
     friend tcp_server;
-    tcp_client(
-        io_scheduler& scheduler,
-        net::socket socket,
-        options opts);
+    tcp_client(io_scheduler& scheduler, net::socket socket, options opts);
 
     /// The scheduler that will drive this tcp client.
     io_scheduler& m_io_scheduler;

@@ -16,8 +16,8 @@ TEST_CASE("io_scheduler sizeof()")
     std::cerr << "sizeof(coro:task<void>)=[" << sizeof(coro::task<void>) << "]\n";
 
     std::cerr << "sizeof(std::coroutine_handle<>)=[" << sizeof(std::coroutine_handle<>) << "]\n";
-    std::cerr << "sizeof(std::variant<coro::task<void>, std::coroutine_handle<>>)=[" << sizeof(std::variant<coro::task<void>, std::coroutine_handle<>>)
-              << "]\n";
+    std::cerr << "sizeof(std::variant<coro::task<void>, std::coroutine_handle<>>)=["
+              << sizeof(std::variant<coro::task<void>, std::coroutine_handle<>>) << "]\n";
 
     REQUIRE(true);
 }

@@ -182,7 +182,9 @@ private:
     coroutine_type m_coroutine;
 };
 
-template<concepts::awaitable awaitable, typename return_type = concepts::awaitable_traits<awaitable>::awaiter_return_type>
+template<
+    concepts::awaitable awaitable,
+    typename return_type = concepts::awaitable_traits<awaitable>::awaiter_return_type>
 static auto make_sync_wait_task(awaitable&& a) -> sync_wait_task<return_type>
 {
     if constexpr (std::is_void_v<return_type>)
