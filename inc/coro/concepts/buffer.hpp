@@ -1,12 +1,11 @@
 #pragma once
 
 #include <concepts>
-#include <type_traits>
 #include <cstdint>
+#include <type_traits>
 
 namespace coro::concepts
 {
-
 // clang-format off
 template<typename type>
 concept const_buffer = requires(const type t)

@@ -10,10 +10,8 @@ using namespace std::chrono_literals;
 tcp_client::tcp_client(io_scheduler& scheduler, options opts)
     : m_io_scheduler(scheduler),
       m_options(std::move(opts)),
-      m_socket(net::make_socket(net::socket::options{
-          m_options.address.domain(),
-          net::socket::type_t::tcp,
-          net::socket::blocking_t::no}))
+      m_socket(net::make_socket(
+          net::socket::options{m_options.address.domain(), net::socket::type_t::tcp, net::socket::blocking_t::no}))
 {
 }
 
@@ -23,12 +21,11 @@ tcp_client::tcp_client(io_scheduler& scheduler, net::socket socket, options opts
       m_socket(std::move(socket)),
       m_connect_status(connect_status::connected)
 {
-
 }
 
 auto tcp_client::connect(std::chrono::milliseconds timeout) -> coro::task<connect_status>
 {
-    if(m_connect_status.has_value() && m_connect_status.value() == connect_status::connected)
+    if (m_connect_status.has_value() && m_connect_status.value() == connect_status::connected)
     {
         co_return m_connect_status.value();
     }

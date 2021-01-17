@@ -4,11 +4,8 @@
 
 namespace coro
 {
-
-detail::resume_token_base::resume_token_base(io_scheduler* s) noexcept
-    : m_scheduler(s), m_state(nullptr)
+detail::resume_token_base::resume_token_base(io_scheduler* s) noexcept : m_scheduler(s), m_state(nullptr)
 {
-
 }
 
 detail::resume_token_base::resume_token_base(resume_token_base&& other)
@@ -148,10 +145,10 @@ auto io_scheduler::task_manager::make_cleanup_task(task<void> user_task, task_po
 
 io_scheduler::io_scheduler(const options opts)
     : m_epoll_fd(epoll_create1(EPOLL_CLOEXEC)),
-        m_accept_fd(eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK)),
-        m_timer_fd(timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC)),
-        m_thread_strategy(opts.thread_strategy),
-        m_task_manager(opts.reserve_size, opts.growth_factor)
+      m_accept_fd(eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK)),
+      m_timer_fd(timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC)),
+      m_thread_strategy(opts.thread_strategy),
+      m_task_manager(opts.reserve_size, opts.growth_factor)
 {
     epoll_event e{};
     e.events = EPOLLIN;
@@ -318,10 +315,7 @@ auto io_scheduler::poll(fd_t fd, poll_op op, std::chrono::milliseconds timeout) 
     co_return status;
 }
 
-auto io_scheduler::poll(
-    const net::socket& sock,
-    poll_op op,
-    std::chrono::milliseconds timeout)
+auto io_scheduler::poll(const net::socket& sock, poll_op op, std::chrono::milliseconds timeout)
     -> coro::task<poll_status>
 {
     return poll(sock.native_handle(), op, timeout);
@@ -340,16 +334,13 @@ auto io_scheduler::read(fd_t fd, std::span<char> buffer, std::chrono::millisecon
     }
 }
 
-auto io_scheduler::read(
-    const net::socket&       sock,
-    std::span<char>           buffer,
-    std::chrono::milliseconds timeout) -> coro::task<std::pair<poll_status, ssize_t>>
+auto io_scheduler::read(const net::socket& sock, std::span<char> buffer, std::chrono::milliseconds timeout)
+    -> coro::task<std::pair<poll_status, ssize_t>>
 {
     return read(sock.native_handle(), buffer, timeout);
 }
 
-auto io_scheduler::write(
-    fd_t fd, const std::span<const char> buffer, std::chrono::milliseconds timeout)
+auto io_scheduler::write(fd_t fd, const std::span<const char> buffer, std::chrono::milliseconds timeout)
     -> coro::task<std::pair<poll_status, ssize_t>>
 {
     auto status = co_await poll(fd, poll_op::write, timeout);
@@ -362,10 +353,8 @@ auto io_scheduler::write(
     }
 }
 
-auto io_scheduler::write(
-    const net::socket&         sock,
-    const std::span<const char> buffer,
-    std::chrono::milliseconds timeout) -> coro::task<std::pair<poll_status, ssize_t>>
+auto io_scheduler::write(const net::socket& sock, const std::span<const char> buffer, std::chrono::milliseconds timeout)
+    -> coro::task<std::pair<poll_status, ssize_t>>
 {
     return write(sock.native_handle(), buffer, timeout);
 }
@@ -430,7 +419,8 @@ auto io_scheduler::shutdown(shutdown_t wait_for_tasks) -> void
     }
 }
 
-auto io_scheduler::make_scheduler_after_task(coro::task<void> task, std::chrono::milliseconds wait_time) -> coro::task<void>
+auto io_scheduler::make_scheduler_after_task(coro::task<void> task, std::chrono::milliseconds wait_time)
+    -> coro::task<void>
 {
     // Wait for the period requested, and then resume their task.
     co_await yield_for(wait_time);

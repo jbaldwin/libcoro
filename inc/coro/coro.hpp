@@ -19,6 +19,7 @@
 #include "coro/generator.hpp"
 #include "coro/io_scheduler.hpp"
 #include "coro/latch.hpp"
+#include "coro/mutex.hpp"
 #include "coro/sync_wait.hpp"
 #include "coro/task.hpp"
 #include "coro/thread_pool.hpp"

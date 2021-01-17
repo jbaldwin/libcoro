@@ -344,9 +344,9 @@ TEST_CASE("benchmark tcp_server echo server")
      * will reset/trample on each other when each side of the client + server go to poll().
      */
 
-    const constexpr std::size_t connections = 64;
+    const constexpr std::size_t connections             = 64;
     const constexpr std::size_t messages_per_connection = 10'000;
-    const constexpr std::size_t ops        = connections * messages_per_connection;
+    const constexpr std::size_t ops                     = connections * messages_per_connection;
 
     const std::string msg = "im a data point in a stream of bytes";
 
@@ -359,13 +359,13 @@ TEST_CASE("benchmark tcp_server echo server")
         std::string in(64, '\0');
 
         // Echo the messages until the socket is closed. a 'done' message arrives.
-        while(true)
+        while (true)
         {
             auto pstatus = co_await client.poll(coro::poll_op::read);
             REQUIRE(pstatus == coro::poll_status::event);
 
             auto [rstatus, rspan] = client.recv(in);
-            if(rstatus == coro::net::recv_status::closed)
+            if (rstatus == coro::net::recv_status::closed)
             {
                 REQUIRE(rspan.empty());
                 break;
@@ -389,7 +389,7 @@ TEST_CASE("benchmark tcp_server echo server")
         listening = true;
 
         uint64_t accepted{0};
-        while(accepted < connections)
+        while (accepted < connections)
         {
             auto pstatus = co_await server.poll();
             REQUIRE(pstatus == coro::poll_status::event);
@@ -411,7 +411,7 @@ TEST_CASE("benchmark tcp_server echo server")
         auto cstatus = co_await client.connect();
         REQUIRE(cstatus == coro::net::connect_status::connected);
 
-        for(size_t i = 1; i <= messages_per_connection; ++i)
+        for (size_t i = 1; i <= messages_per_connection; ++i)
         {
             auto [sstatus, remaining] = client.send(msg);
             REQUIRE(sstatus == coro::net::send_status::ok);
@@ -438,13 +438,13 @@ TEST_CASE("benchmark tcp_server echo server")
 
     // The server can take a small bit of time to start up, if we don't wait for it to notify then
     // the first few connections can easily fail to connect causing this test to fail.
-    while(!listening)
+    while (!listening)
     {
         std::this_thread::sleep_for(std::chrono::milliseconds{1});
     }
 
     // Spawn N client connections.
-    for(size_t i = 0; i < connections; ++i)
+    for (size_t i = 0; i < connections; ++i)
     {
         REQUIRE(client_scheduler.schedule(make_client_task()));
     }

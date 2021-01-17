@@ -64,7 +64,7 @@ TEST_CASE("tcp_server ping server")
     scheduler.schedule(make_server_task());
     scheduler.schedule(make_client_task());
 
-    while(!scheduler.empty())
+    while (!scheduler.empty())
     {
         std::this_thread::sleep_for(std::chrono::milliseconds{1});
     }

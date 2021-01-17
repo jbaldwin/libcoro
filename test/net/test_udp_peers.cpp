@@ -9,7 +9,7 @@ TEST_CASE("udp one way")
     coro::io_scheduler scheduler{};
 
     auto make_send_task = [&]() -> coro::task<void> {
-        coro::net::udp_peer peer{scheduler};
+        coro::net::udp_peer       peer{scheduler};
         coro::net::udp_peer::info peer_info{};
 
         auto [sstatus, remaining] = peer.sendto(peer_info, msg);
@@ -20,9 +20,7 @@ TEST_CASE("udp one way")
     };
 
     auto make_recv_task = [&]() -> coro::task<void> {
-        coro::net::udp_peer::info self_info{
-            .address = coro::net::ip_address::from_string("0.0.0.0")
-        };
+        coro::net::udp_peer::info self_info{.address = coro::net::ip_address::from_string("0.0.0.0")};
 
         coro::net::udp_peer self{scheduler, self_info};
 
@@ -53,18 +51,18 @@ TEST_CASE("udp echo peers")
     coro::io_scheduler scheduler{};
 
     auto make_peer_task = [&scheduler](
-        uint16_t my_port,
-        uint16_t peer_port,
-        bool send_first,
-        const std::string my_msg,
-        const std::string peer_msg) -> coro::task<void> {
-
+                              uint16_t          my_port,
+                              uint16_t          peer_port,
+                              bool              send_first,
+                              const std::string my_msg,
+                              const std::string peer_msg) -> coro::task<void> {
         coro::net::udp_peer::info my_info{.address = coro::net::ip_address::from_string("0.0.0.0"), .port = my_port};
-        coro::net::udp_peer::info peer_info{.address = coro::net::ip_address::from_string("127.0.0.1"), .port = peer_port};
+        coro::net::udp_peer::info peer_info{
+            .address = coro::net::ip_address::from_string("127.0.0.1"), .port = peer_port};
 
         coro::net::udp_peer me{scheduler, my_info};
 
-        if(send_first)
+        if (send_first)
         {
             // Send my message to my peer first.
             auto [sstatus, remaining] = me.sendto(peer_info, my_msg);
@@ -86,7 +84,7 @@ TEST_CASE("udp echo peers")
             REQUIRE(buffer == peer_msg);
         }
 
-        if(send_first)
+        if (send_first)
         {
             // I sent first so now I need to await my peer's message.
             auto pstatus = co_await me.poll(coro::poll_op::read);
@@ -111,5 +109,5 @@ TEST_CASE("udp echo peers")
     };
 
     scheduler.schedule(make_peer_task(8081, 8080, false, peer2_msg, peer1_msg));
-    scheduler.schedule(make_peer_task(8080, 8081, true,  peer1_msg, peer2_msg));
+    scheduler.schedule(make_peer_task(8080, 8081, true, peer1_msg, peer2_msg));
 }

@@ -7,20 +7,18 @@
 TEST_CASE("dns_resolver basic")
 {
     coro::io_scheduler scheduler{
-        coro::io_scheduler::options{.thread_strategy = coro::io_scheduler::thread_strategy_t::spawn}
-    };
+        coro::io_scheduler::options{.thread_strategy = coro::io_scheduler::thread_strategy_t::spawn}};
 
     coro::net::dns_resolver dns_resolver{scheduler, std::chrono::milliseconds{5000}};
 
     std::atomic<bool> done{false};
 
-    auto make_host_by_name_task = [&](coro::net::hostname hn) -> coro::task<void>
-    {
+    auto make_host_by_name_task = [&](coro::net::hostname hn) -> coro::task<void> {
         auto result_ptr = co_await std::move(dns_resolver.host_by_name(hn));
 
-        if(result_ptr->status() == coro::net::dns_status::complete)
+        if (result_ptr->status() == coro::net::dns_status::complete)
         {
-            for(const auto& ip_addr : result_ptr->ip_addresses())
+            for (const auto& ip_addr : result_ptr->ip_addresses())
             {
                 std::cerr << coro::net::to_string(ip_addr.domain()) << " " << ip_addr.to_string() << "\n";
             }
@@ -33,7 +31,7 @@ TEST_CASE("dns_resolver basic")
 
     scheduler.schedule(make_host_by_name_task(coro::net::hostname{"www.example.com"}));
 
-    while(!done)
+    while (!done)
     {
         std::this_thread::sleep_for(std::chrono::milliseconds{10});
     }

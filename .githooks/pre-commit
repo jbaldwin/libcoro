@@ -1,0 +1,39 @@
+#!/usr/bin/sh
+
+FILE_EXTS=".c .h .cpp .hpp .cc .hh .cxx .tcc"
+
+# Determins if a file has the right extension to be clang-format'ed.
+should_clang_format() {
+    local filename=$(basename "$1")
+    local extension=".${filename##*.}"
+    local ext
+
+    local result=0
+
+    # Ignore the test/catch.hpp file
+    if [[ "$1" != *"catch"* ]]; then
+        for ext in $FILE_EXTS; do
+            # Otherwise, if the extension is in the array of extensions to reformat, echo 1.
+            [[ "$ext" == "$extension" ]] && result=1 && break
+        done
+    fi
+
+    echo $result
+}
+
+# Run the clang-format across the project's changed files.
+for file in $(git diff-index --cached --name-only HEAD); do
+    if [ -f "${file}" ] && [ "$(should_clang_format "${file}")" != "0" ] ; then
+        echo "clang-format ${file}"
+        clang-format -i --style=file "${file}"
+        git add "${file}"
+    fi
+done
+
+# Update the README.md example code with the given macros.
+template_contents=$(cat '.githooks/readme-template.md')
+# All code examples in markdown should be indeded '    '
+coro_event_cpp_contents=$(cat 'examples/coro_event.cpp')
+
+echo "${template_contents/\$\{EXAMPLE_CORO_EVENT_CPP\}/$coro_event_cpp_contents}" > README.md
+git add README.md

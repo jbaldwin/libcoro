@@ -27,10 +27,12 @@ TEST_CASE("net::ip_address from_string() ipv4")
 TEST_CASE("net::ip_address from_string() ipv6")
 {
     {
-        auto ip_addr = coro::net::ip_address::from_string("0123:4567:89ab:cdef:0123:4567:89ab:cdef", coro::net::domain_t::ipv6);
+        auto ip_addr =
+            coro::net::ip_address::from_string("0123:4567:89ab:cdef:0123:4567:89ab:cdef", coro::net::domain_t::ipv6);
         REQUIRE(ip_addr.to_string() == "123:4567:89ab:cdef:123:4567:89ab:cdef");
         REQUIRE(ip_addr.domain() == coro::net::domain_t::ipv6);
-        std::array<uint8_t, coro::net::ip_address::ipv6_len> expected{0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef, 0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef};
+        std::array<uint8_t, coro::net::ip_address::ipv6_len> expected{
+            0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef, 0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef};
         REQUIRE(std::equal(expected.begin(), expected.end(), ip_addr.data().begin()));
     }
 
@@ -46,7 +48,8 @@ TEST_CASE("net::ip_address from_string() ipv6")
         auto ip_addr = coro::net::ip_address::from_string("::1", coro::net::domain_t::ipv6);
         REQUIRE(ip_addr.to_string() == "::1");
         REQUIRE(ip_addr.domain() == coro::net::domain_t::ipv6);
-        std::array<uint8_t, coro::net::ip_address::ipv6_len> expected{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01};
+        std::array<uint8_t, coro::net::ip_address::ipv6_len> expected{
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01};
         REQUIRE(std::equal(expected.begin(), expected.end(), ip_addr.data().begin()));
     }
 
@@ -54,7 +57,8 @@ TEST_CASE("net::ip_address from_string() ipv6")
         auto ip_addr = coro::net::ip_address::from_string("1::1", coro::net::domain_t::ipv6);
         REQUIRE(ip_addr.to_string() == "1::1");
         REQUIRE(ip_addr.domain() == coro::net::domain_t::ipv6);
-        std::array<uint8_t, coro::net::ip_address::ipv6_len> expected{0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01};
+        std::array<uint8_t, coro::net::ip_address::ipv6_len> expected{
+            0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01};
         REQUIRE(std::equal(expected.begin(), expected.end(), ip_addr.data().begin()));
     }
 
@@ -62,7 +66,8 @@ TEST_CASE("net::ip_address from_string() ipv6")
         auto ip_addr = coro::net::ip_address::from_string("1::", coro::net::domain_t::ipv6);
         REQUIRE(ip_addr.to_string() == "1::");
         REQUIRE(ip_addr.domain() == coro::net::domain_t::ipv6);
-        std::array<uint8_t, coro::net::ip_address::ipv6_len> expected{0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+        std::array<uint8_t, coro::net::ip_address::ipv6_len> expected{
+            0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
         REQUIRE(std::equal(expected.begin(), expected.end(), ip_addr.data().begin()));
     }
 }

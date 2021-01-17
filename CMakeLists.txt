@@ -1,11 +1,20 @@
 cmake_minimum_required(VERSION 3.16)
-project(coro CXX)
+project(libcoro CXX)
 
-option(CORO_BUILD_TESTS    "Build the tests, Default=ON." ON)
-option(CORO_CODE_COVERAGE  "Enable code coverage, tests must also be enabled, Default=OFF" OFF)
+# Set the githooks directory to auto format and update the readme.
+message("git config core.hooksPath .githooks")
+execute_process(
+    COMMAND git config core.hooksPath .githooks
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+)
 
-message("${PROJECT_NAME} CORO_BUILD_TESTS      = ${CORO_BUILD_TESTS}")
-message("${PROJECT_NAME} CORO_CODE_COVERAGE    = ${CORO_CODE_COVERAGE}")
+option(LIBCORO_BUILD_TESTS    "Build the tests, Default=ON." ON)
+option(LIBCORO_CODE_COVERAGE  "Enable code coverage, tests must also be enabled, Default=OFF" OFF)
+option(LIBCORO_BUILD_EXAMPLES "Build the examples, Default=ON." ON)
+
+message("${PROJECT_NAME} LIBCORO_BUILD_TESTS      = ${LIBCORO_BUILD_TESTS}")
+message("${PROJECT_NAME} LIBCORO_CODE_COVERAGE    = ${LIBCORO_CODE_COVERAGE}")
+message("${PROJECT_NAME} LIBCORO_BUILD_EXAMPLES   = ${LIBCORO_BUILD_EXAMPLES}")
 
 set(CARES_STATIC    ON  CACHE INTERNAL "")
 set(CARES_SHARED    OFF CACHE INTERNAL "")
@@ -36,6 +45,7 @@ set(LIBCORO_SOURCE_FILES
     inc/coro/generator.hpp
     inc/coro/io_scheduler.hpp src/io_scheduler.cpp
     inc/coro/latch.hpp
+    inc/coro/mutex.hpp src/mutex.cpp
     inc/coro/poll.hpp
     inc/coro/shutdown.hpp
     inc/coro/sync_wait.hpp src/sync_wait.cpp
@@ -60,13 +70,16 @@ elseif(${CMAKE_CXX_COMPILER_ID} MATCHES "Clang")
     message(FATAL_ERROR "Clang is currently not supported.")
 endif()
 
-
-if(CORO_BUILD_TESTS)
-    if(CORO_CODE_COVERAGE)
+if(LIBCORO_BUILD_TESTS)
+    if(LIBCORO_CODE_COVERAGE)
         target_compile_options(${PROJECT_NAME} PRIVATE --coverage)
         target_link_libraries(${PROJECT_NAME} PRIVATE gcov)
     endif()
 
     enable_testing()
     add_subdirectory(test)
+endif()
+
+if(LIBCORO_BUILD_EXAMPLES)
+    add_subdirectory(examples)
 endif()

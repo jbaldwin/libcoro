@@ -2,7 +2,6 @@
 
 namespace coro::net
 {
-
 auto socket::type_to_os(type_t type) -> int
 {
     switch (type)
@@ -96,11 +95,8 @@ auto make_socket(const socket::options& opts) -> socket
     return s;
 }
 
-auto make_accept_socket(
-    const socket::options&         opts,
-    const net::ip_address& address,
-    uint16_t               port,
-    int32_t                backlog) -> socket
+auto make_accept_socket(const socket::options& opts, const net::ip_address& address, uint16_t port, int32_t backlog)
+    -> socket
 {
     socket s = make_socket(opts);
 
@@ -120,7 +116,7 @@ auto make_accept_socket(
         throw std::runtime_error{"Failed to bind."};
     }
 
-    if(opts.type == socket::type_t::tcp)
+    if (opts.type == socket::type_t::tcp)
     {
         if (listen(s.native_handle(), backlog) < 0)
         {

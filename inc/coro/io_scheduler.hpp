@@ -1,9 +1,9 @@
 #pragma once
 
 #include "coro/concepts/awaitable.hpp"
+#include "coro/net/socket.hpp"
 #include "coro/poll.hpp"
 #include "coro/shutdown.hpp"
-#include "coro/net/socket.hpp"
 #include "coro/task.hpp"
 
 #include <atomic>
@@ -54,7 +54,9 @@ public:
 
         auto await_ready() const noexcept -> bool { return m_token.is_set(); }
         auto await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept -> bool;
-        auto await_resume() noexcept { /* no-op */ }
+        auto await_resume() noexcept
+        { /* no-op */
+        }
 
         const resume_token_base& m_token;
         std::coroutine_handle<>  m_awaiting_coroutine;
@@ -350,10 +352,7 @@ public:
     auto poll(fd_t fd, poll_op op, std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
         -> coro::task<poll_status>;
 
-    auto poll(
-        const net::socket& sock,
-        poll_op op,
-        std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
+    auto poll(const net::socket& sock, poll_op op, std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
         -> coro::task<poll_status>;
 
     /**
@@ -370,9 +369,10 @@ public:
         -> coro::task<std::pair<poll_status, ssize_t>>;
 
     auto read(
-        const net::socket&       sock,
+        const net::socket&        sock,
         std::span<char>           buffer,
-        std::chrono::milliseconds timeout = std::chrono::milliseconds{0}) -> coro::task<std::pair<poll_status, ssize_t>>;
+        std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
+        -> coro::task<std::pair<poll_status, ssize_t>>;
 
     /**
      * This function will first poll the given `fd` to make sure it can be written to.  Once notified
@@ -388,9 +388,10 @@ public:
         -> coro::task<std::pair<poll_status, ssize_t>>;
 
     auto write(
-        const net::socket&         sock,
+        const net::socket&          sock,
         const std::span<const char> buffer,
-        std::chrono::milliseconds timeout = std::chrono::milliseconds{0}) -> coro::task<std::pair<poll_status, ssize_t>>;
+        std::chrono::milliseconds   timeout = std::chrono::milliseconds{0})
+        -> coro::task<std::pair<poll_status, ssize_t>>;
 
     /**
      * Immediately yields the current task and places it at the end of the queue of tasks waiting
@@ -580,10 +581,10 @@ private:
 
     auto resume(std::coroutine_handle<> handle) -> void;
 
-    static const constexpr std::chrono::milliseconds   m_default_timeout{1000};
-    static const constexpr std::chrono::milliseconds   m_no_timeout{0};
-    static const constexpr std::size_t                 m_max_events = 8;
-    std::array<struct epoll_event, m_max_events> m_events{};
+    static const constexpr std::chrono::milliseconds m_default_timeout{1000};
+    static const constexpr std::chrono::milliseconds m_no_timeout{0};
+    static const constexpr std::size_t               m_max_events = 8;
+    std::array<struct epoll_event, m_max_events>     m_events{};
 
     auto process_task_and_start(task<void>& task) -> void;
     auto process_task_variant(task_variant& tv) -> void;

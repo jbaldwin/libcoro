@@ -1,9 +1,9 @@
 #pragma once
 
-#include "coro/net/ip_address.hpp"
-#include "coro/net/tcp_client.hpp"
 #include "coro/io_scheduler.hpp"
+#include "coro/net/ip_address.hpp"
 #include "coro/net/socket.hpp"
+#include "coro/net/tcp_client.hpp"
 #include "coro/task.hpp"
 
 #include <fcntl.h>
@@ -18,26 +18,22 @@ public:
     struct options
     {
         /// The ip address for the tcp server to bind and listen on.
-        net::ip_address       address{net::ip_address::from_string("0.0.0.0")};
+        net::ip_address address{net::ip_address::from_string("0.0.0.0")};
         /// The port for the tcp server to bind and listen on.
-        uint16_t              port{8080};
+        uint16_t port{8080};
         /// The kernel backlog of connections to buffer.
-        int32_t               backlog{128};
+        int32_t backlog{128};
     };
 
     tcp_server(
         io_scheduler& scheduler,
-        options opts =
-            options{
-                .address = net::ip_address::from_string("0.0.0.0"),
-                .port = 8080,
-                .backlog = 128});
+        options       opts = options{.address = net::ip_address::from_string("0.0.0.0"), .port = 8080, .backlog = 128});
 
     tcp_server(const tcp_server&) = delete;
     tcp_server(tcp_server&&)      = delete;
     auto operator=(const tcp_server&) -> tcp_server& = delete;
     auto operator=(tcp_server&&) -> tcp_server& = delete;
-    ~tcp_server() = default;
+    ~tcp_server()                               = default;
 
     /**
      * Polls for new incoming tcp connections.
