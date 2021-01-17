@@ -1,5 +1,6 @@
 # libcoro C++20 linux coroutine library
 
+[![Codacy Badge](https://api.codacy.com/project/badge/Grade/0ee7ab9f742b46578ed3c3f1d542db0d)](https://app.codacy.com/gh/jbaldwin/libcoro?utm_source=github.com&utm_medium=referral&utm_content=jbaldwin/libcoro&utm_campaign=Badge_Grade_Settings)
 [![CI](https://github.com/jbaldwin/libcoro/workflows/build/badge.svg)](https://github.com/jbaldwin/libcoro/workflows/build/badge.svg)
 [![Coverage Status](https://coveralls.io/repos/github/jbaldwin/libcoro/badge.svg?branch=master)](https://coveralls.io/github/jbaldwin/libcoro?branch=master)
 [![language][badge.language]][language]
