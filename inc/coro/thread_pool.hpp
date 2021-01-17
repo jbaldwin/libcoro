@@ -104,8 +104,7 @@ public:
      * @return A task that wraps the given functor to be executed on the thread pool.
      */
     template<typename functor, typename... arguments>
-    [[nodiscard]] auto schedule(functor&& f, arguments... args) noexcept
-        -> task<decltype(f(std::forward<arguments>(args)...))>
+    [[nodiscard]] auto schedule(functor&& f, arguments... args) -> task<decltype(f(std::forward<arguments>(args)...))>
     {
         auto scheduled = schedule();
         if (!scheduled.has_value())
