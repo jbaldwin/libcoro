@@ -12,7 +12,7 @@
 
 namespace coro::net
 {
-class tcp_server : public io_scheduler
+class tcp_server
 {
 public:
     struct options
@@ -41,7 +41,10 @@ public:
      * @return The result of the poll, 'event' means the poll was successful and there is at least 1
      *         connection ready to be accepted.
      */
-    auto poll(std::chrono::milliseconds timeout = std::chrono::milliseconds{0}) -> coro::task<coro::poll_status>;
+    auto poll(std::chrono::milliseconds timeout = std::chrono::milliseconds{0}) -> coro::task<coro::poll_status>
+    {
+        return m_io_scheduler.poll(m_accept_socket, coro::poll_op::read, timeout);
+    }
 
     /**
      * Accepts an incoming tcp client connection.  On failure the tcp clients socket will be set to

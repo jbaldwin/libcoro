@@ -4,6 +4,7 @@
 #include "coro/net/hostname.hpp"
 #include "coro/net/ip_address.hpp"
 #include "coro/task.hpp"
+#include "coro/task_container.hpp"
 
 #include <ares.h>
 
@@ -31,7 +32,7 @@ class dns_result
     friend dns_resolver;
 
 public:
-    explicit dns_result(coro::resume_token<void>& token, uint64_t pending_dns_requests);
+    dns_result(coro::io_scheduler& scheduler, coro::event& resume, uint64_t pending_dns_requests);
     ~dns_result() = default;
 
     /**
@@ -46,7 +47,8 @@ public:
     auto ip_addresses() const -> const std::vector<coro::net::ip_address>& { return m_ip_addresses; }
 
 private:
-    coro::resume_token<void>&          m_token;
+    coro::io_scheduler&                m_io_scheduler;
+    coro::event&                       m_resume;
     uint64_t                           m_pending_dns_requests{0};
     dns_status                         m_status{dns_status::complete};
     std::vector<coro::net::ip_address> m_ip_addresses{};
@@ -71,7 +73,7 @@ public:
 
 private:
     /// The io scheduler to drive the events for dns lookups.
-    io_scheduler& m_scheduler;
+    io_scheduler& m_io_scheduler;
 
     /// The global timeout per dns lookup request.
     std::chrono::milliseconds m_timeout{0};
@@ -82,6 +84,8 @@ private:
     /// This is the set of sockets that are currently being actively polled so multiple poll tasks
     /// are not setup when ares_poll() is called.
     std::unordered_set<io_scheduler::fd_t> m_active_sockets{};
+
+    task_container m_task_container{};
 
     /// Global count to track if c-ares has been initialized or cleaned up.
     static uint64_t m_ares_count;

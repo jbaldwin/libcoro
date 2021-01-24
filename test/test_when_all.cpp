@@ -2,7 +2,7 @@
 
 #include <coro/coro.hpp>
 
-TEST_CASE("when_all_awaitable single task with tuple container")
+TEST_CASE("when_all_awaitable single task with tuple container", "[when_all]")
 {
     auto make_task = [](uint64_t amount) -> coro::task<uint64_t> { co_return amount; };
 
@@ -15,7 +15,7 @@ TEST_CASE("when_all_awaitable single task with tuple container")
     REQUIRE(counter == 100);
 }
 
-TEST_CASE("when_all_awaitable multiple tasks with tuple container")
+TEST_CASE("when_all_awaitable multiple tasks with tuple container", "[when_all]")
 {
     auto make_task = [](uint64_t amount) -> coro::task<uint64_t> { co_return amount; };
 
@@ -28,7 +28,7 @@ TEST_CASE("when_all_awaitable multiple tasks with tuple container")
     REQUIRE(counter == 170);
 }
 
-TEST_CASE("when_all_awaitable single task with vector container")
+TEST_CASE("when_all_awaitable single task with vector container", "[when_all]")
 {
     auto make_task = [](uint64_t amount) -> coro::task<uint64_t> { co_return amount; };
 
@@ -47,7 +47,7 @@ TEST_CASE("when_all_awaitable single task with vector container")
     REQUIRE(counter == 100);
 }
 
-TEST_CASE("when_all_ready multple task withs vector container")
+TEST_CASE("when_all_ready multple task withs vector container", "[when_all]")
 {
     auto make_task = [](uint64_t amount) -> coro::task<uint64_t> { co_return amount; };
 

@@ -27,7 +27,7 @@ static auto print_stats(const std::string& bench_name, uint64_t operations, sc::
     std::cout << "    ops/sec: " << std::fixed << ops_per_sec << "\n";
 }
 
-TEST_CASE("benchmark counter func direct call")
+TEST_CASE("benchmark counter func direct call", "[benchmark]")
 {
     constexpr std::size_t iterations = default_iterations;
     std::atomic<uint64_t> counter{0};
@@ -47,7 +47,7 @@ TEST_CASE("benchmark counter func direct call")
     REQUIRE(counter == iterations);
 }
 
-TEST_CASE("benchmark counter func coro::sync_wait(awaitable)")
+TEST_CASE("benchmark counter func coro::sync_wait(awaitable)", "[benchmark]")
 {
     constexpr std::size_t iterations = default_iterations;
     uint64_t              counter{0};
@@ -64,7 +64,7 @@ TEST_CASE("benchmark counter func coro::sync_wait(awaitable)")
     REQUIRE(counter == iterations);
 }
 
-TEST_CASE("benchmark counter func coro::sync_wait(coro::when_all_awaitable(awaitable)) x10")
+TEST_CASE("benchmark counter func coro::sync_wait(coro::when_all_awaitable(awaitable)) x10", "[benchmark]")
 {
     constexpr std::size_t iterations = default_iterations;
     uint64_t              counter{0};
@@ -84,7 +84,7 @@ TEST_CASE("benchmark counter func coro::sync_wait(coro::when_all_awaitable(await
     REQUIRE(counter == iterations);
 }
 
-TEST_CASE("benchmark thread_pool{1} counter task")
+TEST_CASE("benchmark thread_pool{1} counter task", "[benchmark]")
 {
     constexpr std::size_t iterations = default_iterations;
 
@@ -92,7 +92,7 @@ TEST_CASE("benchmark thread_pool{1} counter task")
     std::atomic<uint64_t> counter{0};
 
     auto make_task = [](coro::thread_pool& tp, std::atomic<uint64_t>& c) -> coro::task<void> {
-        co_await tp.schedule().value();
+        co_await tp.schedule();
         c.fetch_add(1, std::memory_order::relaxed);
         co_return;
     };
@@ -115,7 +115,7 @@ TEST_CASE("benchmark thread_pool{1} counter task")
     REQUIRE(tp.empty());
 }
 
-TEST_CASE("benchmark thread_pool{2} counter task")
+TEST_CASE("benchmark thread_pool{2} counter task", "[benchmark]")
 {
     constexpr std::size_t iterations = default_iterations;
 
@@ -123,7 +123,7 @@ TEST_CASE("benchmark thread_pool{2} counter task")
     std::atomic<uint64_t> counter{0};
 
     auto make_task = [](coro::thread_pool& tp, std::atomic<uint64_t>& c) -> coro::task<void> {
-        co_await tp.schedule().value();
+        co_await tp.schedule();
         c.fetch_add(1, std::memory_order::relaxed);
         co_return;
     };
@@ -141,51 +141,25 @@ TEST_CASE("benchmark thread_pool{2} counter task")
 
     tp.shutdown();
 
-    print_stats("benchmark thread_pool{n} counter task", iterations, start, sc::now());
+    print_stats("benchmark thread_pool{2} counter task", iterations, start, sc::now());
     REQUIRE(counter == iterations);
     REQUIRE(tp.empty());
 }
 
-TEST_CASE("benchmark counter task io_scheduler")
-{
-    constexpr std::size_t iterations = default_iterations;
-
-    coro::io_scheduler    s1{};
-    std::atomic<uint64_t> counter{0};
-    auto                  func = [&]() -> coro::task<void> {
-        counter.fetch_add(1, std::memory_order::relaxed);
-        co_return;
-    };
-
-    auto start = sc::now();
-
-    for (std::size_t i = 0; i < iterations; ++i)
-    {
-        s1.schedule(func());
-    }
-
-    s1.shutdown();
-    print_stats("benchmark counter task through io_scheduler", iterations, start, sc::now());
-    REQUIRE(s1.empty());
-    REQUIRE(counter == iterations);
-}
-
-TEST_CASE("benchmark counter task io_scheduler yield -> resume from main")
+TEST_CASE("benchmark counter task scheduler{1} yield", "[benchmark]")
 {
     constexpr std::size_t iterations = default_iterations;
     constexpr std::size_t ops        = iterations * 2; // the external resume is still a resume op
 
-    coro::io_scheduler                    s{};
-    std::vector<coro::resume_token<void>> tokens{};
-    for (std::size_t i = 0; i < iterations; ++i)
-    {
-        tokens.emplace_back(s.make_resume_token<void>());
-    }
+    coro::io_scheduler s{coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}}};
 
-    std::atomic<uint64_t> counter{0};
+    std::atomic<uint64_t>         counter{0};
+    std::vector<coro::task<void>> tasks{};
+    tasks.reserve(iterations);
 
-    auto wait_func = [&](std::size_t index) -> coro::task<void> {
-        co_await s.yield<void>(tokens[index]);
+    auto make_task = [&]() -> coro::task<void> {
+        co_await s.schedule();
+        co_await s.yield();
         counter.fetch_add(1, std::memory_order::relaxed);
         co_return;
     };
@@ -194,44 +168,79 @@ TEST_CASE("benchmark counter task io_scheduler yield -> resume from main")
 
     for (std::size_t i = 0; i < iterations; ++i)
     {
-        s.schedule(wait_func(i));
+        tasks.emplace_back(make_task());
     }
 
-    for (std::size_t i = 0; i < iterations; ++i)
-    {
-        tokens[i].resume();
-    }
-
-    s.shutdown();
+    coro::sync_wait(coro::when_all_awaitable(tasks));
 
     auto stop = sc::now();
-    print_stats("benchmark counter task io_scheduler yield -> resume from main", ops, start, stop);
+    print_stats("benchmark counter task scheduler{1} yield", ops, start, stop);
     REQUIRE(s.empty());
     REQUIRE(counter == iterations);
 }
 
-TEST_CASE("benchmark counter task io_scheduler yield -> resume from coroutine")
+TEST_CASE("benchmark counter task scheduler{1} yield_for", "[benchmark]")
 {
     constexpr std::size_t iterations = default_iterations;
-    constexpr std::size_t ops        = iterations * 2; // each iteration executes 2 coroutines.
+    constexpr std::size_t ops        = iterations * 2; // the external resume is still a resume op
 
-    coro::io_scheduler                    s{};
-    std::vector<coro::resume_token<void>> tokens{};
+    coro::io_scheduler s{coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}}};
+
+    std::atomic<uint64_t>         counter{0};
+    std::vector<coro::task<void>> tasks{};
+    tasks.reserve(iterations);
+
+    auto make_task = [&]() -> coro::task<void> {
+        co_await s.schedule();
+        co_await s.yield_for(std::chrono::milliseconds{1});
+        counter.fetch_add(1, std::memory_order::relaxed);
+        co_return;
+    };
+
+    auto start = sc::now();
+
     for (std::size_t i = 0; i < iterations; ++i)
     {
-        tokens.emplace_back(s.make_resume_token<void>());
+        tasks.emplace_back(make_task());
     }
+
+    coro::sync_wait(coro::when_all_awaitable(tasks));
+
+    auto stop = sc::now();
+    print_stats("benchmark counter task scheduler{1} yield", ops, start, stop);
+    REQUIRE(s.empty());
+    REQUIRE(counter == iterations);
+}
+
+TEST_CASE("benchmark counter task scheduler await event from another coroutine", "[benchmark]")
+{
+    constexpr std::size_t iterations = default_iterations;
+    constexpr std::size_t ops        = iterations * 3; // two tasks + event resume
+
+    coro::io_scheduler s{coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}}};
+
+    std::vector<std::unique_ptr<coro::event>> events{};
+    events.reserve(iterations);
+    for (std::size_t i = 0; i < iterations; ++i)
+    {
+        events.emplace_back(std::make_unique<coro::event>());
+    }
+
+    std::vector<coro::task<void>> tasks{};
+    tasks.reserve(iterations * 2); // one for wait, one for resume
 
     std::atomic<uint64_t> counter{0};
 
     auto wait_func = [&](std::size_t index) -> coro::task<void> {
-        co_await s.yield<void>(tokens[index]);
+        co_await s.schedule();
+        co_await* events[index];
         counter.fetch_add(1, std::memory_order::relaxed);
         co_return;
     };
 
     auto resume_func = [&](std::size_t index) -> coro::task<void> {
-        tokens[index].resume();
+        co_await s.schedule();
+        events[index]->set();
         co_return;
     };
 
@@ -239,123 +248,56 @@ TEST_CASE("benchmark counter task io_scheduler yield -> resume from coroutine")
 
     for (std::size_t i = 0; i < iterations; ++i)
     {
-        s.schedule(wait_func(i));
-        s.schedule(resume_func(i));
+        tasks.emplace_back(wait_func(i));
+        tasks.emplace_back(resume_func(i));
     }
 
-    s.shutdown();
+    coro::sync_wait(coro::when_all_awaitable(tasks));
 
     auto stop = sc::now();
-    print_stats("benchmark counter task io_scheduler yield -> resume from coroutine", ops, start, stop);
+    print_stats("benchmark counter task scheduler await event from another coroutine", ops, start, stop);
     REQUIRE(s.empty());
     REQUIRE(counter == iterations);
 }
 
-TEST_CASE("benchmark counter task io_scheduler resume from coroutine -> yield")
+TEST_CASE("benchmark tcp_server echo server", "[benchmark]")
 {
-    constexpr std::size_t iterations = default_iterations;
-    constexpr std::size_t ops        = iterations * 2; // each iteration executes 2 coroutines.
-
-    coro::io_scheduler                    s{};
-    std::vector<coro::resume_token<void>> tokens{};
-    for (std::size_t i = 0; i < iterations; ++i)
-    {
-        tokens.emplace_back(s.make_resume_token<void>());
-    }
-
-    std::atomic<uint64_t> counter{0};
-
-    auto wait_func = [&](std::size_t index) -> coro::task<void> {
-        co_await s.yield<void>(tokens[index]);
-        counter.fetch_add(1, std::memory_order::relaxed);
-        co_return;
-    };
-
-    auto resume_func = [&](std::size_t index) -> coro::task<void> {
-        tokens[index].resume();
-        co_return;
-    };
-
-    auto start = sc::now();
-
-    for (std::size_t i = 0; i < iterations; ++i)
-    {
-        s.schedule(resume_func(i));
-        s.schedule(wait_func(i));
-    }
-
-    s.shutdown();
-
-    auto stop = sc::now();
-    print_stats("benchmark counter task io_scheduler resume from coroutine -> yield", ops, start, stop);
-    REQUIRE(s.empty());
-    REQUIRE(counter == iterations);
-}
-
-TEST_CASE("benchmark counter task io_scheduler yield (all) -> resume (all) from coroutine with reserve")
-{
-    constexpr std::size_t iterations = default_iterations;
-    constexpr std::size_t ops        = iterations * 2; // each iteration executes 2 coroutines.
-
-    coro::io_scheduler                    s{coro::io_scheduler::options{.reserve_size = iterations}};
-    std::vector<coro::resume_token<void>> tokens{};
-    for (std::size_t i = 0; i < iterations; ++i)
-    {
-        tokens.emplace_back(s.make_resume_token<void>());
-    }
-
-    std::atomic<uint64_t> counter{0};
-
-    auto wait_func = [&](std::size_t index) -> coro::task<void> {
-        co_await s.yield<void>(tokens[index]);
-        counter.fetch_add(1, std::memory_order::relaxed);
-        co_return;
-    };
-
-    auto resume_func = [&](std::size_t index) -> coro::task<void> {
-        tokens[index].resume();
-        co_return;
-    };
-
-    auto start = sc::now();
-
-    for (std::size_t i = 0; i < iterations; ++i)
-    {
-        s.schedule(wait_func(i));
-    }
-
-    for (std::size_t i = 0; i < iterations; ++i)
-    {
-        s.schedule(resume_func(i));
-    }
-
-    s.shutdown();
-
-    auto stop = sc::now();
-    print_stats("benchmark counter task io_scheduler yield -> resume from coroutine with reserve", ops, start, stop);
-    REQUIRE(s.empty());
-    REQUIRE(counter == iterations);
-}
-
-TEST_CASE("benchmark tcp_server echo server")
-{
-    /**
-     * This test *requires* two schedulers since polling on read/write of the sockets involved
-     * will reset/trample on each other when each side of the client + server go to poll().
-     */
-
-    const constexpr std::size_t connections             = 64;
+    const constexpr std::size_t connections             = 256;
     const constexpr std::size_t messages_per_connection = 10'000;
     const constexpr std::size_t ops                     = connections * messages_per_connection;
 
     const std::string msg = "im a data point in a stream of bytes";
 
-    coro::io_scheduler server_scheduler{};
-    coro::io_scheduler client_scheduler{};
+    const constexpr std::size_t server_count = 4;
+    const constexpr std::size_t client_count = 4;
 
-    std::atomic<bool> listening{false};
+    const constexpr std::size_t server_thread_count = 4;
+    const constexpr std::size_t client_thread_count = 4;
 
-    auto make_on_connection_task = [&](coro::net::tcp_client client) -> coro::task<void> {
+    std::atomic<uint64_t> listening{0};
+    std::atomic<uint64_t> accepted{0};
+    std::atomic<uint64_t> clients_completed{0};
+
+    std::atomic<uint64_t> server_id{0};
+
+    struct server
+    {
+        uint64_t           id;
+        coro::io_scheduler scheduler{
+            coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = server_thread_count}}};
+        std::vector<coro::task<void>> tasks{};
+        uint64_t                      live_clients{0};
+        coro::event                   wait_for_clients{};
+    };
+
+    struct client
+    {
+        coro::io_scheduler scheduler{
+            coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = client_thread_count}}};
+        std::vector<coro::task<void>> tasks{};
+    };
+
+    auto make_on_connection_task = [&](server& s, coro::net::tcp_client client) -> coro::task<void> {
         std::string in(64, '\0');
 
         // Echo the messages until the socket is closed. a 'done' message arrives.
@@ -370,7 +312,6 @@ TEST_CASE("benchmark tcp_server echo server")
                 REQUIRE(rspan.empty());
                 break;
             }
-
             REQUIRE(rstatus == coro::net::recv_status::ok);
 
             in.resize(rspan.size());
@@ -380,39 +321,56 @@ TEST_CASE("benchmark tcp_server echo server")
             REQUIRE(remaining.empty());
         }
 
+        s.live_clients--;
+        if (s.live_clients == 0)
+        {
+            s.wait_for_clients.set();
+        }
         co_return;
     };
 
-    auto make_server_task = [&]() -> coro::task<void> {
-        coro::net::tcp_server server{server_scheduler};
+    auto make_server_task = [&](server& s) -> coro::task<void> {
+        co_await s.scheduler.schedule();
 
-        listening = true;
+        coro::net::tcp_server server{s.scheduler};
 
-        uint64_t accepted{0};
-        while (accepted < connections)
+        listening++;
+
+        while (accepted.load(std::memory_order::acquire) < connections)
         {
-            auto pstatus = co_await server.poll();
-            REQUIRE(pstatus == coro::poll_status::event);
+            auto pstatus = co_await server.poll(std::chrono::milliseconds{1});
+            if (pstatus == coro::poll_status::event)
+            {
+                auto c = server.accept();
+                if (c.socket().is_valid())
+                {
+                    accepted.fetch_add(1, std::memory_order::release);
 
-            auto client = server.accept();
-            REQUIRE(client.socket().is_valid());
-
-            server_scheduler.schedule(make_on_connection_task(std::move(client)));
-
-            ++accepted;
+                    s.live_clients++;
+                    s.tasks.emplace_back(make_on_connection_task(s, std::move(c)));
+                    s.tasks.back().resume();
+                }
+            }
         }
 
+        co_await s.wait_for_clients;
         co_return;
     };
 
-    auto make_client_task = [&]() -> coro::task<void> {
-        coro::net::tcp_client client{client_scheduler};
+    std::mutex                                    g_histogram_mutex;
+    std::map<std::chrono::milliseconds, uint64_t> g_histogram;
 
-        auto cstatus = co_await client.connect();
+    auto make_client_task = [&](client& c) -> coro::task<void> {
+        co_await c.scheduler.schedule();
+        std::map<std::chrono::milliseconds, uint64_t> histogram;
+        coro::net::tcp_client                         client{c.scheduler};
+
+        auto cstatus = co_await client.connect(); // std::chrono::seconds{1});
         REQUIRE(cstatus == coro::net::connect_status::connected);
 
         for (size_t i = 1; i <= messages_per_connection; ++i)
         {
+            auto req_start            = std::chrono::steady_clock::now();
             auto [sstatus, remaining] = client.send(msg);
             REQUIRE(sstatus == coro::net::send_status::ok);
             REQUIRE(remaining.empty());
@@ -426,7 +384,20 @@ TEST_CASE("benchmark tcp_server echo server")
             REQUIRE(rspan.size() == msg.size());
             response.resize(rspan.size());
             REQUIRE(response == msg);
+
+            auto req_stop = std::chrono::steady_clock::now();
+            histogram[std::chrono::duration_cast<std::chrono::milliseconds>(req_stop - req_start)]++;
         }
+
+        {
+            std::scoped_lock lk{g_histogram_mutex};
+            for (auto [ms, count] : histogram)
+            {
+                g_histogram[ms] += count;
+            }
+        }
+
+        clients_completed.fetch_add(1);
 
         co_return;
     };
@@ -434,33 +405,55 @@ TEST_CASE("benchmark tcp_server echo server")
     auto start = sc::now();
 
     // Create the server to accept incoming tcp connections.
-    server_scheduler.schedule(make_server_task());
+    std::vector<std::thread> server_threads{};
+    for (size_t i = 0; i < server_count; ++i)
+    {
+        server_threads.emplace_back(std::thread{[&]() {
+            server s{};
+            s.id = server_id++;
+            coro::sync_wait(make_server_task(s));
+            s.scheduler.shutdown();
+        }});
+    }
 
     // The server can take a small bit of time to start up, if we don't wait for it to notify then
     // the first few connections can easily fail to connect causing this test to fail.
-    while (!listening)
+    while (listening != server_count)
     {
         std::this_thread::sleep_for(std::chrono::milliseconds{1});
     }
 
-    // Spawn N client connections.
-    for (size_t i = 0; i < connections; ++i)
+    // Spawn N client connections across a set number of clients.
+    std::vector<std::thread> client_threads{};
+    std::vector<client>      clients{};
+    for (size_t i = 0; i < client_count; ++i)
     {
-        REQUIRE(client_scheduler.schedule(make_client_task()));
+        client_threads.emplace_back(std::thread{[&]() {
+            client c{};
+            for (size_t i = 0; i < connections / client_count; ++i)
+            {
+                c.tasks.emplace_back(make_client_task(c));
+            }
+            coro::sync_wait(coro::when_all_awaitable(c.tasks));
+            c.scheduler.shutdown();
+        }});
     }
 
-    // Wait for all the connections to complete their work.
-    while (!client_scheduler.empty())
+    for (auto& ct : client_threads)
     {
-        std::this_thread::sleep_for(std::chrono::milliseconds{1});
+        ct.join();
+    }
+
+    for (auto& st : server_threads)
+    {
+        st.join();
     }
 
     auto stop = sc::now();
     print_stats("benchmark tcp_client and tcp_server", ops, start, stop);
 
-    server_scheduler.shutdown();
-    REQUIRE(server_scheduler.empty());
-
-    client_scheduler.shutdown();
-    REQUIRE(client_scheduler.empty());
+    for (const auto& [ms, count] : g_histogram)
+    {
+        std::cerr << ms.count() << " : " << count << "\n";
+    }
 }

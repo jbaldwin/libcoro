@@ -13,11 +13,6 @@ tcp_server::tcp_server(io_scheduler& scheduler, options opts)
 {
 }
 
-auto tcp_server::poll(std::chrono::milliseconds timeout) -> coro::task<coro::poll_status>
-{
-    co_return co_await m_io_scheduler.poll(m_accept_socket, coro::poll_op::read, timeout);
-}
-
 auto tcp_server::accept() -> coro::net::tcp_client
 {
     sockaddr_in         client{};

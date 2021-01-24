@@ -1,5 +1,6 @@
 #pragma once
 
+#include "coro/event.hpp"
 #include "coro/shutdown.hpp"
 #include "coro/task.hpp"
 
@@ -11,10 +12,13 @@
 #include <mutex>
 #include <optional>
 #include <thread>
+#include <variant>
 #include <vector>
 
 namespace coro
 {
+class event;
+
 /**
  * Creates a thread pool that executes arbitrary coroutine tasks in a FIFO scheduler policy.
  * The thread pool by default will create an execution thread per available core on the system.
@@ -41,7 +45,7 @@ public:
 
     public:
         /**
-         * Operations always pause so the executing thread and be switched.
+         * Operations always pause so the executing thread can be switched.
          */
         auto await_ready() noexcept -> bool { return false; }
 
@@ -68,34 +72,43 @@ public:
         /// The number of executor threads for this thread pool.  Uses the hardware concurrency
         /// value by default.
         uint32_t thread_count = std::thread::hardware_concurrency();
-        /// Functor to call on each executor thread upon starting execution.
+        /// Functor to call on each executor thread upon starting execution.  The parameter is the
+        /// thread's ID assigned to it by the thread pool.
         std::function<void(std::size_t)> on_thread_start_functor = nullptr;
-        /// Functor to call on each executor thread upon stopping execution.
+        /// Functor to call on each executor thread upon stopping execution.  The parameter is the
+        /// thread's ID assigned to it by the thread pool.
         std::function<void(std::size_t)> on_thread_stop_functor = nullptr;
     };
 
     /**
      * @param opts Thread pool configuration options.
      */
-    explicit thread_pool(options opts = options{std::thread::hardware_concurrency(), nullptr, nullptr});
+    explicit thread_pool(
+        options opts = options{
+            .thread_count            = std::thread::hardware_concurrency(),
+            .on_thread_start_functor = nullptr,
+            .on_thread_stop_functor  = nullptr});
 
     thread_pool(const thread_pool&) = delete;
     thread_pool(thread_pool&&)      = delete;
     auto operator=(const thread_pool&) -> thread_pool& = delete;
     auto operator=(thread_pool&&) -> thread_pool& = delete;
 
-    ~thread_pool();
+    virtual ~thread_pool();
 
+    /**
+     * @return The number of executor threads for processing tasks.
+     */
     auto thread_count() const noexcept -> uint32_t { return m_threads.size(); }
 
     /**
      * Schedules the currently executing coroutine to be run on this thread pool.  This must be
      * called from within the coroutines function body to schedule the coroutine on the thread pool.
+     * @throw std::runtime_error If the thread pool is `shutdown()` scheduling new tasks is not permitted.
      * @return The operation to switch from the calling scheduling thread to the executor thread
-     *         pool thread.  This will return nullopt if the schedule fails, currently the only
-     *         way for this to fail is if `shudown()` has been called.
+     *         pool thread.
      */
-    [[nodiscard]] auto schedule() noexcept -> std::optional<operation>;
+    [[nodiscard]] auto schedule() -> operation;
 
     /**
      * @throw std::runtime_error If the thread pool is `shutdown()` scheduling new tasks is not permitted.
@@ -106,13 +119,7 @@ public:
     template<typename functor, typename... arguments>
     [[nodiscard]] auto schedule(functor&& f, arguments... args) -> task<decltype(f(std::forward<arguments>(args)...))>
     {
-        auto scheduled = schedule();
-        if (!scheduled.has_value())
-        {
-            throw std::runtime_error("coro::thread_pool is shutting down, unable to schedule new tasks.");
-        }
-
-        co_await scheduled.value();
+        co_await schedule();
 
         if constexpr (std::is_same_v<void, decltype(f(std::forward<arguments>(args)...))>)
         {
@@ -126,12 +133,20 @@ public:
     }
 
     /**
+     * Immediately yields the current task and places it at the end of the queue of tasks waiting
+     * to be processed.  This will immediately be picked up again once it naturally goes through the
+     * FIFO task queue.  This function is useful to yielding long processing tasks to let other tasks
+     * get processing time.
+     */
+    [[nodiscard]] auto yield() -> operation { return schedule(); }
+
+    /**
      * Shutsdown the thread pool.  This will finish any tasks scheduled prior to calling this
      * function but will prevent the thread pool from scheduling any new tasks.
      * @param wait_for_tasks Should this function block until all remaining scheduled tasks have
      *                       completed?  Pass in sync to wait, or async to not block.
      */
-    auto shutdown(shutdown_t wait_for_tasks = shutdown_t::sync) noexcept -> void;
+    virtual auto shutdown(shutdown_t wait_for_tasks = shutdown_t::sync) noexcept -> void;
 
     /**
      * @return The number of tasks waiting in the task queue + the executing tasks.
@@ -162,9 +177,11 @@ private:
     /// The configuration options.
     options m_opts;
 
+protected:
     /// Has the thread pool been requested to shut down?
     std::atomic<bool> m_shutdown_requested{false};
 
+private:
     /// The background executor threads.
     std::vector<std::jthread> m_threads;
 
@@ -172,15 +189,14 @@ private:
     std::mutex m_wait_mutex;
     /// Condition variable for each executor thread to wait on when no tasks are available.
     std::condition_variable_any m_wait_cv;
-
-    /// Mutex to guard the queue of FIFO tasks.
-    std::mutex m_queue_mutex;
     /// FIFO queue of tasks waiting to be executed.
-    std::deque<operation*> m_queue;
+    std::deque<std::coroutine_handle<>> m_queue;
 
+protected:
     /// The number of tasks in the queue + currently executing.
     std::atomic<std::size_t> m_size{0};
 
+private:
     /**
      * Each background thread runs from this function.
      * @param stop_token Token which signals when shutdown() has been called.
@@ -189,9 +205,20 @@ private:
     auto executor(std::stop_token stop_token, std::size_t idx) -> void;
 
     /**
-     * @param op Schedules the given operation to be executed upon the first available thread.
+     * @param handle Schedules the given coroutine to be executed upon the first available thread.
      */
-    auto schedule_impl(operation* op) noexcept -> void;
+    auto schedule_impl(std::coroutine_handle<> handle) noexcept -> void;
+
+protected:
+    /// Required to resume all waiters of the event onto a thread_pool.
+    friend event;
+
+    /**
+     * Schedules any coroutine that is ready to be resumed.
+     * @param handle The coroutine handle to schedule.
+     */
+    auto resume(std::coroutine_handle<> handle) noexcept -> void;
+    auto resume(const std::vector<std::coroutine_handle<>>& handles) noexcept -> void;
 };
 
 } // namespace coro

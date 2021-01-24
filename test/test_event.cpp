@@ -5,7 +5,7 @@
 #include <chrono>
 #include <thread>
 
-TEST_CASE("event single awaiter")
+TEST_CASE("event single awaiter", "[event]")
 {
     coro::event e{};
 
@@ -36,7 +36,7 @@ auto consumer(const coro::event& event) -> coro::task<uint64_t>
     co_return 42;
 }
 
-TEST_CASE("event one watcher")
+TEST_CASE("event one watcher", "[event]")
 {
     coro::event e{};
 
@@ -49,7 +49,7 @@ TEST_CASE("event one watcher")
     REQUIRE(value.promise().return_value() == 42);
 }
 
-TEST_CASE("event multiple watchers")
+TEST_CASE("event multiple watchers", "[event]")
 {
     coro::event e{};
 
@@ -70,7 +70,7 @@ TEST_CASE("event multiple watchers")
     REQUIRE(value3.promise().return_value() == 42);
 }
 
-TEST_CASE("event reset")
+TEST_CASE("event reset", "[event]")
 {
     coro::event e{};
 

@@ -1,4 +1,5 @@
 #include "coro/event.hpp"
+#include "coro/thread_pool.hpp"
 
 namespace coro
 {
@@ -18,6 +19,23 @@ auto event::set() noexcept -> void
         {
             auto* next = waiters->m_next;
             waiters->m_awaiting_coroutine.resume();
+            waiters = next;
+        }
+    }
+}
+
+auto event::set(coro::thread_pool& tp) noexcept -> void
+{
+    // Exchange the state to this, if the state was previously not this, then traverse the list
+    // of awaiters and resume their coroutines.
+    void* old_value = m_state.exchange(this, std::memory_order::acq_rel);
+    if (old_value != this)
+    {
+        auto* waiters = static_cast<awaiter*>(old_value);
+        while (waiters != nullptr)
+        {
+            auto* next = waiters->m_next;
+            tp.resume(waiters->m_awaiting_coroutine);
             waiters = next;
         }
     }

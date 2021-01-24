@@ -4,12 +4,12 @@
 
 #include <iostream>
 
-TEST_CASE("thread_pool one worker one task")
+TEST_CASE("thread_pool one worker one task", "[thread_pool]")
 {
     coro::thread_pool tp{coro::thread_pool::options{1}};
 
     auto func = [&tp]() -> coro::task<uint64_t> {
-        co_await tp.schedule().value(); // Schedule this coroutine on the scheduler.
+        co_await tp.schedule(); // Schedule this coroutine on the scheduler.
         co_return 42;
     };
 
@@ -17,12 +17,12 @@ TEST_CASE("thread_pool one worker one task")
     REQUIRE(result == 42);
 }
 
-TEST_CASE("thread_pool one worker many tasks tuple")
+TEST_CASE("thread_pool one worker many tasks tuple", "[thread_pool]")
 {
     coro::thread_pool tp{coro::thread_pool::options{1}};
 
     auto f = [&tp]() -> coro::task<uint64_t> {
-        co_await tp.schedule().value(); // Schedule this coroutine on the scheduler.
+        co_await tp.schedule(); // Schedule this coroutine on the scheduler.
         co_return 50;
     };
 
@@ -35,12 +35,12 @@ TEST_CASE("thread_pool one worker many tasks tuple")
     REQUIRE(counter == 250);
 }
 
-TEST_CASE("thread_pool one worker many tasks vector")
+TEST_CASE("thread_pool one worker many tasks vector", "[thread_pool]")
 {
     coro::thread_pool tp{coro::thread_pool::options{1}};
 
     auto f = [&tp]() -> coro::task<uint64_t> {
-        co_await tp.schedule().value(); // Schedule this coroutine on the scheduler.
+        co_await tp.schedule(); // Schedule this coroutine on the scheduler.
         co_return 50;
     };
 
@@ -62,13 +62,13 @@ TEST_CASE("thread_pool one worker many tasks vector")
     REQUIRE(counter == 150);
 }
 
-TEST_CASE("thread_pool N workers 100k tasks")
+TEST_CASE("thread_pool N workers 100k tasks", "[thread_pool]")
 {
     constexpr const std::size_t iterations = 100'000;
     coro::thread_pool           tp{};
 
     auto make_task = [](coro::thread_pool& tp) -> coro::task<uint64_t> {
-        co_await tp.schedule().value();
+        co_await tp.schedule();
         co_return 1;
     };
 
@@ -91,15 +91,15 @@ TEST_CASE("thread_pool N workers 100k tasks")
     REQUIRE(counter == iterations);
 }
 
-TEST_CASE("thread_pool 1 worker task spawns another task")
+TEST_CASE("thread_pool 1 worker task spawns another task", "[thread_pool]")
 {
     coro::thread_pool tp{coro::thread_pool::options{1}};
 
     auto f1 = [](coro::thread_pool& tp) -> coro::task<uint64_t> {
-        co_await tp.schedule().value();
+        co_await tp.schedule();
 
         auto f2 = [](coro::thread_pool& tp) -> coro::task<uint64_t> {
-            co_await tp.schedule().value();
+            co_await tp.schedule();
             co_return 5;
         };
 
@@ -109,18 +109,19 @@ TEST_CASE("thread_pool 1 worker task spawns another task")
     REQUIRE(coro::sync_wait(f1(tp)) == 6);
 }
 
-TEST_CASE("thread_pool shutdown")
+TEST_CASE("thread_pool shutdown", "[thread_pool]")
 {
     coro::thread_pool tp{coro::thread_pool::options{1}};
 
     auto f = [](coro::thread_pool& tp) -> coro::task<bool> {
-        auto scheduled = tp.schedule();
-        if (!scheduled.has_value())
+        try
+        {
+            co_await tp.schedule();
+        }
+        catch (...)
         {
             co_return true;
         }
-
-        co_await scheduled.value();
         co_return false;
     };
 
@@ -129,7 +130,7 @@ TEST_CASE("thread_pool shutdown")
     REQUIRE(coro::sync_wait(f(tp)) == true);
 }
 
-TEST_CASE("thread_pool schedule functor")
+TEST_CASE("thread_pool schedule functor", "[thread_pool]")
 {
     coro::thread_pool tp{coro::thread_pool::options{1}};
 
@@ -143,7 +144,7 @@ TEST_CASE("thread_pool schedule functor")
     REQUIRE_THROWS(coro::sync_wait(tp.schedule(f)));
 }
 
-TEST_CASE("thread_pool schedule functor return_type = void")
+TEST_CASE("thread_pool schedule functor return_type = void", "[thread_pool]")
 {
     coro::thread_pool tp{coro::thread_pool::options{1}};
 
@@ -158,7 +159,7 @@ TEST_CASE("thread_pool schedule functor return_type = void")
     REQUIRE_THROWS(coro::sync_wait(tp.schedule(f, std::ref(counter))));
 }
 
-TEST_CASE("thread_pool event jump threads")
+TEST_CASE("thread_pool event jump threads", "[thread_pool]")
 {
     // This test verifies that the thread that sets the event ends up executing every waiter on the event
 
@@ -168,7 +169,7 @@ TEST_CASE("thread_pool event jump threads")
     coro::event e{};
 
     auto make_tp1_task = [&]() -> coro::task<void> {
-        co_await tp1.schedule().value();
+        co_await tp1.schedule();
         auto before_thread_id = std::this_thread::get_id();
         std::cerr << "before event thread_id = " << before_thread_id << "\n";
         co_await e;
@@ -181,7 +182,7 @@ TEST_CASE("thread_pool event jump threads")
     };
 
     auto make_tp2_task = [&]() -> coro::task<void> {
-        co_await tp2.schedule().value();
+        co_await tp2.schedule();
         std::this_thread::sleep_for(std::chrono::milliseconds{10});
         std::cerr << "setting event\n";
         e.set();

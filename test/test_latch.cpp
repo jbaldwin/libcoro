@@ -5,7 +5,7 @@
 #include <chrono>
 #include <thread>
 
-TEST_CASE("latch count=0")
+TEST_CASE("latch count=0", "[latch]")
 {
     coro::latch l{0};
 
@@ -19,7 +19,7 @@ TEST_CASE("latch count=0")
     REQUIRE(task.promise().return_value() == 42);
 }
 
-TEST_CASE("latch count=1")
+TEST_CASE("latch count=1", "[latch]")
 {
     coro::latch l{1};
 
@@ -37,7 +37,7 @@ TEST_CASE("latch count=1")
     REQUIRE(task.promise().return_value() == 1);
 }
 
-TEST_CASE("latch count=1 count_down=5")
+TEST_CASE("latch count=1 count_down=5", "[latch]")
 {
     coro::latch l{1};
 
@@ -55,7 +55,7 @@ TEST_CASE("latch count=1 count_down=5")
     REQUIRE(task.promise().return_value() == 1);
 }
 
-TEST_CASE("latch count=5 count_down=1 x5")
+TEST_CASE("latch count=5 count_down=1 x5", "[latch]")
 {
     coro::latch l{5};
 
@@ -81,7 +81,7 @@ TEST_CASE("latch count=5 count_down=1 x5")
     REQUIRE(task.promise().return_value() == 5);
 }
 
-TEST_CASE("latch count=5 count_down=5")
+TEST_CASE("latch count=5 count_down=5", "[latch]")
 {
     coro::latch l{5};
 
