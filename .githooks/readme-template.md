@@ -11,25 +11,26 @@
 **libcoro** is meant to provide low level coroutine constructs for building larger applications, the current focus is around high performance networking coroutine support.
 
 ## Overview
- * C++20 coroutines!
- * Modern Safe C++20 API
- * Higher level coroutine constructs
- ** coro::task<T>
- ** coro::generator<T>
- ** coro::event
- ** coro::latch
- ** coro::mutex
- ** coro::sync_wait(awaitable)
- *** coro::when_all(awaitable...)
- * Schedulers
- ** coro::thread_pool for coroutine cooperative multitasking
- ** coro::io_scheduler for driving i/o events, uses thread_pool
- *** epoll driver implemented
- *** io_uring driver planned (will be required for file i/o)
- * Coroutine Networking
- ** coro::net::dns_resolver for async dns, leverages libc-ares
- ** coro::tcp_client and coro::tcp_server
- ** coro::udp_peer
+* C++20 coroutines!
+* Modern Safe C++20 API
+* Higher level coroutine constructs
+    - coro::task<T>
+    - coro::generator<T>
+    - coro::event
+    - coro::latch
+    - coro::mutex
+    - coro::sync_wait(awaitable)
+        - coro::when_all_awaitabe(awaitable...) -> coro::task<T>...
+        - coro::when_all(awaitable...) -> T... (Future)
+* Schedulers
+    - coro::thread_pool for coroutine cooperative multitasking
+    - coro::io_scheduler for driving i/o events, uses thread_pool for coroutine execution
+        - epoll driver
+        - io_uring driver (Future, will be required for async file i/o)
+* Coroutine Networking
+    - coro::net::dns_resolver for async dns, leverages libc-ares
+    - coro::net::tcp_client and coro::net::tcp_server
+    - coro::net::udp_peer
 
 ### A note on co_await
 Its important to note with coroutines that depending on the construct used _any_ `co_await` has the
@@ -104,6 +105,7 @@ This project uses gitsubmodules, to properly checkout this project use:
 
 This project depends on the following projects:
  * [libc-ares](https://github.com/c-ares/c-ares) For async DNS resolver.
+ * [catch2](https://github.com/catchorg/Catch2) For testing.
 
 #### Building
     mkdir Release && cd Release
@@ -155,13 +157,12 @@ target_link_libraries(${PROJECT_NAME} PUBLIC libcoro)
 #### Tests
 The tests will automatically be run by github actions on creating a pull request.  They can also be ran locally:
 
-    # Invoke via cmake:
+    # Invoke via cmake with all output from the tests displayed to console:
     ctest -VV
 
-    # Or invoke directly, can pass the name of tests to execute, the framework used is catch2
-    # catch2 supports '*' wildcards to run multiple tests or comma delimited ',' test names.
-    # The below will run all tests with "tcp_server" prefix in their test name.
-    ./Debug/test/libcoro_test "tcp_server*"
+    # Or invoke directly, can pass the name of tests to execute, the framework used is catch2.
+    # Tests are tagged with their group, below is howt o run all of the coro::net::tcp_server tests:
+    ./Debug/test/libcoro_test "[tcp_server]"
 
 ### Support
 

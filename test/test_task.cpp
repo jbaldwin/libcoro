@@ -5,7 +5,7 @@
 #include <chrono>
 #include <thread>
 
-TEST_CASE("task hello world")
+TEST_CASE("task hello world", "[task]")
 {
     using task_type = coro::task<std::string>;
 
@@ -28,7 +28,7 @@ TEST_CASE("task hello world")
     REQUIRE(w.promise().return_value().empty());
 }
 
-TEST_CASE("task void")
+TEST_CASE("task void", "[task]")
 {
     using namespace std::chrono_literals;
     using task_type = coro::task<>;
@@ -42,7 +42,7 @@ TEST_CASE("task void")
     REQUIRE(t.is_ready());
 }
 
-TEST_CASE("task exception thrown")
+TEST_CASE("task exception thrown", "[task]")
 {
     using task_type = coro::task<std::string>;
 
@@ -71,7 +71,7 @@ TEST_CASE("task exception thrown")
     REQUIRE(thrown);
 }
 
-TEST_CASE("task in a task")
+TEST_CASE("task in a task", "[task]")
 {
     auto outer_task = []() -> coro::task<> {
         auto inner_task = []() -> coro::task<int> {
@@ -91,7 +91,7 @@ TEST_CASE("task in a task")
     REQUIRE(outer_task.is_ready());
 }
 
-TEST_CASE("task in a task in a task")
+TEST_CASE("task in a task in a task", "[task]")
 {
     auto task1 = []() -> coro::task<> {
         std::cerr << "task1 start\n";
@@ -121,7 +121,7 @@ TEST_CASE("task in a task in a task")
     REQUIRE(task1.is_ready());
 }
 
-TEST_CASE("task multiple suspends return void")
+TEST_CASE("task multiple suspends return void", "[task]")
 {
     auto task = []() -> coro::task<void> {
         co_await std::suspend_always{};
@@ -144,7 +144,7 @@ TEST_CASE("task multiple suspends return void")
     REQUIRE(task.is_ready());
 }
 
-TEST_CASE("task multiple suspends return integer")
+TEST_CASE("task multiple suspends return integer", "[task]")
 {
     auto task = []() -> coro::task<int> {
         co_await std::suspend_always{};
@@ -167,7 +167,7 @@ TEST_CASE("task multiple suspends return integer")
     REQUIRE(task.promise().return_value() == 11);
 }
 
-TEST_CASE("task resume from promise to coroutine handles of different types")
+TEST_CASE("task resume from promise to coroutine handles of different types", "[task]")
 {
     auto task1 = [&]() -> coro::task<int> {
         std::cerr << "Task ran\n";
@@ -199,7 +199,7 @@ TEST_CASE("task resume from promise to coroutine handles of different types")
     REQUIRE(coro_handle2.done());
 }
 
-TEST_CASE("task throws void")
+TEST_CASE("task throws void", "[task]")
 {
     auto task = []() -> coro::task<void> {
         throw std::runtime_error{"I always throw."};
@@ -211,7 +211,7 @@ TEST_CASE("task throws void")
     REQUIRE_THROWS_AS(task.promise().return_value(), std::runtime_error);
 }
 
-TEST_CASE("task throws non-void l-value")
+TEST_CASE("task throws non-void l-value", "[task]")
 {
     auto task = []() -> coro::task<int> {
         throw std::runtime_error{"I always throw."};
@@ -223,7 +223,7 @@ TEST_CASE("task throws non-void l-value")
     REQUIRE_THROWS_AS(task.promise().return_value(), std::runtime_error);
 }
 
-TEST_CASE("task throws non-void r-value")
+TEST_CASE("task throws non-void r-value", "[task]")
 {
     struct type
     {

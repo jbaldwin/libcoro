@@ -2,7 +2,7 @@
 
 #include <coro/coro.hpp>
 
-TEST_CASE("sync_wait simple integer return")
+TEST_CASE("sync_wait simple integer return", "[sync_wait]")
 {
     auto func = []() -> coro::task<int> { co_return 11; };
 
@@ -10,7 +10,7 @@ TEST_CASE("sync_wait simple integer return")
     REQUIRE(result == 11);
 }
 
-TEST_CASE("sync_wait void")
+TEST_CASE("sync_wait void", "[sync_wait]")
 {
     std::string output;
 
@@ -23,7 +23,7 @@ TEST_CASE("sync_wait void")
     REQUIRE(output == "hello from sync_wait<void>\n");
 }
 
-TEST_CASE("sync_wait task co_await single")
+TEST_CASE("sync_wait task co_await single", "[sync_wait]")
 {
     auto answer = []() -> coro::task<int> {
         std::cerr << "\tThinking deep thoughts...\n";
@@ -47,7 +47,7 @@ TEST_CASE("sync_wait task co_await single")
     REQUIRE(output == 1337);
 }
 
-TEST_CASE("sync_wait task that throws")
+TEST_CASE("sync_wait task that throws", "[sync_wait]")
 {
     auto f = []() -> coro::task<uint64_t> {
         throw std::runtime_error("I always throw!");

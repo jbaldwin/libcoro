@@ -5,7 +5,7 @@
 #include <chrono>
 #include <thread>
 
-TEST_CASE("mutex single waiter not locked")
+TEST_CASE("mutex single waiter not locked", "[mutex]")
 {
     std::vector<uint64_t> output;
 
@@ -29,7 +29,7 @@ TEST_CASE("mutex single waiter not locked")
     REQUIRE(output[0] == 1);
 }
 
-TEST_CASE("mutex many waiters until event")
+TEST_CASE("mutex many waiters until event", "[mutex]")
 {
     std::atomic<uint64_t>         value{0};
     std::vector<coro::task<void>> tasks;
@@ -40,7 +40,7 @@ TEST_CASE("mutex many waiters until event")
     coro::event e; // triggers the blocking thread to release the lock
 
     auto make_task = [&](uint64_t id) -> coro::task<void> {
-        co_await tp.schedule().value();
+        co_await tp.schedule();
         std::cerr << "id = " << id << " waiting to acquire the lock\n";
         auto scoped_lock = co_await m.lock();
         std::cerr << "id = " << id << " lock acquired\n";
@@ -50,7 +50,7 @@ TEST_CASE("mutex many waiters until event")
     };
 
     auto make_block_task = [&]() -> coro::task<void> {
-        co_await tp.schedule().value();
+        co_await tp.schedule();
         std::cerr << "block task acquiring lock\n";
         auto scoped_lock = co_await m.lock();
         std::cerr << "block task acquired lock, waiting on event\n";
@@ -59,7 +59,7 @@ TEST_CASE("mutex many waiters until event")
     };
 
     auto make_set_task = [&]() -> coro::task<void> {
-        co_await tp.schedule().value();
+        co_await tp.schedule();
         std::cerr << "set task setting event\n";
         e.set();
         co_return;

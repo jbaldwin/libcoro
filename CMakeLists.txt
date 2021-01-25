@@ -49,6 +49,7 @@ set(LIBCORO_SOURCE_FILES
     inc/coro/poll.hpp
     inc/coro/shutdown.hpp
     inc/coro/sync_wait.hpp src/sync_wait.cpp
+    inc/coro/task_container.hpp src/task_container.cpp
     inc/coro/task.hpp
     inc/coro/thread_pool.hpp src/thread_pool.cpp
     inc/coro/when_all.hpp

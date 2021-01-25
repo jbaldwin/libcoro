@@ -2,7 +2,7 @@
 
 #include <coro/coro.hpp>
 
-TEST_CASE("generator single yield")
+TEST_CASE("generator single yield", "[generator]")
 {
     std::string msg{"Hello World Generator!"};
     auto        func = [&]() -> coro::generator<std::string> { co_yield msg; };
@@ -13,7 +13,7 @@ TEST_CASE("generator single yield")
     }
 }
 
-TEST_CASE("generator infinite incrementing integer yield")
+TEST_CASE("generator infinite incrementing integer yield", "[generator]")
 {
     constexpr const int64_t max = 1024;
 

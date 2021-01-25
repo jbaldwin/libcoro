@@ -6,14 +6,11 @@
 
 TEST_CASE("dns_resolver basic")
 {
-    coro::io_scheduler scheduler{
-        coro::io_scheduler::options{.thread_strategy = coro::io_scheduler::thread_strategy_t::spawn}};
-
+    coro::io_scheduler scheduler{coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}}};
     coro::net::dns_resolver dns_resolver{scheduler, std::chrono::milliseconds{5000}};
 
-    std::atomic<bool> done{false};
-
     auto make_host_by_name_task = [&](coro::net::hostname hn) -> coro::task<void> {
+        co_await scheduler.schedule();
         auto result_ptr = co_await std::move(dns_resolver.host_by_name(hn));
 
         if (result_ptr->status() == coro::net::dns_status::complete)
@@ -24,17 +21,10 @@ TEST_CASE("dns_resolver basic")
             }
         }
 
-        done = true;
-
         co_return;
     };
 
-    scheduler.schedule(make_host_by_name_task(coro::net::hostname{"www.example.com"}));
-
-    while (!done)
-    {
-        std::this_thread::sleep_for(std::chrono::milliseconds{10});
-    }
+    coro::sync_wait(make_host_by_name_task(coro::net::hostname{"www.example.com"}));
 
     scheduler.shutdown();
     REQUIRE(scheduler.empty());

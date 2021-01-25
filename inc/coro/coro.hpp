@@ -22,5 +22,6 @@
 #include "coro/mutex.hpp"
 #include "coro/sync_wait.hpp"
 #include "coro/task.hpp"
+#include "coro/task_container.hpp"
 #include "coro/thread_pool.hpp"
 #include "coro/when_all.hpp"

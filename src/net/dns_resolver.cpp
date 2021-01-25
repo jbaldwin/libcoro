@@ -35,18 +35,19 @@ auto ares_dns_callback(void* arg, int status, int /*timeouts*/, struct hostent* 
 
     if (result.m_pending_dns_requests == 0)
     {
-        result.m_token.resume();
+        result.m_resume.set(result.m_io_scheduler);
     }
 }
 
-dns_result::dns_result(coro::resume_token<void>& token, uint64_t pending_dns_requests)
-    : m_token(token),
+dns_result::dns_result(coro::io_scheduler& scheduler, coro::event& resume, uint64_t pending_dns_requests)
+    : m_io_scheduler(scheduler),
+      m_resume(resume),
       m_pending_dns_requests(pending_dns_requests)
 {
 }
 
 dns_resolver::dns_resolver(io_scheduler& scheduler, std::chrono::milliseconds timeout)
-    : m_scheduler(scheduler),
+    : m_io_scheduler(scheduler),
       m_timeout(timeout)
 {
     {
@@ -89,17 +90,19 @@ dns_resolver::~dns_resolver()
 
 auto dns_resolver::host_by_name(const net::hostname& hn) -> coro::task<std::unique_ptr<dns_result>>
 {
-    auto token      = m_scheduler.make_resume_token<void>();
-    auto result_ptr = std::make_unique<dns_result>(token, 2);
+    coro::event resume_event{};
+    auto        result_ptr = std::make_unique<dns_result>(m_io_scheduler, resume_event, 2);
 
     ares_gethostbyname(m_ares_channel, hn.data().data(), AF_INET, ares_dns_callback, result_ptr.get());
     ares_gethostbyname(m_ares_channel, hn.data().data(), AF_INET6, ares_dns_callback, result_ptr.get());
+
+    std::vector<coro::task<void>> poll_tasks{};
 
     // Add all required poll calls for ares to kick off the dns requests.
     ares_poll();
 
     // Suspend until this specific result is completed by ares.
-    co_await m_scheduler.yield(token);
+    co_await resume_event;
     co_return result_ptr;
 }
 
@@ -138,21 +141,22 @@ auto dns_resolver::ares_poll() -> void
         }
     }
 
+    std::vector<coro::task<void>> poll_tasks{};
     for (size_t i = 0; i < new_sockets; ++i)
     {
-        io_scheduler::fd_t fd = static_cast<io_scheduler::fd_t>(ares_sockets[i]);
+        auto fd = static_cast<io_scheduler::fd_t>(ares_sockets[i]);
 
         // If this socket is not currently actively polling, start polling!
         if (m_active_sockets.emplace(fd).second)
         {
-            m_scheduler.schedule(make_poll_task(fd, poll_ops[i]));
+            m_task_container.store(make_poll_task(fd, poll_ops[i])).resume();
         }
     }
 }
 
 auto dns_resolver::make_poll_task(io_scheduler::fd_t fd, poll_op ops) -> coro::task<void>
 {
-    auto result = co_await m_scheduler.poll(fd, ops, m_timeout);
+    auto result = co_await m_io_scheduler.poll(fd, ops, m_timeout);
     switch (result)
     {
         case poll_status::event:

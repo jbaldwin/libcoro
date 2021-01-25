@@ -1,7 +1,4 @@
 #include "coro/net/tcp_client.hpp"
-#include "coro/io_scheduler.hpp"
-
-#include <ares.h>
 
 namespace coro::net
 {

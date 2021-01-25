@@ -17,11 +17,6 @@
 #include <variant>
 #include <vector>
 
-namespace coro
-{
-class io_scheduler;
-} // namespace coro
-
 namespace coro::net
 {
 class tcp_server;
@@ -80,7 +75,7 @@ public:
     auto poll(coro::poll_op op, std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
         -> coro::task<poll_status>
     {
-        co_return co_await m_io_scheduler.poll(m_socket, op, timeout);
+        return m_io_scheduler.poll(m_socket, op, timeout);
     }
 
     /**

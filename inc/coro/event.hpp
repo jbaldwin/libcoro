@@ -5,6 +5,8 @@
 
 namespace coro
 {
+class thread_pool;
+
 /**
  * Event is a manully triggered thread safe signal that can be co_await()'ed by multiple awaiters.
  * Each awaiter should co_await the event and upon the event being set each awaiter will have their
@@ -44,9 +46,16 @@ public:
     auto is_set() const noexcept -> bool { return m_state.load(std::memory_order_acquire) == this; }
 
     /**
-     * Sets this event and resumes all awaiters.
+     * Sets this event and resumes all awaiters.  Note that all waiters will be resumed onto this
+     * thread of execution.
      */
     auto set() noexcept -> void;
+
+    /**
+     * Sets this event and resumes all awaiters onto the given thread pool.  This will distribute
+     * the waiters across the thread pools threads.
+     */
+    auto set(coro::thread_pool& tp) noexcept -> void;
 
     struct awaiter
     {
