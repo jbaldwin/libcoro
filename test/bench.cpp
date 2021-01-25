@@ -285,9 +285,9 @@ TEST_CASE("benchmark tcp_server echo server", "[benchmark]")
         uint64_t           id;
         coro::io_scheduler scheduler{
             coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = server_thread_count}}};
-        std::vector<coro::task<void>> tasks{};
-        uint64_t                      live_clients{0};
-        coro::event                   wait_for_clients{};
+        coro::task_container task_container{};
+        uint64_t             live_clients{0};
+        coro::event          wait_for_clients{};
     };
 
     struct client
@@ -347,8 +347,7 @@ TEST_CASE("benchmark tcp_server echo server", "[benchmark]")
                     accepted.fetch_add(1, std::memory_order::release);
 
                     s.live_clients++;
-                    s.tasks.emplace_back(make_on_connection_task(s, std::move(c)));
-                    s.tasks.back().resume();
+                    s.task_container.store(make_on_connection_task(s, std::move(c))).resume();
                 }
             }
         }

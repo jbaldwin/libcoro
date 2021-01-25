@@ -31,8 +31,8 @@ namespace detail
  */
 struct poll_info
 {
-    explicit poll_info() = default;
-    ~poll_info()         = default;
+    poll_info()  = default;
+    ~poll_info() = default;
 
     poll_info(const poll_info&) = delete;
     poll_info(poll_info&&)      = delete;
@@ -41,7 +41,7 @@ struct poll_info
 
     struct poll_awaiter
     {
-        poll_awaiter(poll_info& pi) noexcept : m_pi(pi) {}
+        explicit poll_awaiter(poll_info& pi) noexcept : m_pi(pi) {}
 
         auto await_ready() const noexcept -> bool { return false; }
         auto await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept -> void

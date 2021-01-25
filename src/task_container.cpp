@@ -99,16 +99,24 @@ auto task_container::make_cleanup_task(task<void> user_task, task_position pos) 
     {
         co_await user_task;
     }
-    catch (const std::runtime_error& e)
+    catch (const std::exception& e)
     {
         // TODO: what would be a good way to report this to the user...?  Catching here is required
-        // since the co_await will unwrap the unhandled exception on the task.  The scheduler thread
-        // should really not throw unhandled exceptions, otherwise it'll take the application down.
-        // The user's task should ideally be wrapped in a catch all and handle it themselves.
+        // since the co_await will unwrap the unhandled exception on the task.
+        // The user's task should ideally be wrapped in a catch all and handle it themselves, but
+        // that cannot be guaranteed.
         std::cerr << "task_container user_task had an unhandled exception e.what()= " << e.what() << "\n";
     }
+    catch (...)
+    {
+        // don't crash if they throw something that isn't derived from std::exception
+        std::cerr << "task_container user_task had unhandle exception, not derived from std::exception.\n";
+    }
 
-    m_tasks_to_delete.push_back(pos);
+    {
+        std::scoped_lock lk{m_mutex};
+        m_tasks_to_delete.push_back(pos);
+    }
     co_return;
 }
 
