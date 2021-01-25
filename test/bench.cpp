@@ -262,17 +262,17 @@ TEST_CASE("benchmark counter task scheduler await event from another coroutine",
 
 TEST_CASE("benchmark tcp_server echo server", "[benchmark]")
 {
-    const constexpr std::size_t connections             = 256;
+    const constexpr std::size_t connections             = 16;
     const constexpr std::size_t messages_per_connection = 10'000;
     const constexpr std::size_t ops                     = connections * messages_per_connection;
 
     const std::string msg = "im a data point in a stream of bytes";
 
-    const constexpr std::size_t server_count = 4;
-    const constexpr std::size_t client_count = 4;
+    const constexpr std::size_t server_count = 1;
+    const constexpr std::size_t client_count = 1;
 
-    const constexpr std::size_t server_thread_count = 4;
-    const constexpr std::size_t client_thread_count = 4;
+    const constexpr std::size_t server_thread_count = 1;
+    const constexpr std::size_t client_thread_count = 1;
 
     std::atomic<uint64_t> listening{0};
     std::atomic<uint64_t> accepted{0};
