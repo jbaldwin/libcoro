@@ -27,6 +27,7 @@ TEST_CASE("io_scheduler schedule single task", "[io_scheduler]")
 
     auto value = coro::sync_wait(make_task());
     REQUIRE(value == 42);
+    s.shutdown();
     REQUIRE(s.empty());
 }
 
@@ -84,7 +85,6 @@ TEST_CASE("io_scheduler task with multiple events", "[io_scheduler]")
     REQUIRE(counter == 3);
 
     s.shutdown();
-
     REQUIRE(s.empty());
 }
 
@@ -216,7 +216,9 @@ TEST_CASE("io_scheduler separate thread resume", "[io_scheduler]")
 
     coro::sync_wait(coro::when_all_awaitable(make_s1_task(), make_s2_task()));
 
+    s1.shutdown();
     REQUIRE(s1.empty());
+    s2.shutdown();
     REQUIRE(s2.empty());
 }
 
@@ -247,6 +249,8 @@ TEST_CASE("io_scheduler separate thread resume spawned thread", "[io_scheduler]"
     };
 
     coro::sync_wait(make_task());
+
+    s.shutdown();
     REQUIRE(s.empty());
 }
 
@@ -286,6 +290,7 @@ TEST_CASE("io_scheduler separate thread resume with return", "[io_scheduler]")
     coro::sync_wait(make_task());
 
     service.join();
+    s.shutdown();
     REQUIRE(s.empty());
 }
 
@@ -322,11 +327,7 @@ TEST_CASE("io_scheduler scheduler_after", "[io_scheduler]")
     std::atomic<uint64_t>               counter{0};
     std::thread::id                     tid;
 
-    coro::io_scheduler s{coro::io_scheduler::options{
-        .pool = coro::thread_pool::options{
-            .thread_count = 1, .on_thread_start_functor = [&](std::size_t) { tid = std::this_thread::get_id(); }}}};
-
-    auto func = [&](std::chrono::milliseconds amount) -> coro::task<void> {
+    auto func = [&](coro::io_scheduler& s, std::chrono::milliseconds amount) -> coro::task<void> {
         co_await s.schedule_after(amount);
         ++counter;
         // Make sure schedule after context switches into the worker thread.
@@ -335,24 +336,33 @@ TEST_CASE("io_scheduler scheduler_after", "[io_scheduler]")
     };
 
     {
-        auto start = std::chrono::steady_clock::now();
-        coro::sync_wait(func(0ms));
+        coro::io_scheduler s{coro::io_scheduler::options{
+            .pool = coro::thread_pool::options{
+                .thread_count = 1, .on_thread_start_functor = [&](std::size_t) { tid = std::this_thread::get_id(); }}}};
+        auto               start = std::chrono::steady_clock::now();
+        coro::sync_wait(func(s, 0ms));
         auto stop     = std::chrono::steady_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
 
         REQUIRE(counter == 1);
         REQUIRE(duration < wait_for);
+        s.shutdown();
         REQUIRE(s.empty());
     }
 
     {
+        coro::io_scheduler s{coro::io_scheduler::options{
+            .pool = coro::thread_pool::options{
+                .thread_count = 1, .on_thread_start_functor = [&](std::size_t) { tid = std::this_thread::get_id(); }}}};
+
         auto start = std::chrono::steady_clock::now();
-        coro::sync_wait(func(wait_for));
+        coro::sync_wait(func(s, wait_for));
         auto stop     = std::chrono::steady_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
 
         REQUIRE(counter == 2);
         REQUIRE(duration >= wait_for);
+        s.shutdown();
         REQUIRE(s.empty());
     }
 }
