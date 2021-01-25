@@ -11,25 +11,25 @@
 **libcoro** is meant to provide low level coroutine constructs for building larger applications, the current focus is around high performance networking coroutine support.
 
 ## Overview
- * C++20 coroutines!
- * Modern Safe C++20 API
- * Higher level coroutine constructs
- ** coro::task<T>
- ** coro::generator<T>
- ** coro::event
- ** coro::latch
- ** coro::mutex
- ** coro::sync_wait(awaitable)
- *** coro::when_all(awaitable...)
- * Schedulers
- ** coro::thread_pool for coroutine cooperative multitasking
- ** coro::io_scheduler for driving i/o events, uses thread_pool
- *** epoll driver implemented
- *** io_uring driver planned (will be required for file i/o)
- * Coroutine Networking
- ** coro::net::dns_resolver for async dns, leverages libc-ares
+* C++20 coroutines!
+* Modern Safe C++20 API
+* Higher level coroutine constructs
+** coro::task<T>
+** coro::generator<T>
+** coro::event
+** coro::latch
+** coro::mutex
+** coro::sync_wait(awaitable)
+*** coro::when_all(awaitable...)
+* Schedulers
+** coro::thread_pool for coroutine cooperative multitasking
+** coro::io_scheduler for driving i/o events, uses thread_pool
+*** epoll driver implemented
+*** io_uring driver planned (will be required for file i/o)
+* Coroutine Networking
+** coro::net::dns_resolver for async dns, leverages libc-ares
  ** coro::tcp_client and coro::tcp_server
- ** coro::udp_peer
+** coro::udp_peer
 
 ### A note on co_await
 Its important to note with coroutines that depending on the construct used _any_ `co_await` has the

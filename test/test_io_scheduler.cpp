@@ -46,9 +46,9 @@ TEST_CASE("io_scheduler submit mutiple tasks", "[io_scheduler]")
     for (std::size_t i = 0; i < n; ++i)
     {
         tasks.emplace_back(make_task());
-        tasks.back().resume();
     }
-    s.shutdown();
+
+    coro::sync_wait(coro::when_all_awaitable(tasks));
 
     REQUIRE(counter == n);
 }

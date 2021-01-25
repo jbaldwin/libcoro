@@ -151,7 +151,7 @@ public:
     /**
      * @return The number of tasks waiting in the task queue + the executing tasks.
      */
-    auto size() const noexcept -> std::size_t { return m_size.load(std::memory_order::relaxed); }
+    auto size() const noexcept -> std::size_t { return m_size.load(std::memory_order::acquire); }
 
     /**
      * @return True if the task queue is empty and zero tasks are currently executing.
