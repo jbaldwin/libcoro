@@ -90,7 +90,7 @@ auto thread_pool::executor(std::stop_token stop_token, std::size_t idx) -> void
             lk.unlock(); // Not needed for processing the coroutine.
 
             handle.resume();
-            m_size.fetch_sub(1, std::memory_order::relaxed);
+            m_size.fetch_sub(1, std::memory_order::release);
         }
     }
 
@@ -140,7 +140,7 @@ auto thread_pool::resume(const std::vector<std::coroutine_handle<>>& handles) no
             }
             else
             {
-                m_size.fetch_sub(1, std::memory_order::relaxed);
+                m_size.fetch_sub(1, std::memory_order::release);
             }
         }
     }
