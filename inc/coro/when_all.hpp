@@ -6,6 +6,7 @@
 #include <atomic>
 #include <coroutine>
 #include <tuple>
+#include <vector>
 
 namespace coro
 {
@@ -453,7 +454,7 @@ static auto make_when_all_task(awaitable&& a) -> when_all_task<return_type>
 } // namespace detail
 
 template<concepts::awaitable... awaitables_type>
-[[nodiscard]] auto when_all_awaitable(awaitables_type&&... awaitables)
+[[nodiscard]] auto when_all(awaitables_type&&... awaitables)
 {
     return detail::when_all_ready_awaitable<std::tuple<
         detail::when_all_task<typename concepts::awaitable_traits<awaitables_type>::awaiter_return_type>...>>(
@@ -461,9 +462,10 @@ template<concepts::awaitable... awaitables_type>
 }
 
 template<
-    concepts::awaitable awaitable,
-    typename return_type = concepts::awaitable_traits<awaitable>::awaiter_return_type>
-[[nodiscard]] auto when_all_awaitable(std::vector<awaitable>& awaitables)
+    concepts::awaitable awaitable_type,
+    typename return_type    = concepts::awaitable_traits<awaitable_type>::awaiter_return_type,
+    typename allocator_type = std::allocator<awaitable_type>>
+[[nodiscard]] auto when_all(std::vector<awaitable_type, allocator_type>& awaitables)
     -> detail::when_all_ready_awaitable<std::vector<detail::when_all_task<return_type>>>
 {
     std::vector<detail::when_all_task<return_type>> tasks;

@@ -35,11 +35,15 @@ done
 cp .githooks/readme-template.md README.md
 
 template_contents=$(cat 'README.md')
-coro_event_cpp_contents=$(cat 'examples/coro_event.cpp')
-echo "${template_contents/\$\{EXAMPLE_CORO_EVENT_CPP\}/$coro_event_cpp_contents}" > README.md
+example_contents=$(cat 'examples/coro_event.cpp')
+echo "${template_contents/\$\{EXAMPLE_CORO_EVENT_CPP\}/$example_contents}" > README.md
 
 template_contents=$(cat 'README.md')
-coro_latch_cpp_contents=$(cat 'examples/coro_latch.cpp')
-echo "${template_contents/\$\{EXAMPLE_CORO_LATCH_CPP\}/$coro_latch_cpp_contents}" > README.md
+example_contents=$(cat 'examples/coro_latch.cpp')
+echo "${template_contents/\$\{EXAMPLE_CORO_LATCH_CPP\}/$example_contents}" > README.md
+
+template_contents=$(cat 'README.md')
+example_contents=$(cat 'examples/coro_mutex.cpp')
+echo "${template_contents/\$\{EXAMPLE_CORO_MUTEX_CPP\}/$example_contents}" > README.md
 
 git add README.md

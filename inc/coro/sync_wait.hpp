@@ -1,6 +1,7 @@
 #pragma once
 
 #include "coro/concepts/awaitable.hpp"
+#include "coro/when_all.hpp"
 
 #include <condition_variable>
 #include <mutex>
@@ -183,28 +184,28 @@ private:
 };
 
 template<
-    concepts::awaitable awaitable,
-    typename return_type = concepts::awaitable_traits<awaitable>::awaiter_return_type>
-static auto make_sync_wait_task(awaitable&& a) -> sync_wait_task<return_type>
+    concepts::awaitable awaitable_type,
+    typename return_type = concepts::awaitable_traits<awaitable_type>::awaiter_return_type>
+static auto make_sync_wait_task(awaitable_type&& a) -> sync_wait_task<return_type>
 {
     if constexpr (std::is_void_v<return_type>)
     {
-        co_await std::forward<awaitable>(a);
+        co_await std::forward<awaitable_type>(a);
         co_return;
     }
     else
     {
-        co_yield co_await std::forward<awaitable>(a);
+        co_yield co_await std::forward<awaitable_type>(a);
     }
 }
 
 } // namespace detail
 
-template<concepts::awaitable awaitable>
-auto sync_wait(awaitable&& a) -> decltype(auto)
+template<concepts::awaitable awaitable_type>
+auto sync_wait(awaitable_type&& a) -> decltype(auto)
 {
     detail::sync_wait_event e{};
-    auto                    task = detail::make_sync_wait_task(std::forward<awaitable>(a));
+    auto                    task = detail::make_sync_wait_task(std::forward<awaitable_type>(a));
     task.start(e);
     e.wait();
 

@@ -64,7 +64,7 @@ TEST_CASE("benchmark counter func coro::sync_wait(awaitable)", "[benchmark]")
     REQUIRE(counter == iterations);
 }
 
-TEST_CASE("benchmark counter func coro::sync_wait(coro::when_all_awaitable(awaitable)) x10", "[benchmark]")
+TEST_CASE("benchmark counter func coro::sync_wait(coro::when_all(awaitable)) x10", "[benchmark]")
 {
     constexpr std::size_t iterations = default_iterations;
     uint64_t              counter{0};
@@ -74,13 +74,12 @@ TEST_CASE("benchmark counter func coro::sync_wait(coro::when_all_awaitable(await
 
     for (std::size_t i = 0; i < iterations; i += 10)
     {
-        auto tasks = coro::sync_wait(coro::when_all_awaitable(f(), f(), f(), f(), f(), f(), f(), f(), f(), f()));
+        auto tasks = coro::sync_wait(coro::when_all(f(), f(), f(), f(), f(), f(), f(), f(), f(), f()));
 
         std::apply([&counter](auto&&... t) { ((counter += t.return_value()), ...); }, tasks);
     }
 
-    print_stats(
-        "benchmark counter func coro::sync_wait(coro::when_all_awaitable(awaitable))", iterations, start, sc::now());
+    print_stats("benchmark counter func coro::sync_wait(coro::when_all(awaitable))", iterations, start, sc::now());
     REQUIRE(counter == iterations);
 }
 
@@ -171,7 +170,7 @@ TEST_CASE("benchmark counter task scheduler{1} yield", "[benchmark]")
         tasks.emplace_back(make_task());
     }
 
-    coro::sync_wait(coro::when_all_awaitable(tasks));
+    coro::sync_wait(coro::when_all(tasks));
 
     auto stop = sc::now();
     print_stats("benchmark counter task scheduler{1} yield", ops, start, stop);
@@ -204,7 +203,7 @@ TEST_CASE("benchmark counter task scheduler{1} yield_for", "[benchmark]")
         tasks.emplace_back(make_task());
     }
 
-    coro::sync_wait(coro::when_all_awaitable(tasks));
+    coro::sync_wait(coro::when_all(tasks));
 
     auto stop = sc::now();
     print_stats("benchmark counter task scheduler{1} yield", ops, start, stop);
@@ -252,7 +251,7 @@ TEST_CASE("benchmark counter task scheduler await event from another coroutine",
         tasks.emplace_back(resume_func(i));
     }
 
-    coro::sync_wait(coro::when_all_awaitable(tasks));
+    coro::sync_wait(coro::when_all(tasks));
 
     auto stop = sc::now();
     print_stats("benchmark counter task scheduler await event from another coroutine", ops, start, stop);
@@ -433,7 +432,7 @@ TEST_CASE("benchmark tcp_server echo server", "[benchmark]")
             {
                 c.tasks.emplace_back(make_client_task(c));
             }
-            coro::sync_wait(coro::when_all_awaitable(c.tasks));
+            coro::sync_wait(coro::when_all(c.tasks));
             c.scheduler.shutdown();
         }});
     }
