@@ -61,7 +61,7 @@ public:
 
     struct lock_operation
     {
-        lock_operation(mutex& m) : m_mutex(m) {}
+        explicit lock_operation(mutex& m) : m_mutex(m) {}
 
         auto await_ready() const noexcept -> bool { return false; }
         auto await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept -> bool;
