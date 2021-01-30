@@ -63,7 +63,7 @@ public:
     {
         explicit lock_operation(mutex& m) : m_mutex(m) {}
 
-        auto await_ready() const noexcept -> bool { return false; }
+        auto await_ready() const noexcept -> bool { return m_mutex.try_lock(); }
         auto await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept -> bool;
         auto await_resume() noexcept -> scoped_lock { return scoped_lock{m_mutex}; }
 
