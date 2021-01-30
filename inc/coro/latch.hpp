@@ -1,6 +1,7 @@
 #pragma once
 
 #include "coro/event.hpp"
+#include "coro/thread_pool.hpp"
 
 #include <atomic>
 
@@ -41,6 +42,7 @@ public:
     auto remaining() const noexcept -> std::size_t { return m_count.load(std::memory_order::acquire); }
 
     /**
+     * If the latch counter goes to zero then the task awaiting the latch is resumed.
      * @param n The number of tasks to complete towards the latch, defaults to 1.
      */
     auto count_down(std::ptrdiff_t n = 1) noexcept -> void
@@ -48,6 +50,20 @@ public:
         if (m_count.fetch_sub(n, std::memory_order::acq_rel) <= n)
         {
             m_event.set();
+        }
+    }
+
+    /**
+     * If the latch counter goes to then the task awaiting the latch is resumed on the given
+     * thread pool.
+     * @param tp The thread pool to schedule the task that is waiting on the latch on.
+     * @param n The number of tasks to complete towards the latch, defaults to 1.
+     */
+    auto count_down(coro::thread_pool& tp, std::ptrdiff_t n = 1) noexcept -> void
+    {
+        if (m_count.fetch_sub(n, std::memory_order::acq_rel) <= n)
+        {
+            m_event.set(tp);
         }
     }
 

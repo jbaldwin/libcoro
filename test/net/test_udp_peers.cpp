@@ -41,7 +41,7 @@ TEST_CASE("udp one way")
         co_return;
     };
 
-    coro::sync_wait(coro::when_all_awaitable(make_recv_task(), make_send_task()));
+    coro::sync_wait(coro::when_all(make_recv_task(), make_send_task()));
 }
 
 TEST_CASE("udp echo peers")
@@ -110,7 +110,7 @@ TEST_CASE("udp echo peers")
         co_return;
     };
 
-    coro::sync_wait(coro::when_all_awaitable(
+    coro::sync_wait(coro::when_all(
         make_peer_task(8081, 8080, false, peer2_msg, peer1_msg),
         make_peer_task(8080, 8081, true, peer1_msg, peer2_msg)));
 }

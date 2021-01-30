@@ -26,7 +26,7 @@ TEST_CASE("thread_pool one worker many tasks tuple", "[thread_pool]")
         co_return 50;
     };
 
-    auto tasks = coro::sync_wait(coro::when_all_awaitable(f(), f(), f(), f(), f()));
+    auto tasks = coro::sync_wait(coro::when_all(f(), f(), f(), f(), f()));
     REQUIRE(std::tuple_size<decltype(tasks)>() == 5);
 
     uint64_t counter{0};
@@ -49,7 +49,7 @@ TEST_CASE("thread_pool one worker many tasks vector", "[thread_pool]")
     input_tasks.emplace_back(f());
     input_tasks.emplace_back(f());
 
-    auto output_tasks = coro::sync_wait(coro::when_all_awaitable(input_tasks));
+    auto output_tasks = coro::sync_wait(coro::when_all(input_tasks));
 
     REQUIRE(output_tasks.size() == 3);
 
@@ -79,7 +79,7 @@ TEST_CASE("thread_pool N workers 100k tasks", "[thread_pool]")
         input_tasks.emplace_back(make_task(tp));
     }
 
-    auto output_tasks = coro::sync_wait(coro::when_all_awaitable(input_tasks));
+    auto output_tasks = coro::sync_wait(coro::when_all(input_tasks));
     REQUIRE(output_tasks.size() == iterations);
 
     uint64_t counter{0};
@@ -189,5 +189,5 @@ TEST_CASE("thread_pool event jump threads", "[thread_pool]")
         co_return;
     };
 
-    coro::sync_wait(coro::when_all_awaitable(make_tp1_task(), make_tp2_task()));
+    coro::sync_wait(coro::when_all(make_tp1_task(), make_tp2_task()));
 }

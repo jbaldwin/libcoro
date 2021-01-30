@@ -20,8 +20,8 @@
     - coro::latch
     - coro::mutex
     - coro::sync_wait(awaitable)
-        - coro::when_all_awaitabe(awaitable...) -> coro::task<T>...
-        - coro::when_all(awaitable...) -> T... (Future)
+        - coro::when_all(awaitable...) -> coro::task<T>...
+        - coro::when_all_results(awaitable...) -> T... (Future)
 * Schedulers
     - coro::thread_pool for coroutine cooperative multitasking
     - coro::io_scheduler for driving i/o events, uses thread_pool for coroutine execution
@@ -73,17 +73,30 @@ Expected output:
 ```bash
 $ ./examples/coro_latch
 latch task is now waiting on all children tasks...
-work task 1 is working...
-work task 1 is done, counting down on the latch
-work task 2 is working...
-work task 2 is done, counting down on the latch
-work task 3 is working...
-work task 3 is done, counting down on the latch
-work task 4 is working...
-work task 4 is done, counting down on the latch
-work task 5 is working...
-work task 5 is done, counting down on the latch
-latch task children tasks completed, resuming.
+worker task 1 is working...
+worker task 2 is working...
+worker task 3 is working...
+worker task 4 is working...
+worker task 5 is working...
+worker task 1 is done, counting down on the latch
+worker task 2 is done, counting down on the latch
+worker task 3 is done, counting down on the latch
+worker task 4 is done, counting down on the latch
+worker task 5 is done, counting down on the latch
+latch task dependency tasks completed, resuming.
+```
+
+### coro::mutex
+
+```C++
+${EXAMPLE_CORO_MUTEX_CPP}
+```
+
+Expected output, note that the output will vary from run to run based on how the thread pool workers
+are scheduled and in what order they acquire the mutex lock:
+```bash
+$ ./examples/coro_mutex
+1, 2, 3, 4, 5, 6, 7, 8, 10, 9, 12, 11, 13, 14, 15, 16, 17, 18, 19, 21, 22, 20, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 47, 48, 49, 46, 50, 51, 52, 53, 54, 55, 57, 58, 59, 56, 60, 62, 61, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100,
 ```
 
 ## Usage

@@ -49,7 +49,7 @@ TEST_CASE("io_scheduler submit mutiple tasks", "[io_scheduler]")
         tasks.emplace_back(make_task());
     }
 
-    coro::sync_wait(coro::when_all_awaitable(tasks));
+    coro::sync_wait(coro::when_all(tasks));
 
     REQUIRE(counter == n);
 }
@@ -79,8 +79,7 @@ TEST_CASE("io_scheduler task with multiple events", "[io_scheduler]")
         e.set();
     };
 
-    coro::sync_wait(
-        coro::when_all_awaitable(make_wait_task(), make_set_task(e1), make_set_task(e2), make_set_task(e3)));
+    coro::sync_wait(coro::when_all(make_wait_task(), make_set_task(e1), make_set_task(e2), make_set_task(e3)));
 
     REQUIRE(counter == 3);
 
@@ -107,7 +106,7 @@ TEST_CASE("io_scheduler task with read poll", "[io_scheduler]")
         co_return;
     };
 
-    coro::sync_wait(coro::when_all_awaitable(make_poll_read_task(), make_poll_write_task()));
+    coro::sync_wait(coro::when_all(make_poll_read_task(), make_poll_write_task()));
 
     s.shutdown();
     REQUIRE(s.empty());
@@ -134,7 +133,7 @@ TEST_CASE("io_scheduler task with read poll with timeout", "[io_scheduler]")
         co_return;
     };
 
-    coro::sync_wait(coro::when_all_awaitable(make_poll_read_task(), make_poll_write_task()));
+    coro::sync_wait(coro::when_all(make_poll_read_task(), make_poll_write_task()));
 
     s.shutdown();
     REQUIRE(s.empty());
@@ -182,7 +181,7 @@ TEST_CASE("io_scheduler task with read poll timeout", "[io_scheduler]")
 //         co_return;
 //     };
 
-//     coro::sync_wait(coro::when_all_awaitable(make_poll_task(), make_close_task()));
+//     coro::sync_wait(coro::when_all(make_poll_task(), make_close_task()));
 
 //     s.shutdown();
 //     REQUIRE(s.empty());
@@ -214,7 +213,7 @@ TEST_CASE("io_scheduler separate thread resume", "[io_scheduler]")
         co_return;
     };
 
-    coro::sync_wait(coro::when_all_awaitable(make_s1_task(), make_s2_task()));
+    coro::sync_wait(coro::when_all(make_s1_task(), make_s2_task()));
 
     s1.shutdown();
     REQUIRE(s1.empty());
@@ -307,8 +306,7 @@ TEST_CASE("io_scheduler with basic task", "[io_scheduler]")
     auto func = [&]() -> coro::task<int> {
         co_await s.schedule();
 
-        auto output_tasks =
-            co_await coro::when_all_awaitable(add_data(1), add_data(1), add_data(1), add_data(1), add_data(1));
+        auto output_tasks = co_await coro::when_all(add_data(1), add_data(1), add_data(1), add_data(1), add_data(1));
 
         int counter{0};
         std::apply([&counter](auto&&... tasks) -> void { ((counter += tasks.return_value()), ...); }, output_tasks);
@@ -491,7 +489,7 @@ TEST_CASE("io_scheduler multipler event waiters", "[io_scheduler]")
             tasks.emplace_back(func());
         }
 
-        auto results = co_await coro::when_all_awaitable(tasks);
+        auto results = co_await coro::when_all(tasks);
 
         uint64_t counter{0};
         for (const auto& task : results)
@@ -506,7 +504,7 @@ TEST_CASE("io_scheduler multipler event waiters", "[io_scheduler]")
         e.set(s);
     };
 
-    coro::sync_wait(coro::when_all_awaitable(spawn(), release()));
+    coro::sync_wait(coro::when_all(spawn(), release()));
 }
 
 TEST_CASE("io_scheduler self generating coroutine (stack overflow check)", "[io_scheduler]")

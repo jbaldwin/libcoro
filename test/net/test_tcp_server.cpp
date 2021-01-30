@@ -78,5 +78,5 @@ TEST_CASE("tcp_server ping server", "[tcp_server]")
         co_return;
     };
 
-    coro::sync_wait(coro::when_all_awaitable(make_server_task(), make_client_task()));
+    coro::sync_wait(coro::when_all(make_server_task(), make_client_task()));
 }
