@@ -20,21 +20,40 @@
     - coro::latch
     - coro::mutex
     - coro::sync_wait(awaitable)
-        - coro::when_all(awaitable...) -> coro::task<T>...
-        - coro::when_all_results(awaitable...) -> T... (Future)
+    - coro::when_all(awaitable...) -> awaitable
 * Schedulers
     - coro::thread_pool for coroutine cooperative multitasking
-    - coro::io_scheduler for driving i/o events, uses thread_pool for coroutine execution
+    - coro::io_scheduler for driving i/o events, uses thread_pool for coroutine execution upon triggered events
         - epoll driver
         - io_uring driver (Future, will be required for async file i/o)
 * Coroutine Networking
-    - coro::net::dns_resolver for async dns, leverages libc-ares
-    - coro::net::tcp_client and coro::net::tcp_server
+    - coro::net::dns_resolver for async dns
+        - Uses libc-ares
+    - coro::net::tcp_client
+    - coro::net::tcp_server
     - coro::net::udp_peer
 
 ### A note on co_await
 Its important to note with coroutines that depending on the construct used _any_ `co_await` has the potential to switch the thread that is executing the currently running coroutine.  In general this shouldn't affect the way any user of the library would write code except for `thread_local`.  Usage of `thread_local` should be extremely careful and _never_ used across any `co_await` boundary do to thread switching and work stealing on thread pools.
 
+### coro::task<T>
+The `coro::task<T>` is the main coroutine building block within `libcoro`.  Use task to create your coroutines and `co_await` or `co_yield` tasks within tasks to perform asynchronous operations, lazily evaluation or even spreading work out across a `coro::thread_pool`.  Tasks are lightweight and only begin execution upon awaiting them.  If their return type is not `void` then the value can be returned by const reference or by moving (r-value reference).
+
+
+```C++
+${EXAMPLE_CORO_TASK_CPP}
+```
+
+Expected output:
+```bash
+$ ./examples/coro_task
+Task1 output = 9
+expensive_struct() move constructor called
+expensive_struct() move assignment called
+expensive_struct() move constructor called
+12345678-1234-5678-9012-123456781234 has 90000 records.
+Answer to everything = 42
+```
 
 ### coro::generator<T>
 The `coro::generator<T>` construct is a coroutine which can generate one or more values.
