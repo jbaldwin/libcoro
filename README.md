@@ -100,7 +100,9 @@ int main()
             data.records.emplace_back(std::to_string(i));
         }
 
-        co_return std::move(data);
+        // Because the struct only has move contructors it will be forced to use
+        // them, no need to explicitly std::move(data).
+        co_return data;
     };
 
     auto data = coro::sync_wait(move_output_task());
