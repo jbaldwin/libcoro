@@ -19,6 +19,17 @@ auto scoped_lock::unlock() -> void
     }
 }
 
+auto mutex::lock_operation::await_ready() const noexcept -> bool
+{
+    if (m_mutex.try_lock())
+    {
+        // Since there is no mutex acquired, insert a memory fence to act like it.
+        std::atomic_thread_fence(std::memory_order::acquire);
+        return true;
+    }
+    return false;
+}
+
 auto mutex::lock_operation::await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept -> bool
 {
     std::scoped_lock lk{m_mutex.m_waiter_mutex};
@@ -74,8 +85,9 @@ auto mutex::unlock() -> void
         {
             // If there were no waiters, release the lock.  This is done under the waiter list being
             // locked so another thread doesn't add themselves to the waiter list before the lock
-            // is actually released.
-            m_state.exchange(false, std::memory_order::release);
+            // is actually released.  We can safely used relaxed here since m_waiter_mutex will
+            // perform the release memory order upon unlocking.
+            m_state.exchange(false, std::memory_order::relaxed);
         }
     }
 
