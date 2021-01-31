@@ -33,6 +33,8 @@
     - coro::net::tcp_server
     - coro::net::udp_peer
 
+## Usage
+
 ### A note on co_await
 Its important to note with coroutines that depending on the construct used _any_ `co_await` has the potential to switch the thread that is executing the currently running coroutine.  In general this shouldn't affect the way any user of the library would write code except for `thread_local`.  Usage of `thread_local` should be extremely careful and _never_ used across any `co_await` boundary do to thread switching and work stealing on thread pools.
 
@@ -347,7 +349,112 @@ $ ./examples/coro_mutex
 1, 2, 3, 4, 5, 6, 7, 8, 10, 9, 12, 11, 13, 14, 15, 16, 17, 18, 19, 21, 22, 20, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 47, 48, 49, 46, 50, 51, 52, 53, 54, 55, 57, 58, 59, 56, 60, 62, 61, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100,
 ```
 
-## Usage
+### coro::thread_pool
+`coro::thread_pool` is a staticaly sized pool of worker threads to execute scheduled coroutines from a FIFO queue.  To schedule a coroutine on a thread pool the pool's `schedule()` function should be `co_awaited` to transfer the execution from the current thread to a thread pool worker thread.  Its important to note that scheduling will first place the coroutine into the FIFO queue and will be picked up by the first available thread in the pool, e.g. there could be a delay if there is a lot of work queued up.
+
+```C++
+#include <coro/coro.hpp>
+#include <iostream>
+#include <random>
+
+int main()
+{
+    coro::thread_pool tp{coro::thread_pool::options{
+        // By default all thread pools will create its thread count with the
+        // std::thread::hardware_concurrency() as the number of worker threads in the pool,
+        // but this can be changed via this thread_count option.  This example will use 4.
+        .thread_count = 4,
+        // Upon starting each worker thread an optional lambda callback with the worker's
+        // index can be called to make thread changes, perhaps priority or change the thread's
+        // name.
+        .on_thread_start_functor = [](std::size_t worker_idx) -> void {
+            std::cout << "thread pool worker " << worker_idx << " is starting up.\n";
+        },
+        // Upon stopping each worker thread an optional lambda callback with the worker's
+        // index can b called.
+        .on_thread_stop_functor = [](std::size_t worker_idx) -> void {
+            std::cout << "thread pool worker " << worker_idx << " is shutting down.\n";
+        }}};
+
+    auto offload_task = [&](uint64_t child_idx) -> coro::task<uint64_t> {
+        // Start by scheduling this offload worker task onto the thread pool.
+        co_await tp.schedule();
+        // Now any code below this schedule() line will be executed on one of the thread pools
+        // worker threads.
+
+        // Mimic some expensive task that should be run on a background thread...
+        std::random_device              rd;
+        std::mt19937                    gen{rd()};
+        std::uniform_int_distribution<> d{0, 1};
+
+        size_t calculation{0};
+        for (size_t i = 0; i < 1'000'000; ++i)
+        {
+            calculation += d(gen);
+
+            // Lets be nice and yield() to let other coroutines on the thread pool have some cpu
+            // time.  This isn't necessary but is illustrated to show how tasks can cooperatively
+            // yield control at certain points of execution.  Its important to never call the
+            // std::this_thread::sleep_for() within the context of a coroutine, that will block
+            // and other coroutines which are ready for execution from starting, always use yield()
+            // or within the context of a coro::io_scheduler you can use yield_for(amount).
+            if (i == 500'000)
+            {
+                std::cout << "Task " << child_idx << " is yielding()\n";
+                co_await tp.yield();
+            }
+        }
+        co_return calculation;
+    };
+
+    auto primary_task = [&]() -> coro::task<uint64_t> {
+        const size_t                      num_children{10};
+        std::vector<coro::task<uint64_t>> child_tasks{};
+        child_tasks.reserve(num_children);
+        for (size_t i = 0; i < num_children; ++i)
+        {
+            child_tasks.emplace_back(offload_task(i));
+        }
+
+        // Wait for the thread pool workers to process all child tasks.
+        auto results = co_await coro::when_all(child_tasks);
+
+        // Sum up the results of the completed child tasks.
+        size_t calculation{0};
+        for (const auto& task : results)
+        {
+            calculation += task.return_value();
+        }
+        co_return calculation;
+    };
+
+    auto result = coro::sync_wait(primary_task());
+    std::cout << "calculated thread pool result = " << result << "\n";
+}
+```
+
+Example output (will vary based on threads):
+```bash
+thread pool worker 0 is starting up.
+thread pool worker 2 is starting up.
+thread pool worker 3 is starting up.
+thread pool worker 1 is starting up.
+Task 2 is yielding()
+Task 3 is yielding()
+Task 0 is yielding()
+Task 1 is yielding()
+Task 4 is yielding()
+Task 5 is yielding()
+Task 6 is yielding()
+Task 7 is yielding()
+Task 8 is yielding()
+Task 9 is yielding()
+calculated thread pool result = 4999898
+thread pool worker 1 is shutting down.
+thread pool worker 2 is shutting down.
+thread pool worker 3 is shutting down.
+thread pool worker 0 is shutting down.
+````
 
 ### Requirements
     C++20 Compiler with coroutine support
