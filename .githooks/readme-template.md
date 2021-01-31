@@ -33,17 +33,24 @@
     - coro::net::udp_peer
 
 ### A note on co_await
-Its important to note with coroutines that depending on the construct used _any_ `co_await` has the
-potential to switch the thread that is executing the currently running coroutine.  In general this shouldn't
-affect the way any user of the library would write code except for `thread_local`.  Usage of `thread_local`
-should be extremely careful and _never_ used across any `co_await` boundary do to thread switching and
-work stealing on thread pools.
+Its important to note with coroutines that depending on the construct used _any_ `co_await` has the potential to switch the thread that is executing the currently running coroutine.  In general this shouldn't affect the way any user of the library would write code except for `thread_local`.  Usage of `thread_local` should be extremely careful and _never_ used across any `co_await` boundary do to thread switching and work stealing on thread pools.
+
+
+### coro::generator<T>
+The `coro::generator<T>` construct is a coroutine which can generate one or more values.
+
+```C++
+${EXAMPLE_CORO_GENERATOR_CPP}
+```
+
+Expected output:
+```bash
+$ ./examples/coro_generator
+0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100,
+```
 
 ### coro::event
-The `coro::event` is a thread safe async tool to have 1 or more waiters suspend for an event to be set
-before proceeding.  The implementation of event currently will resume execution of all waiters on the
-thread that sets the event.  If the event is already set when a waiter goes to wait on the thread they
-will simply continue executing with no suspend or wait time incurred.
+The `coro::event` is a thread safe async tool to have 1 or more waiters suspend for an event to be set before proceeding.  The implementation of event currently will resume execution of all waiters on the thread that sets the event.  If the event is already set when a waiter goes to wait on the thread they will simply continue executing with no suspend or wait time incurred.
 
 ```C++
 ${EXAMPLE_CORO_EVENT_CPP}
@@ -62,8 +69,7 @@ task 1 event triggered, now resuming.
 ```
 
 ### coro::latch
-The `coro::latch` is a thread safe async tool to have 1 waiter suspend until all outstanding events
-have completed before proceeding.
+The `coro::latch` is a thread safe async tool to have 1 waiter suspend until all outstanding events have completed before proceeding.
 
 ```C++
 ${EXAMPLE_CORO_LATCH_CPP}
@@ -87,6 +93,9 @@ latch task dependency tasks completed, resuming.
 ```
 
 ### coro::mutex
+The `coro::mutex` is a thread safe async tool to protect critical sections and only allow a single thread to execute the critical section at any given time.  Mutexes that are uncontended are a simple CAS operation with a memory fence 'acquire' to behave similar to `std::mutex`.  If the lock is contended then the thread will add itself to a FIFO queue of waiters and yield excution to allow another coroutine to process on that thread while it waits to acquire the lock.
+
+Its important to note that upon releasing the mutex that thread will immediately start processing the next waiter in line for the `coro::mutex`, the mutex is only unlocked/released once all waiters have been processed.  This guarantees fair execution in a FIFO manner, but it also means all coroutines that stack in the waiter queue will end up shifting to the single thread that is executing all waiting coroutines.  It is possible to reschedule after the critical section onto a thread pool to re-distribute the work.  Perhaps an auto-reschedule on a given thread pool is a good feature to implement in the future to prevent this behavior so the post critical section work in the coroutines is redistributed amongst all available thread pool threads.
 
 ```C++
 ${EXAMPLE_CORO_MUTEX_CPP}
