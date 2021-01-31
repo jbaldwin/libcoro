@@ -1,6 +1,10 @@
 cmake_minimum_required(VERSION 3.0)
 project(libcoro_examples)
 
+add_executable(coro_task coro_task.cpp)
+target_compile_features(coro_task PUBLIC cxx_std_20)
+target_link_libraries(coro_task PUBLIC libcoro)
+
 add_executable(coro_generator coro_generator.cpp)
 target_compile_features(coro_generator PUBLIC cxx_std_20)
 target_link_libraries(coro_generator PUBLIC libcoro)
@@ -18,6 +22,7 @@ target_compile_features(coro_mutex PUBLIC cxx_std_20)
 target_link_libraries(coro_mutex PUBLIC libcoro)
 
 if(${CMAKE_CXX_COMPILER_ID} MATCHES "GNU")
+    target_compile_options(coro_task      PUBLIC -fcoroutines -Wall -Wextra -pipe)
     target_compile_options(coro_generator PUBLIC -fcoroutines -Wall -Wextra -pipe)
     target_compile_options(coro_event     PUBLIC -fcoroutines -Wall -Wextra -pipe)
     target_compile_options(coro_latch     PUBLIC -fcoroutines -Wall -Wextra -pipe)
