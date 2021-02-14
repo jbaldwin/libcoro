@@ -36,6 +36,7 @@ set(LIBCORO_SOURCE_FILES
     inc/coro/net/recv_status.hpp src/net/recv_status.cpp
     inc/coro/net/send_status.hpp src/net/send_status.cpp
     inc/coro/net/socket.hpp src/net/socket.cpp
+    inc/coro/net/ssl_context.hpp src/net/ssl_context.cpp
     inc/coro/net/tcp_client.hpp src/net/tcp_client.cpp
     inc/coro/net/tcp_server.hpp src/net/tcp_server.cpp
     inc/coro/net/udp_peer.hpp src/net/udp_peer.cpp
@@ -59,7 +60,7 @@ add_library(${PROJECT_NAME} STATIC ${LIBCORO_SOURCE_FILES})
 set_target_properties(${PROJECT_NAME} PROPERTIES LINKER_LANGUAGE CXX)
 target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_20)
 target_include_directories(${PROJECT_NAME} PUBLIC inc)
-target_link_libraries(${PROJECT_NAME} PUBLIC pthread c-ares)
+target_link_libraries(${PROJECT_NAME} PUBLIC pthread c-ares ssl crypto)
 
 if(${CMAKE_CXX_COMPILER_ID} MATCHES "GNU")
     if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "10.2.0")

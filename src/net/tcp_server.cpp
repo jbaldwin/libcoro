@@ -1,9 +1,12 @@
 #include "coro/net/tcp_server.hpp"
 
+#include "coro/io_scheduler.hpp"
+// #include "coro/net/ssl_context.hpp"
+
 namespace coro::net
 {
 tcp_server::tcp_server(io_scheduler& scheduler, options opts)
-    : m_io_scheduler(scheduler),
+    : m_io_scheduler(&scheduler),
       m_options(std::move(opts)),
       m_accept_socket(net::make_accept_socket(
           net::socket::options{net::domain_t::ipv4, net::socket::type_t::tcp, net::socket::blocking_t::no},
@@ -11,6 +14,24 @@ tcp_server::tcp_server(io_scheduler& scheduler, options opts)
           m_options.port,
           m_options.backlog))
 {
+}
+
+tcp_server::tcp_server(tcp_server&& other)
+    : m_io_scheduler(std::exchange(other.m_io_scheduler, nullptr)),
+      m_options(std::move(other.m_options)),
+      m_accept_socket(std::move(other.m_accept_socket))
+{
+}
+
+auto tcp_server::operator=(tcp_server&& other) -> tcp_server&
+{
+    if (std::addressof(other) != this)
+    {
+        m_io_scheduler  = std::exchange(other.m_io_scheduler, nullptr);
+        m_options       = std::move(other.m_options);
+        m_accept_socket = std::move(other.m_accept_socket);
+    }
+    return *this;
 }
 
 auto tcp_server::accept() -> coro::net::tcp_client
@@ -25,11 +46,12 @@ auto tcp_server::accept() -> coro::net::tcp_client
     };
 
     return tcp_client{
-        m_io_scheduler,
+        *m_io_scheduler,
         std::move(s),
         tcp_client::options{
             .address = net::ip_address{ip_addr_view, static_cast<net::domain_t>(client.sin_family)},
-            .port    = ntohs(client.sin_port)}};
+            .port    = ntohs(client.sin_port),
+            .ssl_ctx = m_options.ssl_ctx}};
 };
 
 } // namespace coro::net

@@ -24,7 +24,9 @@ enum class send_status : int64_t
     not_connected            = ENOTCONN,
     not_a_socket             = ENOTSOCK,
     operationg_not_supported = EOPNOTSUPP,
-    pipe_closed              = EPIPE
+    pipe_closed              = EPIPE,
+
+    ssl_error = -3
 };
 
 } // namespace coro::net
