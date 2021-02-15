@@ -105,7 +105,7 @@ TEST_CASE("tcp_server with ssl", "[tcp_server]")
 
         std::cerr << "client.ssl_handshake()\n";
         auto hstatus = co_await client.ssl_handshake();
-        REQUIRE(hstatus);
+        REQUIRE(hstatus == coro::net::ssl_handshake_status::ok);
 
         std::cerr << "client.poll(write)\n";
         auto pstatus = co_await client.poll(coro::poll_op::write);
@@ -164,7 +164,7 @@ TEST_CASE("tcp_server with ssl", "[tcp_server]")
 
         std::cerr << "server client.handshake()\n";
         auto hstatus = co_await client.ssl_handshake();
-        REQUIRE(hstatus);
+        REQUIRE(hstatus == coro::net::ssl_handshake_status::ok);
 
         std::cerr << "server client.poll(read)\n";
         pstatus = co_await client.poll(coro::poll_op::read);

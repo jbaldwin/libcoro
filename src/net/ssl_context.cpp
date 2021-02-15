@@ -60,15 +60,6 @@ ssl_context::~ssl_context()
         SSL_CTX_free(m_ssl_ctx);
         m_ssl_ctx = nullptr;
     }
-
-    // {
-    //     std::scoped_lock g{m_ssl_context_mutex};
-    //     --m_ssl_context_count;
-    //     if (m_ssl_context_count == 0)
-    //     {
-    //         SSL_library
-    //     }
-    // }
 }
 
 } // namespace coro::net

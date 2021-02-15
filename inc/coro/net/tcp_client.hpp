@@ -8,15 +8,13 @@
 #include "coro/net/send_status.hpp"
 #include "coro/net/socket.hpp"
 #include "coro/net/ssl_context.hpp"
+#include "coro/net/ssl_handshake_status.hpp"
 #include "coro/poll.hpp"
 #include "coro/task.hpp"
 
 #include <chrono>
 #include <memory>
 #include <optional>
-
-#include <openssl/err.h>
-#include <openssl/ssl.h>
 
 namespace coro::net
 {
@@ -89,10 +87,10 @@ public:
      *          co_await client.ssl_handshake(); // <-- only perform if ssl/tls connection
      *      }
      * @param timeout How long to allow for the ssl handshake to successfully complete?
-     * @return True if the handshake succeeded, otherwise false. TODO: Create a handshake status for more detailed
-     * errors.
+     * @return The result of the ssl handshake.
      */
-    auto ssl_handshake(std::chrono::milliseconds timeout = std::chrono::milliseconds{0}) -> coro::task<bool>;
+    auto ssl_handshake(std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
+        -> coro::task<ssl_handshake_status>;
 
     /**
      * Polls for the given operation on this client's tcp socket.  This should be done prior to
@@ -251,18 +249,21 @@ private:
         ssl_info(ssl_info&& other) noexcept
             : m_ssl_connection_type(std::exchange(other.m_ssl_connection_type, ssl_connection_type::connect)),
               m_ssl_ptr(std::move(other.m_ssl_ptr)),
-              m_ssl_error(std::exchange(other.m_ssl_error, false))
+              m_ssl_error(std::exchange(other.m_ssl_error, false)),
+              m_ssl_handshake_status(std::move(other.m_ssl_handshake_status))
         {
         }
 
         auto operator=(const ssl_info&) noexcept -> ssl_info& = delete;
-        auto operator                                         =(ssl_info&& other) noexcept -> ssl_info&
+
+        auto operator=(ssl_info&& other) noexcept -> ssl_info&
         {
             if (std::addressof(other) != this)
             {
-                m_ssl_connection_type = std::exchange(other.m_ssl_connection_type, ssl_connection_type::connect);
-                m_ssl_ptr             = std::move(other.m_ssl_ptr);
-                m_ssl_error           = std::exchange(other.m_ssl_error, false);
+                m_ssl_connection_type  = std::exchange(other.m_ssl_connection_type, ssl_connection_type::connect);
+                m_ssl_ptr              = std::move(other.m_ssl_ptr);
+                m_ssl_error            = std::exchange(other.m_ssl_error, false);
+                m_ssl_handshake_status = std::move(other.m_ssl_handshake_status);
             }
             return *this;
         }
@@ -273,6 +274,8 @@ private:
         ssl_unique_ptr m_ssl_ptr{nullptr};
         /// Was there an error with the SSL/TLS connection?
         bool m_ssl_error{false};
+        /// The result of the ssl handshake.
+        std::optional<ssl_handshake_status> m_ssl_handshake_status{std::nullopt};
     };
 
     /// The tcp_server creates already connected clients and provides a tcp socket pre-built.

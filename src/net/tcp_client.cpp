@@ -114,35 +114,41 @@ auto tcp_client::connect(std::chrono::milliseconds timeout) -> coro::task<connec
     co_return return_value(connect_status::error);
 }
 
-auto tcp_client::ssl_handshake(std::chrono::milliseconds timeout) -> coro::task<bool>
+auto tcp_client::ssl_handshake(std::chrono::milliseconds timeout) -> coro::task<ssl_handshake_status>
 {
     if (!m_connect_status.has_value() || m_connect_status.value() != connect_status::connected)
     {
         // Can't ssl handshake if the connection isn't established.
-        co_return false;
+        co_return ssl_handshake_status::not_connected;
     }
 
     if (m_options.ssl_ctx == nullptr)
     {
         // ssl isn't setup
-        co_return false;
+        co_return ssl_handshake_status::ssl_context_required;
     }
 
-    if (m_ssl_info.m_ssl_ptr != nullptr)
+    if (m_ssl_info.m_ssl_handshake_status.has_value())
     {
-        // already connected.
-        co_return true;
+        // The user has already called this function.
+        co_return m_ssl_info.m_ssl_handshake_status.value();
     }
+
+    // Enforce on any return past here to set the cached handshake status.
+    auto return_value = [this](ssl_handshake_status s) -> ssl_handshake_status {
+        m_ssl_info.m_ssl_handshake_status = s;
+        return s;
+    };
 
     m_ssl_info.m_ssl_ptr = ssl_unique_ptr{SSL_new(m_options.ssl_ctx->native_handle())};
     if (m_ssl_info.m_ssl_ptr == nullptr)
     {
-        co_return false;
+        co_return return_value(ssl_handshake_status::ssl_resource_allocation_failed);
     }
 
     if (auto r = SSL_set_fd(m_ssl_info.m_ssl_ptr.get(), m_socket.native_handle()); r == 0)
     {
-        co_return false;
+        co_return return_value(ssl_handshake_status::ssl_set_fd_failure);
     }
 
     if (m_ssl_info.m_ssl_connection_type == ssl_connection_type::connect)
@@ -170,10 +176,10 @@ auto tcp_client::ssl_handshake(std::chrono::milliseconds timeout) -> coro::task<
         }
         else
         {
-            char error_buffer[256];
-            ERR_error_string(err, error_buffer);
-            std::cerr << "ssl_handleshake error=[" << error_buffer << "]\n";
-            co_return false;
+            // char error_buffer[256];
+            // ERR_error_string(err, error_buffer);
+            // std::cerr << "ssl_handleshake error=[" << error_buffer << "]\n";
+            co_return return_value(ssl_handshake_status::handshake_failed);
         }
 
         // TODO: adjust timeout based on elapsed time so far.
@@ -181,16 +187,18 @@ auto tcp_client::ssl_handshake(std::chrono::milliseconds timeout) -> coro::task<
         switch (pstatus)
         {
             case poll_status::timeout:
+                co_return return_value(ssl_handshake_status::timeout);
             case poll_status::error:
+                co_return return_value(ssl_handshake_status::poll_error);
             case poll_status::closed:
-                co_return false;
+                co_return return_value(ssl_handshake_status::unexpected_close);
             default:
                 // Event triggered, continue handshake.
                 break;
         }
     }
 
-    co_return true;
+    co_return return_value(ssl_handshake_status::ok);
 }
 
 auto tcp_client::ssl_shutdown_and_free(

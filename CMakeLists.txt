@@ -37,6 +37,7 @@ set(LIBCORO_SOURCE_FILES
     inc/coro/net/send_status.hpp src/net/send_status.cpp
     inc/coro/net/socket.hpp src/net/socket.cpp
     inc/coro/net/ssl_context.hpp src/net/ssl_context.cpp
+    inc/coro/net/ssl_handshake_status.hpp
     inc/coro/net/tcp_client.hpp src/net/tcp_client.cpp
     inc/coro/net/tcp_server.hpp src/net/tcp_server.cpp
     inc/coro/net/udp_peer.hpp src/net/udp_peer.cpp

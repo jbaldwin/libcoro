@@ -13,11 +13,7 @@ enum class connect_status
     /// The connection operation timed out.
     timeout,
     /// There was an error, use errno to get more information on the specific error.
-    error,
-    /// The dns hostname lookup failed
-    dns_lookup_failure,
-    /// The SSL/TLS handshake had an error.
-    ssl_handshake_failure
+    error
 };
 
 /**
