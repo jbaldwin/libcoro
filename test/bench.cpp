@@ -83,6 +83,35 @@ TEST_CASE("benchmark counter func coro::sync_wait(coro::when_all(awaitable)) x10
     REQUIRE(counter == iterations);
 }
 
+TEST_CASE("benchmark counter func coro::sync_wait(coro::when_all(vector<awaitable>)) x10", "[benchmark]")
+{
+    constexpr std::size_t iterations = default_iterations;
+    uint64_t              counter{0};
+    auto                  f = []() -> coro::task<uint64_t> { co_return 1; };
+
+    auto start = sc::now();
+
+    for (std::size_t i = 0; i < iterations; i += 10)
+    {
+        std::vector<coro::task<uint64_t>> tasks{};
+        tasks.reserve(10);
+        for (size_t j = 0; j < 10; ++j)
+        {
+            tasks.emplace_back(f());
+        }
+
+        auto results = coro::sync_wait(coro::when_all(tasks));
+
+        for (const auto& r : results)
+        {
+            counter += r.return_value();
+        }
+    }
+
+    print_stats("benchmark counter func coro::sync_wait(coro::when_all(awaitable))", iterations, start, sc::now());
+    REQUIRE(counter == iterations);
+}
+
 TEST_CASE("benchmark thread_pool{1} counter task", "[benchmark]")
 {
     constexpr std::size_t iterations = default_iterations;
@@ -107,6 +136,10 @@ TEST_CASE("benchmark thread_pool{1} counter task", "[benchmark]")
         tasks.back().resume();
     }
 
+    // This will fail in valgrind since it runs in a single 'thread', and thus is shutsdown prior
+    // to any coroutine actually getting properly scheduled onto the background thread pool.
+    // Inject a sleep here so it forces a thread context switch within valgrind.
+    std::this_thread::sleep_for(std::chrono::milliseconds{10});
     tp.shutdown();
 
     print_stats("benchmark thread_pool{1} counter task", iterations, start, sc::now());
@@ -138,6 +171,10 @@ TEST_CASE("benchmark thread_pool{2} counter task", "[benchmark]")
         tasks.back().resume();
     }
 
+    // This will fail in valgrind since it runs in a single 'thread', and thus is shutsdown prior
+    // to any coroutine actually getting properly scheduled onto the background thread pool.
+    // Inject a sleep here so it forces a thread context switch within valgrind.
+    std::this_thread::sleep_for(std::chrono::milliseconds{10});
     tp.shutdown();
 
     print_stats("benchmark thread_pool{2} counter task", iterations, start, sc::now());
@@ -255,8 +292,14 @@ TEST_CASE("benchmark counter task scheduler await event from another coroutine",
 
     auto stop = sc::now();
     print_stats("benchmark counter task scheduler await event from another coroutine", ops, start, stop);
-    REQUIRE(s.empty());
     REQUIRE(counter == iterations);
+
+    // valgrind workaround
+    while (!s.empty())
+    {
+        std::this_thread::sleep_for(std::chrono::milliseconds{1});
+    }
+    REQUIRE(s.empty());
 }
 
 TEST_CASE("benchmark tcp_server echo server", "[benchmark]")
