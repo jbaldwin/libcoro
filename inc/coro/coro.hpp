@@ -11,6 +11,7 @@
 #include "coro/net/recv_status.hpp"
 #include "coro/net/send_status.hpp"
 #include "coro/net/socket.hpp"
+#include "coro/net/ssl_context.hpp"
 #include "coro/net/tcp_client.hpp"
 #include "coro/net/tcp_server.hpp"
 #include "coro/net/udp_peer.hpp"

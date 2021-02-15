@@ -4,11 +4,10 @@
 
 namespace coro::net
 {
-static std::string connect_status_connected{"connected"};
-static std::string connect_status_invalid_ip_address{"invalid_ip_address"};
-static std::string connect_status_timeout{"timeout"};
-static std::string connect_status_error{"error"};
-static std::string connect_status_dns_lookup_failure{"dns_lookup_failure"};
+const static std::string connect_status_connected{"connected"};
+const static std::string connect_status_invalid_ip_address{"invalid_ip_address"};
+const static std::string connect_status_timeout{"timeout"};
+const static std::string connect_status_error{"error"};
 
 auto to_string(const connect_status& status) -> const std::string&
 {
@@ -22,8 +21,6 @@ auto to_string(const connect_status& status) -> const std::string&
             return connect_status_timeout;
         case connect_status::error:
             return connect_status_error;
-        case connect_status::dns_lookup_failure:
-            return connect_status_dns_lookup_failure;
     }
 
     throw std::logic_error{"Invalid/unknown connect status."};

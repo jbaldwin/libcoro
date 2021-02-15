@@ -22,7 +22,8 @@ jobs:
                         cmake \
                         git \
                         ninja-build \
-                        g++-10
+                        g++-10 \
+                        libssl-dev
             -   name: Checkout # recurisve checkout requires git to be installed first
                 uses: actions/checkout@v2
                 with:
@@ -55,7 +56,8 @@ jobs:
                         git \
                         ninja-build \
                         gcc-c++-10.2.1 \
-                        lcov
+                        lcov \
+                        openssl-devel
             -   name: Checkout # recurisve checkout requires git to be installed first
                 uses: actions/checkout@v2
                 with:

@@ -22,7 +22,9 @@ enum class recv_status : int64_t
     invalid_argument    = EINVAL,
     no_memory           = ENOMEM,
     not_connected       = ENOTCONN,
-    not_a_socket        = ENOTSOCK
+    not_a_socket        = ENOTSOCK,
+
+    ssl_error = -3
 };
 
 auto to_string(recv_status status) -> const std::string&;

@@ -51,7 +51,7 @@ dns_resolver::dns_resolver(io_scheduler& scheduler, std::chrono::milliseconds ti
       m_timeout(timeout)
 {
     {
-        std::lock_guard<std::mutex> g{m_ares_mutex};
+        std::scoped_lock g{m_ares_mutex};
         if (m_ares_count == 0)
         {
             auto ares_status = ares_library_init(ARES_LIB_INIT_ALL);
@@ -79,7 +79,7 @@ dns_resolver::~dns_resolver()
     }
 
     {
-        std::lock_guard<std::mutex> g{m_ares_mutex};
+        std::scoped_lock g{m_ares_mutex};
         --m_ares_count;
         if (m_ares_count == 0)
         {

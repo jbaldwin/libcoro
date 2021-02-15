@@ -165,6 +165,7 @@ thread pool worker 0 is shutting down.
     CMake
     make or ninja
     pthreads
+    openssl
     gcov/lcov (For generating coverage only)
 
 ### Instructions
