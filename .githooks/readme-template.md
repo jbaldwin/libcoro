@@ -30,7 +30,9 @@
     - coro::net::dns_resolver for async dns
         - Uses libc-ares
     - coro::net::tcp_client
+        - Supports SSL/TLS via OpenSSL
     - coro::net::tcp_server
+        - Supports SSL/TLS via OpenSSL
     - coro::net::udp_peer
 
 ## Usage
@@ -157,7 +159,27 @@ thread pool worker 1 is shutting down.
 thread pool worker 2 is shutting down.
 thread pool worker 3 is shutting down.
 thread pool worker 0 is shutting down.
-````
+```
+
+### coro::io_scheduler
+`coro::io_scheduler`
+
+```C++
+${EXAMPLE_CORO_IO_SCHEDULER_CPP}
+```
+
+Example output:
+```bash
+io_scheduler::thread_pool worker 0 starting
+io_scheduler::process event thread start
+io_scheduler::thread_pool worker 1 starting
+server: Hello from client.
+client: Hello from server.
+io_scheduler::thread_pool worker 0 stopping
+io_scheduler::thread_pool worker 1 stopping
+io_scheduler::process event thread stop
+
+```
 
 ### Requirements
     C++20 Compiler with coroutine support
@@ -175,7 +197,7 @@ This project uses gitsubmodules, to properly checkout this project use:
 
     git clone --recurse-submodules <libcoro-url>
 
-This project depends on the following projects:
+This project depends on the following git sub-modules:
  * [libc-ares](https://github.com/c-ares/c-ares) For async DNS resolver.
  * [catch2](https://github.com/catchorg/Catch2) For testing.
 
