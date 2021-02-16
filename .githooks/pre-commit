@@ -58,4 +58,8 @@ template_contents=$(cat 'README.md')
 example_contents=$(cat 'examples/coro_thread_pool.cpp')
 echo "${template_contents/\$\{EXAMPLE_CORO_THREAD_POOL_CPP\}/$example_contents}" > README.md
 
+template_contents=$(cat 'README.md')
+example_contents=$(cat 'examples/coro_io_scheduler.cpp')
+echo "${template_contents/\$\{EXAMPLE_CORO_IO_SCHEDULER_CPP\}/$example_contents}" > README.md
+
 git add README.md

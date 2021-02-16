@@ -39,10 +39,14 @@ public:
 
     struct options
     {
-        thread_strategy_t     thread_strategy{thread_strategy_t::spawn};
+        /// Should the io scheduler spawn a dedicated event processor?
+        thread_strategy_t thread_strategy{thread_strategy_t::spawn};
+        /// If spawning a dedicated event processor a functor to call upon that thread starting.
         std::function<void()> on_io_thread_start_functor{nullptr};
+        /// If spawning a dedicated event processor a functor to call upon that thread stopping.
         std::function<void()> on_io_thread_stop_functor{nullptr};
-        thread_pool::options  pool{
+        /// Thread pool options for the task processor threads.  See thread pool for more details.
+        thread_pool::options pool{
             .thread_count = ((std::thread::hardware_concurrency() > 1) ? (std::thread::hardware_concurrency() - 1) : 1),
             .on_thread_start_functor = nullptr,
             .on_thread_stop_functor  = nullptr};
@@ -66,17 +70,65 @@ public:
 
     virtual ~io_scheduler() override;
 
+    /**
+     * Given a thread_strategy_t::manual this function should be called at regular intervals to
+     * process events that are ready.  If a using thread_strategy_t::spawn this is run continously
+     * on a dedicated background thread and does not need to be manually invoked.
+     * @param timeout If no events are ready how long should the function wait for events to be ready?
+     *                Passing zero (default) for the timeout will check for any events that are
+     *                ready now, and then return.  This could be zero events.  Passing -1 means block
+     *                indefinitely until an event happens.
+     * @param return The number of tasks currently executing or waiting to execute.
+     */
     auto process_events(std::chrono::milliseconds timeout = std::chrono::milliseconds{0}) -> std::size_t;
 
+    /**
+     * Schedules the current task to run after the given amount of time has elapsed.
+     * @param amount The amount of time to wait before resuming execution of this task.
+     *               Given zero or negative amount of time this behaves identical to schedule().
+     */
     [[nodiscard]] auto schedule_after(std::chrono::milliseconds amount) -> coro::task<void>;
+
+    /**
+     * Schedules the current task to run at a given time point in the future.
+     * @param time The time point to resume execution of this task.  Given 'now' or a time point
+     *             in the past this behaves identical to schedule().
+     */
     [[nodiscard]] auto schedule_at(time_point time) -> coro::task<void>;
 
+    /**
+     * Yields the current task for the given amount of time.
+     * @param amount The amount of time to yield for before resuming executino of this task.
+     *               Given zero or negative amount of time this behaves identical to yield().
+     */
     [[nodiscard]] auto yield_for(std::chrono::milliseconds amount) -> coro::task<void>;
+
+    /**
+     * Yields the current task until the given time point in the future.
+     * @param time The time point to resume execution of this task.  Given 'now' or a time point in the
+     *             in the past this behaves identical to yield().
+     */
     [[nodiscard]] auto yield_until(time_point time) -> coro::task<void>;
 
+    /**
+     * Polls the given file descriptor for the given operations.
+     * @param fd The file descriptor to poll for events.
+     * @param op The operations to poll for.
+     * @param timeout The amount of time to wait for the events to trigger.  A timeout of zero will
+     *                block indefinitely until the event triggers.
+     * @return The result of the poll operation.
+     */
     [[nodiscard]] auto poll(fd_t fd, coro::poll_op op, std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
         -> coro::task<poll_status>;
 
+    /**
+     * Polls the given coro::net::socket for the given operations.
+     * @param sock The socket to poll for events on.
+     * @param op The operations to poll for.
+     * @param timeout The amount of time to wait for the events to trigger.  A timeout of zero will
+     *                block indefinitely until the event triggers.
+     * @return THe result of the poll operation.
+     */
     [[nodiscard]] auto poll(
         const net::socket& sock, coro::poll_op op, std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
         -> coro::task<poll_status>
@@ -84,6 +136,14 @@ public:
         return poll(sock.native_handle(), op, timeout);
     }
 
+    /**
+     * Starts the shutdown of the io scheduler.  All currently executing and pending tasks will complete
+     * prior to shutting down.
+     * @param wait_for_tasks Given shutdown_t::sync this function will block until all oustanding
+     *                       tasks are completed.  Given shutdown_t::async this function will trigger
+     *                       the shutdown process but return immediately.  In this case the io_scheduler's
+     *                       destructor will block if any background threads haven't joined.
+     */
     auto shutdown(shutdown_t wait_for_tasks = shutdown_t::sync) noexcept -> void override;
 
 private:
