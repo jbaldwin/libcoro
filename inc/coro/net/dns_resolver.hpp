@@ -85,7 +85,7 @@ private:
     /// are not setup when ares_poll() is called.
     std::unordered_set<io_scheduler::fd_t> m_active_sockets{};
 
-    task_container m_task_container{};
+    task_container m_task_container;
 
     /// Global count to track if c-ares has been initialized or cleaned up.
     static uint64_t m_ares_count;

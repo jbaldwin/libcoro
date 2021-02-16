@@ -9,6 +9,8 @@
 
 namespace coro
 {
+class thread_pool;
+
 class task_container
 {
 public:
@@ -22,14 +24,19 @@ public:
         double growth_factor{2};
     };
 
-    explicit task_container(const options opts = options{.reserve_size = 8, .growth_factor = 2});
+    /**
+     * @param tp Tasks started in the container are scheduled onto this thread pool.  For tasks created
+     *           from a coro::io_scheduler, this would usually be that coro::io_scheduler instance.
+     * @param opts Task container options.
+     */
+    task_container(thread_pool& tp, const options opts = options{.reserve_size = 8, .growth_factor = 2});
     task_container(const task_container&) = delete;
     task_container(task_container&&)      = delete;
     auto operator=(const task_container&) -> task_container& = delete;
     auto operator=(task_container&&) -> task_container& = delete;
     ~task_container();
 
-    enum class garbage_collect
+    enum class garbage_collect_t
     {
         /// Execute garbage collection.
         yes,
@@ -38,23 +45,20 @@ public:
     };
 
     /**
-     * Stores a users task and sets a continuation coroutine to automatically mark the task
-     * as deleted upon the coroutines completion.
-     * @param user_task The scheduled user's task to store since it has suspended after its
-     *                  first execution.
+     * Stores a user task and starts its execution on the container's thread pool.
+     * @param user_task The scheduled user's task to store in this task container and start its execution.
      * @param cleanup Should the task container run garbage collect at the beginning of this store
      *                call?  Calling at regular intervals will reduce memory usage of completed
      *                tasks and allow for the task container to re-use allocated space.
-     * @return The task just stored wrapped in the self cleanup task.
      */
-    auto store(coro::task<void> user_task, garbage_collect cleanup = garbage_collect::yes) -> coro::task<void>&;
+    auto start(coro::task<void> user_task, garbage_collect_t cleanup = garbage_collect_t::yes) -> void;
 
     /**
      * Garbage collects any tasks that are marked as deleted.  This frees up space to be re-used by
      * the task container for newly stored tasks.
      * @return The number of tasks that were deleted.
      */
-    auto gc() -> std::size_t;
+    auto garbage_collect() -> std::size_t;
 
     /**
      * @return The number of tasks that are awaiting deletion.
@@ -92,6 +96,15 @@ public:
         std::atomic_thread_fence(std::memory_order::acquire);
         return m_tasks.size();
     }
+
+    /**
+     * Will continue to garbage collect and yield until all tasks are complete.  This method can be
+     * co_await'ed to make it easier to wait for the task container to have all its tasks complete.
+     *
+     * This does not shut down the task container, but can be used when shutting down, or if your
+     * logic requires all the tasks contained within to complete, it is similar to coro::latch.
+     */
+    auto garbage_collect_and_yield_until_empty() -> coro::task<void>;
 
 private:
     /**
@@ -135,6 +148,8 @@ private:
     task_position m_free_pos{};
     /// The amount to grow the containers by when all spaces are taken.
     double m_growth_factor{};
+    /// The thread pool to schedule tasks that have just started.
+    thread_pool& m_thread_pool;
 };
 
 } // namespace coro

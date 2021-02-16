@@ -132,7 +132,7 @@ $ ./examples/coro_mutex
 ```
 
 ### coro::thread_pool
-`coro::thread_pool` is a staticaly sized pool of worker threads to execute scheduled coroutines from a FIFO queue.  To schedule a coroutine on a thread pool the pool's `schedule()` function should be `co_awaited` to transfer the execution from the current thread to a thread pool worker thread.  Its important to note that scheduling will first place the coroutine into the FIFO queue and will be picked up by the first available thread in the pool, e.g. there could be a delay if there is a lot of work queued up.
+`coro::thread_pool` is a statically sized pool of worker threads to execute scheduled coroutines from a FIFO queue.  To schedule a coroutine on a thread pool the pool's `schedule()` function should be `co_awaited` to transfer the execution from the current thread to a thread pool worker thread.  Its important to note that scheduling will first place the coroutine into the FIFO queue and will be picked up by the first available thread in the pool, e.g. there could be a delay if there is a lot of work queued up.
 
 ```C++
 ${EXAMPLE_CORO_THREAD_POOL_CPP}
@@ -140,6 +140,7 @@ ${EXAMPLE_CORO_THREAD_POOL_CPP}
 
 Example output (will vary based on threads):
 ```bash
+$ ./examples/coro_thread_pool
 thread pool worker 0 is starting up.
 thread pool worker 2 is starting up.
 thread pool worker 3 is starting up.
@@ -162,7 +163,9 @@ thread pool worker 0 is shutting down.
 ```
 
 ### coro::io_scheduler
-`coro::io_scheduler`
+`coro::io_scheduler` is a i/o event scheduler that uses a statically sized pool (`coro::thread_pool`) to process the events that are ready.  The `coro::io_scheduler` can use a dedicated spawned thread for processing events that are ready or it can be maually driven via its `process_events()` function for integration into existing event loops.  If using the dedicated thread to process i/o events the dedicated thread does not execute and of the tasks itself, it simply schedules them to be executed on the next availble worker thread in its embedded `coro::thread_pool`.  Inline execution of tasks on the i/o dedicated thread is not supported since it can introduce poor latency when an expensive task is executing.
+
+The example provided here shows an i/o scheduler that spins up a basic `coro::net::tcp_server` and a `coro::net::tcp_client` that will connect to each other and then send a request and a response.
 
 ```C++
 ${EXAMPLE_CORO_IO_SCHEDULER_CPP}
@@ -170,6 +173,7 @@ ${EXAMPLE_CORO_IO_SCHEDULER_CPP}
 
 Example output:
 ```bash
+$ ./examples/coro_io_scheduler
 io_scheduler::thread_pool worker 0 starting
 io_scheduler::process event thread start
 io_scheduler::thread_pool worker 1 starting
@@ -178,7 +182,29 @@ client: Hello from server.
 io_scheduler::thread_pool worker 0 stopping
 io_scheduler::thread_pool worker 1 stopping
 io_scheduler::process event thread stop
+```
 
+### coro::task_container
+`coro::task_container` is a special container type that will maintain the lifetime of tasks that do not have a known lifetime.  This is extremely useful for tasks that hold open connections to clients and possibly process multiple requests from that client before shutting down.  The task doesn't know how long it will be alive but at some point in the future it will complete and need to have its resources cleaned up.  The `coro::task_container` does this by wrapping the users task into anothe coroutine task that will mark itself for deletion upon completing within the parent task container.  The task container should then run garbage collection periodically, or by default when a new task is added, to prune completed tasks from the container.
+
+All tasks that are stored within a `coro::task_container` must have a `void` return type since their result cannot be accessed due to the task's lifetime being indeterminate.
+
+```C++
+${EXAMPLE_CORO_TASK_CONTAINER_CPP}
+```
+
+```bash
+$ ./examples/coro_task_container
+server: Hello from client 1
+client: Hello from server 1
+server: Hello from client 2
+client: Hello from server 2
+server: Hello from client 3
+client: Hello from server 3
+server: Hello from client 4
+client: Hello from server 4
+server: Hello from client 5
+client: Hello from server 5
 ```
 
 ### Requirements

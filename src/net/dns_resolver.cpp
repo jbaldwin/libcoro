@@ -48,7 +48,8 @@ dns_result::dns_result(coro::io_scheduler& scheduler, coro::event& resume, uint6
 
 dns_resolver::dns_resolver(io_scheduler& scheduler, std::chrono::milliseconds timeout)
     : m_io_scheduler(scheduler),
-      m_timeout(timeout)
+      m_timeout(timeout),
+      m_task_container(scheduler)
 {
     {
         std::scoped_lock g{m_ares_mutex};
@@ -149,7 +150,7 @@ auto dns_resolver::ares_poll() -> void
         // If this socket is not currently actively polling, start polling!
         if (m_active_sockets.emplace(fd).second)
         {
-            m_task_container.store(make_poll_task(fd, poll_ops[i])).resume();
+            m_task_container.start(make_poll_task(fd, poll_ops[i]));
         }
     }
 }
