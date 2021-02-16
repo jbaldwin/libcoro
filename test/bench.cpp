@@ -327,7 +327,7 @@ TEST_CASE("benchmark tcp_server echo server", "[benchmark]")
         uint64_t           id;
         coro::io_scheduler scheduler{
             coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = server_thread_count}}};
-        coro::task_container task_container{};
+        coro::task_container task_container{scheduler};
         uint64_t             live_clients{0};
         coro::event          wait_for_clients{};
     };
@@ -342,7 +342,7 @@ TEST_CASE("benchmark tcp_server echo server", "[benchmark]")
     auto make_on_connection_task = [&](server& s, coro::net::tcp_client client) -> coro::task<void> {
         std::string in(64, '\0');
 
-        // Echo the messages until the socket is closed. a 'done' message arrives.
+        // Echo the messages until the socket is closed.
         while (true)
         {
             auto pstatus = co_await client.poll(coro::poll_op::read);
@@ -389,7 +389,7 @@ TEST_CASE("benchmark tcp_server echo server", "[benchmark]")
                     accepted.fetch_add(1, std::memory_order::release);
 
                     s.live_clients++;
-                    s.task_container.store(make_on_connection_task(s, std::move(c))).resume();
+                    s.task_container.start(make_on_connection_task(s, std::move(c)));
                 }
             }
         }

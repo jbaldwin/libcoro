@@ -1,10 +1,13 @@
 #include "coro/task_container.hpp"
+#include "coro/thread_pool.hpp"
 
 #include <iostream>
 
 namespace coro
 {
-task_container::task_container(const options opts) : m_growth_factor(opts.growth_factor)
+task_container::task_container(thread_pool& tp, const options opts)
+    : m_growth_factor(opts.growth_factor),
+      m_thread_pool(tp)
 {
     m_tasks.resize(opts.reserve_size);
     for (std::size_t i = 0; i < opts.reserve_size; ++i)
@@ -16,20 +19,20 @@ task_container::task_container(const options opts) : m_growth_factor(opts.growth
 
 task_container::~task_container()
 {
-    // TODO: Not entirely sure how to best do this as this could hold up the thread that could
-    //       be finishing the remaining tasks..
-
+    // This will hang the current thread.. but if tasks are not complete thats also pretty bad.
     while (!empty())
     {
-        gc();
+        garbage_collect();
     }
 }
 
-auto task_container::store(coro::task<void> user_task, garbage_collect cleanup) -> coro::task<void>&
+auto task_container::start(coro::task<void> user_task, garbage_collect_t cleanup) -> void
 {
+    m_size.fetch_add(1, std::memory_order::relaxed);
+
     std::scoped_lock lk{m_mutex};
 
-    if (cleanup == garbage_collect::yes)
+    if (cleanup == garbage_collect_t::yes)
     {
         gc_internal();
     }
@@ -47,13 +50,23 @@ auto task_container::store(coro::task<void> user_task, garbage_collect cleanup) 
     // Mark the current used slot as used.
     std::advance(m_free_pos, 1);
 
-    return m_tasks[index];
+    // Start executing from the cleanup task to schedule the user's task onto the thread pool.
+    m_tasks[index].resume();
 }
 
-auto task_container::gc() -> std::size_t
+auto task_container::garbage_collect() -> std::size_t
 {
     std::scoped_lock lk{m_mutex};
     return gc_internal();
+}
+
+auto task_container::garbage_collect_and_yield_until_empty() -> coro::task<void>
+{
+    while (!empty())
+    {
+        garbage_collect();
+        co_await m_thread_pool.yield();
+    }
 }
 
 auto task_container::grow() -> task_position
@@ -95,8 +108,12 @@ auto task_container::gc_internal() -> std::size_t
 
 auto task_container::make_cleanup_task(task<void> user_task, task_position pos) -> coro::task<void>
 {
+    // Immediately move the task onto the thread pool.
+    co_await m_thread_pool.schedule();
+
     try
     {
+        // Await the users task to complete.
         co_await user_task;
     }
     catch (const std::exception& e)
@@ -105,18 +122,19 @@ auto task_container::make_cleanup_task(task<void> user_task, task_position pos) 
         // since the co_await will unwrap the unhandled exception on the task.
         // The user's task should ideally be wrapped in a catch all and handle it themselves, but
         // that cannot be guaranteed.
-        std::cerr << "task_container user_task had an unhandled exception e.what()= " << e.what() << "\n";
+        std::cerr << "coro::task_container user_task had an unhandled exception e.what()= " << e.what() << "\n";
     }
     catch (...)
     {
         // don't crash if they throw something that isn't derived from std::exception
-        std::cerr << "task_container user_task had unhandle exception, not derived from std::exception.\n";
+        std::cerr << "coro::task_container user_task had unhandle exception, not derived from std::exception.\n";
     }
 
-    {
-        std::scoped_lock lk{m_mutex};
-        m_tasks_to_delete.push_back(pos);
-    }
+    std::scoped_lock lk{m_mutex};
+    m_tasks_to_delete.push_back(pos);
+    // This has to be done within scope lock to make sure this coroutine task completes before the
+    // task container object destructs -- if it was waiting on .empty() to become true.
+    m_size.fetch_sub(1, std::memory_order::relaxed);
     co_return;
 }
 
