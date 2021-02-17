@@ -27,7 +27,7 @@ int main()
         tasks.emplace_back(make_critical_section_task(i));
     }
 
-    coro::sync_wait(coro::when_all(tasks));
+    coro::sync_wait(coro::when_all(std::move(tasks)));
 
     // The output will be variable per run depending on how the tasks are picked up on the
     // thread pool workers.

@@ -89,7 +89,7 @@ TEST_CASE("mutex many waiters until event", "[mutex]")
 
     tasks.emplace_back(make_set_task());
 
-    coro::sync_wait(coro::when_all(tasks));
+    coro::sync_wait(coro::when_all(std::move(tasks)));
 
     REQUIRE(value == 4);
 }

@@ -5,6 +5,7 @@
 
 #include <atomic>
 #include <coroutine>
+#include <ranges>
 #include <tuple>
 #include <vector>
 
@@ -438,26 +439,8 @@ private:
 template<
     concepts::awaitable awaitable,
     typename return_type = concepts::awaitable_traits<awaitable&&>::awaiter_return_type>
-static auto make_when_all_task(awaitable& a) -> when_all_task<return_type>
+static auto make_when_all_task(awaitable a) -> when_all_task<return_type>
 {
-    // Use this version if the awaitable can be taken as a reference (non-owning).
-    if constexpr (std::is_void_v<return_type>)
-    {
-        co_await static_cast<awaitable&&>(a);
-        co_return;
-    }
-    else
-    {
-        co_yield co_await static_cast<awaitable&&>(a);
-    }
-}
-
-template<
-    concepts::awaitable awaitable,
-    typename return_type = concepts::awaitable_traits<awaitable&&>::awaiter_return_type>
-static auto make_when_all_task_owned(awaitable a) -> when_all_task<return_type>
-{
-    // Use this version if the awaitable needs to be owned by this task.
     if constexpr (std::is_void_v<return_type>)
     {
         co_await static_cast<awaitable&&>(a);
@@ -476,25 +459,32 @@ template<concepts::awaitable... awaitables_type>
 {
     return detail::when_all_ready_awaitable<std::tuple<
         detail::when_all_task<typename concepts::awaitable_traits<awaitables_type>::awaiter_return_type>...>>(
-        std::make_tuple(detail::make_when_all_task_owned(std::move(awaitables))...));
+        std::make_tuple(detail::make_when_all_task(std::move(awaitables))...));
 }
 
 template<
-    concepts::awaitable awaitable_type,
-    typename return_type    = concepts::awaitable_traits<awaitable_type>::awaiter_return_type,
-    typename allocator_type = std::allocator<awaitable_type>>
-[[nodiscard]] auto when_all(std::vector<awaitable_type, allocator_type>& awaitables)
+    std::ranges::range  range_type,
+    concepts::awaitable awaitable_type = std::ranges::range_value_t<range_type>,
+    typename return_type               = concepts::awaitable_traits<awaitable_type>::awaiter_return_type>
+[[nodiscard]] auto when_all(range_type awaitables)
     -> detail::when_all_ready_awaitable<std::vector<detail::when_all_task<return_type>>>
 {
-    std::vector<detail::when_all_task<return_type>> tasks;
-    tasks.reserve(std::size(awaitables));
+    std::vector<detail::when_all_task<return_type>> output_tasks;
 
-    for (auto& a : awaitables)
+    // If the size is known in constant time reserve the output tasks size.
+    if constexpr (std::ranges::sized_range<range_type>)
     {
-        tasks.emplace_back(detail::make_when_all_task(a));
+        output_tasks.reserve(std::size(awaitables));
     }
 
-    return detail::when_all_ready_awaitable(std::move(tasks));
+    // Wrap each task into a when_all_task.
+    for (auto& a : awaitables)
+    {
+        output_tasks.emplace_back(detail::make_when_all_task(std::move(a)));
+    }
+
+    // Return the single awaitable that drives all the user's tasks.
+    return detail::when_all_ready_awaitable(std::move(output_tasks));
 }
 
 } // namespace coro
