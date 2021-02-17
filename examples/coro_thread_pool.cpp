@@ -62,7 +62,7 @@ int main()
         }
 
         // Wait for the thread pool workers to process all child tasks.
-        auto results = co_await coro::when_all(child_tasks);
+        auto results = co_await coro::when_all(std::move(child_tasks));
 
         // Sum up the results of the completed child tasks.
         size_t calculation{0};

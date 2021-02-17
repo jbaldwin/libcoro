@@ -277,7 +277,7 @@ int main()
     }
 
     // Wait for all tasks to complete.
-    coro::sync_wait(coro::when_all(tasks));
+    coro::sync_wait(coro::when_all(std::move(tasks)));
 }
 ```
 
@@ -333,7 +333,7 @@ int main()
         tasks.emplace_back(make_critical_section_task(i));
     }
 
-    coro::sync_wait(coro::when_all(tasks));
+    coro::sync_wait(coro::when_all(std::move(tasks)));
 
     // The output will be variable per run depending on how the tasks are picked up on the
     // thread pool workers.
@@ -419,7 +419,7 @@ int main()
         }
 
         // Wait for the thread pool workers to process all child tasks.
-        auto results = co_await coro::when_all(child_tasks);
+        auto results = co_await coro::when_all(std::move(child_tasks));
 
         // Sum up the results of the completed child tasks.
         size_t calculation{0};

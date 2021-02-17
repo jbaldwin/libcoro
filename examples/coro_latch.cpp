@@ -50,5 +50,5 @@ int main()
     }
 
     // Wait for all tasks to complete.
-    coro::sync_wait(coro::when_all(tasks));
+    coro::sync_wait(coro::when_all(std::move(tasks)));
 }

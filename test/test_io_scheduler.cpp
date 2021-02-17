@@ -49,7 +49,7 @@ TEST_CASE("io_scheduler submit mutiple tasks", "[io_scheduler]")
         tasks.emplace_back(make_task());
     }
 
-    coro::sync_wait(coro::when_all(tasks));
+    coro::sync_wait(coro::when_all(std::move(tasks)));
 
     REQUIRE(counter == n);
 }
@@ -489,7 +489,7 @@ TEST_CASE("io_scheduler multipler event waiters", "[io_scheduler]")
             tasks.emplace_back(func());
         }
 
-        auto results = co_await coro::when_all(tasks);
+        auto results = co_await coro::when_all(std::move(tasks));
 
         uint64_t counter{0};
         for (const auto& task : results)

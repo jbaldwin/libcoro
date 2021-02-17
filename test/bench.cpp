@@ -100,7 +100,7 @@ TEST_CASE("benchmark counter func coro::sync_wait(coro::when_all(vector<awaitabl
             tasks.emplace_back(f());
         }
 
-        auto results = coro::sync_wait(coro::when_all(tasks));
+        auto results = coro::sync_wait(coro::when_all(std::move(tasks)));
 
         for (const auto& r : results)
         {
@@ -207,7 +207,7 @@ TEST_CASE("benchmark counter task scheduler{1} yield", "[benchmark]")
         tasks.emplace_back(make_task());
     }
 
-    coro::sync_wait(coro::when_all(tasks));
+    coro::sync_wait(coro::when_all(std::move(tasks)));
 
     auto stop = sc::now();
     print_stats("benchmark counter task scheduler{1} yield", ops, start, stop);
@@ -240,7 +240,7 @@ TEST_CASE("benchmark counter task scheduler{1} yield_for", "[benchmark]")
         tasks.emplace_back(make_task());
     }
 
-    coro::sync_wait(coro::when_all(tasks));
+    coro::sync_wait(coro::when_all(std::move(tasks)));
 
     auto stop = sc::now();
     print_stats("benchmark counter task scheduler{1} yield", ops, start, stop);
@@ -288,7 +288,7 @@ TEST_CASE("benchmark counter task scheduler await event from another coroutine",
         tasks.emplace_back(resume_func(i));
     }
 
-    coro::sync_wait(coro::when_all(tasks));
+    coro::sync_wait(coro::when_all(std::move(tasks)));
 
     auto stop = sc::now();
     print_stats("benchmark counter task scheduler await event from another coroutine", ops, start, stop);
@@ -475,7 +475,7 @@ TEST_CASE("benchmark tcp_server echo server", "[benchmark]")
             {
                 c.tasks.emplace_back(make_client_task(c));
             }
-            coro::sync_wait(coro::when_all(c.tasks));
+            coro::sync_wait(coro::when_all(std::move(c.tasks)));
             c.scheduler.shutdown();
         }});
     }
