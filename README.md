@@ -351,6 +351,47 @@ $ ./examples/coro_mutex
 1, 2, 3, 4, 5, 6, 7, 8, 10, 9, 12, 11, 13, 14, 15, 16, 17, 18, 19, 21, 22, 20, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 47, 48, 49, 46, 50, 51, 52, 53, 54, 55, 57, 58, 59, 56, 60, 62, 61, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100,
 ```
 
+### coro::semaphore
+The `coro::semaphore` is a thread safe async tool to protect a limited number of resources by only allowing so many consumers to acquire the resources a single time.  The `coro::semaphore` also has a maximum number of resources denoted by its constructor.  This means if a resource is produced or released when the semaphore is at its maximum resource availability then the release operation will await for space to become available.  This is useful for a ringbuffer type situation where the resources are produced and then consumed, but will have no effect on a semaphores usage if there is a set known quantity of resources to start with and are acquired and then released back.
+
+```C++
+#include <coro/coro.hpp>
+#include <iostream>
+
+int main()
+{
+    // Have more threads/tasks than the semaphore will allow for at any given point in time.
+    coro::thread_pool tp{coro::thread_pool::options{.thread_count = 8}};
+    coro::semaphore   semaphore{2};
+
+    auto make_rate_limited_task = [&](uint64_t task_num) -> coro::task<void> {
+        co_await tp.schedule();
+
+        // This will only allow 2 tasks through at any given point in time, all other tasks will
+        // await the resource to be available before proceeding.
+        co_await semaphore.acquire();
+        std::cout << task_num << ", ";
+        semaphore.release();
+        co_return;
+    };
+
+    const size_t                  num_tasks{100};
+    std::vector<coro::task<void>> tasks{};
+    for (size_t i = 1; i <= num_tasks; ++i)
+    {
+        tasks.emplace_back(make_rate_limited_task(i));
+    }
+
+    coro::sync_wait(coro::when_all(std::move(tasks)));
+}
+```
+
+Expected output, note that there is no lock around the `std::cout` so some of the output isn't perfect.
+```bash
+$ ./examples/coro_semaphore
+1, 23, 25, 24, 22, 27, 28, 29, 21, 20, 19, 18, 17, 14, 31, 30, 33, 32, 41, 40, 37, 39, 38, 36, 35, 34, 43, 46, 47, 48, 45, 42, 44, 26, 16, 15, 13, 52, 54, 55, 53, 49, 51, 57, 58, 50, 62, 63, 61, 60, 59, 56, 12, 11, 8, 10, 9, 7, 6, 5, 4, 3, 642, , 66, 67, 6568, , 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100,
+```
+
 ### coro::thread_pool
 `coro::thread_pool` is a statically sized pool of worker threads to execute scheduled coroutines from a FIFO queue.  To schedule a coroutine on a thread pool the pool's `schedule()` function should be `co_awaited` to transfer the execution from the current thread to a thread pool worker thread.  Its important to note that scheduling will first place the coroutine into the FIFO queue and will be picked up by the first available thread in the pool, e.g. there could be a delay if there is a lot of work queued up.
 

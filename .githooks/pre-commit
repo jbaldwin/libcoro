@@ -66,4 +66,8 @@ template_contents=$(cat 'README.md')
 example_contents=$(cat 'examples/coro_task_container.cpp')
 echo "${template_contents/\$\{EXAMPLE_CORO_TASK_CONTAINER_CPP\}/$example_contents}" > README.md
 
+template_contents=$(cat 'README.md')
+example_contents=$(cat 'examples/coro_semaphore.cpp')
+echo "${template_contents/\$\{EXAMPLE_CORO_SEMAPHORE_CPP\}/$example_contents}" > README.md
+
 git add README.md

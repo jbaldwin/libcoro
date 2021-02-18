@@ -21,6 +21,7 @@
 #include "coro/io_scheduler.hpp"
 #include "coro/latch.hpp"
 #include "coro/mutex.hpp"
+#include "coro/semaphore.hpp"
 #include "coro/sync_wait.hpp"
 #include "coro/task.hpp"
 #include "coro/task_container.hpp"

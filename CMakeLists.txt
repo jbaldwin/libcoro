@@ -49,6 +49,7 @@ set(LIBCORO_SOURCE_FILES
     inc/coro/latch.hpp
     inc/coro/mutex.hpp src/mutex.cpp
     inc/coro/poll.hpp
+    inc/coro/semaphore.hpp src/semaphore.cpp
     inc/coro/shutdown.hpp
     inc/coro/sync_wait.hpp src/sync_wait.cpp
     inc/coro/task_container.hpp src/task_container.cpp
