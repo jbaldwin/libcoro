@@ -19,37 +19,22 @@ public:
     auto operator=(const semaphore&) noexcept -> semaphore& = delete;
     auto operator=(semaphore&&) noexcept -> semaphore& = delete;
 
-    // struct release_operation
-    // {
-    //     explicit release_operation(semaphore& s);
-
-    //     auto await_ready() const noexcept -> bool;
-    //     auto await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept -> bool;
-    //     auto await_resume() const noexcept -> bool;
-
-    //     semaphore&              m_semaphore;
-    //     std::coroutine_handle<> m_awaiting_coroutine;
-    //     release_operation*      m_next{nullptr};
-    // };
-
-    struct acquire_operation
+    class acquire_operation
     {
+    public:
         explicit acquire_operation(semaphore& s);
 
         auto await_ready() const noexcept -> bool;
         auto await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept -> bool;
         auto await_resume() const noexcept -> bool;
 
+    private:
+        friend semaphore;
+
         semaphore&              m_semaphore;
         std::coroutine_handle<> m_awaiting_coroutine;
         acquire_operation*      m_next{nullptr};
     };
-
-    /**
-     * Releases a resource back to the semaphore, if the semaphore is at its max value then this
-     * will wait until a resource as been acquired.
-     */
-    // [[nodiscard]] auto release() -> release_operation { return release_operation{*this}; }
 
     auto release() -> void;
 
@@ -58,12 +43,6 @@ public:
      * this will wait until a resource becomes available.
      */
     [[nodiscard]] auto acquire() -> acquire_operation { return acquire_operation{*this}; }
-
-    // /**
-    //  * Attempts to release a resource if there is space available.
-    //  * @return True if the release operation was able to release a resource.
-    //  */
-    // auto try_release() -> bool;
 
     /**
      * Attemtps to acquire a resource if there is any resources available.
@@ -91,14 +70,10 @@ private:
     friend class release_operation;
     friend class acquire_operation;
 
-    // auto try_release_locked(std::unique_lock<std::mutex>& lk) -> bool;
-    // auto try_acquire_locked(std::unique_lock<std::mutex>& lk) -> bool;
-
     const std::ptrdiff_t        m_least_max_value;
     std::atomic<std::ptrdiff_t> m_counter;
 
-    std::mutex m_waiter_mutex{};
-    // release_operation* m_release_waiters{nullptr};
+    std::mutex         m_waiter_mutex{};
     acquire_operation* m_acquire_waiters{nullptr};
 
     bool m_notify_all_set{false};

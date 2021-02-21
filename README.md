@@ -392,6 +392,97 @@ $ ./examples/coro_semaphore
 1, 23, 25, 24, 22, 27, 28, 29, 21, 20, 19, 18, 17, 14, 31, 30, 33, 32, 41, 40, 37, 39, 38, 36, 35, 34, 43, 46, 47, 48, 45, 42, 44, 26, 16, 15, 13, 52, 54, 55, 53, 49, 51, 57, 58, 50, 62, 63, 61, 60, 59, 56, 12, 11, 8, 10, 9, 7, 6, 5, 4, 3, 642, , 66, 67, 6568, , 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100,
 ```
 
+### coro::ring_buffer<element, num_elements>
+The `coro::ring_buffer` is thread safe async multi-producer multi-consumer statically sized ring buffer.  Producers will that try to produce a value when the ring buffer is full will suspend until space is available.  Consumers that try to consume a value when the ring buffer is empty will suspend until space is available.  All waiters on the ring buffer for producing or consuming are resumed in a LIFO manner when their respective operation becomes available.
+
+The `coro::ring_buffer` also works with `coro::stop_signal` in that if the ring buffers `stop_
+
+```C++
+#include <coro/coro.hpp>
+#include <iostream>
+
+int main()
+{
+    const size_t                    iterations = 100;
+    const size_t                    consumers  = 4;
+    coro::thread_pool               tp{coro::thread_pool::options{.thread_count = 4}};
+    coro::ring_buffer<uint64_t, 16> rb{};
+    coro::mutex                     m{};
+
+    std::vector<coro::task<void>> tasks{};
+
+    auto make_producer_task = [&]() -> coro::task<void> {
+        co_await tp.schedule();
+
+        for (size_t i = 1; i <= iterations; ++i)
+        {
+            co_await rb.produce(i);
+        }
+
+        // Wait for the ring buffer to clear all items so its a clean stop.
+        while (!rb.empty())
+        {
+            co_await tp.yield();
+        }
+
+        // Now that the ring buffer is empty signal to all the consumers its time to stop.  Note that
+        // the stop signal works on producers as well, but this example only uses 1 producer.
+        {
+            auto scoped_lock = co_await m.lock();
+            std::cerr << "\nproducer is sending stop signal";
+        }
+        rb.stop_signal_waiters();
+        co_return;
+    };
+
+    auto make_consumer_task = [&](size_t id) -> coro::task<void> {
+        co_await tp.schedule();
+
+        try
+        {
+            while (true)
+            {
+                auto value       = co_await rb.consume();
+                auto scoped_lock = co_await m.lock();
+                std::cout << "(id=" << id << ", v=" << value << "), ";
+
+                // Mimic doing some work on the consumed value.
+                co_await tp.yield();
+            }
+        }
+        catch (const coro::stop_signal&)
+        {
+            auto scoped_lock = co_await m.lock();
+            std::cerr << "\nconsumer " << id << " shutting down, stop signal received";
+        }
+
+        co_return;
+    };
+
+    // Create N consumers
+    for (size_t i = 0; i < consumers; ++i)
+    {
+        tasks.emplace_back(make_consumer_task(i));
+    }
+    // Create 1 producer.
+    tasks.emplace_back(make_producer_task());
+
+    // Wait for all the values to be produced and consumed through the ring buffer.
+    coro::sync_wait(coro::when_all(std::move(tasks)));
+}
+```
+
+Expected output:
+```bash
+$ ./examples/coro_ring_buffer
+(id=3, v=1), (id=2, v=2), (id=1, v=3), (id=0, v=4), (id=3, v=5), (id=2, v=6), (id=1, v=7), (id=0, v=8), (id=3, v=9), (id=2, v=10), (id=1, v=11), (id=0, v=12), (id=3, v=13), (id=2, v=14), (id=1, v=15), (id=0, v=16), (id=3, v=17), (id=2, v=18), (id=1, v=19), (id=0, v=20), (id=3, v=21), (id=2, v=22), (id=1, v=23), (id=0, v=24), (id=3, v=25), (id=2, v=26), (id=1, v=27), (id=0, v=28), (id=3, v=29), (id=2, v=30), (id=1, v=31), (id=0, v=32), (id=3, v=33), (id=2, v=34), (id=1, v=35), (id=0, v=36), (id=3, v=37), (id=2, v=38), (id=1, v=39), (id=0, v=40), (id=3, v=41), (id=2, v=42), (id=0, v=44), (id=1, v=43), (id=3, v=45), (id=2, v=46), (id=0, v=47), (id=3, v=48), (id=2, v=49), (id=0, v=50), (id=3, v=51), (id=2, v=52), (id=0, v=53), (id=3, v=54), (id=2, v=55), (id=0, v=56), (id=3, v=57), (id=2, v=58), (id=0, v=59), (id=3, v=60), (id=1, v=61), (id=2, v=62), (id=0, v=63), (id=3, v=64), (id=1, v=65), (id=2, v=66), (id=0, v=67), (id=3, v=68), (id=1, v=69), (id=2, v=70), (id=0, v=71), (id=3, v=72), (id=1, v=73), (id=2, v=74), (id=0, v=75), (id=3, v=76), (id=1, v=77), (id=2, v=78), (id=0, v=79), (id=3, v=80), (id=2, v=81), (id=1, v=82), (id=0, v=83), (id=3, v=84), (id=2, v=85), (id=1, v=86), (id=0, v=87), (id=3, v=88), (id=2, v=89), (id=1, v=90), (id=0, v=91), (id=3, v=92), (id=2, v=93), (id=1, v=94), (id=0, v=95), (id=3, v=96), (id=2, v=97), (id=1, v=98), (id=0, v=99), (id=3, v=100),
+producer is sending stop signal
+consumer 0 shutting down, stop signal received
+consumer 1 shutting down, stop signal received
+consumer 2 shutting down, stop signal received
+consumer 3 shutting down, stop signal received
+```
+
 ### coro::thread_pool
 `coro::thread_pool` is a statically sized pool of worker threads to execute scheduled coroutines from a FIFO queue.  To schedule a coroutine on a thread pool the pool's `schedule()` function should be `co_awaited` to transfer the execution from the current thread to a thread pool worker thread.  Its important to note that scheduling will first place the coroutine into the FIFO queue and will be picked up by the first available thread in the pool, e.g. there could be a delay if there is a lot of work queued up.
 

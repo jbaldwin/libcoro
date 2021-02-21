@@ -18,48 +18,6 @@ semaphore::~semaphore()
     stop_notify_all();
 }
 
-// semaphore::release_operation::release_operation(semaphore& s) : m_semaphore(s)
-// {
-// }
-
-// auto semaphore::release_operation::await_ready() const noexcept -> bool
-// {
-//     return m_semaphore.try_release();
-// }
-
-// auto semaphore::release_operation::await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept -> bool
-// {
-//     std::unique_lock lk{m_semaphore.m_waiter_mutex};
-//     if (m_semaphore.try_release_locked(lk))
-//     {
-//         return false;
-//     }
-
-//     if (m_semaphore.m_notify_all_set)
-//     {
-//         return false;
-//     }
-
-//     if (m_semaphore.m_release_waiters == nullptr)
-//     {
-//         m_semaphore.m_release_waiters = this;
-//     }
-//     else
-//     {
-//         m_next                        = m_semaphore.m_release_waiters;
-//         m_semaphore.m_release_waiters = this;
-//     }
-
-//     m_awaiting_coroutine = awaiting_coroutine;
-//     return true;
-// }
-
-// auto semaphore::release_operation::await_resume() const noexcept -> bool
-// {
-//     // If notify all hasn't been set then the operation succeeded.
-//     return !m_semaphore.m_notify_all_set;
-// }
-
 semaphore::acquire_operation::acquire_operation(semaphore& s) : m_semaphore(s)
 {
 }
@@ -104,12 +62,6 @@ auto semaphore::acquire_operation::await_resume() const noexcept -> bool
 {
     return !m_semaphore.m_notify_all_set;
 }
-
-// auto semaphore::try_release() -> bool
-// {
-//     std::unique_lock lk{m_waiter_mutex};
-//     return try_release_locked(lk);
-// }
 
 auto semaphore::release() -> void
 {
@@ -167,67 +119,5 @@ auto semaphore::stop_notify_all() noexcept -> void
         }
     }
 }
-
-// auto semaphore::try_release_locked(std::unique_lock<std::mutex>& lk) -> bool
-// {
-//     if (m_notify_all_set)
-//     {
-//         return false;
-//     }
-
-//     if (m_acquire_waiters != nullptr)
-//     {
-//         acquire_operation* to_resume = m_acquire_waiters;
-//         m_acquire_waiters            = m_acquire_waiters->m_next;
-//         lk.unlock();
-
-//         // This will transfer the "release" into the "acquire".
-//         to_resume->m_awaiting_coroutine.resume();
-//         return true;
-//     }
-//     else
-//     {
-//         if (m_counter.load(std::memory_order::relaxed) < m_max_value)
-//         {
-//             m_counter.fetch_add(1, std::memory_order::relaxed);
-//             return true;
-//         }
-//         else
-//         {
-//             return false;
-//         }
-//     }
-// }
-
-// auto semaphore::try_acquire_locked(std::unique_lock<std::mutex>& lk) -> bool
-// {
-//     if (m_notify_all_set)
-//     {
-//         return false;
-//     }
-
-//     if (m_release_waiters != nullptr)
-//     {
-//         release_operation* to_resume = m_release_waiters;
-//         m_release_waiters            = m_release_waiters->m_next;
-//         lk.unlock();
-
-//         // This will transfer the "acquire" into the "release".
-//         to_resume->m_awaiting_coroutine.resume();
-//         return true;
-//     }
-//     else
-//     {
-//         if (m_counter.load(std::memory_order::relaxed) > 0)
-//         {
-//             m_counter.fetch_sub(1, std::memory_order::relaxed);
-//             return true;
-//         }
-//         else
-//         {
-//             return false;
-//         }
-//     }
-// }
 
 } // namespace coro

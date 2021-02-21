@@ -13,6 +13,7 @@ set(LIBCORO_TEST_SOURCE_FILES
     test_io_scheduler.cpp
     test_latch.cpp
     test_mutex.cpp
+    test_ring_buffer.cpp
     test_semaphore.cpp
     test_sync_wait.cpp
     test_task.cpp
