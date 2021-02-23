@@ -1,0 +1,218 @@
+#include "catch.hpp"
+
+#include <coro/coro.hpp>
+
+#include <chrono>
+#include <thread>
+#include <vector>
+
+TEST_CASE("semaphore binary", "[semaphore]")
+{
+    std::vector<uint64_t> output;
+
+    coro::semaphore s{1};
+
+    auto make_emplace_task = [&](coro::semaphore& s) -> coro::task<void> {
+        std::cerr << "Acquiring semaphore\n";
+        co_await s.acquire();
+        REQUIRE_FALSE(s.try_acquire());
+        std::cerr << "semaphore acquired, emplacing back 1\n";
+        output.emplace_back(1);
+        std::cerr << "coroutine done with resource, releasing\n";
+        REQUIRE(s.value() == 0);
+        s.release();
+
+        REQUIRE(s.value() == 1);
+
+        REQUIRE(s.try_acquire());
+        s.release();
+
+        co_return;
+    };
+
+    coro::sync_wait(make_emplace_task(s));
+
+    REQUIRE(s.value() == 1);
+    REQUIRE(s.try_acquire());
+    REQUIRE(s.value() == 0);
+    s.release();
+    REQUIRE(s.value() == 1);
+
+    REQUIRE(output.size() == 1);
+    REQUIRE(output[0] == 1);
+}
+
+TEST_CASE("semaphore binary many waiters until event", "[semaphore]")
+{
+    std::atomic<uint64_t>         value{0};
+    std::vector<coro::task<void>> tasks;
+
+    coro::semaphore s{1}; // acquires and holds the semaphore until the event is triggered
+    coro::event     e;    // triggers the blocking thread to release the semaphore
+
+    auto make_task = [&](uint64_t id) -> coro::task<void> {
+        std::cerr << "id = " << id << " waiting to acquire the semaphore\n";
+        co_await s.acquire();
+
+        // Should always be locked upon acquiring the semaphore.
+        REQUIRE_FALSE(s.try_acquire());
+
+        std::cerr << "id = " << id << " semaphore acquired\n";
+        value.fetch_add(1, std::memory_order::relaxed);
+        std::cerr << "id = " << id << " semaphore release\n";
+        s.release();
+        co_return;
+    };
+
+    auto make_block_task = [&]() -> coro::task<void> {
+        std::cerr << "block task acquiring lock\n";
+        co_await s.acquire();
+        REQUIRE_FALSE(s.try_acquire());
+        std::cerr << "block task acquired semaphore, waiting on event\n";
+        co_await e;
+        std::cerr << "block task releasing semaphore\n";
+        s.release();
+        co_return;
+    };
+
+    auto make_set_task = [&]() -> coro::task<void> {
+        std::cerr << "set task setting event\n";
+        e.set();
+        co_return;
+    };
+
+    tasks.emplace_back(make_block_task());
+
+    // Create N tasks that attempt to acquire the semaphore.
+    for (uint64_t i = 1; i <= 4; ++i)
+    {
+        tasks.emplace_back(make_task(i));
+    }
+
+    tasks.emplace_back(make_set_task());
+
+    coro::sync_wait(coro::when_all(std::move(tasks)));
+
+    REQUIRE(value == 4);
+}
+
+TEST_CASE("semaphore ringbuffer", "[semaphore]")
+{
+    const std::size_t iterations = 10;
+
+    // This test is run in the context of a thread pool so the producer task can yield.  Otherwise
+    // the producer will just run wild!
+    coro::thread_pool             tp{coro::thread_pool::options{.thread_count = 1}};
+    std::atomic<uint64_t>         value{0};
+    std::vector<coro::task<void>> tasks;
+
+    coro::semaphore s{2, 2};
+
+    auto make_consumer_task = [&](uint64_t id) -> coro::task<void> {
+        co_await tp.schedule();
+
+        while (value.load(std::memory_order::acquire) < iterations)
+        {
+            std::cerr << "id = " << id << " waiting to acquire the semaphore\n";
+            co_await s.acquire();
+            std::cerr << "id = " << id << " semaphore acquired, consuming value\n";
+
+            value.fetch_add(1, std::memory_order::release);
+            // In the ringbfuffer acquire is 'consuming', we never release back into the buffer
+        }
+
+        std::cerr << "id = " << id << " exiting\n";
+        s.stop_notify_all();
+        co_return;
+    };
+
+    auto make_producer_task = [&]() -> coro::task<void> {
+        co_await tp.schedule();
+
+        while (value.load(std::memory_order::acquire) < iterations)
+        {
+            std::cerr << "producer: doing work\n";
+            // Do some work...
+
+            std::cerr << "producer: releasing\n";
+            s.release();
+            std::cerr << "producer: produced\n";
+            co_await tp.yield();
+        }
+
+        std::cerr << "producer exiting\n";
+        s.stop_notify_all();
+        co_return;
+    };
+
+    tasks.emplace_back(make_producer_task());
+    tasks.emplace_back(make_consumer_task(1));
+
+    coro::sync_wait(coro::when_all(std::move(tasks)));
+
+    REQUIRE(value == iterations);
+}
+
+TEST_CASE("semaphore ringbuffer many producers and consumers", "[semaphore]")
+{
+    const std::size_t consumers  = 16;
+    const std::size_t producers  = 1;
+    const std::size_t iterations = 1'000'000;
+
+    std::atomic<uint64_t> value{0};
+
+    coro::semaphore s{50, 0};
+
+    coro::thread_pool tp{}; // let er rip
+
+    auto make_consumer_task = [&](uint64_t id) -> coro::task<void> {
+        co_await tp.schedule();
+
+        while (value.load(std::memory_order::acquire) < iterations)
+        {
+            auto success = co_await s.acquire();
+            if (!success)
+            {
+                break;
+            }
+
+            co_await tp.schedule();
+            value.fetch_add(1, std::memory_order::relaxed);
+        }
+
+        std::cerr << "consumer " << id << " exiting\n";
+
+        s.stop_notify_all();
+
+        co_return;
+    };
+
+    auto make_producer_task = [&](uint64_t id) -> coro::task<void> {
+        co_await tp.schedule();
+
+        while (value.load(std::memory_order::acquire) < iterations)
+        {
+            s.release();
+        }
+
+        std::cerr << "producer " << id << " exiting\n";
+
+        s.stop_notify_all();
+
+        co_return;
+    };
+
+    std::vector<coro::task<void>> tasks{};
+    for (size_t i = 0; i < consumers; ++i)
+    {
+        tasks.emplace_back(make_consumer_task(i));
+    }
+    for (size_t i = 0; i < producers; ++i)
+    {
+        tasks.emplace_back(make_producer_task(i));
+    }
+
+    coro::sync_wait(coro::when_all(std::move(tasks)));
+
+    REQUIRE(value >= iterations);
+}

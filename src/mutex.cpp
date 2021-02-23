@@ -4,10 +4,7 @@ namespace coro
 {
 scoped_lock::~scoped_lock()
 {
-    if (m_mutex != nullptr)
-    {
-        m_mutex->unlock();
-    }
+    unlock();
 }
 
 auto scoped_lock::unlock() -> void
