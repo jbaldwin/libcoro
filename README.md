@@ -14,27 +14,27 @@
 * C++20 coroutines!
 * Modern Safe C++20 API
 * Higher level coroutine constructs
-    - [coro::task<T>](coro::task<t>)
-    - [coro::generator<T>](coro::generator<t>)
-    - [coro::event](coro::event)
-    - [coro::latch](coro::latch)
-    - [coro::mutex](coro::mutex)
-    - [coro::shared_mutex](coro::shared_mutex)
-    - [coro::semaphore](coro::semaphore)
-    - [coro::ring_buffer<element, num_elements>](coro::ring_buffer<element,-num_elements>)
+    - [coro::task<T>](#coro::task<t>)
+    - [coro::generator<T>](#coro::generator<t>)
+    - [coro::event](#coro::event)
+    - [coro::latch](#coro::latch)
+    - [coro::mutex](#coro::mutex)
+    - [coro::shared_mutex](#coro::shared_mutex)
+    - [coro::semaphore](#coro::semaphore)
+    - [coro::ring_buffer<element, num_elements>](#coro::ring_buffer<element,-num_elements>)
     - coro::sync_wait(awaitable)
     - coro::when_all(awaitable...) -> awaitable
 * Schedulers
-    - [coro::thread_pool](coro::thread_pool) for coroutine cooperative multitasking
-    - [coro::io_scheduler](coro::io_scheduler) for driving i/o events, uses thread_pool for coroutine execution upon triggered events
+    - [coro::thread_pool](#coro::thread_pool) for coroutine cooperative multitasking
+    - [coro::io_scheduler](#coro::io_scheduler) for driving i/o events, uses thread_pool for coroutine execution upon triggered events
         - Currently uses an epoll driver
-    - [coro::task_container](coro::task_container) for dynamic task lifetimes
+    - [coro::task_container](#coro::task_container) for dynamic task lifetimes
 * Coroutine Networking
     - coro::net::dns_resolver for async dns
         - Uses libc-ares
-    - [coro::net::tcp_client](coro::io_scheduler)
+    - [coro::net::tcp_client](#coro::io_scheduler)
         - Supports SSL/TLS via OpenSSL
-    - [coro::net::tcp_server](coro::io_scheduler)
+    - [coro::net::tcp_server](#coro::io_scheduler)
         - Supports SSL/TLS via OpenSSL
     - coro::net::udp_peer
 
