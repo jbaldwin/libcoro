@@ -34,7 +34,7 @@ public:
     ~ring_buffer()
     {
         // Wake up anyone still using the ring buffer.
-        stop_signal_waiters();
+        stop_signal_notify_waiters();
     }
 
     ring_buffer(const ring_buffer<element, num_elements>&) = delete;
@@ -183,7 +183,7 @@ public:
      * will throw a coro::stop_signal.  Further produce()/consume() calls will always throw
      * a coro::stop_signal after this is called for this ring buffer.
      */
-    auto stop_signal_waiters() -> void
+    auto stop_signal_notify_waiters() -> void
     {
         // Only wake up waiters once.
         if (m_stopped.load(std::memory_order::acquire))
