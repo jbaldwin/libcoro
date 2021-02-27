@@ -31,7 +31,7 @@ int main()
             auto scoped_lock = co_await m.lock();
             std::cerr << "\nproducer is sending stop signal";
         }
-        rb.stop_signal_waiters();
+        rb.stop_signal_notify_waiters();
         co_return;
     };
 

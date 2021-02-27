@@ -70,7 +70,7 @@ TEST_CASE("ring_buffer many elements many producers many consumers", "[ring_buff
             co_await tp.yield();
         }
 
-        rb.stop_signal_waiters(); // signal to all consumers (or even producers) we are done/shutting down.
+        rb.stop_signal_notify_waiters(); // signal to all consumers (or even producers) we are done/shutting down.
 
         co_return;
     };
