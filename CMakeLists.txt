@@ -51,6 +51,7 @@ set(LIBCORO_SOURCE_FILES
     inc/coro/poll.hpp
     inc/coro/ring_buffer.hpp
     inc/coro/semaphore.hpp src/semaphore.cpp
+    inc/coro/shared_mutex.hpp src/shared_mutex.cpp
     inc/coro/shutdown.hpp
     inc/coro/stop_signal.hpp
     inc/coro/sync_wait.hpp src/sync_wait.cpp

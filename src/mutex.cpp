@@ -32,7 +32,9 @@ auto mutex::lock_operation::await_suspend(std::coroutine_handle<> awaiting_corou
     std::scoped_lock lk{m_mutex.m_waiter_mutex};
     if (m_mutex.try_lock())
     {
-        // If we just straight up acquire the lock, don't suspend.
+        // If we just straight up acquire the lock, don't suspend.  This is necessary because its
+        // possible the lock is released between await_ready() and await_suspend() and suspending
+        // when the lock isn't held would be bad.
         return false;
     }
 
