@@ -18,6 +18,7 @@
 namespace coro
 {
 class event;
+class shared_mutex;
 
 /**
  * Creates a thread pool that executes arbitrary coroutine tasks in a FIFO scheduler policy.
@@ -212,6 +213,7 @@ private:
 protected:
     /// Required to resume all waiters of the event onto a thread_pool.
     friend event;
+    friend shared_mutex;
 
     /**
      * Schedules any coroutine that is ready to be resumed.

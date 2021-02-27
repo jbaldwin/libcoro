@@ -42,9 +42,11 @@ int main()
         {
             while (true)
             {
-                auto value       = co_await rb.consume();
-                auto scoped_lock = co_await m.lock();
-                std::cout << "(id=" << id << ", v=" << value << "), ";
+                auto value = co_await rb.consume();
+                {
+                    auto scoped_lock = co_await m.lock();
+                    std::cout << "(id=" << id << ", v=" << value << "), ";
+                }
 
                 // Mimic doing some work on the consumed value.
                 co_await tp.yield();

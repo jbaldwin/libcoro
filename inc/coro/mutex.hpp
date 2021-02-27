@@ -8,6 +8,11 @@ namespace coro
 {
 class mutex;
 
+/**
+ * A scoped RAII lock holder, just like std::lock_guard or std::scoped_lock in that the coro::mutex
+ * is always unlocked unpon this coro::scoped_lock going out of scope.  It is possible to unlock the
+ * coro::mutex prior to the end of its current scope by manually calling the unlock() function.
+ */
 class scoped_lock
 {
     friend class mutex;
@@ -25,12 +30,16 @@ public:
         // co_await in the constructor.
         (void)strategy;
     }
+
+    /**
+     * Unlocks the mutex upon this shared lock destructing.
+     */
     ~scoped_lock();
 
     scoped_lock(const scoped_lock&) = delete;
     scoped_lock(scoped_lock&& other) : m_mutex(std::exchange(other.m_mutex, nullptr)) {}
     auto operator=(const scoped_lock&) -> scoped_lock& = delete;
-    auto operator                                      =(scoped_lock&& other) -> scoped_lock&
+    auto operator                                      =(scoped_lock&& other) noexcept -> scoped_lock&
     {
         if (std::addressof(other) != this)
         {
@@ -40,7 +49,8 @@ public:
     }
 
     /**
-     * Unlocks the scoped lock prior to it going out of scope.
+     * Unlocks the scoped lock prior to it going out of scope.  Calling this multiple times has no
+     * additional affect after the first call.
      */
     auto unlock() -> void;
 
@@ -67,6 +77,9 @@ public:
         auto await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept -> bool;
         auto await_resume() noexcept -> scoped_lock { return scoped_lock{m_mutex}; }
 
+    private:
+        friend class mutex;
+
         mutex&                  m_mutex;
         std::coroutine_handle<> m_awaiting_coroutine;
         lock_operation*         m_next{nullptr};
@@ -91,7 +104,6 @@ public:
     auto unlock() -> void;
 
 private:
-    // friend class scoped_lock;
     friend class lock_operation;
 
     std::atomic<bool> m_state{false};

@@ -351,6 +351,95 @@ $ ./examples/coro_mutex
 1, 2, 3, 4, 5, 6, 7, 8, 10, 9, 12, 11, 13, 14, 15, 16, 17, 18, 19, 21, 22, 20, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 47, 48, 49, 46, 50, 51, 52, 53, 54, 55, 57, 58, 59, 56, 60, 62, 61, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100,
 ```
 
+### coro::shared_mutex
+The `coro::shared_mutex` is a thread safe async tool to allow for multiple shared users at once but also exclusive access.  The lock is acquired strictly in a FIFO manner in that if the lock is currenty held by shared users and an exclusive attempts to lock, the exclusive waiter will suspend until all the _current_ shared users finish using the lock.  Any new users that attempt to lock the mutex in a shared state once there is an exclusive waiter will also wait behind the exclusive waiter.  This prevents the exclusive waiter from being starved.
+
+
+```C++
+#include <coro/coro.hpp>
+#include <iostream>
+
+int main()
+{
+    // Shared mutexes require a thread pool to be able to wake up multiple shared waiters when
+    // there is an exclusive lock holder releasing the lock.  This example uses a single thread
+    // to also show the interleaving of coroutines acquiring the shared lock in shared and
+    // exclusive mode as they resume and suspend in a linear manner.  Ideally the thread pool
+    // would have more than 1 thread to resume all shared waiters in parallel.
+    coro::thread_pool  tp{coro::thread_pool::options{.thread_count = 1}};
+    coro::shared_mutex mutex{tp};
+
+    auto make_shared_task = [&](uint64_t i) -> coro::task<void> {
+        co_await tp.schedule();
+        {
+            std::cerr << "shared task " << i << " lock_shared()\n";
+            auto scoped_lock = co_await mutex.lock_shared();
+            std::cerr << "shared task " << i << " lock_shared() acquired\n";
+            /// Immediately yield so the other shared tasks also acquire in shared state
+            /// while this task currently holds the mutex in shared state.
+            co_await tp.yield();
+            std::cerr << "shared task " << i << " unlock_shared()\n";
+        }
+        co_return;
+    };
+
+    auto make_exclusive_task = [&]() -> coro::task<void> {
+        co_await tp.schedule();
+
+        std::cerr << "exclusive task lock()\n";
+        auto scoped_lock = co_await mutex.lock();
+        std::cerr << "exclusive task lock() acquired\n";
+        // Do the exclusive work..
+        std::cerr << "exclusive task unlock()\n";
+        co_return;
+    };
+
+    // Create 3 shared tasks that will acquire the mutex in a shared state.
+    const size_t                  num_tasks{3};
+    std::vector<coro::task<void>> tasks{};
+    for (size_t i = 1; i <= num_tasks; ++i)
+    {
+        tasks.emplace_back(make_shared_task(i));
+    }
+    // Create an exclusive task.
+    tasks.emplace_back(make_exclusive_task());
+    // Create 3 more shared tasks that will be blocked until the exclusive task completes.
+    for (size_t i = num_tasks + 1; i <= num_tasks * 2; ++i)
+    {
+        tasks.emplace_back(make_shared_task(i));
+    }
+
+    coro::sync_wait(coro::when_all(std::move(tasks)));
+}
+```
+
+Example output, notice how the (4,5,6) shared tasks attempt to acquire the lock in a shared state but are blocked behind the exclusive waiter until it completes:
+```bash
+$ ./examples/coro_shared_mutex
+shared task 1 lock_shared()
+shared task 1 lock_shared() acquired
+shared task 2 lock_shared()
+shared task 2 lock_shared() acquired
+shared task 3 lock_shared()
+shared task 3 lock_shared() acquired
+exclusive task lock()
+shared task 4 lock_shared()
+shared task 5 lock_shared()
+shared task 6 lock_shared()
+shared task 1 unlock_shared()
+shared task 2 unlock_shared()
+shared task 3 unlock_shared()
+exclusive task lock() acquired
+exclusive task unlock()
+shared task 4 lock_shared() acquired
+shared task 5 lock_shared() acquired
+shared task 6 lock_shared() acquired
+shared task 4 unlock_shared()
+shared task 5 unlock_shared()
+shared task 6 unlock_shared()
+
+```
+
 ### coro::semaphore
 The `coro::semaphore` is a thread safe async tool to protect a limited number of resources by only allowing so many consumers to acquire the resources a single time.  The `coro::semaphore` also has a maximum number of resources denoted by its constructor.  This means if a resource is produced or released when the semaphore is at its maximum resource availability then the release operation will await for space to become available.  This is useful for a ringbuffer type situation where the resources are produced and then consumed, but will have no effect on a semaphores usage if there is a set known quantity of resources to start with and are acquired and then released back.
 
@@ -442,9 +531,11 @@ int main()
         {
             while (true)
             {
-                auto value       = co_await rb.consume();
-                auto scoped_lock = co_await m.lock();
-                std::cout << "(id=" << id << ", v=" << value << "), ";
+                auto value = co_await rb.consume();
+                {
+                    auto scoped_lock = co_await m.lock();
+                    std::cout << "(id=" << id << ", v=" << value << "), ";
+                }
 
                 // Mimic doing some work on the consumed value.
                 co_await tp.yield();

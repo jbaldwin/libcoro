@@ -31,7 +31,11 @@ public:
         }
     }
 
-    ~ring_buffer() = default;
+    ~ring_buffer()
+    {
+        // Wake up anyone still using the ring buffer.
+        stop_signal_waiters();
+    }
 
     ring_buffer(const ring_buffer<element, num_elements>&) = delete;
     ring_buffer(ring_buffer<element, num_elements>&&)      = delete;

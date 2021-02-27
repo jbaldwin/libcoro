@@ -24,6 +24,7 @@
 #include "coro/poll.hpp"
 #include "coro/ring_buffer.hpp"
 #include "coro/semaphore.hpp"
+#include "coro/shared_mutex.hpp"
 #include "coro/shutdown.hpp"
 #include "coro/stop_signal.hpp"
 #include "coro/sync_wait.hpp"

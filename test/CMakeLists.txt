@@ -15,6 +15,7 @@ set(LIBCORO_TEST_SOURCE_FILES
     test_mutex.cpp
     test_ring_buffer.cpp
     test_semaphore.cpp
+    test_shared_mutex.cpp
     test_sync_wait.cpp
     test_task.cpp
     test_thread_pool.cpp
