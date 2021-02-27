@@ -23,6 +23,7 @@ TEST_CASE("mutex single waiter not locked", "[mutex]")
 
         // The scoped lock should release the lock upon destructing.
         REQUIRE(m.try_lock());
+        REQUIRE_FALSE(m.try_lock());
         m.unlock();
 
         co_return;

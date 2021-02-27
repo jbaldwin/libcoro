@@ -1,5 +1,7 @@
 #include "coro/mutex.hpp"
 
+#include <iostream>
+
 namespace coro
 {
 scoped_lock::~scoped_lock()
@@ -12,6 +14,7 @@ auto scoped_lock::unlock() -> void
     if (m_mutex != nullptr)
     {
         m_mutex->unlock();
+        // Only allow a scoped lock to unlock the mutex a single time.
         m_mutex = nullptr;
     }
 }
@@ -29,28 +32,29 @@ auto mutex::lock_operation::await_ready() const noexcept -> bool
 
 auto mutex::lock_operation::await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept -> bool
 {
-    std::scoped_lock lk{m_mutex.m_waiter_mutex};
-    if (m_mutex.try_lock())
-    {
-        // If we just straight up acquire the lock, don't suspend.  This is necessary because its
-        // possible the lock is released between await_ready() and await_suspend() and suspending
-        // when the lock isn't held would be bad.
-        return false;
-    }
+    void* current = m_mutex.m_state.load(std::memory_order::acquire);
+    void* new_value;
 
-    // The lock is currently held, so append ourself to the waiter list.
-    if (m_mutex.m_tail_waiter == nullptr)
+    do
     {
-        // If there are no current waiters this lock operation is the head and tail.
-        m_mutex.m_head_waiter = this;
-        m_mutex.m_tail_waiter = this;
-    }
-    else
+        if (current == m_mutex.m_unlocked_value)
+        {
+            // If the current value is 'unlocked' then attempt to lock it.
+            new_value = nullptr;
+        }
+        else
+        {
+            // If the current value is a waiting lock operation, or nullptr, set our next to that
+            // lock op and attempt to set ourself as the head of the waiter list.
+            m_next    = static_cast<lock_operation*>(current);
+            new_value = static_cast<void*>(this);
+        }
+    } while (!m_mutex.m_state.compare_exchange_weak(current, new_value, std::memory_order::acq_rel));
+
+    // Don't suspend if the state went from unlocked -> locked with zero waiters.
+    if (current == m_mutex.m_unlocked_value)
     {
-        // Update the current tail pointer to ourself.
-        m_mutex.m_tail_waiter->m_next = this;
-        // Update the tail pointer on the mutex to ourself.
-        m_mutex.m_tail_waiter = this;
+        return false;
     }
 
     m_awaiting_coroutine = awaiting_coroutine;
@@ -59,43 +63,47 @@ auto mutex::lock_operation::await_suspend(std::coroutine_handle<> awaiting_corou
 
 auto mutex::try_lock() -> bool
 {
-    bool expected = false;
-    return m_state.compare_exchange_strong(expected, true, std::memory_order::release, std::memory_order::relaxed);
+    void* expected = const_cast<void*>(m_unlocked_value);
+    return m_state.compare_exchange_strong(expected, nullptr, std::memory_order::acq_rel, std::memory_order::relaxed);
 }
 
 auto mutex::unlock() -> void
 {
-    // Acquire the next waiter before releasing _or_ moving ownship of the lock.
-    lock_operation* next{nullptr};
+    if (m_internal_waiters == nullptr)
     {
-        std::scoped_lock lk{m_waiter_mutex};
-        if (m_head_waiter != nullptr)
+        void* current = m_state.load(std::memory_order::relaxed);
+        if (current == nullptr)
         {
-            next          = m_head_waiter;
-            m_head_waiter = m_head_waiter->m_next;
-
-            // Null out the tail waiter if this was the last waiter.
-            if (m_head_waiter == nullptr)
+            // If there are no internal waiters and there are no atomic waiters, attempt to set the
+            // mutex as unlocked.
+            if (m_state.compare_exchange_strong(
+                    current,
+                    const_cast<void*>(m_unlocked_value),
+                    std::memory_order::release,
+                    std::memory_order::relaxed))
             {
-                m_tail_waiter = nullptr;
+                return; // The mutex is now unlocked with zero waiters.
             }
+            // else we failed to unlock, someone added themself as a waiter.
         }
-        else
-        {
-            // If there were no waiters, release the lock.  This is done under the waiter list being
-            // locked so another thread doesn't add themselves to the waiter list before the lock
-            // is actually released.  We can safely used relaxed here since m_waiter_mutex will
-            // perform the release memory order upon unlocking.
-            m_state.exchange(false, std::memory_order::relaxed);
-        }
+
+        // There are waiters on the atomic list, acquire them and update the state for all others.
+        m_internal_waiters = static_cast<lock_operation*>(m_state.exchange(nullptr, std::memory_order::acq_rel));
+
+        // Should internal waiters be reversed to allow for true FIFO, or should they be resumed
+        // in this reverse order to maximum throuhgput?  If this list ever gets 'long' the reversal
+        // will take some time, but it might guarantee better latency across waiters.  This LIFO
+        // middle ground on the atomic waiters means the best throughput at the cost of the first
+        // waiter possibly having added latency based on the queue length of waiters.  Either way
+        // incurs a cost but this way for short lists will most likely be faster even though it
+        // isn't completely fair.
     }
 
-    // If there were any waiters resume the next in line, this will pass ownership of the mutex to
-    // that waiter, only the final waiter in the list actually unlocks the mutex.
-    if (next != nullptr)
-    {
-        next->m_awaiting_coroutine.resume();
-    }
+    // assert m_internal_waiters != nullptr
+
+    lock_operation* to_resume = m_internal_waiters;
+    m_internal_waiters        = m_internal_waiters->m_next;
+    to_resume->m_awaiting_coroutine.resume();
 }
 
 } // namespace coro
