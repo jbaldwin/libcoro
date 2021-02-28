@@ -183,6 +183,11 @@ auto shared_mutex::wake_waiters(std::unique_lock<std::mutex>& lk) -> void
         m_state                   = state::locked_exclusive;
         lock_operation* to_resume = m_head_waiter;
         m_head_waiter             = m_head_waiter->m_next;
+        if (m_head_waiter == nullptr)
+        {
+            m_tail_waiter = nullptr;
+        }
+
         --m_exclusive_waiters;
         if (m_head_waiter == nullptr)
         {

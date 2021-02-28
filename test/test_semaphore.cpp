@@ -102,8 +102,8 @@ TEST_CASE("semaphore ringbuffer", "[semaphore]")
 
     // This test is run in the context of a thread pool so the producer task can yield.  Otherwise
     // the producer will just run wild!
-    coro::thread_pool             tp{coro::thread_pool::options{.thread_count = 1}};
-    std::atomic<uint64_t>         value{0};
+    coro::io_scheduler    tp{coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}}};
+    std::atomic<uint64_t> value{0};
     std::vector<coro::task<void>> tasks;
 
     coro::semaphore s{2, 2};
@@ -111,9 +111,9 @@ TEST_CASE("semaphore ringbuffer", "[semaphore]")
     auto make_consumer_task = [&](uint64_t id) -> coro::task<void> {
         co_await tp.schedule();
 
-        try
+        while (true)
         {
-            while (true)
+            try
             {
                 std::cerr << "id = " << id << " waiting to acquire the semaphore\n";
                 co_await s.acquire();
@@ -122,10 +122,10 @@ TEST_CASE("semaphore ringbuffer", "[semaphore]")
                 value.fetch_add(1, std::memory_order::release);
                 // In the ringbfuffer acquire is 'consuming', we never release back into the buffer
             }
-        }
-        catch (const coro::stop_signal&)
-        {
-            std::cerr << "id = " << id << " exiting\n";
+            catch (const coro::stop_signal&)
+            {
+                std::cerr << "id = " << id << " exiting\n";
+            }
         }
 
         co_return;
@@ -134,6 +134,7 @@ TEST_CASE("semaphore ringbuffer", "[semaphore]")
     auto make_producer_task = [&]() -> coro::task<void> {
         co_await tp.schedule();
 
+        size_t produced{0};
         for (size_t i = 2; i < iterations; ++i)
         {
             std::cerr << "producer: doing work\n";
@@ -141,8 +142,14 @@ TEST_CASE("semaphore ringbuffer", "[semaphore]")
 
             std::cerr << "producer: releasing\n";
             s.release();
+            ++produced;
             std::cerr << "producer: produced\n";
-            co_await tp.yield();
+            co_await tp.yield_for(std::chrono::milliseconds{1});
+        }
+
+        while (value.load(std::memory_order::acquire) < iterations)
+        {
+            co_await tp.yield_for(std::chrono::milliseconds{1});
         }
 
         std::cerr << "producer exiting\n";
@@ -162,7 +169,7 @@ TEST_CASE("semaphore ringbuffer many producers and consumers", "[semaphore]")
 {
     const std::size_t consumers  = 16;
     const std::size_t producers  = 1;
-    const std::size_t iterations = 100'000;
+    const std::size_t iterations = 1'000;
 
     std::atomic<uint64_t> value{0};
 
@@ -196,16 +203,14 @@ TEST_CASE("semaphore ringbuffer many producers and consumers", "[semaphore]")
         for (size_t i = 0; i < iterations; ++i)
         {
             s.release();
-        }
-
-        while (value.load(std::memory_order::relaxed) < iterations)
-        {
             co_await tp.yield_for(std::chrono::milliseconds{1});
         }
 
-        std::cerr << "producer " << id << " exiting\n";
+        std::cerr << "producer " << id << " s.stop_signal_notify_waiters()\n";
 
         s.stop_signal_notify_waiters();
+
+        std::cerr << "producer " << id << " exiting\n";
 
         co_return;
     };

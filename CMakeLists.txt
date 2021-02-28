@@ -21,6 +21,7 @@ set(CARES_SHARED    OFF CACHE INTERNAL "")
 set(CARES_INSTALL   OFF CACHE INTERNAL "")
 
 add_subdirectory(vendor/c-ares/c-ares)
+add_subdirectory(vendor/moodycamel/concurrentqueue)
 
 set(LIBCORO_SOURCE_FILES
     inc/coro/concepts/awaitable.hpp
@@ -65,7 +66,7 @@ add_library(${PROJECT_NAME} STATIC ${LIBCORO_SOURCE_FILES})
 set_target_properties(${PROJECT_NAME} PROPERTIES LINKER_LANGUAGE CXX)
 target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_20)
 target_include_directories(${PROJECT_NAME} PUBLIC inc)
-target_link_libraries(${PROJECT_NAME} PUBLIC pthread c-ares ssl crypto)
+target_link_libraries(${PROJECT_NAME} PUBLIC pthread c-ares concurrentqueue ssl crypto)
 
 if(${CMAKE_CXX_COMPILER_ID} MATCHES "GNU")
     if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "10.2.0")

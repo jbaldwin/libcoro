@@ -76,22 +76,36 @@ auto thread_pool::executor(std::stop_token stop_token, std::size_t idx) -> void
         // Wait until the queue has operations to execute or shutdown has been requested.
         while (true)
         {
-            std::unique_lock<std::mutex> lk{m_wait_mutex};
-            m_wait_cv.wait(lk, stop_token, [this] { return !m_queue.empty(); });
-            if (m_queue.empty())
+            std::coroutine_handle<> handle;
+            if (m_queue.wait_dequeue_timed(handle, std::chrono::milliseconds{5}))
             {
-                lk.unlock(); // would happen on scope destruction, but being explicit/faster(?)
+                handle.resume();
+                m_size.fetch_sub(1, std::memory_order::release);
+            }
+            else
+            {
                 break;
             }
-
-            auto handle = m_queue.front();
-            m_queue.pop_front();
-
-            lk.unlock(); // Not needed for processing the coroutine.
-
-            handle.resume();
-            m_size.fetch_sub(1, std::memory_order::release);
         }
+
+        // while (true)
+        // {
+        //     std::unique_lock<std::mutex> lk{m_wait_mutex};
+        //     m_wait_cv.wait(lk, stop_token, [this] { return !m_queue.empty(); });
+        //     if (m_queue.empty())
+        //     {
+        //         lk.unlock(); // would happen on scope destruction, but being explicit/faster(?)
+        //         break;
+        //     }
+
+        //     auto handle = m_queue.front();
+        //     m_queue.pop_front();
+
+        //     lk.unlock(); // Not needed for processing the coroutine.
+
+        //     handle.resume();
+        //     m_size.fetch_sub(1, std::memory_order::release);
+        // }
     }
 
     if (m_opts.on_thread_stop_functor != nullptr)
@@ -108,11 +122,12 @@ auto thread_pool::schedule_impl(std::coroutine_handle<> handle) noexcept -> void
     }
 
     {
-        std::scoped_lock lk{m_wait_mutex};
-        m_queue.emplace_back(handle);
+        // std::scoped_lock lk{m_wait_mutex};
+        // m_queue.emplace_back(handle);
+        m_queue.enqueue(handle);
     }
 
-    m_wait_cv.notify_one();
+    // m_wait_cv.notify_one();
 }
 
 auto thread_pool::resume(std::coroutine_handle<> handle) noexcept -> void
@@ -122,30 +137,31 @@ auto thread_pool::resume(std::coroutine_handle<> handle) noexcept -> void
         return;
     }
 
-    m_size.fetch_add(1, std::memory_order::relaxed);
+    m_size.fetch_add(1, std::memory_order::release);
     schedule_impl(handle);
 }
 
 auto thread_pool::resume(const std::vector<std::coroutine_handle<>>& handles) noexcept -> void
 {
-    m_size.fetch_add(handles.size(), std::memory_order::relaxed);
+    m_size.fetch_add(handles.size(), std::memory_order::release);
+    m_queue.enqueue_bulk(handles.data(), handles.size());
 
-    {
-        std::scoped_lock lk{m_wait_mutex};
-        for (const auto& handle : handles)
-        {
-            if (handle != nullptr) [[likely]]
-            {
-                m_queue.emplace_back(handle);
-            }
-            else
-            {
-                m_size.fetch_sub(1, std::memory_order::release);
-            }
-        }
-    }
+    // {
+    //     std::scoped_lock lk{m_wait_mutex};
+    //     for (const auto& handle : handles)
+    //     {
+    //         if (handle != nullptr) [[likely]]
+    //         {
+    //             m_queue.emplace_back(handle);
+    //         }
+    //         else
+    //         {
+    //             m_size.fetch_sub(1, std::memory_order::release);
+    //         }
+    //     }
+    // }
 
-    m_wait_cv.notify_one();
+    // m_wait_cv.notify_one();
 }
 
 } // namespace coro

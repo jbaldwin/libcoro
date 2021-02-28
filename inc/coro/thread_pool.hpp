@@ -4,6 +4,8 @@
 #include "coro/shutdown.hpp"
 #include "coro/task.hpp"
 
+#include <blockingconcurrentqueue.h>
+
 #include <atomic>
 #include <condition_variable>
 #include <coroutine>
@@ -166,7 +168,7 @@ public:
     {
         // Might not be totally perfect but good enough, avoids acquiring the lock for now.
         std::atomic_thread_fence(std::memory_order::acquire);
-        return m_queue.size();
+        return m_queue.size_approx();
     }
 
     /**
@@ -180,12 +182,22 @@ private:
     /// The background executor threads.
     std::vector<std::jthread> m_threads;
 
-    /// Mutex for executor threads to sleep on the condition variable.
-    std::mutex m_wait_mutex;
-    /// Condition variable for each executor thread to wait on when no tasks are available.
-    std::condition_variable_any m_wait_cv;
-    /// FIFO queue of tasks waiting to be executed.
-    std::deque<std::coroutine_handle<>> m_queue;
+    // /// Mutex for executor threads to sleep on the condition variable.
+    // std::mutex m_wait_mutex;
+    // /// Condition variable for each executor thread to wait on when no tasks are available.
+    // std::condition_variable_any m_wait_cv;
+    // /// FIFO queue of tasks waiting to be executed.
+    // std::deque<std::coroutine_handle<>> m_queue;
+
+    moodycamel::BlockingConcurrentQueue<std::coroutine_handle<>> m_queue;
+
+    // /// Mutex for executor threads to sleep on the condition variable.
+    // std::mutex m_wait_mutex;
+    // /// Condition variable for each executor thread to wait on when no tasks are available.
+    // std::condition_variable_any m_wait_cv;
+    // /// FIFO queue of tasks waiting to be executed.
+    // std::deque<std::coroutine_handle<>> m_queue;
+
     /**
      * Each background thread runs from this function.
      * @param stop_token Token which signals when shutdown() has been called.

@@ -150,6 +150,10 @@ TEST_CASE("mutex many shared and exclusive waiters interleaved", "[shared_mutex]
             {
                 break;
             }
+            else
+            {
+                co_await tp.yield_for(std::chrono::milliseconds{1});
+            }
         }
 
         co_return;

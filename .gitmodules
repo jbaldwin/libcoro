@@ -1,3 +1,6 @@
 [submodule "vendor/c-ares/c-ares"]
 	path = vendor/c-ares/c-ares
 	url = git@github.com:c-ares/c-ares.git
+[submodule "vendor/moodycamel/concurrentqueue"]
+	path = vendor/moodycamel/concurrentqueue
+	url = git@github.com:cameron314/concurrentqueue.git

@@ -52,10 +52,14 @@ TEST_CASE("ring_buffer many elements many producers many consumers", "[ring_buff
     const size_t consumers  = 100;
     const size_t producers  = 100;
 
-    coro::thread_pool               tp{coro::thread_pool::options{.thread_count = 4}};
+    std::atomic<size_t> produced_count{0};
+
+    coro::io_scheduler tp{coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 4}}};
     coro::ring_buffer<uint64_t, 64> rb{};
 
-    auto make_producer_task = [&]() -> coro::task<void> {
+    coro::event producers_completed{};
+
+    auto make_producer_task = [&](size_t idx) -> coro::task<void> {
         co_await tp.schedule();
         auto to_produce = iterations / producers;
 
@@ -64,18 +68,33 @@ TEST_CASE("ring_buffer many elements many producers many consumers", "[ring_buff
             co_await rb.produce(i);
         }
 
-        // Wait for all the values to be consumed prior to sending the stop signal.
-        while (!rb.empty())
+        // Wait for all he values to be produced prior to waiting for all to be consumed.
+        if (produced_count.fetch_add(to_produce, std::memory_order::acq_rel) + to_produce < iterations)
         {
-            co_await tp.yield();
+            std::cerr << "co_await producers_completed " << idx << "\n";
+            co_await producers_completed;
         }
+        else
+        {
+            std::cerr << "producers_completed.set() " << idx << "\n";
+            producers_completed.set();
 
-        rb.stop_signal_notify_waiters(); // signal to all consumers (or even producers) we are done/shutting down.
+            // Wait for all the values to be consumed prior to sending the stop signal.
+            while (!rb.empty())
+            {
+                co_await tp.yield_for(std::chrono::milliseconds{1});
+            }
+
+            REQUIRE(rb.size() == 0);
+
+            std::cerr << "rb.stop_signal_notify_waiters() " << idx << "\n";
+            rb.stop_signal_notify_waiters(); // signal to all consumers (or even producers) we are done/shutting down.
+        }
 
         co_return;
     };
 
-    auto make_consumer_task = [&]() -> coro::task<void> {
+    auto make_consumer_task = [&](size_t idx) -> coro::task<void> {
         co_await tp.schedule();
 
         try
@@ -84,13 +103,15 @@ TEST_CASE("ring_buffer many elements many producers many consumers", "[ring_buff
             {
                 auto value = co_await rb.consume();
                 (void)value;
-                co_await tp.yield(); // mimic some work
+                co_await tp.yield_for(std::chrono::milliseconds{1});
             }
         }
         catch (const coro::stop_signal&)
         {
             // requested to stop/shutdown.
         }
+
+        std::cerr << "consumer " << idx << " done\n";
 
         co_return;
     };
@@ -100,14 +121,15 @@ TEST_CASE("ring_buffer many elements many producers many consumers", "[ring_buff
 
     for (size_t i = 0; i < consumers; ++i)
     {
-        tasks.emplace_back(make_consumer_task());
+        tasks.emplace_back(make_consumer_task(i));
     }
     for (size_t i = 0; i < producers; ++i)
     {
-        tasks.emplace_back(make_producer_task());
+        tasks.emplace_back(make_producer_task(i));
     }
 
     coro::sync_wait(coro::when_all(std::move(tasks)));
 
+    REQUIRE(rb.size() == 0);
     REQUIRE(rb.empty());
 }
