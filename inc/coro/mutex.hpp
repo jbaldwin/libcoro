@@ -61,11 +61,7 @@ private:
 class mutex
 {
 public:
-    explicit mutex() noexcept
-        : m_unlocked_value(&m_state), // This address is guaranteed to be unique and un-used elsewhere.
-          m_state(const_cast<void*>(m_unlocked_value))
-    {
-    }
+    explicit mutex() noexcept : m_state(const_cast<void*>(unlocked_value())) {}
     ~mutex() = default;
 
     mutex(const mutex&) = delete;
@@ -110,18 +106,18 @@ public:
 private:
     friend class lock_operation;
 
-    /// Inactive value, this cannot be nullptr since we want nullptr to signify that the mutex
-    /// is locked but there are zero waiters, this makes it easy to CAS new waiters into the
-    /// m_state linked list.
-    const void* m_unlocked_value;
-
-    /// unlocked -> state == m_unlocked_value
+    /// unlocked -> state == unlocked_value()
     /// locked but empty waiter list == nullptr
     /// locked with waiters == lock_operation*
     std::atomic<void*> m_state;
 
     /// A list of grabbed internal waiters that are only accessed by the unlock()'er.
     lock_operation* m_internal_waiters{nullptr};
+
+    /// Inactive value, this cannot be nullptr since we want nullptr to signify that the mutex
+    /// is locked but there are zero waiters, this makes it easy to CAS new waiters into the
+    /// m_state linked list.
+    auto unlocked_value() const noexcept -> const void* { return &m_state; }
 };
 
 } // namespace coro

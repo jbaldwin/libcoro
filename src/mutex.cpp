@@ -13,6 +13,7 @@ auto scoped_lock::unlock() -> void
 {
     if (m_mutex != nullptr)
     {
+        std::atomic_thread_fence(std::memory_order::release);
         m_mutex->unlock();
         // Only allow a scoped lock to unlock the mutex a single time.
         m_mutex = nullptr;
@@ -35,9 +36,10 @@ auto mutex::lock_operation::await_suspend(std::coroutine_handle<> awaiting_corou
     void* current = m_mutex.m_state.load(std::memory_order::acquire);
     void* new_value;
 
+    const void* unlocked_value = m_mutex.unlocked_value();
     do
     {
-        if (current == m_mutex.m_unlocked_value)
+        if (current == unlocked_value)
         {
             // If the current value is 'unlocked' then attempt to lock it.
             new_value = nullptr;
@@ -52,8 +54,9 @@ auto mutex::lock_operation::await_suspend(std::coroutine_handle<> awaiting_corou
     } while (!m_mutex.m_state.compare_exchange_weak(current, new_value, std::memory_order::acq_rel));
 
     // Don't suspend if the state went from unlocked -> locked with zero waiters.
-    if (current == m_mutex.m_unlocked_value)
+    if (current == unlocked_value)
     {
+        std::atomic_thread_fence(std::memory_order::acquire);
         return false;
     }
 
@@ -63,7 +66,7 @@ auto mutex::lock_operation::await_suspend(std::coroutine_handle<> awaiting_corou
 
 auto mutex::try_lock() -> bool
 {
-    void* expected = const_cast<void*>(m_unlocked_value);
+    void* expected = const_cast<void*>(unlocked_value());
     return m_state.compare_exchange_strong(expected, nullptr, std::memory_order::acq_rel, std::memory_order::relaxed);
 }
 
@@ -78,7 +81,7 @@ auto mutex::unlock() -> void
             // mutex as unlocked.
             if (m_state.compare_exchange_strong(
                     current,
-                    const_cast<void*>(m_unlocked_value),
+                    const_cast<void*>(unlocked_value()),
                     std::memory_order::release,
                     std::memory_order::relaxed))
             {
