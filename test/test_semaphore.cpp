@@ -111,25 +111,30 @@ TEST_CASE("semaphore ringbuffer", "[semaphore]")
     auto make_consumer_task = [&](uint64_t id) -> coro::task<void> {
         co_await tp.schedule();
 
-        while (value.load(std::memory_order::acquire) < iterations)
+        try
         {
-            std::cerr << "id = " << id << " waiting to acquire the semaphore\n";
-            co_await s.acquire();
-            std::cerr << "id = " << id << " semaphore acquired, consuming value\n";
+            while (true)
+            {
+                std::cerr << "id = " << id << " waiting to acquire the semaphore\n";
+                co_await s.acquire();
+                std::cerr << "id = " << id << " semaphore acquired, consuming value\n";
 
-            value.fetch_add(1, std::memory_order::release);
-            // In the ringbfuffer acquire is 'consuming', we never release back into the buffer
+                value.fetch_add(1, std::memory_order::release);
+                // In the ringbfuffer acquire is 'consuming', we never release back into the buffer
+            }
+        }
+        catch (const coro::stop_signal&)
+        {
+            std::cerr << "id = " << id << " exiting\n";
         }
 
-        std::cerr << "id = " << id << " exiting\n";
-        s.stop_notify_all();
         co_return;
     };
 
     auto make_producer_task = [&]() -> coro::task<void> {
         co_await tp.schedule();
 
-        while (value.load(std::memory_order::acquire) < iterations)
+        for (size_t i = 2; i < iterations; ++i)
         {
             std::cerr << "producer: doing work\n";
             // Do some work...
@@ -141,7 +146,7 @@ TEST_CASE("semaphore ringbuffer", "[semaphore]")
         }
 
         std::cerr << "producer exiting\n";
-        s.stop_notify_all();
+        s.stop_signal_notify_waiters();
         co_return;
     };
 
@@ -157,32 +162,30 @@ TEST_CASE("semaphore ringbuffer many producers and consumers", "[semaphore]")
 {
     const std::size_t consumers  = 16;
     const std::size_t producers  = 1;
-    const std::size_t iterations = 1'000'000;
+    const std::size_t iterations = 100'000;
 
     std::atomic<uint64_t> value{0};
 
     coro::semaphore s{50, 0};
 
-    coro::thread_pool tp{}; // let er rip
+    coro::io_scheduler tp{}; // let er rip
 
     auto make_consumer_task = [&](uint64_t id) -> coro::task<void> {
         co_await tp.schedule();
 
-        while (value.load(std::memory_order::acquire) < iterations)
+        try
         {
-            auto success = co_await s.acquire();
-            if (!success)
+            while (true)
             {
-                break;
+                co_await s.acquire();
+                co_await tp.schedule();
+                value.fetch_add(1, std::memory_order::relaxed);
             }
-
-            co_await tp.schedule();
-            value.fetch_add(1, std::memory_order::relaxed);
         }
-
-        std::cerr << "consumer " << id << " exiting\n";
-
-        s.stop_notify_all();
+        catch (const coro::stop_signal&)
+        {
+            std::cerr << "consumer " << id << " exiting\n";
+        }
 
         co_return;
     };
@@ -190,14 +193,19 @@ TEST_CASE("semaphore ringbuffer many producers and consumers", "[semaphore]")
     auto make_producer_task = [&](uint64_t id) -> coro::task<void> {
         co_await tp.schedule();
 
-        while (value.load(std::memory_order::acquire) < iterations)
+        for (size_t i = 0; i < iterations; ++i)
         {
             s.release();
         }
 
+        while (value.load(std::memory_order::relaxed) < iterations)
+        {
+            co_await tp.yield_for(std::chrono::milliseconds{1});
+        }
+
         std::cerr << "producer " << id << " exiting\n";
 
-        s.stop_notify_all();
+        s.stop_signal_notify_waiters();
 
         co_return;
     };

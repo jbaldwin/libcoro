@@ -184,6 +184,10 @@ auto shared_mutex::wake_waiters(std::unique_lock<std::mutex>& lk) -> void
         lock_operation* to_resume = m_head_waiter;
         m_head_waiter             = m_head_waiter->m_next;
         --m_exclusive_waiters;
+        if (m_head_waiter == nullptr)
+        {
+            m_tail_waiter = nullptr;
+        }
 
         // Since this is an exclusive lock waiting we can resume it directly.
         lk.unlock();
@@ -198,6 +202,10 @@ auto shared_mutex::wake_waiters(std::unique_lock<std::mutex>& lk) -> void
         {
             lock_operation* to_resume = m_head_waiter;
             m_head_waiter             = m_head_waiter->m_next;
+            if (m_head_waiter == nullptr)
+            {
+                m_tail_waiter = nullptr;
+            }
             ++m_shared_users;
 
             m_thread_pool.resume(to_resume->m_awaiting_coroutine);
