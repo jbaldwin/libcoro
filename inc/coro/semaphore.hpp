@@ -1,5 +1,7 @@
 #pragma once
 
+#include "coro/stop_signal.hpp"
+
 #include <atomic>
 #include <coroutine>
 #include <mutex>
@@ -26,7 +28,7 @@ public:
 
         auto await_ready() const noexcept -> bool;
         auto await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept -> bool;
-        auto await_resume() const noexcept -> bool;
+        auto await_resume() const -> void;
 
     private:
         friend semaphore;
@@ -41,6 +43,7 @@ public:
     /**
      * Acquires a resource from the semaphore, if the semaphore has no resources available then
      * this will wait until a resource becomes available.
+     * @throws coro::stop_signal If the semaphore has been requested to stop.
      */
     [[nodiscard]] auto acquire() -> acquire_operation { return acquire_operation{*this}; }
 
@@ -64,7 +67,7 @@ public:
      * Stops the semaphore and will notify all release/acquire waiters to wake up in a failed state.
      * Once this is set it cannot be un-done and all future oprations on the semaphore will fail.
      */
-    auto stop_notify_all() noexcept -> void;
+    auto stop_signal_notify_waiters() noexcept -> void;
 
 private:
     friend class release_operation;
@@ -76,7 +79,7 @@ private:
     std::mutex         m_waiter_mutex{};
     acquire_operation* m_acquire_waiters{nullptr};
 
-    bool m_notify_all_set{false};
+    std::atomic<bool> m_notify_all_set{false};
 };
 
 } // namespace coro

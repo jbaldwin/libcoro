@@ -15,7 +15,7 @@ semaphore::semaphore(std::ptrdiff_t least_max_value, std::ptrdiff_t starting_val
 
 semaphore::~semaphore()
 {
-    stop_notify_all();
+    stop_signal_notify_waiters();
 }
 
 semaphore::acquire_operation::acquire_operation(semaphore& s) : m_semaphore(s)
@@ -24,13 +24,17 @@ semaphore::acquire_operation::acquire_operation(semaphore& s) : m_semaphore(s)
 
 auto semaphore::acquire_operation::await_ready() const noexcept -> bool
 {
+    if (m_semaphore.m_notify_all_set.load(std::memory_order::relaxed))
+    {
+        return true;
+    }
     return m_semaphore.try_acquire();
 }
 
 auto semaphore::acquire_operation::await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept -> bool
 {
     std::unique_lock lk{m_semaphore.m_waiter_mutex};
-    if (m_semaphore.m_notify_all_set)
+    if (m_semaphore.m_notify_all_set.load(std::memory_order::relaxed))
     {
         return false;
     }
@@ -58,9 +62,12 @@ auto semaphore::acquire_operation::await_suspend(std::coroutine_handle<> awaitin
     return true;
 }
 
-auto semaphore::acquire_operation::await_resume() const noexcept -> bool
+auto semaphore::acquire_operation::await_resume() const -> void
 {
-    return !m_semaphore.m_notify_all_set;
+    if (m_semaphore.m_notify_all_set.load(std::memory_order::relaxed))
+    {
+        throw coro::stop_signal{};
+    }
 }
 
 auto semaphore::release() -> void
@@ -100,8 +107,9 @@ auto semaphore::try_acquire() -> bool
     return true;
 }
 
-auto semaphore::stop_notify_all() noexcept -> void
+auto semaphore::stop_signal_notify_waiters() noexcept -> void
 {
+    m_notify_all_set.exchange(true, std::memory_order::release);
     while (true)
     {
         std::unique_lock lk{m_waiter_mutex};

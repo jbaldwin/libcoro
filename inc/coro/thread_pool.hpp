@@ -177,12 +177,6 @@ public:
 private:
     /// The configuration options.
     options m_opts;
-
-protected:
-    /// Has the thread pool been requested to shut down?
-    std::atomic<bool> m_shutdown_requested{false};
-
-private:
     /// The background executor threads.
     std::vector<std::jthread> m_threads;
 
@@ -192,12 +186,6 @@ private:
     std::condition_variable_any m_wait_cv;
     /// FIFO queue of tasks waiting to be executed.
     std::deque<std::coroutine_handle<>> m_queue;
-
-protected:
-    /// The number of tasks in the queue + currently executing.
-    std::atomic<std::size_t> m_size{0};
-
-private:
     /**
      * Each background thread runs from this function.
      * @param stop_token Token which signals when shutdown() has been called.
@@ -211,6 +199,11 @@ private:
     auto schedule_impl(std::coroutine_handle<> handle) noexcept -> void;
 
 protected:
+    /// The number of tasks in the queue + currently executing.
+    std::atomic<std::size_t> m_size{0};
+    /// Has the thread pool been requested to shut down?
+    std::atomic<bool> m_shutdown_requested{false};
+
     /// Required to resume all waiters of the event onto a thread_pool.
     friend event;
     friend shared_mutex;
