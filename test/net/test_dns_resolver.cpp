@@ -4,7 +4,7 @@
 
 #include <chrono>
 
-TEST_CASE("dns_resolver basic")
+TEST_CASE("dns_resolver basic", "[dns]")
 {
     coro::io_scheduler scheduler{coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}}};
     coro::net::dns_resolver dns_resolver{scheduler, std::chrono::milliseconds{5000}};

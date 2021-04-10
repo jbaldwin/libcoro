@@ -35,7 +35,7 @@ auto thread_pool::schedule() -> operation
 {
     if (!m_shutdown_requested.load(std::memory_order::relaxed))
     {
-        m_size.fetch_add(1, std::memory_order::relaxed);
+        m_size.fetch_add(1, std::memory_order::release);
         return operation{*this};
     }
 
@@ -122,13 +122,13 @@ auto thread_pool::resume(std::coroutine_handle<> handle) noexcept -> void
         return;
     }
 
-    m_size.fetch_add(1, std::memory_order::relaxed);
+    m_size.fetch_add(1, std::memory_order::release);
     schedule_impl(handle);
 }
 
 auto thread_pool::resume(const std::vector<std::coroutine_handle<>>& handles) noexcept -> void
 {
-    m_size.fetch_add(handles.size(), std::memory_order::relaxed);
+    m_size.fetch_add(handles.size(), std::memory_order::release);
 
     {
         std::scoped_lock lk{m_wait_mutex};

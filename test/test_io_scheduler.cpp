@@ -543,7 +543,7 @@ TEST_CASE("io_scheduler self generating coroutine (stack overflow check)", "[io_
     REQUIRE(tasks.size() == total - 1);
 }
 
-TEST_CASE("io_scheduler manual process events", "[io_scheduler]")
+TEST_CASE("io_scheduler manual process events thread pool", "[io_scheduler]")
 {
     auto               trigger_fd = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
     coro::io_scheduler s{coro::io_scheduler::options{
@@ -555,17 +555,23 @@ TEST_CASE("io_scheduler manual process events", "[io_scheduler]")
     std::atomic<bool> polling{false};
 
     auto make_poll_read_task = [&]() -> coro::task<void> {
+        std::cerr << "poll task start s.size() == " << s.size() << "\n";
         co_await s.schedule();
-        polling     = true;
+        polling = true;
+        std::cerr << "poll task polling s.size() == " << s.size() << "\n";
         auto status = co_await s.poll(trigger_fd, coro::poll_op::read);
         REQUIRE(status == coro::poll_status::event);
+        std::cerr << "poll task exiting s.size() == " << s.size() << "\n";
         co_return;
     };
 
     auto make_poll_write_task = [&]() -> coro::task<void> {
+        std::cerr << "write task start s.size() == " << s.size() << "\n";
         co_await s.schedule();
         uint64_t value{42};
+        std::cerr << "write task writing s.size() == " << s.size() << "\n";
         write(trigger_fd, &value, sizeof(value));
+        std::cerr << "write task exiting s.size() == " << s.size() << "\n";
         co_return;
     };
 
@@ -580,7 +586,58 @@ TEST_CASE("io_scheduler manual process events", "[io_scheduler]")
 
     write_task.resume();
 
-    REQUIRE(s.process_events(100ms) == 1);
+    while (s.process_events(100ms) > 0)
+        ;
+
+    s.shutdown();
+    REQUIRE(s.empty());
+    close(trigger_fd);
+}
+
+TEST_CASE("io_scheduler manual process events inline", "[io_scheduler]")
+{
+    auto               trigger_fd = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
+    coro::io_scheduler s{coro::io_scheduler::options{
+        .thread_strategy    = coro::io_scheduler::thread_strategy_t::manual,
+        .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline}};
+
+    auto make_poll_read_task = [&]() -> coro::task<void> {
+        std::cerr << "poll task start s.size() == " << s.size() << "\n";
+        co_await s.schedule();
+        std::cerr << "poll task polling s.size() == " << s.size() << "\n";
+        auto status = co_await s.poll(trigger_fd, coro::poll_op::read);
+        REQUIRE(status == coro::poll_status::event);
+        std::cerr << "poll task exiting s.size() == " << s.size() << "\n";
+        co_return;
+    };
+
+    auto make_poll_write_task = [&]() -> coro::task<void> {
+        std::cerr << "write task start s.size() == " << s.size() << "\n";
+        co_await s.schedule();
+        uint64_t value{42};
+        std::cerr << "write task writing s.size() == " << s.size() << "\n";
+        write(trigger_fd, &value, sizeof(value));
+        std::cerr << "write task exiting s.size() == " << s.size() << "\n";
+        co_return;
+    };
+
+    auto poll_task  = make_poll_read_task();
+    auto write_task = make_poll_write_task();
+
+    // Start the tasks by scheduling them into the io scheduler.
+    poll_task.resume();
+    write_task.resume();
+
+    // Now process them to completion.
+    while (true)
+    {
+        auto remaining = s.process_events(100ms);
+        std::cerr << "remaining " << remaining << "\n";
+        if (remaining == 0)
+        {
+            break;
+        }
+    };
 
     s.shutdown();
     REQUIRE(s.empty());

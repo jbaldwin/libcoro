@@ -75,12 +75,17 @@ struct poll_info
 } // namespace detail
 
 io_scheduler::io_scheduler(options opts)
-    : thread_pool(std::move(opts.pool)),
-      m_opts(std::move(opts)),
+    : m_opts(std::move(opts)),
       m_epoll_fd(epoll_create1(EPOLL_CLOEXEC)),
       m_shutdown_fd(eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK)),
-      m_timer_fd(timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC))
+      m_timer_fd(timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC)),
+      m_schedule_fd(eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK))
 {
+    if (opts.execution_strategy == execution_strategy_t::process_tasks_on_thread_pool)
+    {
+        m_thread_pool = std::make_unique<thread_pool>(std::move(m_opts.pool));
+    }
+
     epoll_event e{};
     e.events = EPOLLIN;
 
@@ -89,6 +94,9 @@ io_scheduler::io_scheduler(options opts)
 
     e.data.ptr = const_cast<void*>(m_timer_ptr);
     epoll_ctl(m_epoll_fd, EPOLL_CTL_ADD, m_timer_fd, &e);
+
+    e.data.ptr = const_cast<void*>(m_schedule_ptr);
+    epoll_ctl(m_epoll_fd, EPOLL_CTL_ADD, m_schedule_fd, &e);
 
     if (m_opts.thread_strategy == thread_strategy_t::spawn)
     {
@@ -116,12 +124,17 @@ io_scheduler::~io_scheduler()
         close(m_timer_fd);
         m_timer_fd = -1;
     }
+    if (m_schedule_fd != -1)
+    {
+        close(m_schedule_fd);
+        m_schedule_fd = -1;
+    }
 }
 
 auto io_scheduler::process_events(std::chrono::milliseconds timeout) -> std::size_t
 {
     process_events_manual(timeout);
-    return m_size.load(std::memory_order::relaxed);
+    return size();
 }
 
 auto io_scheduler::schedule_after(std::chrono::milliseconds amount) -> coro::task<void>
@@ -175,6 +188,10 @@ auto io_scheduler::yield_until(time_point time) -> coro::task<void>
 
 auto io_scheduler::poll(fd_t fd, coro::poll_op op, std::chrono::milliseconds timeout) -> coro::task<poll_status>
 {
+    // Because the size will drop when this coroutine suspends every poll needs to undo the subtraction
+    // on the number of active tasks in the scheduler.  When this task is resumed by the event loop.
+    m_size.fetch_add(1, std::memory_order::release);
+
     // Setup two events, a timeout event and the actual poll for op event.
     // Whichever triggers first will delete the other to guarantee only one wins.
     // The resume token will be set by the scheduler to what the event turned out to be.
@@ -200,16 +217,24 @@ auto io_scheduler::poll(fd_t fd, coro::poll_op op, std::chrono::milliseconds tim
     // The event loop will 'clean-up' whichever event didn't win since the coroutine is scheduled
     // onto the thread poll its possible the other type of event could trigger while its waiting
     // to execute again, thus restarting the coroutine twice, that would be quite bad.
-    co_return co_await pi;
+    auto result = co_await pi;
+    m_size.fetch_sub(1, std::memory_order::release);
+    co_return result;
 }
 
 auto io_scheduler::shutdown(shutdown_t wait_for_tasks) noexcept -> void
 {
-    thread_pool::shutdown(wait_for_tasks);
+    if (m_shutdown_requested.exchange(true, std::memory_order::release))
+    {
+        if (m_thread_pool != nullptr)
+        {
+            m_thread_pool->shutdown(wait_for_tasks);
+        }
 
-    // Signal the event loop to stop asap, triggering the event fd is safe.
-    uint64_t value{1};
-    ::write(m_shutdown_fd, &value, sizeof(value));
+        // Signal the event loop to stop asap, triggering the event fd is safe.
+        uint64_t value{1};
+        ::write(m_shutdown_fd, &value, sizeof(value));
+    }
 }
 
 auto io_scheduler::process_events_manual(std::chrono::milliseconds timeout) -> void
@@ -231,7 +256,7 @@ auto io_scheduler::process_events_dedicated_thread() -> void
 
     m_io_processing.exchange(true, std::memory_order::release);
     // Execute tasks until stopped or there are no more tasks to complete.
-    while (!m_shutdown_requested.load(std::memory_order::relaxed) || m_size.load(std::memory_order::relaxed) > 0)
+    while (!m_shutdown_requested.load(std::memory_order::acquire) || size() > 0)
     {
         process_events_execute(m_default_timeout);
     }
@@ -257,6 +282,14 @@ auto io_scheduler::process_events_execute(std::chrono::milliseconds timeout) -> 
             {
                 // Process all events that have timed out.
                 process_timeout_execute();
+            }
+            else if (handle_ptr == m_schedule_ptr)
+            {
+                // Clear the schedule eventfd if this is a scheduled task.
+                eventfd_t value{0};
+                eventfd_read(m_shutdown_fd, &value);
+
+                process_scheduled_execute_inline();
             }
             else if (handle_ptr == m_shutdown_ptr) [[unlikely]]
             {
@@ -290,6 +323,22 @@ auto io_scheduler::event_to_poll_status(uint32_t events) -> poll_status
     throw std::runtime_error{"invalid epoll state"};
 }
 
+auto io_scheduler::process_scheduled_execute_inline() -> void
+{
+    std::vector<std::coroutine_handle<>> tasks{};
+    {
+        // Acquire the entire list, and then reset it.
+        std::scoped_lock lk{m_scheduled_tasks_mutex};
+        tasks.swap(m_scheduled_tasks);
+    }
+
+    for (auto& task : tasks)
+    {
+        task.resume();
+    }
+    m_size.fetch_sub(tasks.size(), std::memory_order::release);
+}
+
 auto io_scheduler::process_event_execute(detail::poll_info* pi, poll_status status) -> void
 {
     if (!pi->m_processed)
@@ -317,7 +366,19 @@ auto io_scheduler::process_event_execute(detail::poll_info* pi, poll_status stat
         {
             std::atomic_thread_fence(std::memory_order::acquire);
         }
-        resume(pi->m_awaiting_coroutine);
+
+        if (m_opts.execution_strategy == execution_strategy_t::process_tasks_inline)
+        {
+            pi->m_awaiting_coroutine.resume();
+        }
+        else
+        {
+            resume(pi->m_awaiting_coroutine);
+        }
+
+        // // Both execution strategies use a counter for processing events to accurately track the number
+        // // of tasks in the io scheduler.
+        // m_size.fetch_sub(1, std::memory_order::release);
     }
 }
 
@@ -373,7 +434,19 @@ auto io_scheduler::process_timeout_execute() -> void
     }
 
     // Resume all timed out coroutines.
-    resume(handles);
+    if (m_opts.execution_strategy == execution_strategy_t::process_tasks_inline)
+    {
+        for (auto& handle : handles)
+        {
+            handle.resume();
+        }
+    }
+    else
+    {
+        m_thread_pool->resume(handles);
+    }
+
+    // m_size.fetch_sub(handles.size(), std::memory_order::release);
 
     // Update the time to the next smallest time point, re-take the current now time
     // since updating and resuming tasks could shift the time.

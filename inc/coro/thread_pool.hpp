@@ -17,9 +17,6 @@
 
 namespace coro
 {
-class event;
-class shared_mutex;
-
 /**
  * Creates a thread pool that executes arbitrary coroutine tasks in a FIFO scheduler policy.
  * The thread pool by default will create an execution thread per available core on the system.
@@ -147,7 +144,7 @@ public:
      * @param wait_for_tasks Should this function block until all remaining scheduled tasks have
      *                       completed?  Pass in sync to wait, or async to not block.
      */
-    virtual auto shutdown(shutdown_t wait_for_tasks = shutdown_t::sync) noexcept -> void;
+    auto shutdown(shutdown_t wait_for_tasks = shutdown_t::sync) noexcept -> void;
 
     /**
      * @return The number of tasks waiting in the task queue + the executing tasks.
@@ -204,10 +201,7 @@ protected:
     /// Has the thread pool been requested to shut down?
     std::atomic<bool> m_shutdown_requested{false};
 
-    /// Required to resume all waiters of the event onto a thread_pool.
-    friend event;
-    friend shared_mutex;
-
+public:
     /**
      * Schedules any coroutine that is ready to be resumed.
      * @param handle The coroutine handle to schedule.
