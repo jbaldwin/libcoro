@@ -224,7 +224,7 @@ auto io_scheduler::poll(fd_t fd, coro::poll_op op, std::chrono::milliseconds tim
 
 auto io_scheduler::shutdown(shutdown_t wait_for_tasks) noexcept -> void
 {
-    if (m_shutdown_requested.exchange(true, std::memory_order::release))
+    if (!m_shutdown_requested.exchange(true, std::memory_order::acq_rel))
     {
         if (m_thread_pool != nullptr)
         {
@@ -234,6 +234,11 @@ auto io_scheduler::shutdown(shutdown_t wait_for_tasks) noexcept -> void
         // Signal the event loop to stop asap, triggering the event fd is safe.
         uint64_t value{1};
         ::write(m_shutdown_fd, &value, sizeof(value));
+
+        if (m_io_thread.joinable())
+        {
+            m_io_thread.join();
+        }
     }
 }
 
@@ -375,10 +380,6 @@ auto io_scheduler::process_event_execute(detail::poll_info* pi, poll_status stat
         {
             resume(pi->m_awaiting_coroutine);
         }
-
-        // // Both execution strategies use a counter for processing events to accurately track the number
-        // // of tasks in the io scheduler.
-        // m_size.fetch_sub(1, std::memory_order::release);
     }
 }
 
@@ -445,8 +446,6 @@ auto io_scheduler::process_timeout_execute() -> void
     {
         m_thread_pool->resume(handles);
     }
-
-    // m_size.fetch_sub(handles.size(), std::memory_order::release);
 
     // Update the time to the next smallest time point, re-take the current now time
     // since updating and resuming tasks could shift the time.

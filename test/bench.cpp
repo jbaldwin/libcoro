@@ -340,7 +340,7 @@ TEST_CASE("benchmark counter task scheduler await event from another coroutine",
 TEST_CASE("benchmark tcp_server echo server thread pool", "[benchmark]")
 {
     const constexpr std::size_t connections             = 100;
-    const constexpr std::size_t messages_per_connection = 100'000;
+    const constexpr std::size_t messages_per_connection = 1'000;
     const constexpr std::size_t ops                     = connections * messages_per_connection;
 
     const std::string msg = "im a data point in a stream of bytes";
@@ -528,7 +528,7 @@ TEST_CASE("benchmark tcp_server echo server thread pool", "[benchmark]")
     }
 
     auto stop = sc::now();
-    print_stats("benchmark tcp_client and tcp_server", ops, start, stop);
+    print_stats("benchmark tcp_client and tcp_server thread_pool", ops, start, stop);
 
     for (const auto& [ms, count] : g_histogram)
     {
@@ -539,7 +539,7 @@ TEST_CASE("benchmark tcp_server echo server thread pool", "[benchmark]")
 TEST_CASE("benchmark tcp_server echo server inline", "[benchmark]")
 {
     const constexpr std::size_t connections             = 100;
-    const constexpr std::size_t messages_per_connection = 100'000;
+    const constexpr std::size_t messages_per_connection = 1'000;
     const constexpr std::size_t ops                     = connections * messages_per_connection;
 
     const std::string msg = "im a data point in a stream of bytes";
@@ -722,7 +722,7 @@ TEST_CASE("benchmark tcp_server echo server inline", "[benchmark]")
     }
 
     auto stop = sc::now();
-    print_stats("benchmark tcp_client and tcp_server", ops, start, stop);
+    print_stats("benchmark tcp_client and tcp_server inline", ops, start, stop);
 
     for (const auto& [ms, count] : g_histogram)
     {

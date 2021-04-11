@@ -27,7 +27,9 @@ TEST_CASE("io_scheduler schedule single task", "[io_scheduler]")
 
     auto value = coro::sync_wait(make_task());
     REQUIRE(value == 42);
+    std::cerr << "io_scheduler.size() before shutdown = " << s.size() << "\n";
     s.shutdown();
+    std::cerr << "io_scheduler.size() after shutdown = " << s.size() << "\n";
     REQUIRE(s.empty());
 }
 
@@ -52,6 +54,11 @@ TEST_CASE("io_scheduler submit mutiple tasks", "[io_scheduler]")
     coro::sync_wait(coro::when_all(std::move(tasks)));
 
     REQUIRE(counter == n);
+
+    std::cerr << "io_scheduler.size() before shutdown = " << s.size() << "\n";
+    s.shutdown();
+    std::cerr << "io_scheduler.size() after shutdown = " << s.size() << "\n";
+    REQUIRE(s.empty());
 }
 
 TEST_CASE("io_scheduler task with multiple events", "[io_scheduler]")
@@ -83,7 +90,9 @@ TEST_CASE("io_scheduler task with multiple events", "[io_scheduler]")
 
     REQUIRE(counter == 3);
 
+    std::cerr << "io_scheduler.size() before shutdown = " << s.size() << "\n";
     s.shutdown();
+    std::cerr << "io_scheduler.size() after shutdown = " << s.size() << "\n";
     REQUIRE(s.empty());
 }
 
@@ -108,7 +117,9 @@ TEST_CASE("io_scheduler task with read poll", "[io_scheduler]")
 
     coro::sync_wait(coro::when_all(make_poll_read_task(), make_poll_write_task()));
 
+    std::cerr << "io_scheduler.size() before shutdown = " << s.size() << "\n";
     s.shutdown();
+    std::cerr << "io_scheduler.size() after shutdown = " << s.size() << "\n";
     REQUIRE(s.empty());
     close(trigger_fd);
 }
@@ -135,7 +146,9 @@ TEST_CASE("io_scheduler task with read poll with timeout", "[io_scheduler]")
 
     coro::sync_wait(coro::when_all(make_poll_read_task(), make_poll_write_task()));
 
+    std::cerr << "io_scheduler.size() before shutdown = " << s.size() << "\n";
     s.shutdown();
+    std::cerr << "io_scheduler.size() after shutdown = " << s.size() << "\n";
     REQUIRE(s.empty());
     close(trigger_fd);
 }
@@ -155,7 +168,9 @@ TEST_CASE("io_scheduler task with read poll timeout", "[io_scheduler]")
 
     coro::sync_wait(make_task());
 
+    std::cerr << "io_scheduler.size() before shutdown = " << s.size() << "\n";
     s.shutdown();
+    std::cerr << "io_scheduler.size() after shutdown = " << s.size() << "\n";
     REQUIRE(s.empty());
     close(trigger_fd);
 }
@@ -289,7 +304,9 @@ TEST_CASE("io_scheduler separate thread resume with return", "[io_scheduler]")
     coro::sync_wait(make_task());
 
     service.join();
+    std::cerr << "io_scheduler.size() before shutdown = " << s.size() << "\n";
     s.shutdown();
+    std::cerr << "io_scheduler.size() after shutdown = " << s.size() << "\n";
     REQUIRE(s.empty());
 }
 
@@ -317,6 +334,11 @@ TEST_CASE("io_scheduler with basic task", "[io_scheduler]")
     auto counter = coro::sync_wait(func());
 
     REQUIRE(counter == expected_value);
+
+    std::cerr << "io_scheduler.size() before shutdown = " << s.size() << "\n";
+    s.shutdown();
+    std::cerr << "io_scheduler.size() after shutdown = " << s.size() << "\n";
+    REQUIRE(s.empty());
 }
 
 TEST_CASE("io_scheduler scheduler_after", "[io_scheduler]")
@@ -344,7 +366,9 @@ TEST_CASE("io_scheduler scheduler_after", "[io_scheduler]")
 
         REQUIRE(counter == 1);
         REQUIRE(duration < wait_for);
+        std::cerr << "io_scheduler.size() before shutdown = " << s.size() << "\n";
         s.shutdown();
+        std::cerr << "io_scheduler.size() after shutdown = " << s.size() << "\n";
         REQUIRE(s.empty());
     }
 
@@ -360,7 +384,9 @@ TEST_CASE("io_scheduler scheduler_after", "[io_scheduler]")
 
         REQUIRE(counter == 2);
         REQUIRE(duration >= wait_for);
+        std::cerr << "io_scheduler.size() before shutdown = " << s.size() << "\n";
         s.shutdown();
+        std::cerr << "io_scheduler.size() after shutdown = " << s.size() << "\n";
         REQUIRE(s.empty());
     }
 }
@@ -432,6 +458,11 @@ TEST_CASE("io_scheduler yield", "[io_scheduler]")
     };
 
     coro::sync_wait(func());
+
+    std::cerr << "io_scheduler.size() before shutdown = " << s.size() << "\n";
+    s.shutdown();
+    std::cerr << "io_scheduler.size() after shutdown = " << s.size() << "\n";
+    REQUIRE(s.empty());
 }
 
 TEST_CASE("io_scheduler yield_for", "[io_scheduler]")
@@ -449,6 +480,11 @@ TEST_CASE("io_scheduler yield_for", "[io_scheduler]")
 
     auto duration = coro::sync_wait(make_task());
     REQUIRE(duration >= wait_for);
+
+    std::cerr << "io_scheduler.size() before shutdown = " << s.size() << "\n";
+    s.shutdown();
+    std::cerr << "io_scheduler.size() after shutdown = " << s.size() << "\n";
+    REQUIRE(s.empty());
 }
 
 TEST_CASE("io_scheduler yield_until", "[io_scheduler]")
@@ -468,6 +504,11 @@ TEST_CASE("io_scheduler yield_until", "[io_scheduler]")
 
     auto duration = coro::sync_wait(make_task());
     REQUIRE(duration >= (wait_for - epsilon));
+
+    std::cerr << "io_scheduler.size() before shutdown = " << s.size() << "\n";
+    s.shutdown();
+    std::cerr << "io_scheduler.size() after shutdown = " << s.size() << "\n";
+    REQUIRE(s.empty());
 }
 
 TEST_CASE("io_scheduler multipler event waiters", "[io_scheduler]")
@@ -505,6 +546,11 @@ TEST_CASE("io_scheduler multipler event waiters", "[io_scheduler]")
     };
 
     coro::sync_wait(coro::when_all(spawn(), release()));
+
+    std::cerr << "io_scheduler.size() before shutdown = " << s.size() << "\n";
+    s.shutdown();
+    std::cerr << "io_scheduler.size() after shutdown = " << s.size() << "\n";
+    REQUIRE(s.empty());
 }
 
 TEST_CASE("io_scheduler self generating coroutine (stack overflow check)", "[io_scheduler]")
@@ -541,6 +587,11 @@ TEST_CASE("io_scheduler self generating coroutine (stack overflow check)", "[io_
     }
 
     REQUIRE(tasks.size() == total - 1);
+
+    std::cerr << "io_scheduler.size() before shutdown = " << s.size() << "\n";
+    s.shutdown();
+    std::cerr << "io_scheduler.size() after shutdown = " << s.size() << "\n";
+    REQUIRE(s.empty());
 }
 
 TEST_CASE("io_scheduler manual process events thread pool", "[io_scheduler]")
@@ -589,7 +640,9 @@ TEST_CASE("io_scheduler manual process events thread pool", "[io_scheduler]")
     while (s.process_events(100ms) > 0)
         ;
 
+    std::cerr << "io_scheduler.size() before shutdown = " << s.size() << "\n";
     s.shutdown();
+    std::cerr << "io_scheduler.size() after shutdown = " << s.size() << "\n";
     REQUIRE(s.empty());
     close(trigger_fd);
 }
@@ -639,7 +692,9 @@ TEST_CASE("io_scheduler manual process events inline", "[io_scheduler]")
         }
     };
 
+    std::cerr << "io_scheduler.size() before shutdown = " << s.size() << "\n";
     s.shutdown();
+    std::cerr << "io_scheduler.size() after shutdown = " << s.size() << "\n";
     REQUIRE(s.empty());
     close(trigger_fd);
 }

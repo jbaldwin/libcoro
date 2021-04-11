@@ -232,10 +232,12 @@ public:
     {
         if (m_opts.execution_strategy == execution_strategy_t::process_tasks_inline)
         {
+            std::cerr << "(" << m_size.load(std::memory_order::acquire) << ") ";
             return m_size.load(std::memory_order::acquire);
         }
         else
         {
+            std::cerr << "(" << m_size.load(std::memory_order::acquire) << ", " << m_thread_pool->size() << ") ";
             return m_size.load(std::memory_order::acquire) + m_thread_pool->size();
         }
     }

@@ -1,5 +1,7 @@
 #include "coro/thread_pool.hpp"
 
+#include <iostream>
+
 namespace coro
 {
 thread_pool::operation::operation(thread_pool& tp) noexcept : m_thread_pool(tp)
@@ -44,23 +46,23 @@ auto thread_pool::schedule() -> operation
 
 auto thread_pool::shutdown(shutdown_t wait_for_tasks) noexcept -> void
 {
-    if (!m_shutdown_requested.exchange(true, std::memory_order::release))
+    if (!m_shutdown_requested.exchange(true, std::memory_order::acq_rel))
     {
         for (auto& thread : m_threads)
         {
             thread.request_stop();
         }
 
-        if (wait_for_tasks == shutdown_t::sync)
+        // if (wait_for_tasks == shutdown_t::sync)
+        // {
+        for (auto& thread : m_threads)
         {
-            for (auto& thread : m_threads)
+            if (thread.joinable())
             {
-                if (thread.joinable())
-                {
-                    thread.join();
-                }
+                thread.join();
             }
         }
+        // }
     }
 }
 
@@ -93,6 +95,8 @@ auto thread_pool::executor(std::stop_token stop_token, std::size_t idx) -> void
             m_size.fetch_sub(1, std::memory_order::release);
         }
     }
+
+    std::cerr << "thread_pool::executor m_size = " << m_size.load(std::memory_order::acquire) << "\n";
 
     if (m_opts.on_thread_stop_functor != nullptr)
     {
