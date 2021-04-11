@@ -25,7 +25,9 @@ add_subdirectory(vendor/c-ares/c-ares)
 set(LIBCORO_SOURCE_FILES
     inc/coro/concepts/awaitable.hpp
     inc/coro/concepts/buffer.hpp
+    inc/coro/concepts/executor.hpp
     inc/coro/concepts/promise.hpp
+    inc/coro/concepts/range_of.hpp
 
     inc/coro/detail/poll_info.hpp
     inc/coro/detail/void_value.hpp

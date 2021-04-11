@@ -4,6 +4,7 @@
 #include "coro/concepts/buffer.hpp"
 #include "coro/concepts/executor.hpp"
 #include "coro/concepts/promise.hpp"
+#include "coro/concepts/range_of.hpp"
 
 #include "coro/net/connect.hpp"
 #include "coro/net/dns_resolver.hpp"

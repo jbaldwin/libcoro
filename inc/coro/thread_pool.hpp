@@ -1,5 +1,6 @@
 #pragma once
 
+#include "coro/concepts/range_of.hpp"
 #include "coro/event.hpp"
 #include "coro/task.hpp"
 
@@ -10,6 +11,7 @@
 #include <functional>
 #include <mutex>
 #include <optional>
+#include <ranges>
 #include <thread>
 #include <variant>
 #include <vector>
@@ -130,6 +132,46 @@ public:
     }
 
     /**
+     * Schedules any coroutine handle that is ready to be resumed.
+     * @param handle The coroutine handle to schedule.
+     */
+    auto resume(std::coroutine_handle<> handle) noexcept -> void;
+
+    /**
+     * Schedules the set of coroutine handles that are ready to be resumed.
+     * @param handles The coroutine handles to schedule.
+     */
+    template<coro::concepts::range_of<std::coroutine_handle<>> range_type>
+    auto resume(const range_type& handles) noexcept -> void
+    {
+        m_size.fetch_add(std::size(handles), std::memory_order::release);
+
+        size_t null_handles{0};
+
+        {
+            std::scoped_lock lk{m_wait_mutex};
+            for (const auto& handle : handles)
+            {
+                if (handle != nullptr) [[likely]]
+                {
+                    m_queue.emplace_back(handle);
+                }
+                else
+                {
+                    ++null_handles;
+                }
+            }
+        }
+
+        if (null_handles > 0)
+        {
+            m_size.fetch_sub(null_handles, std::memory_order::release);
+        }
+
+        m_wait_cv.notify_one();
+    }
+
+    /**
      * Immediately yields the current task and places it at the end of the queue of tasks waiting
      * to be processed.  This will immediately be picked up again once it naturally goes through the
      * FIFO task queue.  This function is useful to yielding long processing tasks to let other tasks
@@ -193,19 +235,10 @@ private:
      */
     auto schedule_impl(std::coroutine_handle<> handle) noexcept -> void;
 
-protected:
     /// The number of tasks in the queue + currently executing.
     std::atomic<std::size_t> m_size{0};
     /// Has the thread pool been requested to shut down?
     std::atomic<bool> m_shutdown_requested{false};
-
-public:
-    /**
-     * Schedules any coroutine that is ready to be resumed.
-     * @param handle The coroutine handle to schedule.
-     */
-    auto resume(std::coroutine_handle<> handle) noexcept -> void;
-    auto resume(const std::vector<std::coroutine_handle<>>& handles) noexcept -> void;
 };
 
 } // namespace coro

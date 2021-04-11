@@ -304,14 +304,6 @@ private:
     std::mutex                           m_scheduled_tasks_mutex{};
     std::vector<std::coroutine_handle<>> m_scheduled_tasks{};
 
-    auto process_event_execute(detail::poll_info* pi, poll_status status) -> void;
-    auto process_timeout_execute() -> void;
-
-    auto add_timer_token(time_point tp, detail::poll_info& pi) -> timed_events::iterator;
-    auto remove_timer_token(timed_events::iterator pos) -> void;
-    auto update_timeout(time_point now) -> void;
-
-private:
     static constexpr const int   m_shutdown_object{0};
     static constexpr const void* m_shutdown_ptr = &m_shutdown_object;
 
@@ -323,8 +315,16 @@ private:
 
     static const constexpr std::chrono::milliseconds m_default_timeout{1000};
     static const constexpr std::chrono::milliseconds m_no_timeout{0};
-    static const constexpr std::size_t               m_max_events = 8;
+    static const constexpr std::size_t               m_max_events = 16;
     std::array<struct epoll_event, m_max_events>     m_events{};
+    std::vector<std::coroutine_handle<>>             m_handles_to_resume{};
+
+    auto process_event_execute(detail::poll_info* pi, poll_status status) -> void;
+    auto process_timeout_execute() -> void;
+
+    auto add_timer_token(time_point tp, detail::poll_info& pi) -> timed_events::iterator;
+    auto remove_timer_token(timed_events::iterator pos) -> void;
+    auto update_timeout(time_point now) -> void;
 };
 
 } // namespace coro

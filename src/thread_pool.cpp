@@ -44,6 +44,17 @@ auto thread_pool::schedule() -> operation
     throw std::runtime_error("coro::thread_pool is shutting down, unable to schedule new tasks.");
 }
 
+auto thread_pool::resume(std::coroutine_handle<> handle) noexcept -> void
+{
+    if (handle == nullptr)
+    {
+        return;
+    }
+
+    m_size.fetch_add(1, std::memory_order::release);
+    schedule_impl(handle);
+}
+
 auto thread_pool::shutdown() noexcept -> void
 {
     // Only allow shutdown to occur once.
@@ -110,39 +121,6 @@ auto thread_pool::schedule_impl(std::coroutine_handle<> handle) noexcept -> void
     {
         std::scoped_lock lk{m_wait_mutex};
         m_queue.emplace_back(handle);
-    }
-
-    m_wait_cv.notify_one();
-}
-
-auto thread_pool::resume(std::coroutine_handle<> handle) noexcept -> void
-{
-    if (handle == nullptr)
-    {
-        return;
-    }
-
-    m_size.fetch_add(1, std::memory_order::release);
-    schedule_impl(handle);
-}
-
-auto thread_pool::resume(const std::vector<std::coroutine_handle<>>& handles) noexcept -> void
-{
-    m_size.fetch_add(handles.size(), std::memory_order::release);
-
-    {
-        std::scoped_lock lk{m_wait_mutex};
-        for (const auto& handle : handles)
-        {
-            if (handle != nullptr) [[likely]]
-            {
-                m_queue.emplace_back(handle);
-            }
-            else
-            {
-                m_size.fetch_sub(1, std::memory_order::release);
-            }
-        }
     }
 
     m_wait_cv.notify_one();

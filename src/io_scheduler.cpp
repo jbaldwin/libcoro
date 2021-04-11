@@ -242,6 +242,7 @@ auto io_scheduler::process_events_execute(std::chrono::milliseconds timeout) -> 
             }
             else if (handle_ptr == m_schedule_ptr)
             {
+                // Process scheduled coroutines.
                 process_scheduled_execute_inline();
             }
             else if (handle_ptr == m_shutdown_ptr) [[unlikely]]
@@ -250,11 +251,33 @@ auto io_scheduler::process_events_execute(std::chrono::milliseconds timeout) -> 
             }
             else
             {
-                // Individual poll task wake-up, this will queue the coroutines waiting
-                // on the resume token into the FIFO queue for processing.
+                // Individual poll task wake-up.
                 process_event_execute(static_cast<detail::poll_info*>(handle_ptr), event_to_poll_status(event.events));
             }
         }
+    }
+
+    // Its important to not resume any handles until the full set is accounted for.  If a timeout
+    // and an event for the same handle happen in the same epoll_wait() call then inline processing
+    // will destruct the poll_info object before the second event is handled.  This is also possible
+    // with thread pool processing, but probably has an extremely low chance of occuring due to
+    // the thread switch required.  If m_max_events == 1 this would be unnecessary.
+
+    if (!m_handles_to_resume.empty())
+    {
+        if (m_opts.execution_strategy == execution_strategy_t::process_tasks_inline)
+        {
+            for (auto& handle : m_handles_to_resume)
+            {
+                handle.resume();
+            }
+        }
+        else
+        {
+            m_thread_pool->resume(m_handles_to_resume);
+        }
+
+        m_handles_to_resume.clear();
     }
 }
 
@@ -292,6 +315,7 @@ auto io_scheduler::process_scheduled_execute_inline() -> void
         m_schedule_fd_triggered.exchange(false, std::memory_order::release);
     }
 
+    // This set of handles can be safely resumed now since they do not have a corresponding timeout event.
     for (auto& task : tasks)
     {
         task.resume();
@@ -327,14 +351,7 @@ auto io_scheduler::process_event_execute(detail::poll_info* pi, poll_status stat
             std::atomic_thread_fence(std::memory_order::acquire);
         }
 
-        if (m_opts.execution_strategy == execution_strategy_t::process_tasks_inline)
-        {
-            pi->m_awaiting_coroutine.resume();
-        }
-        else
-        {
-            resume(pi->m_awaiting_coroutine);
-        }
+        m_handles_to_resume.emplace_back(pi->m_awaiting_coroutine);
     }
 }
 
@@ -362,8 +379,6 @@ auto io_scheduler::process_timeout_execute() -> void
         }
     }
 
-    std::vector<std::coroutine_handle<>> handles{};
-    handles.reserve(poll_infos.size());
     for (auto pi : poll_infos)
     {
         if (!pi->m_processed)
@@ -384,22 +399,9 @@ auto io_scheduler::process_timeout_execute() -> void
                 // std::cerr << "process_event_execute() has a nullptr event\n";
             }
 
-            handles.emplace_back(pi->m_awaiting_coroutine);
+            m_handles_to_resume.emplace_back(pi->m_awaiting_coroutine);
             pi->m_poll_status = coro::poll_status::timeout;
         }
-    }
-
-    // Resume all timed out coroutines.
-    if (m_opts.execution_strategy == execution_strategy_t::process_tasks_inline)
-    {
-        for (auto& handle : handles)
-        {
-            handle.resume();
-        }
-    }
-    else
-    {
-        m_thread_pool->resume(handles);
     }
 
     // Update the time to the next smallest time point, re-take the current now time
