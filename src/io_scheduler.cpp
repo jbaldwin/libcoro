@@ -14,73 +14,18 @@ using namespace std::chrono_literals;
 
 namespace coro
 {
-namespace detail
-{
-/**
- * Poll Info encapsulates everything about a poll operation for the event as well as its paired
- * timeout.  This is important since coroutines that are waiting on an event or timeout do not
- * immediately execute, they are re-scheduled onto the thread pool, so its possible its pair
- * event or timeout also triggers while the coroutine is still waiting to resume.  This means that
- * the first one to happen, the event itself or its timeout, needs to disable the other pair item
- * prior to resuming the coroutine.
- *
- * Finally, its also important to note that the event and its paired timeout could happen during
- * the same epoll_wait and possibly trigger the coroutine to start twice.  Only one can win, so the
- * first one processed sets m_processed to true and any subsequent events in the same epoll batch
- * are effectively discarded.
- */
-struct poll_info
-{
-    poll_info()  = default;
-    ~poll_info() = default;
-
-    poll_info(const poll_info&) = delete;
-    poll_info(poll_info&&)      = delete;
-    auto operator=(const poll_info&) -> poll_info& = delete;
-    auto operator=(poll_info&&) -> poll_info& = delete;
-
-    struct poll_awaiter
-    {
-        explicit poll_awaiter(poll_info& pi) noexcept : m_pi(pi) {}
-
-        auto await_ready() const noexcept -> bool { return false; }
-        auto await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept -> void
-        {
-            m_pi.m_awaiting_coroutine = awaiting_coroutine;
-            std::atomic_thread_fence(std::memory_order::release);
-        }
-        auto await_resume() noexcept -> coro::poll_status { return m_pi.m_poll_status; }
-
-        poll_info& m_pi;
-    };
-
-    auto operator co_await() noexcept -> poll_awaiter { return poll_awaiter{*this}; }
-
-    /// The file descriptor being polled on.  This is needed so that if the timeout occurs first then
-    /// the event loop can immediately disable the event within epoll.
-    io_scheduler::fd_t m_fd{-1};
-    /// The timeout's position in the timeout map.  A poll() with no timeout or yield() this is empty.
-    /// This is needed so that if the event occurs first then the event loop can immediately disable
-    /// the timeout within epoll.
-    std::optional<io_scheduler::timed_events::iterator> m_timer_pos{std::nullopt};
-    /// The awaiting coroutine for this poll info to resume upon event or timeout.
-    std::coroutine_handle<> m_awaiting_coroutine;
-    /// The status of the poll operation.
-    coro::poll_status m_poll_status{coro::poll_status::error};
-    /// Did the timeout and event trigger at the same time on the same epoll_wait call?
-    /// Once this is set to true all future events on this poll info are null and void.
-    bool m_processed{false};
-};
-
-} // namespace detail
-
 io_scheduler::io_scheduler(options opts)
-    : thread_pool(std::move(opts.pool)),
-      m_opts(std::move(opts)),
+    : m_opts(std::move(opts)),
       m_epoll_fd(epoll_create1(EPOLL_CLOEXEC)),
       m_shutdown_fd(eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK)),
-      m_timer_fd(timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC))
+      m_timer_fd(timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC)),
+      m_schedule_fd(eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK))
 {
+    if (opts.execution_strategy == execution_strategy_t::process_tasks_on_thread_pool)
+    {
+        m_thread_pool = std::make_unique<thread_pool>(std::move(m_opts.pool));
+    }
+
     epoll_event e{};
     e.events = EPOLLIN;
 
@@ -89,6 +34,9 @@ io_scheduler::io_scheduler(options opts)
 
     e.data.ptr = const_cast<void*>(m_timer_ptr);
     epoll_ctl(m_epoll_fd, EPOLL_CTL_ADD, m_timer_fd, &e);
+
+    e.data.ptr = const_cast<void*>(m_schedule_ptr);
+    epoll_ctl(m_epoll_fd, EPOLL_CTL_ADD, m_schedule_fd, &e);
 
     if (m_opts.thread_strategy == thread_strategy_t::spawn)
     {
@@ -116,12 +64,17 @@ io_scheduler::~io_scheduler()
         close(m_timer_fd);
         m_timer_fd = -1;
     }
+    if (m_schedule_fd != -1)
+    {
+        close(m_schedule_fd);
+        m_schedule_fd = -1;
+    }
 }
 
 auto io_scheduler::process_events(std::chrono::milliseconds timeout) -> std::size_t
 {
     process_events_manual(timeout);
-    return m_size.load(std::memory_order::relaxed);
+    return size();
 }
 
 auto io_scheduler::schedule_after(std::chrono::milliseconds amount) -> coro::task<void>
@@ -142,6 +95,11 @@ auto io_scheduler::yield_for(std::chrono::milliseconds amount) -> coro::task<voi
     }
     else
     {
+        // Yield/timeout tasks are considered live in the scheduler and must be accounted for. Note
+        // that if the user gives an invalid amount and schedule() is directly called it will account
+        // for the scheduled task there.
+        m_size.fetch_add(1, std::memory_order::release);
+
         // Yielding does not requiring setting the timer position on the poll info since
         // it doesn't have a corresponding 'event' that can trigger, it always waits for
         // the timeout to occur before resuming.
@@ -149,6 +107,8 @@ auto io_scheduler::yield_for(std::chrono::milliseconds amount) -> coro::task<voi
         detail::poll_info pi{};
         add_timer_token(clock::now() + amount, pi);
         co_await pi;
+
+        m_size.fetch_sub(1, std::memory_order::release);
     }
     co_return;
 }
@@ -164,17 +124,25 @@ auto io_scheduler::yield_until(time_point time) -> coro::task<void>
     }
     else
     {
+        m_size.fetch_add(1, std::memory_order::release);
+
         auto amount = std::chrono::duration_cast<std::chrono::milliseconds>(time - now);
 
         detail::poll_info pi{};
         add_timer_token(now + amount, pi);
         co_await pi;
+
+        m_size.fetch_sub(1, std::memory_order::release);
     }
     co_return;
 }
 
 auto io_scheduler::poll(fd_t fd, coro::poll_op op, std::chrono::milliseconds timeout) -> coro::task<poll_status>
 {
+    // Because the size will drop when this coroutine suspends every poll needs to undo the subtraction
+    // on the number of active tasks in the scheduler.  When this task is resumed by the event loop.
+    m_size.fetch_add(1, std::memory_order::release);
+
     // Setup two events, a timeout event and the actual poll for op event.
     // Whichever triggers first will delete the other to guarantee only one wins.
     // The resume token will be set by the scheduler to what the event turned out to be.
@@ -200,16 +168,30 @@ auto io_scheduler::poll(fd_t fd, coro::poll_op op, std::chrono::milliseconds tim
     // The event loop will 'clean-up' whichever event didn't win since the coroutine is scheduled
     // onto the thread poll its possible the other type of event could trigger while its waiting
     // to execute again, thus restarting the coroutine twice, that would be quite bad.
-    co_return co_await pi;
+    auto result = co_await pi;
+    m_size.fetch_sub(1, std::memory_order::release);
+    co_return result;
 }
 
-auto io_scheduler::shutdown(shutdown_t wait_for_tasks) noexcept -> void
+auto io_scheduler::shutdown() noexcept -> void
 {
-    thread_pool::shutdown(wait_for_tasks);
+    // Only allow shutdown to occur once.
+    if (m_shutdown_requested.exchange(true, std::memory_order::acq_rel) == false)
+    {
+        if (m_thread_pool != nullptr)
+        {
+            m_thread_pool->shutdown();
+        }
 
-    // Signal the event loop to stop asap, triggering the event fd is safe.
-    uint64_t value{1};
-    ::write(m_shutdown_fd, &value, sizeof(value));
+        // Signal the event loop to stop asap, triggering the event fd is safe.
+        uint64_t value{1};
+        ::write(m_shutdown_fd, &value, sizeof(value));
+
+        if (m_io_thread.joinable())
+        {
+            m_io_thread.join();
+        }
+    }
 }
 
 auto io_scheduler::process_events_manual(std::chrono::milliseconds timeout) -> void
@@ -231,7 +213,7 @@ auto io_scheduler::process_events_dedicated_thread() -> void
 
     m_io_processing.exchange(true, std::memory_order::release);
     // Execute tasks until stopped or there are no more tasks to complete.
-    while (!m_shutdown_requested.load(std::memory_order::relaxed) || m_size.load(std::memory_order::relaxed) > 0)
+    while (!m_shutdown_requested.load(std::memory_order::acquire) || size() > 0)
     {
         process_events_execute(m_default_timeout);
     }
@@ -258,17 +240,44 @@ auto io_scheduler::process_events_execute(std::chrono::milliseconds timeout) -> 
                 // Process all events that have timed out.
                 process_timeout_execute();
             }
+            else if (handle_ptr == m_schedule_ptr)
+            {
+                // Process scheduled coroutines.
+                process_scheduled_execute_inline();
+            }
             else if (handle_ptr == m_shutdown_ptr) [[unlikely]]
             {
                 // Nothing to do , just needed to wake-up and smell the flowers
             }
             else
             {
-                // Individual poll task wake-up, this will queue the coroutines waiting
-                // on the resume token into the FIFO queue for processing.
+                // Individual poll task wake-up.
                 process_event_execute(static_cast<detail::poll_info*>(handle_ptr), event_to_poll_status(event.events));
             }
         }
+    }
+
+    // Its important to not resume any handles until the full set is accounted for.  If a timeout
+    // and an event for the same handle happen in the same epoll_wait() call then inline processing
+    // will destruct the poll_info object before the second event is handled.  This is also possible
+    // with thread pool processing, but probably has an extremely low chance of occuring due to
+    // the thread switch required.  If m_max_events == 1 this would be unnecessary.
+
+    if (!m_handles_to_resume.empty())
+    {
+        if (m_opts.execution_strategy == execution_strategy_t::process_tasks_inline)
+        {
+            for (auto& handle : m_handles_to_resume)
+            {
+                handle.resume();
+            }
+        }
+        else
+        {
+            m_thread_pool->resume(m_handles_to_resume);
+        }
+
+        m_handles_to_resume.clear();
     }
 }
 
@@ -288,6 +297,30 @@ auto io_scheduler::event_to_poll_status(uint32_t events) -> poll_status
     }
 
     throw std::runtime_error{"invalid epoll state"};
+}
+
+auto io_scheduler::process_scheduled_execute_inline() -> void
+{
+    std::vector<std::coroutine_handle<>> tasks{};
+    {
+        // Acquire the entire list, and then reset it.
+        std::scoped_lock lk{m_scheduled_tasks_mutex};
+        tasks.swap(m_scheduled_tasks);
+
+        // Clear the schedule eventfd if this is a scheduled task.
+        eventfd_t value{0};
+        eventfd_read(m_shutdown_fd, &value);
+
+        // Clear the in memory flag to reduce eventfd_* calls on scheduling.
+        m_schedule_fd_triggered.exchange(false, std::memory_order::release);
+    }
+
+    // This set of handles can be safely resumed now since they do not have a corresponding timeout event.
+    for (auto& task : tasks)
+    {
+        task.resume();
+    }
+    m_size.fetch_sub(tasks.size(), std::memory_order::release);
 }
 
 auto io_scheduler::process_event_execute(detail::poll_info* pi, poll_status status) -> void
@@ -317,7 +350,8 @@ auto io_scheduler::process_event_execute(detail::poll_info* pi, poll_status stat
         {
             std::atomic_thread_fence(std::memory_order::acquire);
         }
-        resume(pi->m_awaiting_coroutine);
+
+        m_handles_to_resume.emplace_back(pi->m_awaiting_coroutine);
     }
 }
 
@@ -345,8 +379,6 @@ auto io_scheduler::process_timeout_execute() -> void
         }
     }
 
-    std::vector<std::coroutine_handle<>> handles{};
-    handles.reserve(poll_infos.size());
     for (auto pi : poll_infos)
     {
         if (!pi->m_processed)
@@ -367,13 +399,10 @@ auto io_scheduler::process_timeout_execute() -> void
                 // std::cerr << "process_event_execute() has a nullptr event\n";
             }
 
-            handles.emplace_back(pi->m_awaiting_coroutine);
+            m_handles_to_resume.emplace_back(pi->m_awaiting_coroutine);
             pi->m_poll_status = coro::poll_status::timeout;
         }
     }
-
-    // Resume all timed out coroutines.
-    resume(handles);
 
     // Update the time to the next smallest time point, re-take the current now time
     // since updating and resuming tasks could shift the time.

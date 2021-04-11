@@ -2,9 +2,9 @@ cmake_minimum_required(VERSION 3.0)
 project(libcoro CXX)
 
 # Set the githooks directory to auto format and update the readme.
-message("git config core.hooksPath .githooks")
+message("${PROJECT_NAME} ${CMAKE_CURRENT_SOURCE_DIR} -> git config --local core.hooksPath .githooks")
 execute_process(
-    COMMAND git config core.hooksPath .githooks
+    COMMAND git config --local core.hooksPath .githooks
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
@@ -25,8 +25,11 @@ add_subdirectory(vendor/c-ares/c-ares)
 set(LIBCORO_SOURCE_FILES
     inc/coro/concepts/awaitable.hpp
     inc/coro/concepts/buffer.hpp
+    inc/coro/concepts/executor.hpp
     inc/coro/concepts/promise.hpp
+    inc/coro/concepts/range_of.hpp
 
+    inc/coro/detail/poll_info.hpp
     inc/coro/detail/void_value.hpp
 
     inc/coro/net/connect.hpp src/net/connect.cpp
@@ -44,6 +47,7 @@ set(LIBCORO_SOURCE_FILES
 
     inc/coro/coro.hpp
     inc/coro/event.hpp src/event.cpp
+    inc/coro/fd.hpp
     inc/coro/generator.hpp
     inc/coro/io_scheduler.hpp src/io_scheduler.cpp
     inc/coro/latch.hpp
@@ -51,11 +55,10 @@ set(LIBCORO_SOURCE_FILES
     inc/coro/poll.hpp
     inc/coro/ring_buffer.hpp
     inc/coro/semaphore.hpp src/semaphore.cpp
-    inc/coro/shared_mutex.hpp src/shared_mutex.cpp
-    inc/coro/shutdown.hpp
+    inc/coro/shared_mutex.hpp
     inc/coro/stop_signal.hpp
     inc/coro/sync_wait.hpp src/sync_wait.cpp
-    inc/coro/task_container.hpp src/task_container.cpp
+    inc/coro/task_container.hpp
     inc/coro/task.hpp
     inc/coro/thread_pool.hpp src/thread_pool.cpp
     inc/coro/when_all.hpp

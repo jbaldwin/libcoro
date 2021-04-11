@@ -2,7 +2,9 @@
 
 #include "coro/concepts/awaitable.hpp"
 #include "coro/concepts/buffer.hpp"
+#include "coro/concepts/executor.hpp"
 #include "coro/concepts/promise.hpp"
+#include "coro/concepts/range_of.hpp"
 
 #include "coro/net/connect.hpp"
 #include "coro/net/dns_resolver.hpp"
@@ -25,7 +27,6 @@
 #include "coro/ring_buffer.hpp"
 #include "coro/semaphore.hpp"
 #include "coro/shared_mutex.hpp"
-#include "coro/shutdown.hpp"
 #include "coro/stop_signal.hpp"
 #include "coro/sync_wait.hpp"
 #include "coro/task.hpp"

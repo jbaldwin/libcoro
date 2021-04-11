@@ -4,7 +4,7 @@
 
 #include <chrono>
 
-TEST_CASE("dns_resolver basic")
+TEST_CASE("dns_resolver basic", "[dns]")
 {
     coro::io_scheduler scheduler{coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}}};
     coro::net::dns_resolver dns_resolver{scheduler, std::chrono::milliseconds{5000}};
@@ -26,6 +26,8 @@ TEST_CASE("dns_resolver basic")
 
     coro::sync_wait(make_host_by_name_task(coro::net::hostname{"www.example.com"}));
 
+    std::cerr << "io_scheduler.size() before shutdown = " << scheduler.size() << "\n";
     scheduler.shutdown();
+    std::cerr << "io_scheduler.size() after shutdown = " << scheduler.size() << "\n";
     REQUIRE(scheduler.empty());
 }

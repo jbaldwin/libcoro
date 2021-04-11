@@ -1,5 +1,7 @@
 #include "coro/thread_pool.hpp"
 
+#include <iostream>
+
 namespace coro
 {
 thread_pool::operation::operation(thread_pool& tp) noexcept : m_thread_pool(tp)
@@ -35,30 +37,39 @@ auto thread_pool::schedule() -> operation
 {
     if (!m_shutdown_requested.load(std::memory_order::relaxed))
     {
-        m_size.fetch_add(1, std::memory_order::relaxed);
+        m_size.fetch_add(1, std::memory_order::release);
         return operation{*this};
     }
 
     throw std::runtime_error("coro::thread_pool is shutting down, unable to schedule new tasks.");
 }
 
-auto thread_pool::shutdown(shutdown_t wait_for_tasks) noexcept -> void
+auto thread_pool::resume(std::coroutine_handle<> handle) noexcept -> void
 {
-    if (!m_shutdown_requested.exchange(true, std::memory_order::release))
+    if (handle == nullptr)
+    {
+        return;
+    }
+
+    m_size.fetch_add(1, std::memory_order::release);
+    schedule_impl(handle);
+}
+
+auto thread_pool::shutdown() noexcept -> void
+{
+    // Only allow shutdown to occur once.
+    if (m_shutdown_requested.exchange(true, std::memory_order::acq_rel) == false)
     {
         for (auto& thread : m_threads)
         {
             thread.request_stop();
         }
 
-        if (wait_for_tasks == shutdown_t::sync)
+        for (auto& thread : m_threads)
         {
-            for (auto& thread : m_threads)
+            if (thread.joinable())
             {
-                if (thread.joinable())
-                {
-                    thread.join();
-                }
+                thread.join();
             }
         }
     }
@@ -110,39 +121,6 @@ auto thread_pool::schedule_impl(std::coroutine_handle<> handle) noexcept -> void
     {
         std::scoped_lock lk{m_wait_mutex};
         m_queue.emplace_back(handle);
-    }
-
-    m_wait_cv.notify_one();
-}
-
-auto thread_pool::resume(std::coroutine_handle<> handle) noexcept -> void
-{
-    if (handle == nullptr)
-    {
-        return;
-    }
-
-    m_size.fetch_add(1, std::memory_order::relaxed);
-    schedule_impl(handle);
-}
-
-auto thread_pool::resume(const std::vector<std::coroutine_handle<>>& handles) noexcept -> void
-{
-    m_size.fetch_add(handles.size(), std::memory_order::relaxed);
-
-    {
-        std::scoped_lock lk{m_wait_mutex};
-        for (const auto& handle : handles)
-        {
-            if (handle != nullptr) [[likely]]
-            {
-                m_queue.emplace_back(handle);
-            }
-            else
-            {
-                m_size.fetch_sub(1, std::memory_order::release);
-            }
-        }
     }
 
     m_wait_cv.notify_one();

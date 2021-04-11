@@ -1,5 +1,7 @@
 #pragma once
 
+#include "coro/concepts/executor.hpp"
+
 #include <atomic>
 #include <coroutine>
 
@@ -27,36 +29,6 @@ t2: resume()
 class event
 {
 public:
-    /**
-     * Creates an event with the given initial state of being set or not set.
-     * @param initially_set By default all events start as not set, but if needed this parameter can
-     *                      set the event to already be triggered.
-     */
-    explicit event(bool initially_set = false) noexcept;
-    ~event() = default;
-
-    event(const event&) = delete;
-    event(event&&)      = delete;
-    auto operator=(const event&) -> event& = delete;
-    auto operator=(event&&) -> event& = delete;
-
-    /**
-     * @return True if this event is currently in the set state.
-     */
-    auto is_set() const noexcept -> bool { return m_state.load(std::memory_order_acquire) == this; }
-
-    /**
-     * Sets this event and resumes all awaiters.  Note that all waiters will be resumed onto this
-     * thread of execution.
-     */
-    auto set() noexcept -> void;
-
-    /**
-     * Sets this event and resumes all awaiters onto the given thread pool.  This will distribute
-     * the waiters across the thread pools threads.
-     */
-    auto set(coro::thread_pool& tp) noexcept -> void;
-
     struct awaiter
     {
         /**
@@ -89,6 +61,50 @@ public:
         /// The next awaiter in line for this event, nullptr if this is the end.
         awaiter* m_next{nullptr};
     };
+
+    /**
+     * Creates an event with the given initial state of being set or not set.
+     * @param initially_set By default all events start as not set, but if needed this parameter can
+     *                      set the event to already be triggered.
+     */
+    explicit event(bool initially_set = false) noexcept;
+    ~event() = default;
+
+    event(const event&) = delete;
+    event(event&&)      = delete;
+    auto operator=(const event&) -> event& = delete;
+    auto operator=(event&&) -> event& = delete;
+
+    /**
+     * @return True if this event is currently in the set state.
+     */
+    auto is_set() const noexcept -> bool { return m_state.load(std::memory_order_acquire) == this; }
+
+    /**
+     * Sets this event and resumes all awaiters.  Note that all waiters will be resumed onto this
+     * thread of execution.
+     */
+    auto set() noexcept -> void;
+
+    /**
+     * Sets this event and resumes all awaiters onto the given thread pool.  This will distribute
+     * the waiters across the thread pools threads.
+     */
+    template<concepts::executor executor_type>
+    auto set(executor_type& e) noexcept -> void
+    {
+        void* old_value = m_state.exchange(this, std::memory_order::acq_rel);
+        if (old_value != this)
+        {
+            auto* waiters = static_cast<awaiter*>(old_value);
+            while (waiters != nullptr)
+            {
+                auto* next = waiters->m_next;
+                e.resume(waiters->m_awaiting_coroutine);
+                waiters = next;
+            }
+        }
+    }
 
     /**
      * @return An awaiter struct to suspend and resume this coroutine for when the event is set.

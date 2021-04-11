@@ -145,7 +145,7 @@ auto dns_resolver::ares_poll() -> void
     std::vector<coro::task<void>> poll_tasks{};
     for (size_t i = 0; i < new_sockets; ++i)
     {
-        auto fd = static_cast<io_scheduler::fd_t>(ares_sockets[i]);
+        auto fd = static_cast<fd_t>(ares_sockets[i]);
 
         // If this socket is not currently actively polling, start polling!
         if (m_active_sockets.emplace(fd).second)
@@ -155,7 +155,7 @@ auto dns_resolver::ares_poll() -> void
     }
 }
 
-auto dns_resolver::make_poll_task(io_scheduler::fd_t fd, poll_op ops) -> coro::task<void>
+auto dns_resolver::make_poll_task(fd_t fd, poll_op ops) -> coro::task<void>
 {
     auto result = co_await m_io_scheduler.poll(fd, ops, m_timeout);
     switch (result)

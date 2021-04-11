@@ -27,7 +27,9 @@ TEST_CASE("io_scheduler schedule single task", "[io_scheduler]")
 
     auto value = coro::sync_wait(make_task());
     REQUIRE(value == 42);
+    std::cerr << "io_scheduler.size() before shutdown = " << s.size() << "\n";
     s.shutdown();
+    std::cerr << "io_scheduler.size() after shutdown = " << s.size() << "\n";
     REQUIRE(s.empty());
 }
 
@@ -52,6 +54,11 @@ TEST_CASE("io_scheduler submit mutiple tasks", "[io_scheduler]")
     coro::sync_wait(coro::when_all(std::move(tasks)));
 
     REQUIRE(counter == n);
+
+    std::cerr << "io_scheduler.size() before shutdown = " << s.size() << "\n";
+    s.shutdown();
+    std::cerr << "io_scheduler.size() after shutdown = " << s.size() << "\n";
+    REQUIRE(s.empty());
 }
 
 TEST_CASE("io_scheduler task with multiple events", "[io_scheduler]")
@@ -83,7 +90,9 @@ TEST_CASE("io_scheduler task with multiple events", "[io_scheduler]")
 
     REQUIRE(counter == 3);
 
+    std::cerr << "io_scheduler.size() before shutdown = " << s.size() << "\n";
     s.shutdown();
+    std::cerr << "io_scheduler.size() after shutdown = " << s.size() << "\n";
     REQUIRE(s.empty());
 }
 
@@ -108,7 +117,9 @@ TEST_CASE("io_scheduler task with read poll", "[io_scheduler]")
 
     coro::sync_wait(coro::when_all(make_poll_read_task(), make_poll_write_task()));
 
+    std::cerr << "io_scheduler.size() before shutdown = " << s.size() << "\n";
     s.shutdown();
+    std::cerr << "io_scheduler.size() after shutdown = " << s.size() << "\n";
     REQUIRE(s.empty());
     close(trigger_fd);
 }
@@ -135,7 +146,9 @@ TEST_CASE("io_scheduler task with read poll with timeout", "[io_scheduler]")
 
     coro::sync_wait(coro::when_all(make_poll_read_task(), make_poll_write_task()));
 
+    std::cerr << "io_scheduler.size() before shutdown = " << s.size() << "\n";
     s.shutdown();
+    std::cerr << "io_scheduler.size() after shutdown = " << s.size() << "\n";
     REQUIRE(s.empty());
     close(trigger_fd);
 }
@@ -155,7 +168,9 @@ TEST_CASE("io_scheduler task with read poll timeout", "[io_scheduler]")
 
     coro::sync_wait(make_task());
 
+    std::cerr << "io_scheduler.size() before shutdown = " << s.size() << "\n";
     s.shutdown();
+    std::cerr << "io_scheduler.size() after shutdown = " << s.size() << "\n";
     REQUIRE(s.empty());
     close(trigger_fd);
 }
@@ -289,7 +304,9 @@ TEST_CASE("io_scheduler separate thread resume with return", "[io_scheduler]")
     coro::sync_wait(make_task());
 
     service.join();
+    std::cerr << "io_scheduler.size() before shutdown = " << s.size() << "\n";
     s.shutdown();
+    std::cerr << "io_scheduler.size() after shutdown = " << s.size() << "\n";
     REQUIRE(s.empty());
 }
 
@@ -317,6 +334,11 @@ TEST_CASE("io_scheduler with basic task", "[io_scheduler]")
     auto counter = coro::sync_wait(func());
 
     REQUIRE(counter == expected_value);
+
+    std::cerr << "io_scheduler.size() before shutdown = " << s.size() << "\n";
+    s.shutdown();
+    std::cerr << "io_scheduler.size() after shutdown = " << s.size() << "\n";
+    REQUIRE(s.empty());
 }
 
 TEST_CASE("io_scheduler scheduler_after", "[io_scheduler]")
@@ -344,7 +366,9 @@ TEST_CASE("io_scheduler scheduler_after", "[io_scheduler]")
 
         REQUIRE(counter == 1);
         REQUIRE(duration < wait_for);
+        std::cerr << "io_scheduler.size() before shutdown = " << s.size() << "\n";
         s.shutdown();
+        std::cerr << "io_scheduler.size() after shutdown = " << s.size() << "\n";
         REQUIRE(s.empty());
     }
 
@@ -360,7 +384,9 @@ TEST_CASE("io_scheduler scheduler_after", "[io_scheduler]")
 
         REQUIRE(counter == 2);
         REQUIRE(duration >= wait_for);
+        std::cerr << "io_scheduler.size() before shutdown = " << s.size() << "\n";
         s.shutdown();
+        std::cerr << "io_scheduler.size() after shutdown = " << s.size() << "\n";
         REQUIRE(s.empty());
     }
 }
@@ -432,6 +458,11 @@ TEST_CASE("io_scheduler yield", "[io_scheduler]")
     };
 
     coro::sync_wait(func());
+
+    std::cerr << "io_scheduler.size() before shutdown = " << s.size() << "\n";
+    s.shutdown();
+    std::cerr << "io_scheduler.size() after shutdown = " << s.size() << "\n";
+    REQUIRE(s.empty());
 }
 
 TEST_CASE("io_scheduler yield_for", "[io_scheduler]")
@@ -449,6 +480,11 @@ TEST_CASE("io_scheduler yield_for", "[io_scheduler]")
 
     auto duration = coro::sync_wait(make_task());
     REQUIRE(duration >= wait_for);
+
+    std::cerr << "io_scheduler.size() before shutdown = " << s.size() << "\n";
+    s.shutdown();
+    std::cerr << "io_scheduler.size() after shutdown = " << s.size() << "\n";
+    REQUIRE(s.empty());
 }
 
 TEST_CASE("io_scheduler yield_until", "[io_scheduler]")
@@ -468,6 +504,11 @@ TEST_CASE("io_scheduler yield_until", "[io_scheduler]")
 
     auto duration = coro::sync_wait(make_task());
     REQUIRE(duration >= (wait_for - epsilon));
+
+    std::cerr << "io_scheduler.size() before shutdown = " << s.size() << "\n";
+    s.shutdown();
+    std::cerr << "io_scheduler.size() after shutdown = " << s.size() << "\n";
+    REQUIRE(s.empty());
 }
 
 TEST_CASE("io_scheduler multipler event waiters", "[io_scheduler]")
@@ -505,6 +546,11 @@ TEST_CASE("io_scheduler multipler event waiters", "[io_scheduler]")
     };
 
     coro::sync_wait(coro::when_all(spawn(), release()));
+
+    std::cerr << "io_scheduler.size() before shutdown = " << s.size() << "\n";
+    s.shutdown();
+    std::cerr << "io_scheduler.size() after shutdown = " << s.size() << "\n";
+    REQUIRE(s.empty());
 }
 
 TEST_CASE("io_scheduler self generating coroutine (stack overflow check)", "[io_scheduler]")
@@ -541,9 +587,14 @@ TEST_CASE("io_scheduler self generating coroutine (stack overflow check)", "[io_
     }
 
     REQUIRE(tasks.size() == total - 1);
+
+    std::cerr << "io_scheduler.size() before shutdown = " << s.size() << "\n";
+    s.shutdown();
+    std::cerr << "io_scheduler.size() after shutdown = " << s.size() << "\n";
+    REQUIRE(s.empty());
 }
 
-TEST_CASE("io_scheduler manual process events", "[io_scheduler]")
+TEST_CASE("io_scheduler manual process events thread pool", "[io_scheduler]")
 {
     auto               trigger_fd = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
     coro::io_scheduler s{coro::io_scheduler::options{
@@ -555,17 +606,23 @@ TEST_CASE("io_scheduler manual process events", "[io_scheduler]")
     std::atomic<bool> polling{false};
 
     auto make_poll_read_task = [&]() -> coro::task<void> {
+        std::cerr << "poll task start s.size() == " << s.size() << "\n";
         co_await s.schedule();
-        polling     = true;
+        polling = true;
+        std::cerr << "poll task polling s.size() == " << s.size() << "\n";
         auto status = co_await s.poll(trigger_fd, coro::poll_op::read);
         REQUIRE(status == coro::poll_status::event);
+        std::cerr << "poll task exiting s.size() == " << s.size() << "\n";
         co_return;
     };
 
     auto make_poll_write_task = [&]() -> coro::task<void> {
+        std::cerr << "write task start s.size() == " << s.size() << "\n";
         co_await s.schedule();
         uint64_t value{42};
+        std::cerr << "write task writing s.size() == " << s.size() << "\n";
         write(trigger_fd, &value, sizeof(value));
+        std::cerr << "write task exiting s.size() == " << s.size() << "\n";
         co_return;
     };
 
@@ -580,9 +637,64 @@ TEST_CASE("io_scheduler manual process events", "[io_scheduler]")
 
     write_task.resume();
 
-    REQUIRE(s.process_events(100ms) == 1);
+    while (s.process_events(100ms) > 0)
+        ;
 
+    std::cerr << "io_scheduler.size() before shutdown = " << s.size() << "\n";
     s.shutdown();
+    std::cerr << "io_scheduler.size() after shutdown = " << s.size() << "\n";
+    REQUIRE(s.empty());
+    close(trigger_fd);
+}
+
+TEST_CASE("io_scheduler manual process events inline", "[io_scheduler]")
+{
+    auto               trigger_fd = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
+    coro::io_scheduler s{coro::io_scheduler::options{
+        .thread_strategy    = coro::io_scheduler::thread_strategy_t::manual,
+        .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline}};
+
+    auto make_poll_read_task = [&]() -> coro::task<void> {
+        std::cerr << "poll task start s.size() == " << s.size() << "\n";
+        co_await s.schedule();
+        std::cerr << "poll task polling s.size() == " << s.size() << "\n";
+        auto status = co_await s.poll(trigger_fd, coro::poll_op::read);
+        REQUIRE(status == coro::poll_status::event);
+        std::cerr << "poll task exiting s.size() == " << s.size() << "\n";
+        co_return;
+    };
+
+    auto make_poll_write_task = [&]() -> coro::task<void> {
+        std::cerr << "write task start s.size() == " << s.size() << "\n";
+        co_await s.schedule();
+        uint64_t value{42};
+        std::cerr << "write task writing s.size() == " << s.size() << "\n";
+        write(trigger_fd, &value, sizeof(value));
+        std::cerr << "write task exiting s.size() == " << s.size() << "\n";
+        co_return;
+    };
+
+    auto poll_task  = make_poll_read_task();
+    auto write_task = make_poll_write_task();
+
+    // Start the tasks by scheduling them into the io scheduler.
+    poll_task.resume();
+    write_task.resume();
+
+    // Now process them to completion.
+    while (true)
+    {
+        auto remaining = s.process_events(100ms);
+        std::cerr << "remaining " << remaining << "\n";
+        if (remaining == 0)
+        {
+            break;
+        }
+    };
+
+    std::cerr << "io_scheduler.size() before shutdown = " << s.size() << "\n";
+    s.shutdown();
+    std::cerr << "io_scheduler.size() after shutdown = " << s.size() << "\n";
     REQUIRE(s.empty());
     close(trigger_fd);
 }
