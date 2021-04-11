@@ -27,6 +27,7 @@ set(LIBCORO_SOURCE_FILES
     inc/coro/concepts/buffer.hpp
     inc/coro/concepts/promise.hpp
 
+    inc/coro/detail/poll_info.hpp
     inc/coro/detail/void_value.hpp
 
     inc/coro/net/connect.hpp src/net/connect.cpp
@@ -44,6 +45,7 @@ set(LIBCORO_SOURCE_FILES
 
     inc/coro/coro.hpp
     inc/coro/event.hpp src/event.cpp
+    inc/coro/fd.hpp
     inc/coro/generator.hpp
     inc/coro/io_scheduler.hpp src/io_scheduler.cpp
     inc/coro/latch.hpp

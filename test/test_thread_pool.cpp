@@ -125,7 +125,7 @@ TEST_CASE("thread_pool shutdown", "[thread_pool]")
         co_return false;
     };
 
-    tp.shutdown(coro::shutdown_t::async);
+    tp.shutdown();
 
     REQUIRE(coro::sync_wait(f(tp)) == true);
 }

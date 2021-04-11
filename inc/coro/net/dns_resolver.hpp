@@ -1,5 +1,6 @@
 #pragma once
 
+#include "coro/fd.hpp"
 #include "coro/io_scheduler.hpp"
 #include "coro/net/hostname.hpp"
 #include "coro/net/ip_address.hpp"
@@ -83,7 +84,7 @@ private:
 
     /// This is the set of sockets that are currently being actively polled so multiple poll tasks
     /// are not setup when ares_poll() is called.
-    std::unordered_set<io_scheduler::fd_t> m_active_sockets{};
+    std::unordered_set<fd_t> m_active_sockets{};
 
     task_container<io_scheduler> m_task_container;
 
@@ -93,7 +94,7 @@ private:
     static std::mutex m_ares_mutex;
 
     auto ares_poll() -> void;
-    auto make_poll_task(io_scheduler::fd_t fd, poll_op ops) -> coro::task<void>;
+    auto make_poll_task(fd_t fd, poll_op ops) -> coro::task<void>;
 };
 
 } // namespace coro::net

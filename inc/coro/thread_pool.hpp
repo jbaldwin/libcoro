@@ -1,7 +1,6 @@
 #pragma once
 
 #include "coro/event.hpp"
-#include "coro/shutdown.hpp"
 #include "coro/task.hpp"
 
 #include <atomic>
@@ -140,11 +139,10 @@ public:
 
     /**
      * Shutsdown the thread pool.  This will finish any tasks scheduled prior to calling this
-     * function but will prevent the thread pool from scheduling any new tasks.
-     * @param wait_for_tasks Should this function block until all remaining scheduled tasks have
-     *                       completed?  Pass in sync to wait, or async to not block.
+     * function but will prevent the thread pool from scheduling any new tasks.  This call is
+     * blocking and will wait until all inflight tasks are completed before returnin.
      */
-    auto shutdown(shutdown_t wait_for_tasks = shutdown_t::sync) noexcept -> void;
+    auto shutdown() noexcept -> void;
 
     /**
      * @return The number of tasks waiting in the task queue + the executing tasks.

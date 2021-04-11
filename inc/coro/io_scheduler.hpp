@@ -1,5 +1,7 @@
 #pragma once
 
+#include "coro/detail/poll_info.hpp"
+#include "coro/fd.hpp"
 #include "coro/net/socket.hpp"
 #include "coro/poll.hpp"
 #include "coro/thread_pool.hpp"
@@ -14,11 +16,6 @@
 
 namespace coro
 {
-namespace detail
-{
-class poll_info;
-} // namespace detail
-
 class event;
 
 namespace net
@@ -32,15 +29,13 @@ class io_scheduler
     friend event;
     friend net::dns_resolver;
 
-    using clock        = std::chrono::steady_clock;
-    using time_point   = clock::time_point;
-    using timed_events = std::multimap<time_point, detail::poll_info*>;
+    using clock        = detail::poll_info::clock;
+    using time_point   = detail::poll_info::time_point;
+    using timed_events = detail::poll_info::timed_events;
 
 public:
     class schedule_operation;
     friend schedule_operation;
-
-    using fd_t = int;
 
     enum class thread_strategy_t
     {
@@ -249,13 +244,9 @@ public:
 
     /**
      * Starts the shutdown of the io scheduler.  All currently executing and pending tasks will complete
-     * prior to shutting down.
-     * @param wait_for_tasks Given shutdown_t::sync this function will block until all oustanding
-     *                       tasks are completed.  Given shutdown_t::async this function will trigger
-     *                       the shutdown process but return immediately.  In this case the io_scheduler's
-     *                       destructor will block if any background threads haven't joined.
+     * prior to shutting down.  This call is blocking and will not return until all tasks complete.
      */
-    auto shutdown(shutdown_t wait_for_tasks = shutdown_t::sync) noexcept -> void;
+    auto shutdown() noexcept -> void;
 
 private:
     /// The configuration options.

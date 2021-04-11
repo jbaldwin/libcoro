@@ -44,17 +44,16 @@ auto thread_pool::schedule() -> operation
     throw std::runtime_error("coro::thread_pool is shutting down, unable to schedule new tasks.");
 }
 
-auto thread_pool::shutdown(shutdown_t wait_for_tasks) noexcept -> void
+auto thread_pool::shutdown() noexcept -> void
 {
-    if (!m_shutdown_requested.exchange(true, std::memory_order::acq_rel))
+    // Only allow shutdown to occur once.
+    if (m_shutdown_requested.exchange(true, std::memory_order::acq_rel) == false)
     {
         for (auto& thread : m_threads)
         {
             thread.request_stop();
         }
 
-        // if (wait_for_tasks == shutdown_t::sync)
-        // {
         for (auto& thread : m_threads)
         {
             if (thread.joinable())
@@ -62,7 +61,6 @@ auto thread_pool::shutdown(shutdown_t wait_for_tasks) noexcept -> void
                 thread.join();
             }
         }
-        // }
     }
 }
 
@@ -95,8 +93,6 @@ auto thread_pool::executor(std::stop_token stop_token, std::size_t idx) -> void
             m_size.fetch_sub(1, std::memory_order::release);
         }
     }
-
-    std::cerr << "thread_pool::executor m_size = " << m_size.load(std::memory_order::acquire) << "\n";
 
     if (m_opts.on_thread_stop_functor != nullptr)
     {
