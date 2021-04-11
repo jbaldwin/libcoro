@@ -11,8 +11,6 @@
 
 namespace coro
 {
-class thread_pool;
-
 template<concepts::executor executor_type>
 class task_container
 {

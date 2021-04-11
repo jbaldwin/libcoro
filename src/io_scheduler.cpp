@@ -242,10 +242,6 @@ auto io_scheduler::process_events_execute(std::chrono::milliseconds timeout) -> 
             }
             else if (handle_ptr == m_schedule_ptr)
             {
-                // Clear the schedule eventfd if this is a scheduled task.
-                eventfd_t value{0};
-                eventfd_read(m_shutdown_fd, &value);
-
                 process_scheduled_execute_inline();
             }
             else if (handle_ptr == m_shutdown_ptr) [[unlikely]]
@@ -287,6 +283,13 @@ auto io_scheduler::process_scheduled_execute_inline() -> void
         // Acquire the entire list, and then reset it.
         std::scoped_lock lk{m_scheduled_tasks_mutex};
         tasks.swap(m_scheduled_tasks);
+
+        // Clear the schedule eventfd if this is a scheduled task.
+        eventfd_t value{0};
+        eventfd_read(m_shutdown_fd, &value);
+
+        // Clear the in memory flag to reduce eventfd_* calls on scheduling.
+        m_schedule_fd_triggered.exchange(false, std::memory_order::release);
     }
 
     for (auto& task : tasks)

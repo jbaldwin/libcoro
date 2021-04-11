@@ -2,9 +2,9 @@ cmake_minimum_required(VERSION 3.0)
 project(libcoro CXX)
 
 # Set the githooks directory to auto format and update the readme.
-message("git config core.hooksPath .githooks")
+message("${PROJECT_NAME} ${CMAKE_CURRENT_SOURCE_DIR} -> git config --local core.hooksPath .githooks")
 execute_process(
-    COMMAND git config core.hooksPath .githooks
+    COMMAND git config --local core.hooksPath .githooks
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
@@ -53,11 +53,10 @@ set(LIBCORO_SOURCE_FILES
     inc/coro/poll.hpp
     inc/coro/ring_buffer.hpp
     inc/coro/semaphore.hpp src/semaphore.cpp
-    inc/coro/shared_mutex.hpp src/shared_mutex.cpp
-    inc/coro/shutdown.hpp
+    inc/coro/shared_mutex.hpp
     inc/coro/stop_signal.hpp
     inc/coro/sync_wait.hpp src/sync_wait.cpp
-    inc/coro/task_container.hpp src/task_container.cpp
+    inc/coro/task_container.hpp
     inc/coro/task.hpp
     inc/coro/thread_pool.hpp src/thread_pool.cpp
     inc/coro/when_all.hpp

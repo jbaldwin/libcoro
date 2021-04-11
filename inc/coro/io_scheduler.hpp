@@ -16,19 +16,8 @@
 
 namespace coro
 {
-class event;
-
-namespace net
-{
-class dns_resolver;
-} // namespace net
-
 class io_scheduler
 {
-    friend detail::poll_info;
-    friend event;
-    friend net::dns_resolver;
-
     using clock        = detail::poll_info::clock;
     using time_point   = detail::poll_info::time_point;
     using timed_events = detail::poll_info::timed_events;
@@ -39,9 +28,9 @@ public:
 
     enum class thread_strategy_t
     {
-        /// Spawns a background thread for the scheduler to run on.
+        /// Spawns a dedicated background thread for the scheduler to run on.
         spawn,
-        /// Requires the user to call process_events() to drive the scheduler
+        /// Requires the user to call process_events() to drive the scheduler.
         manual
     };
 
@@ -49,10 +38,12 @@ public:
     {
         /// Tasks will be FIFO queued to be executed on a thread pool.  This is better for tasks that
         /// are long lived and will use lots of CPU because long lived tasks will block other i/o
-        /// operations.
+        /// operations while they complete.  This strategy is generally better for lower latency
+        /// requirements at the cost of throughput.
         process_tasks_on_thread_pool,
         /// Tasks will be executed inline on the io scheduler thread.  This is better for short tasks
-        /// that can be quickly processed and not block other i/o operations.
+        /// that can be quickly processed and not block other i/o operations for very long.  This
+        /// strategy is generally better for higher throughput at the cost of latency.
         process_tasks_inline
     };
 
@@ -221,18 +212,43 @@ public:
     }
 
     /**
+     * Resumes execution of a direct coroutine handle on this io scheduler.
+     * @param handle The coroutine handle to resume execution.
+     */
+    auto resume(std::coroutine_handle<> handle) -> void
+    {
+        if (m_opts.execution_strategy == execution_strategy_t::process_tasks_inline)
+        {
+            {
+                std::scoped_lock lk{m_scheduled_tasks_mutex};
+                m_scheduled_tasks.emplace_back(handle);
+            }
+
+            bool expected{false};
+            if (m_schedule_fd_triggered.compare_exchange_strong(
+                    expected, true, std::memory_order::release, std::memory_order::relaxed))
+            {
+                eventfd_t value{1};
+                eventfd_write(m_schedule_fd, value);
+            }
+        }
+        else
+        {
+            m_thread_pool->resume(handle);
+        }
+    }
+
+    /**
      * @return The number of tasks waiting in the task queue + the executing tasks.
      */
     auto size() const noexcept -> std::size_t
     {
         if (m_opts.execution_strategy == execution_strategy_t::process_tasks_inline)
         {
-            std::cerr << "(" << m_size.load(std::memory_order::acquire) << ") ";
             return m_size.load(std::memory_order::acquire);
         }
         else
         {
-            std::cerr << "(" << m_size.load(std::memory_order::acquire) << ", " << m_thread_pool->size() << ") ";
             return m_size.load(std::memory_order::acquire) + m_thread_pool->size();
         }
     }
@@ -294,30 +310,6 @@ private:
     auto add_timer_token(time_point tp, detail::poll_info& pi) -> timed_events::iterator;
     auto remove_timer_token(timed_events::iterator pos) -> void;
     auto update_timeout(time_point now) -> void;
-
-public:
-    auto resume(std::coroutine_handle<> handle) -> void
-    {
-        if (m_opts.execution_strategy == execution_strategy_t::process_tasks_inline)
-        {
-            {
-                std::scoped_lock lk{m_scheduled_tasks_mutex};
-                m_scheduled_tasks.emplace_back(handle);
-            }
-
-            bool expected{false};
-            if (m_schedule_fd_triggered.compare_exchange_strong(
-                    expected, true, std::memory_order::release, std::memory_order::relaxed))
-            {
-                eventfd_t value{1};
-                eventfd_write(m_schedule_fd, value);
-            }
-        }
-        else
-        {
-            m_thread_pool->resume(handle);
-        }
-    }
 
 private:
     static constexpr const int   m_shutdown_object{0};
