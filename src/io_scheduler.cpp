@@ -309,7 +309,7 @@ auto io_scheduler::process_scheduled_execute_inline() -> void
 
         // Clear the schedule eventfd if this is a scheduled task.
         eventfd_t value{0};
-        eventfd_read(m_shutdown_fd, &value);
+        eventfd_read(m_schedule_fd, &value);
 
         // Clear the in memory flag to reduce eventfd_* calls on scheduling.
         m_schedule_fd_triggered.exchange(false, std::memory_order::release);
