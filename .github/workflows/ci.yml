@@ -57,6 +57,7 @@ jobs:
                         ninja-build \
                         gcc-c++ \
                         lcov \
+                        openssl \
                         openssl-devel
             -   name: Checkout # recurisve checkout requires git to be installed first
                 uses: actions/checkout@v2
@@ -114,6 +115,7 @@ jobs:
                         git \
                         ninja-build \
                         gcc-c++-10.3.1 \
+                        openssl \
                         openssl-devel
             -   name: Checkout # recurisve checkout requires git to be installed first
                 uses: actions/checkout@v2
@@ -147,6 +149,7 @@ jobs:
                         git \
                         ninja-build \
                         gcc-c++ \
+                        openssl \
                         openssl-devel
             -   name: Checkout # recurisve checkout requires git to be installed first
                 uses: actions/checkout@v2

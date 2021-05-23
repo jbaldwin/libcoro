@@ -9,10 +9,12 @@ TEST_CASE("latch count=0", "[latch]")
 {
     coro::latch l{0};
 
-    auto task = [&]() -> coro::task<uint64_t> {
+    auto make_task = [&]() -> coro::task<uint64_t> {
         co_await l;
         co_return 42;
-    }();
+    };
+
+    auto task = make_task();
 
     task.resume();
     REQUIRE(task.is_ready()); // The latch never waits due to zero count.
@@ -23,11 +25,13 @@ TEST_CASE("latch count=1", "[latch]")
 {
     coro::latch l{1};
 
-    auto task = [&]() -> coro::task<uint64_t> {
+    auto make_task = [&]() -> coro::task<uint64_t> {
         auto workers = l.remaining();
         co_await l;
         co_return workers;
-    }();
+    };
+
+    auto task = make_task();
 
     task.resume();
     REQUIRE_FALSE(task.is_ready());
@@ -41,11 +45,13 @@ TEST_CASE("latch count=1 count_down=5", "[latch]")
 {
     coro::latch l{1};
 
-    auto task = [&]() -> coro::task<uint64_t> {
+    auto make_task = [&]() -> coro::task<uint64_t> {
         auto workers = l.remaining();
         co_await l;
         co_return workers;
-    }();
+    };
+
+    auto task = make_task();
 
     task.resume();
     REQUIRE_FALSE(task.is_ready());
@@ -59,11 +65,13 @@ TEST_CASE("latch count=5 count_down=1 x5", "[latch]")
 {
     coro::latch l{5};
 
-    auto task = [&]() -> coro::task<uint64_t> {
+    auto make_task = [&]() -> coro::task<uint64_t> {
         auto workers = l.remaining();
         co_await l;
         co_return workers;
-    }();
+    };
+
+    auto task = make_task();
 
     task.resume();
     REQUIRE_FALSE(task.is_ready());
@@ -85,11 +93,13 @@ TEST_CASE("latch count=5 count_down=5", "[latch]")
 {
     coro::latch l{5};
 
-    auto task = [&]() -> coro::task<uint64_t> {
+    auto make_task = [&]() -> coro::task<uint64_t> {
         auto workers = l.remaining();
         co_await l;
         co_return workers;
-    }();
+    };
+
+    auto task = make_task();
 
     task.resume();
     REQUIRE_FALSE(task.is_ready());
