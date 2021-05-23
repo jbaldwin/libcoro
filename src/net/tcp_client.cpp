@@ -40,8 +40,8 @@ tcp_client::~tcp_client()
     if (m_ssl_info.m_ssl_ptr != nullptr && !m_ssl_info.m_ssl_error)
     {
         // Should the shutdown timeout be configurable?
-        ssl_shutdown_and_free(
-            *m_io_scheduler, std::move(m_socket), std::move(m_ssl_info.m_ssl_ptr), std::chrono::seconds{30});
+        m_io_scheduler->schedule(ssl_shutdown_and_free(
+            *m_io_scheduler, std::move(m_socket), std::move(m_ssl_info.m_ssl_ptr), std::chrono::seconds{30}));
     }
 }
 
@@ -205,9 +205,6 @@ auto tcp_client::ssl_shutdown_and_free(
     io_scheduler& io_scheduler, net::socket s, ssl_unique_ptr ssl_ptr, std::chrono::milliseconds timeout)
     -> coro::task<void>
 {
-    // Immediately transfer onto the scheduler thread pool for background processing.
-    co_await io_scheduler.schedule();
-
     while (true)
     {
         auto r = SSL_shutdown(ssl_ptr.get());

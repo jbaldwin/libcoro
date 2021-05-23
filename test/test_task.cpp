@@ -206,9 +206,9 @@ TEST_CASE("task throws void", "[task]")
         co_return;
     }();
 
-    task.resume();
+    REQUIRE_NOTHROW(task.resume());
     REQUIRE(task.is_ready());
-    REQUIRE_THROWS_AS(task.promise().return_value(), std::runtime_error);
+    REQUIRE_THROWS_AS(task.promise().return_void(), std::runtime_error);
 }
 
 TEST_CASE("task throws non-void l-value", "[task]")
@@ -218,7 +218,7 @@ TEST_CASE("task throws non-void l-value", "[task]")
         co_return 42;
     }();
 
-    task.resume();
+    REQUIRE_NOTHROW(task.resume());
     REQUIRE(task.is_ready());
     REQUIRE_THROWS_AS(task.promise().return_value(), std::runtime_error);
 }

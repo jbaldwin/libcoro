@@ -46,7 +46,7 @@ struct promise_base
 
     auto initial_suspend() { return std::suspend_always{}; }
 
-    auto final_suspend() { return final_awaitable{}; }
+    auto final_suspend() noexcept(true) { return final_awaitable{}; }
 
     auto unhandled_exception() -> void { m_exception_ptr = std::current_exception(); }
 
@@ -105,9 +105,7 @@ struct promise<void> : public promise_base
 
     auto get_return_object() noexcept -> task_type;
 
-    auto return_void() noexcept -> void {}
-
-    auto return_value() const -> void
+    auto return_void() -> void
     {
         if (m_exception_ptr)
         {
@@ -119,7 +117,7 @@ struct promise<void> : public promise_base
 } // namespace detail
 
 template<typename return_type>
-class task
+class [[nodiscard]] task
 {
 public:
     using task_type        = task<return_type>;
@@ -202,7 +200,19 @@ public:
     {
         struct awaitable : public awaitable_base
         {
-            auto await_resume() -> decltype(auto) { return this->m_coroutine.promise().return_value(); }
+            auto await_resume() -> decltype(auto)
+            {
+                if constexpr (std::is_same_v<void, return_type>)
+                {
+                    // Propagate uncaught exceptions.
+                    this->m_coroutine.promise().return_void();
+                    return;
+                }
+                else
+                {
+                    return this->m_coroutine.promise().return_value();
+                }
+            }
         };
 
         return awaitable{m_coroutine};
@@ -212,7 +222,19 @@ public:
     {
         struct awaitable : public awaitable_base
         {
-            auto await_resume() -> decltype(auto) { return std::move(this->m_coroutine.promise()).return_value(); }
+            auto await_resume() -> decltype(auto)
+            {
+                if constexpr (std::is_same_v<void, return_type>)
+                {
+                    // Propagate uncaught exceptions.
+                    this->m_coroutine.promise().return_void();
+                    return;
+                }
+                else
+                {
+                    return std::move(this->m_coroutine.promise()).return_value();
+                }
+            }
         };
 
         return awaitable{m_coroutine};

@@ -69,7 +69,7 @@ public:
      *                call?  Calling at regular intervals will reduce memory usage of completed
      *                tasks and allow for the task container to re-use allocated space.
      */
-    auto start(coro::task<void> user_task, garbage_collect_t cleanup = garbage_collect_t::yes) -> void
+    auto start(coro::task<void>&& user_task, garbage_collect_t cleanup = garbage_collect_t::yes) -> void
     {
         m_size.fetch_add(1, std::memory_order::relaxed);
 

@@ -19,7 +19,8 @@ io_scheduler::io_scheduler(options opts)
       m_epoll_fd(epoll_create1(EPOLL_CLOEXEC)),
       m_shutdown_fd(eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK)),
       m_timer_fd(timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC)),
-      m_schedule_fd(eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK))
+      m_schedule_fd(eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK)),
+      m_owned_tasks(new coro::task_container<coro::io_scheduler>(*this))
 {
     if (opts.execution_strategy == execution_strategy_t::process_tasks_on_thread_pool)
     {
@@ -68,6 +69,12 @@ io_scheduler::~io_scheduler()
     {
         close(m_schedule_fd);
         m_schedule_fd = -1;
+    }
+
+    if (m_owned_tasks != nullptr)
+    {
+        delete static_cast<coro::task_container<coro::io_scheduler>*>(m_owned_tasks);
+        m_owned_tasks = nullptr;
     }
 }
 

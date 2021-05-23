@@ -4,11 +4,13 @@
 #include "coro/fd.hpp"
 #include "coro/net/socket.hpp"
 #include "coro/poll.hpp"
+#include "coro/task_container.hpp"
 #include "coro/thread_pool.hpp"
 
 #include <chrono>
 #include <functional>
 #include <map>
+#include <memory>
 #include <optional>
 #include <sys/eventfd.h>
 #include <thread>
@@ -151,6 +153,18 @@ public:
      * Schedules the current task onto this io_scheduler for execution.
      */
     auto schedule() -> schedule_operation { return schedule_operation{*this}; }
+
+    /**
+     * Schedules a task onto the io_scheduler and moves ownership of the task to the io_scheduler.
+     * Only void return type tasks can be scheduled in this manner since the task submitter will no
+     * longer have control over the scheduled task.
+     * @param task The task to execute on this io_scheduler.  It's lifetime ownership will be transferred
+     *             to this io_scheduler.
+     */
+    auto schedule(coro::task<void>&& task) -> void
+    {
+        static_cast<coro::task_container<coro::io_scheduler>*>(m_owned_tasks)->start(std::move(task));
+    }
 
     /**
      * Schedules the current task to run after the given amount of time has elapsed.
@@ -303,6 +317,11 @@ private:
     auto                                 process_scheduled_execute_inline() -> void;
     std::mutex                           m_scheduled_tasks_mutex{};
     std::vector<std::coroutine_handle<>> m_scheduled_tasks{};
+
+    /// Tasks that have their ownership passed into the scheduler.  This is a bit strange for now
+    /// but the concept doesn't pass since io_scheduler isn't fully defined yet.
+    /// The type is coro::task_container<coro::io_scheduler>*
+    void* m_owned_tasks{nullptr};
 
     static constexpr const int   m_shutdown_object{0};
     static constexpr const void* m_shutdown_ptr = &m_shutdown_object;

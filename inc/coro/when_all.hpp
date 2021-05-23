@@ -340,20 +340,18 @@ public:
 
     auto unhandled_exception() noexcept -> void { m_exception_ptr = std::current_exception(); }
 
-    auto return_void() noexcept -> void {}
-
-    auto start(when_all_latch& latch) -> void
-    {
-        m_latch = &latch;
-        coroutine_handle_type::from_promise(*this).resume();
-    }
-
-    auto return_value() -> void
+    auto return_void() noexcept -> void
     {
         if (m_exception_ptr)
         {
             std::rethrow_exception(m_exception_ptr);
         }
+    }
+
+    auto start(when_all_latch& latch) -> void
+    {
+        m_latch = &latch;
+        coroutine_handle_type::from_promise(*this).resume();
     }
 
 private:
