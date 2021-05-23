@@ -24,7 +24,7 @@ public:
 
     auto initial_suspend() const { return std::suspend_always{}; }
 
-    auto final_suspend() const { return std::suspend_always{}; }
+    auto final_suspend() const noexcept(true) { return std::suspend_always{}; }
 
     template<typename U = T, std::enable_if_t<!std::is_rvalue_reference<U>::value, int> = 0>
     auto yield_value(std::remove_reference_t<T>& value) noexcept

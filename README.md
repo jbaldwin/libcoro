@@ -26,7 +26,9 @@
     - coro::when_all(awaitable...) -> awaitable
 * Schedulers
     - [coro::thread_pool](#thread_pool) for coroutine cooperative multitasking
-    - [coro::io_scheduler](#io_scheduler) for driving i/o events, uses thread_pool for coroutine execution upon triggered events
+    - [coro::io_scheduler](#io_scheduler) for driving i/o events
+        - Can use coro::thread_pool for latency sensitive or long lived tasks.
+        - Can use inline task processing for thread per core or short lived tasks.
         - Currently uses an epoll driver
     - [coro::task_container](#task_container) for dynamic task lifetimes
 * Coroutine Networking
@@ -690,7 +692,18 @@ thread pool worker 0 is shutting down.
 ```
 
 ### io_scheduler
-`coro::io_scheduler` is a i/o event scheduler that uses a statically sized pool (`coro::thread_pool`) to process the events that are ready.  The `coro::io_scheduler` can use a dedicated spawned thread for processing events that are ready or it can be maually driven via its `process_events()` function for integration into existing event loops.  If using the dedicated thread to process i/o events the dedicated thread does not execute and of the tasks itself, it simply schedules them to be executed on the next availble worker thread in its embedded `coro::thread_pool`.  Inline execution of tasks on the i/o dedicated thread is not supported since it can introduce poor latency when an expensive task is executing.
+`coro::io_scheduler` is a i/o event scheduler that can use two methods of task processing:
+
+* A background `coro::thread_pool`
+* Inline task processing on the `coro::io_scheduler`'s event loop
+
+Using a background `coro::thread_pool` will default to using `(std::thread::hardware_concurrency() - 1)` threads to process tasks.  This processing strategy is best for longer tasks that would block the i/o scheduler or for tasks that are latency sensitive.
+
+Using the inline processing strategy will have the event loop i/o thread process the tasks inline on that thread when events are received.  This processing strategy is best for shorter task that will not block the i/o thread for long or for pure throughput by using thread per core architecture, e.g. spin up an inline i/o scheduler per core and inline process tasks on each scheduler.
+
+The `coro::io_scheduler` can use a dedicated spawned thread for processing events that are ready or it can be maually driven via its `process_events()` function for integration into existing event loops.  By default i/o schedulers will spawn a dedicated event thread and use a thread pool to process tasks.
+
+Before getting to an example there are two methods of scheduling work onto an i/o scheduler, the first is by having the caller maintain the lifetime of the task being scheduled and the second is by moving or transfering owership of the task into the i/o scheduler.  The first can allow for return values but requires the caller to manage the lifetime of the coroutine while the second requires the return type of the task to be void but allows for variable or unknown task lifetimes.  Transferring task lifetime to the scheduler can be useful, e.g. for a network request.
 
 The example provided here shows an i/o scheduler that spins up a basic `coro::net::tcp_server` and a `coro::net::tcp_client` that will connect to each other and then send a request and a response.
 
@@ -959,7 +972,8 @@ client: Hello from server 5
 
 ### Requirements
     C++20 Compiler with coroutine support
-        g++10.2 is tested
+        g++10.2.1
+        g++10.3.1
     CMake
     make or ninja
     pthreads
