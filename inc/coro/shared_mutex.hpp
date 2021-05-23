@@ -75,11 +75,17 @@ class shared_mutex
 {
 public:
     /**
-     * @param e The thread pool for when multiple shared waiters can be woken up at the same time,
-     *          each shared waiter will be scheduled to immediately run on this thread pool in
+     * @param e The executor for when multiple shared waiters can be woken up at the same time,
+     *          each shared waiter will be scheduled to immediately run on this executor in
      *          parallel.
      */
-    explicit shared_mutex(executor_type& e) : m_executor(e) {}
+    explicit shared_mutex(std::shared_ptr<executor_type> e) : m_executor(std::move(e))
+    {
+        if (m_executor == nullptr)
+        {
+            throw std::runtime_error{"shared_mutex cannot have a nullptr executor"};
+        }
+    }
     ~shared_mutex() = default;
 
     shared_mutex(const shared_mutex&) = delete;
@@ -254,7 +260,7 @@ private:
     };
 
     /// This executor is for resuming multiple shared waiters.
-    executor_type& m_executor;
+    std::shared_ptr<executor_type> m_executor{nullptr};
 
     std::mutex m_mutex;
 
@@ -341,7 +347,7 @@ private:
                 }
                 ++m_shared_users;
 
-                m_executor.resume(to_resume->m_awaiting_coroutine);
+                m_executor->resume(to_resume->m_awaiting_coroutine);
             } while (m_head_waiter != nullptr && !m_head_waiter->m_exclusive);
 
             // Cannot unlock until the entire set of shared waiters has been traversed.  I think this

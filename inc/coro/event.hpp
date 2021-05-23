@@ -7,8 +7,6 @@
 
 namespace coro
 {
-class thread_pool;
-
 /**
  * Event is a manully triggered thread safe signal that can be co_await()'ed by multiple awaiters.
  * Each awaiter should co_await the event and upon the event being set each awaiter will have their
