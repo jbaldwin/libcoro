@@ -4,27 +4,33 @@ namespace coro::net
 {
 using namespace std::chrono_literals;
 
-tcp_client::tcp_client(io_scheduler& scheduler, options opts)
-    : m_io_scheduler(&scheduler),
+tcp_client::tcp_client(std::shared_ptr<io_scheduler> scheduler, options opts)
+    : m_io_scheduler(std::move(scheduler)),
       m_options(std::move(opts)),
       m_socket(net::make_socket(
           net::socket::options{m_options.address.domain(), net::socket::type_t::tcp, net::socket::blocking_t::no}))
 {
+    if (m_io_scheduler == nullptr)
+    {
+        throw std::runtime_error{"tcp_client cannot have nullptr io_scheduler"};
+    }
 }
 
-tcp_client::tcp_client(io_scheduler& scheduler, net::socket socket, options opts)
-    : m_io_scheduler(&scheduler),
+tcp_client::tcp_client(std::shared_ptr<io_scheduler> scheduler, net::socket socket, options opts)
+    : m_io_scheduler(std::move(scheduler)),
       m_options(std::move(opts)),
       m_socket(std::move(socket)),
       m_connect_status(connect_status::connected),
       m_ssl_info(ssl_connection_type::accept)
 {
+    // io_scheduler is assumed good since it comes from a tcp_server.
+
     // Force the socket to be non-blocking.
     m_socket.blocking(coro::net::socket::blocking_t::no);
 }
 
 tcp_client::tcp_client(tcp_client&& other)
-    : m_io_scheduler(std::exchange(other.m_io_scheduler, nullptr)),
+    : m_io_scheduler(std::move(other.m_io_scheduler)),
       m_options(std::move(other.m_options)),
       m_socket(std::move(other.m_socket)),
       m_connect_status(std::exchange(other.m_connect_status, std::nullopt)),
@@ -41,7 +47,7 @@ tcp_client::~tcp_client()
     {
         // Should the shutdown timeout be configurable?
         m_io_scheduler->schedule(ssl_shutdown_and_free(
-            *m_io_scheduler, std::move(m_socket), std::move(m_ssl_info.m_ssl_ptr), std::chrono::seconds{30}));
+            m_io_scheduler, std::move(m_socket), std::move(m_ssl_info.m_ssl_ptr), std::chrono::seconds{30}));
     }
 }
 
@@ -49,7 +55,7 @@ auto tcp_client::operator=(tcp_client&& other) noexcept -> tcp_client&
 {
     if (std::addressof(other) != this)
     {
-        m_io_scheduler   = std::exchange(other.m_io_scheduler, nullptr);
+        m_io_scheduler   = std::move(other.m_io_scheduler);
         m_options        = std::move(other.m_options);
         m_socket         = std::move(other.m_socket);
         m_connect_status = std::exchange(other.m_connect_status, std::nullopt);
@@ -202,8 +208,10 @@ auto tcp_client::ssl_handshake(std::chrono::milliseconds timeout) -> coro::task<
 }
 
 auto tcp_client::ssl_shutdown_and_free(
-    io_scheduler& io_scheduler, net::socket s, ssl_unique_ptr ssl_ptr, std::chrono::milliseconds timeout)
-    -> coro::task<void>
+    std::shared_ptr<io_scheduler> io_scheduler,
+    net::socket                   s,
+    ssl_unique_ptr                ssl_ptr,
+    std::chrono::milliseconds     timeout) -> coro::task<void>
 {
     while (true)
     {
@@ -229,7 +237,7 @@ auto tcp_client::ssl_shutdown_and_free(
                 co_return;
             }
 
-            auto pstatus = co_await io_scheduler.poll(s, op, timeout);
+            auto pstatus = co_await io_scheduler->poll(s, op, timeout);
             switch (pstatus)
             {
                 case poll_status::timeout:

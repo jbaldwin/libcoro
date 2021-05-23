@@ -46,11 +46,16 @@ dns_result::dns_result(coro::io_scheduler& scheduler, coro::event& resume, uint6
 {
 }
 
-dns_resolver::dns_resolver(io_scheduler& scheduler, std::chrono::milliseconds timeout)
-    : m_io_scheduler(scheduler),
+dns_resolver::dns_resolver(std::shared_ptr<io_scheduler> scheduler, std::chrono::milliseconds timeout)
+    : m_io_scheduler(std::move(scheduler)),
       m_timeout(timeout),
-      m_task_container(scheduler)
+      m_task_container(m_io_scheduler)
 {
+    if (m_io_scheduler == nullptr)
+    {
+        throw std::runtime_error{"dns_resolver cannot have nullptr scheduler"};
+    }
+
     {
         std::scoped_lock g{m_ares_mutex};
         if (m_ares_count == 0)
@@ -92,12 +97,10 @@ dns_resolver::~dns_resolver()
 auto dns_resolver::host_by_name(const net::hostname& hn) -> coro::task<std::unique_ptr<dns_result>>
 {
     coro::event resume_event{};
-    auto        result_ptr = std::make_unique<dns_result>(m_io_scheduler, resume_event, 2);
+    auto        result_ptr = std::make_unique<dns_result>(*m_io_scheduler.get(), resume_event, 2);
 
     ares_gethostbyname(m_ares_channel, hn.data().data(), AF_INET, ares_dns_callback, result_ptr.get());
     ares_gethostbyname(m_ares_channel, hn.data().data(), AF_INET6, ares_dns_callback, result_ptr.get());
-
-    std::vector<coro::task<void>> poll_tasks{};
 
     // Add all required poll calls for ares to kick off the dns requests.
     ares_poll();
@@ -157,7 +160,7 @@ auto dns_resolver::ares_poll() -> void
 
 auto dns_resolver::make_poll_task(fd_t fd, poll_op ops) -> coro::task<void>
 {
-    auto result = co_await m_io_scheduler.poll(fd, ops, m_timeout);
+    auto result = co_await m_io_scheduler->poll(fd, ops, m_timeout);
     switch (result)
     {
         case poll_status::event:

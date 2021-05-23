@@ -85,8 +85,8 @@ public:
     auto set() noexcept -> void;
 
     /**
-     * Sets this event and resumes all awaiters onto the given thread pool.  This will distribute
-     * the waiters across the thread pools threads.
+     * Sets this event and resumes all awaiters onto the given executor.  This will distribute
+     * the waiters across the executor's threads.
      */
     template<concepts::executor executor_type>
     auto set(executor_type& e) noexcept -> void

@@ -6,11 +6,12 @@
 
 TEST_CASE("dns_resolver basic", "[dns]")
 {
-    coro::io_scheduler scheduler{coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}}};
+    auto scheduler = std::make_shared<coro::io_scheduler>(
+        coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
     coro::net::dns_resolver dns_resolver{scheduler, std::chrono::milliseconds{5000}};
 
     auto make_host_by_name_task = [&](coro::net::hostname hn) -> coro::task<void> {
-        co_await scheduler.schedule();
+        co_await scheduler->schedule();
         auto result_ptr = co_await std::move(dns_resolver.host_by_name(hn));
 
         if (result_ptr->status() == coro::net::dns_status::complete)
@@ -26,8 +27,8 @@ TEST_CASE("dns_resolver basic", "[dns]")
 
     coro::sync_wait(make_host_by_name_task(coro::net::hostname{"www.example.com"}));
 
-    std::cerr << "io_scheduler.size() before shutdown = " << scheduler.size() << "\n";
-    scheduler.shutdown();
-    std::cerr << "io_scheduler.size() after shutdown = " << scheduler.size() << "\n";
-    REQUIRE(scheduler.empty());
+    std::cerr << "io_scheduler.size() before shutdown = " << scheduler->size() << "\n";
+    scheduler->shutdown();
+    std::cerr << "io_scheduler.size() after shutdown = " << scheduler->size() << "\n";
+    REQUIRE(scheduler->empty());
 }
