@@ -3,7 +3,8 @@
 
 int main()
 {
-    coro::io_scheduler scheduler{coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}}};
+    auto scheduler = std::make_shared<coro::io_scheduler>(
+        coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
 
     auto make_server_task = [&]() -> coro::task<void> {
         // This is the task that will handle processing a client's requests.
@@ -36,7 +37,7 @@ int main()
 
         // Spin up the tcp_server and schedule it onto the io_scheduler.
         coro::net::tcp_server server{scheduler};
-        co_await scheduler.schedule();
+        co_await scheduler->schedule();
 
         // All incoming connections will be stored into the task container until they are completed.
         coro::task_container tc{scheduler};
@@ -54,7 +55,7 @@ int main()
     };
 
     auto make_client_task = [&](size_t request_count) -> coro::task<void> {
-        co_await scheduler.schedule();
+        co_await scheduler->schedule();
         coro::net::tcp_client client{scheduler};
 
         co_await client.connect();

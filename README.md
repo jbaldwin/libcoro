@@ -363,6 +363,8 @@ Its very easy to see the LIFO 'atomic' queue in action in the beginning where 22
 ### shared_mutex
 The `coro::shared_mutex` is a thread safe async tool to allow for multiple shared users at once but also exclusive access.  The lock is acquired strictly in a FIFO manner in that if the lock is currenty held by shared users and an exclusive attempts to lock, the exclusive waiter will suspend until all the _current_ shared users finish using the lock.  Any new users that attempt to lock the mutex in a shared state once there is an exclusive waiter will also wait behind the exclusive waiter.  This prevents the exclusive waiter from being starved.
 
+The `coro::shared_mutex` requires a `executor_type` when constructed to be able to resume multiple shared waiters when an exclusive lock is released.  This allows for all of the pending shared waiters to be resumed concurrently.
+
 
 ```C++
 #include <coro/coro.hpp>
@@ -370,30 +372,30 @@ The `coro::shared_mutex` is a thread safe async tool to allow for multiple share
 
 int main()
 {
-    // Shared mutexes require a thread pool to be able to wake up multiple shared waiters when
+    // Shared mutexes require an excutor type to be able to wake up multiple shared waiters when
     // there is an exclusive lock holder releasing the lock.  This example uses a single thread
     // to also show the interleaving of coroutines acquiring the shared lock in shared and
     // exclusive mode as they resume and suspend in a linear manner.  Ideally the thread pool
-    // would have more than 1 thread to resume all shared waiters in parallel.
-    coro::thread_pool  tp{coro::thread_pool::options{.thread_count = 1}};
+    // executor would have more than 1 thread to resume all shared waiters in parallel.
+    auto               tp = std::make_shared<coro::thread_pool>(coro::thread_pool::options{.thread_count = 1});
     coro::shared_mutex mutex{tp};
 
     auto make_shared_task = [&](uint64_t i) -> coro::task<void> {
-        co_await tp.schedule();
+        co_await tp->schedule();
         {
             std::cerr << "shared task " << i << " lock_shared()\n";
             auto scoped_lock = co_await mutex.lock_shared();
             std::cerr << "shared task " << i << " lock_shared() acquired\n";
             /// Immediately yield so the other shared tasks also acquire in shared state
             /// while this task currently holds the mutex in shared state.
-            co_await tp.yield();
+            co_await tp->yield();
             std::cerr << "shared task " << i << " unlock_shared()\n";
         }
         co_return;
     };
 
     auto make_exclusive_task = [&]() -> coro::task<void> {
-        co_await tp.schedule();
+        co_await tp->schedule();
 
         std::cerr << "exclusive task lock()\n";
         auto scoped_lock = co_await mutex.lock();
@@ -713,7 +715,7 @@ The example provided here shows an i/o scheduler that spins up a basic `coro::ne
 
 int main()
 {
-    coro::io_scheduler scheduler{coro::io_scheduler::options{
+    auto scheduler = std::make_shared<coro::io_scheduler>(coro::io_scheduler::options{
         // The scheduler will spawn a dedicated event processing thread.  This is the default, but
         // it is possible to use 'manual' and call 'process_events()' to drive the scheduler yourself.
         .thread_strategy = coro::io_scheduler::thread_strategy_t::spawn,
@@ -733,7 +735,7 @@ int main()
                 .on_thread_start_functor =
                     [](size_t i) { std::cout << "io_scheduler::thread_pool worker " << i << " starting\n"; },
                 .on_thread_stop_functor =
-                    [](size_t i) { std::cout << "io_scheduler::thread_pool worker " << i << " stopping\n"; }}}};
+                    [](size_t i) { std::cout << "io_scheduler::thread_pool worker " << i << " stopping\n"; }}});
 
     auto make_server_task = [&]() -> coro::task<void> {
         // Start by creating a tcp server, we'll do this before putting it into the scheduler so
@@ -743,7 +745,7 @@ int main()
         coro::net::tcp_server server{scheduler};
 
         // Now scheduler this task onto the scheduler.
-        co_await scheduler.schedule();
+        co_await scheduler->schedule();
 
         // Wait for an incoming connection and accept it.
         auto poll_status = co_await server.poll();
@@ -824,7 +826,7 @@ int main()
 
     auto make_client_task = [&]() -> coro::task<void> {
         // Immediately schedule onto the scheduler.
-        co_await scheduler.schedule();
+        co_await scheduler->schedule();
 
         // Create the tcp_client with the default settings, see tcp_client for how to set the
         // ip address, port, and optionally enabling SSL/TLS.
@@ -878,7 +880,8 @@ All tasks that are stored within a `coro::task_container` must have a `void` ret
 
 int main()
 {
-    coro::io_scheduler scheduler{coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}}};
+    auto scheduler = std::make_shared<coro::io_scheduler>(
+        coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
 
     auto make_server_task = [&]() -> coro::task<void> {
         // This is the task that will handle processing a client's requests.
@@ -911,7 +914,7 @@ int main()
 
         // Spin up the tcp_server and schedule it onto the io_scheduler.
         coro::net::tcp_server server{scheduler};
-        co_await scheduler.schedule();
+        co_await scheduler->schedule();
 
         // All incoming connections will be stored into the task container until they are completed.
         coro::task_container tc{scheduler};
@@ -929,7 +932,7 @@ int main()
     };
 
     auto make_client_task = [&](size_t request_count) -> coro::task<void> {
-        co_await scheduler.schedule();
+        co_await scheduler->schedule();
         coro::net::tcp_client client{scheduler};
 
         co_await client.connect();

@@ -34,8 +34,8 @@ public:
     };
 
     tcp_server(
-        io_scheduler& scheduler,
-        options       opts = options{
+        std::shared_ptr<io_scheduler> scheduler,
+        options                       opts = options{
             .address = net::ip_address::from_string("0.0.0.0"), .port = 8080, .backlog = 128, .ssl_ctx = nullptr});
 
     tcp_server(const tcp_server&) = delete;
@@ -64,7 +64,7 @@ public:
 
 private:
     /// The io scheduler for awaiting new connections.
-    io_scheduler* m_io_scheduler{nullptr};
+    std::shared_ptr<io_scheduler> m_io_scheduler{nullptr};
     /// The bind and listen options for this server.
     options m_options;
     /// The socket for accepting new tcp connections on.

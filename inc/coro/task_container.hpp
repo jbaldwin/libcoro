@@ -6,11 +6,14 @@
 #include <atomic>
 #include <iostream>
 #include <list>
+#include <memory>
 #include <mutex>
 #include <vector>
 
 namespace coro
 {
+class io_scheduler;
+
 template<concepts::executor executor_type>
 class task_container
 {
@@ -30,16 +33,18 @@ public:
      *           from a coro::io_scheduler, this would usually be that coro::io_scheduler instance.
      * @param opts Task container options.
      */
-    task_container(executor_type& e, const options opts = options{.reserve_size = 8, .growth_factor = 2})
+    task_container(
+        std::shared_ptr<executor_type> e, const options opts = options{.reserve_size = 8, .growth_factor = 2})
         : m_growth_factor(opts.growth_factor),
-          m_executor(e)
+          m_executor(std::move(e)),
+          m_executor_ptr(m_executor.get())
     {
-        m_tasks.resize(opts.reserve_size);
-        for (std::size_t i = 0; i < opts.reserve_size; ++i)
+        if (m_executor == nullptr)
         {
-            m_task_indexes.emplace_back(i);
+            throw std::runtime_error{"task_container cannot have a nullptr executor"};
         }
-        m_free_pos = m_task_indexes.begin();
+
+        init(opts.reserve_size);
     }
     task_container(const task_container&) = delete;
     task_container(task_container&&)      = delete;
@@ -157,7 +162,7 @@ public:
         while (!empty())
         {
             garbage_collect();
-            co_await m_executor.yield();
+            co_await m_executor_ptr->yield();
         }
     }
 
@@ -221,7 +226,7 @@ private:
     auto make_cleanup_task(task<void> user_task, task_position pos) -> coro::task<void>
     {
         // Immediately move the task onto the executor.
-        co_await m_executor.schedule();
+        co_await m_executor_ptr->schedule();
 
         try
         {
@@ -267,7 +272,31 @@ private:
     /// The amount to grow the containers by when all spaces are taken.
     double m_growth_factor{};
     /// The executor to schedule tasks that have just started.
-    executor_type& m_executor;
+    std::shared_ptr<executor_type> m_executor{nullptr};
+    /// This is used internally since io_scheduler cannot pass itself in as a shared_ptr.
+    executor_type* m_executor_ptr{nullptr};
+
+    /**
+     * Special constructor for internal types to create their embeded task containers.
+     */
+
+    friend io_scheduler;
+    task_container(executor_type& e, const options opts = options{.reserve_size = 8, .growth_factor = 2})
+        : m_growth_factor(opts.growth_factor),
+          m_executor_ptr(&e)
+    {
+        init(opts.reserve_size);
+    }
+
+    auto init(std::size_t reserve_size) -> void
+    {
+        m_tasks.resize(reserve_size);
+        for (std::size_t i = 0; i < reserve_size; ++i)
+        {
+            m_task_indexes.emplace_back(i);
+        }
+        m_free_pos = m_task_indexes.begin();
+    }
 };
 
 } // namespace coro

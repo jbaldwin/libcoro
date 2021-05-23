@@ -60,7 +60,7 @@ private:
 class dns_resolver
 {
 public:
-    explicit dns_resolver(io_scheduler& scheduler, std::chrono::milliseconds timeout);
+    explicit dns_resolver(std::shared_ptr<io_scheduler> scheduler, std::chrono::milliseconds timeout);
     dns_resolver(const dns_resolver&) = delete;
     dns_resolver(dns_resolver&&)      = delete;
     auto operator=(const dns_resolver&) noexcept -> dns_resolver& = delete;
@@ -74,7 +74,7 @@ public:
 
 private:
     /// The io scheduler to drive the events for dns lookups.
-    io_scheduler& m_io_scheduler;
+    std::shared_ptr<io_scheduler> m_io_scheduler;
 
     /// The global timeout per dns lookup request.
     std::chrono::milliseconds m_timeout{0};

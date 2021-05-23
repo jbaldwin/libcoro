@@ -359,21 +359,21 @@ TEST_CASE("benchmark tcp_server echo server thread pool", "[benchmark]")
 
     struct server
     {
-        uint64_t                                 id;
-        coro::io_scheduler                       scheduler{coro::io_scheduler::options{
+        uint64_t                            id;
+        std::shared_ptr<coro::io_scheduler> scheduler{std::make_shared<coro::io_scheduler>(coro::io_scheduler::options{
             .pool               = coro::thread_pool::options{.thread_count = server_thread_count},
-            .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_on_thread_pool}};
-        coro::task_container<coro::io_scheduler> task_container{scheduler};
-        uint64_t                                 live_clients{0};
-        coro::event                              wait_for_clients{};
+            .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_on_thread_pool})};
+        // coro::task_container<coro::io_scheduler> task_container{scheduler};
+        uint64_t    live_clients{0};
+        coro::event wait_for_clients{};
     };
 
     struct client
     {
-        coro::io_scheduler            scheduler{coro::io_scheduler::options{
+        std::shared_ptr<coro::io_scheduler> scheduler{std::make_shared<coro::io_scheduler>(coro::io_scheduler::options{
             .pool               = coro::thread_pool::options{.thread_count = client_thread_count},
-            .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_on_thread_pool}};
-        std::vector<coro::task<void>> tasks{};
+            .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_on_thread_pool})};
+        std::vector<coro::task<void>>       tasks{};
     };
 
     auto make_on_connection_task = [&](server& s, coro::net::tcp_client client) -> coro::task<void> {
@@ -409,7 +409,7 @@ TEST_CASE("benchmark tcp_server echo server thread pool", "[benchmark]")
     };
 
     auto make_server_task = [&](server& s) -> coro::task<void> {
-        co_await s.scheduler.schedule();
+        co_await s.scheduler->schedule();
 
         coro::net::tcp_server server{s.scheduler};
 
@@ -426,7 +426,8 @@ TEST_CASE("benchmark tcp_server echo server thread pool", "[benchmark]")
                     accepted.fetch_add(1, std::memory_order::release);
 
                     s.live_clients++;
-                    s.task_container.start(make_on_connection_task(s, std::move(c)));
+                    s.scheduler->schedule(make_on_connection_task(s, std::move(c)));
+                    // s.task_container.start(make_on_connection_task(s, std::move(c)));
                 }
             }
         }
@@ -439,7 +440,7 @@ TEST_CASE("benchmark tcp_server echo server thread pool", "[benchmark]")
     std::map<std::chrono::milliseconds, uint64_t> g_histogram;
 
     auto make_client_task = [&](client& c) -> coro::task<void> {
-        co_await c.scheduler.schedule();
+        co_await c.scheduler->schedule();
         std::map<std::chrono::milliseconds, uint64_t> histogram;
         coro::net::tcp_client                         client{c.scheduler};
 
@@ -490,7 +491,7 @@ TEST_CASE("benchmark tcp_server echo server thread pool", "[benchmark]")
             server s{};
             s.id = server_id++;
             coro::sync_wait(make_server_task(s));
-            s.scheduler.shutdown();
+            s.scheduler->shutdown();
         }});
     }
 
@@ -513,7 +514,7 @@ TEST_CASE("benchmark tcp_server echo server thread pool", "[benchmark]")
                 c.tasks.emplace_back(make_client_task(c));
             }
             coro::sync_wait(coro::when_all(std::move(c.tasks)));
-            c.scheduler.shutdown();
+            c.scheduler->shutdown();
         }});
     }
 
@@ -557,17 +558,19 @@ TEST_CASE("benchmark tcp_server echo server inline", "[benchmark]")
 
     struct server
     {
-        uint64_t           id;
-        coro::io_scheduler scheduler{coro::io_scheduler::options{.execution_strategy = estrat::process_tasks_inline}};
-        coro::task_container<coro::io_scheduler> task_container{scheduler};
-        uint64_t                                 live_clients{0};
-        coro::event                              wait_for_clients{};
+        uint64_t                            id;
+        std::shared_ptr<coro::io_scheduler> scheduler{std::make_shared<coro::io_scheduler>(
+            coro::io_scheduler::options{.execution_strategy = estrat::process_tasks_inline})};
+        // coro::task_container<coro::io_scheduler> task_container{scheduler};
+        uint64_t    live_clients{0};
+        coro::event wait_for_clients{};
     };
 
     struct client
     {
-        coro::io_scheduler scheduler{coro::io_scheduler::options{.execution_strategy = estrat::process_tasks_inline}};
-        std::vector<coro::task<void>> tasks{};
+        std::shared_ptr<coro::io_scheduler> scheduler{std::make_shared<coro::io_scheduler>(
+            coro::io_scheduler::options{.execution_strategy = estrat::process_tasks_inline})};
+        std::vector<coro::task<void>>       tasks{};
     };
 
     auto make_on_connection_task = [&](server& s, coro::net::tcp_client client) -> coro::task<void> {
@@ -603,7 +606,7 @@ TEST_CASE("benchmark tcp_server echo server inline", "[benchmark]")
     };
 
     auto make_server_task = [&](server& s) -> coro::task<void> {
-        co_await s.scheduler.schedule();
+        co_await s.scheduler->schedule();
 
         coro::net::tcp_server server{s.scheduler};
 
@@ -620,7 +623,8 @@ TEST_CASE("benchmark tcp_server echo server inline", "[benchmark]")
                     accepted.fetch_add(1, std::memory_order::release);
 
                     s.live_clients++;
-                    s.task_container.start(make_on_connection_task(s, std::move(c)));
+                    s.scheduler->schedule(make_on_connection_task(s, std::move(c)));
+                    // s.task_container.start(make_on_connection_task(s, std::move(c)));
                 }
             }
         }
@@ -633,7 +637,7 @@ TEST_CASE("benchmark tcp_server echo server inline", "[benchmark]")
     std::map<std::chrono::milliseconds, uint64_t> g_histogram;
 
     auto make_client_task = [&](client& c) -> coro::task<void> {
-        co_await c.scheduler.schedule();
+        co_await c.scheduler->schedule();
         std::map<std::chrono::milliseconds, uint64_t> histogram;
         coro::net::tcp_client                         client{c.scheduler};
 
@@ -684,7 +688,7 @@ TEST_CASE("benchmark tcp_server echo server inline", "[benchmark]")
             server s{};
             s.id = server_id++;
             coro::sync_wait(make_server_task(s));
-            s.scheduler.shutdown();
+            s.scheduler->shutdown();
         }});
     }
 
@@ -707,7 +711,7 @@ TEST_CASE("benchmark tcp_server echo server inline", "[benchmark]")
                 c.tasks.emplace_back(make_client_task(c));
             }
             coro::sync_wait(coro::when_all(std::move(c.tasks)));
-            c.scheduler.shutdown();
+            c.scheduler->shutdown();
         }});
     }
 

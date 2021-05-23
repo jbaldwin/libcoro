@@ -36,12 +36,12 @@ public:
      * Creates a udp peer that can send packets but not receive them.  This udp peer will not explicitly
      * bind to a local ip+port.
      */
-    explicit udp_peer(io_scheduler& scheduler, net::domain_t domain = net::domain_t::ipv4);
+    explicit udp_peer(std::shared_ptr<io_scheduler> scheduler, net::domain_t domain = net::domain_t::ipv4);
 
     /**
      * Creates a udp peer that can send and receive packets.  This peer will bind to the given ip_port.
      */
-    explicit udp_peer(io_scheduler& scheduler, const info& bind_info);
+    explicit udp_peer(std::shared_ptr<io_scheduler> scheduler, const info& bind_info);
 
     udp_peer(const udp_peer&) = delete;
     udp_peer(udp_peer&&)      = default;
@@ -58,7 +58,7 @@ public:
     auto poll(poll_op op, std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
         -> coro::task<coro::poll_status>
     {
-        co_return co_await m_io_scheduler.poll(m_socket, op, timeout);
+        co_return co_await m_io_scheduler->poll(m_socket, op, timeout);
     }
 
     /**
@@ -137,7 +137,7 @@ public:
 
 private:
     /// The scheduler that will drive this udp client.
-    io_scheduler& m_io_scheduler;
+    std::shared_ptr<io_scheduler> m_io_scheduler;
     /// The udp socket.
     net::socket m_socket{-1};
     /// Did the user request this udp socket is bound locally to receive packets?

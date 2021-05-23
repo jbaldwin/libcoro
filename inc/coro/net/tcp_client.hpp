@@ -41,8 +41,8 @@ public:
      * @param opts See tcp_client::options for more information.
      */
     tcp_client(
-        io_scheduler& scheduler,
-        options       opts = options{
+        std::shared_ptr<io_scheduler> scheduler,
+        options                       opts = options{
             .address = {net::ip_address::from_string("127.0.0.1")}, .port = 8080, .ssl_ctx = nullptr});
     tcp_client(const tcp_client&) = delete;
     tcp_client(tcp_client&& other);
@@ -280,10 +280,10 @@ private:
 
     /// The tcp_server creates already connected clients and provides a tcp socket pre-built.
     friend tcp_server;
-    tcp_client(io_scheduler& scheduler, net::socket socket, options opts);
+    tcp_client(std::shared_ptr<io_scheduler> scheduler, net::socket socket, options opts);
 
     /// The scheduler that will drive this tcp client.
-    io_scheduler* m_io_scheduler{nullptr};
+    std::shared_ptr<io_scheduler> m_io_scheduler{nullptr};
     /// Options for what server to connect to.
     options m_options{};
     /// The tcp socket.
@@ -293,12 +293,11 @@ private:
     /// SSL/TLS specific information if m_options.ssl_ctx != nullptr.
     ssl_info m_ssl_info{};
 
-private:
     static auto ssl_shutdown_and_free(
-        io_scheduler&             io_scheduler,
-        net::socket               s,
-        ssl_unique_ptr            ssl_ptr,
-        std::chrono::milliseconds timeout = std::chrono::milliseconds{0}) -> coro::task<void>;
+        std::shared_ptr<io_scheduler> io_scheduler,
+        net::socket                   s,
+        ssl_unique_ptr                ssl_ptr,
+        std::chrono::milliseconds     timeout = std::chrono::milliseconds{0}) -> coro::task<void>;
 };
 
 } // namespace coro::net

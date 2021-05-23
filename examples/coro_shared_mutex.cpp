@@ -3,30 +3,30 @@
 
 int main()
 {
-    // Shared mutexes require a thread pool to be able to wake up multiple shared waiters when
+    // Shared mutexes require an excutor type to be able to wake up multiple shared waiters when
     // there is an exclusive lock holder releasing the lock.  This example uses a single thread
     // to also show the interleaving of coroutines acquiring the shared lock in shared and
     // exclusive mode as they resume and suspend in a linear manner.  Ideally the thread pool
-    // would have more than 1 thread to resume all shared waiters in parallel.
-    coro::thread_pool  tp{coro::thread_pool::options{.thread_count = 1}};
+    // executor would have more than 1 thread to resume all shared waiters in parallel.
+    auto               tp = std::make_shared<coro::thread_pool>(coro::thread_pool::options{.thread_count = 1});
     coro::shared_mutex mutex{tp};
 
     auto make_shared_task = [&](uint64_t i) -> coro::task<void> {
-        co_await tp.schedule();
+        co_await tp->schedule();
         {
             std::cerr << "shared task " << i << " lock_shared()\n";
             auto scoped_lock = co_await mutex.lock_shared();
             std::cerr << "shared task " << i << " lock_shared() acquired\n";
             /// Immediately yield so the other shared tasks also acquire in shared state
             /// while this task currently holds the mutex in shared state.
-            co_await tp.yield();
+            co_await tp->yield();
             std::cerr << "shared task " << i << " unlock_shared()\n";
         }
         co_return;
     };
 
     auto make_exclusive_task = [&]() -> coro::task<void> {
-        co_await tp.schedule();
+        co_await tp->schedule();
 
         std::cerr << "exclusive task lock()\n";
         auto scoped_lock = co_await mutex.lock();

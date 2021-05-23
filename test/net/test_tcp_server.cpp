@@ -9,10 +9,11 @@ TEST_CASE("tcp_server ping server", "[tcp_server]")
     const std::string client_msg{"Hello from client"};
     const std::string server_msg{"Reply from server!"};
 
-    coro::io_scheduler scheduler{coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}}};
+    auto scheduler = std::make_shared<coro::io_scheduler>(
+        coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
 
     auto make_client_task = [&]() -> coro::task<void> {
-        co_await scheduler.schedule();
+        co_await scheduler->schedule();
         coro::net::tcp_client client{scheduler};
 
         std::cerr << "client connect\n";
@@ -44,7 +45,7 @@ TEST_CASE("tcp_server ping server", "[tcp_server]")
     };
 
     auto make_server_task = [&]() -> coro::task<void> {
-        co_await scheduler.schedule();
+        co_await scheduler->schedule();
         coro::net::tcp_server server{scheduler};
 
         // Poll for client connection.
@@ -83,7 +84,8 @@ TEST_CASE("tcp_server ping server", "[tcp_server]")
 
 TEST_CASE("tcp_server with ssl", "[tcp_server]")
 {
-    coro::io_scheduler scheduler{coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}}};
+    auto scheduler = std::make_shared<coro::io_scheduler>(
+        coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
 
     coro::net::ssl_context client_ssl_context{};
 
@@ -94,7 +96,7 @@ TEST_CASE("tcp_server with ssl", "[tcp_server]")
     std::string server_msg = "Hello world from SSL server!!";
 
     auto make_client_task = [&]() -> coro::task<void> {
-        co_await scheduler.schedule();
+        co_await scheduler->schedule();
 
         coro::net::tcp_client client{scheduler, coro::net::tcp_client::options{.ssl_ctx = &client_ssl_context}};
 
@@ -150,7 +152,7 @@ TEST_CASE("tcp_server with ssl", "[tcp_server]")
     };
 
     auto make_server_task = [&]() -> coro::task<void> {
-        co_await scheduler.schedule();
+        co_await scheduler->schedule();
 
         coro::net::tcp_server server{scheduler, coro::net::tcp_server::options{.ssl_ctx = &server_ssl_context}};
 

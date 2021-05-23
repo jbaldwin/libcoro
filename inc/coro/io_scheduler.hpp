@@ -163,7 +163,8 @@ public:
      */
     auto schedule(coro::task<void>&& task) -> void
     {
-        static_cast<coro::task_container<coro::io_scheduler>*>(m_owned_tasks)->start(std::move(task));
+        auto* ptr = static_cast<coro::task_container<coro::io_scheduler>*>(m_owned_tasks);
+        ptr->start(std::move(task));
     }
 
     /**
