@@ -17,8 +17,8 @@ public:
     sync_wait_event(const sync_wait_event&) = delete;
     sync_wait_event(sync_wait_event&&)      = delete;
     auto operator=(const sync_wait_event&) -> sync_wait_event& = delete;
-    auto operator=(sync_wait_event&&) -> sync_wait_event& = delete;
-    ~sync_wait_event()                                    = default;
+    auto operator=(sync_wait_event &&) -> sync_wait_event& = delete;
+    ~sync_wait_event()                                     = default;
 
     auto set() noexcept -> void;
     auto reset() noexcept -> void;
@@ -181,6 +181,11 @@ public:
 private:
     coroutine_type m_coroutine;
 };
+
+template<
+    concepts::awaitable awaitable_type,
+    typename return_type = concepts::awaitable_traits<awaitable_type>::awaiter_return_type>
+static auto make_sync_wait_task(awaitable_type&& a) -> sync_wait_task<return_type> __attribute__((used));
 
 template<
     concepts::awaitable awaitable_type,

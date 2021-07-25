@@ -170,3 +170,38 @@ jobs:
                 run: |
                     cd build-release-g++
                     ctest -VV
+    build-opensuse-15:
+        name: opensuse-15
+        runs-on: ubuntu-latest
+        container:
+            image: opensuse/leap:15.2
+        steps:
+            -   name: zypper
+                run: |
+                    zypper install -y \
+                        cmake \
+                        git \
+                        ninja \
+                        gcc10 \
+                        gcc10-c++ \
+                        openssl \
+                        openssl-devel
+            -   name: Checkout # recurisve checkout requires git to be installed first
+                uses: actions/checkout@v2
+                with:
+                    submodules: recursive
+            -   name: build-release-g++
+                run: |
+                    mkdir build-release-g++
+                    cd build-release-g++
+                    cmake \
+                        -GNinja \
+                        -DCMAKE_BUILD_TYPE=Release \
+                        -DCMAKE_C_COMPILER=gcc-10 \
+                        -DCMAKE_CXX_COMPILER=g++-10 \
+                        ..
+                    ninja
+            -   name: test-release-g++
+                run: |
+                    cd build-release-g++
+                    ctest -VV

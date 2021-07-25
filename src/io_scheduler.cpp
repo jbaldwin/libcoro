@@ -192,7 +192,8 @@ auto io_scheduler::shutdown() noexcept -> void
 
         // Signal the event loop to stop asap, triggering the event fd is safe.
         uint64_t value{1};
-        ::write(m_shutdown_fd, &value, sizeof(value));
+        auto     written = ::write(m_shutdown_fd, &value, sizeof(value));
+        (void)written;
 
         if (m_io_thread.joinable())
         {
@@ -252,10 +253,11 @@ auto io_scheduler::process_events_execute(std::chrono::milliseconds timeout) -> 
                 // Process scheduled coroutines.
                 process_scheduled_execute_inline();
             }
-            else if (handle_ptr == m_shutdown_ptr) [[unlikely]]
-            {
-                // Nothing to do , just needed to wake-up and smell the flowers
-            }
+            else if (handle_ptr == m_shutdown_ptr)
+                [[unlikely]]
+                {
+                    // Nothing to do , just needed to wake-up and smell the flowers
+                }
             else
             {
                 // Individual poll task wake-up.

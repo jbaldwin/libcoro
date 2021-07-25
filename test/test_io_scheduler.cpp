@@ -111,7 +111,8 @@ TEST_CASE("io_scheduler task with read poll", "[io_scheduler]")
     auto make_poll_write_task = [&]() -> coro::task<void> {
         co_await s.schedule();
         uint64_t value{42};
-        write(trigger_fd, &value, sizeof(value));
+        auto     unused = write(trigger_fd, &value, sizeof(value));
+        (void)unused;
         co_return;
     };
 
@@ -140,7 +141,8 @@ TEST_CASE("io_scheduler task with read poll with timeout", "[io_scheduler]")
     auto make_poll_write_task = [&]() -> coro::task<void> {
         co_await s.schedule();
         uint64_t value{42};
-        write(trigger_fd, &value, sizeof(value));
+        auto     unused = write(trigger_fd, &value, sizeof(value));
+        (void)unused;
         co_return;
     };
 
@@ -621,7 +623,8 @@ TEST_CASE("io_scheduler manual process events thread pool", "[io_scheduler]")
         co_await s.schedule();
         uint64_t value{42};
         std::cerr << "write task writing s.size() == " << s.size() << "\n";
-        write(trigger_fd, &value, sizeof(value));
+        auto unused = write(trigger_fd, &value, sizeof(value));
+        (void)unused;
         std::cerr << "write task exiting s.size() == " << s.size() << "\n";
         co_return;
     };
@@ -669,7 +672,8 @@ TEST_CASE("io_scheduler manual process events inline", "[io_scheduler]")
         co_await s.schedule();
         uint64_t value{42};
         std::cerr << "write task writing s.size() == " << s.size() << "\n";
-        write(trigger_fd, &value, sizeof(value));
+        auto unused = write(trigger_fd, &value, sizeof(value));
+        (void)unused;
         std::cerr << "write task exiting s.size() == " << s.size() << "\n";
         co_return;
     };

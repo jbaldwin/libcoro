@@ -985,6 +985,12 @@ client: Hello from server 5
 
 ### Instructions
 
+#### Tested Distos
+
+ * ubuntu:20.04
+ * fedora:32-34
+ * openSUSE/leap:15.2
+
 #### Cloning the project
 This project uses gitsubmodules, to properly checkout this project use:
 
