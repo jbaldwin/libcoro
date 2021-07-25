@@ -178,7 +178,7 @@ jobs:
         steps:
             -   name: zypper
                 run: |
-                    sudo zypper install -y \
+                    zypper install -y \
                         cmake \
                         git \
                         ninja \
