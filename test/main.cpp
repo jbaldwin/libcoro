@@ -16,14 +16,16 @@ struct test_setup
 
         // For SSL/TLS tests create a localhost cert.pem and key.pem, tests expected these files
         // to be generated into the same directory that the tests are running in.
-        system(
+        auto unused = system(
             "openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem -days 365 -subj '/CN=localhost' -nodes");
+        (void)unused;
     }
 
     ~test_setup()
     {
         // Cleanup the temporary key.pem and cert.pem files.
-        system("rm key.pem cert.pem");
+        auto unused = system("rm key.pem cert.pem");
+        (void)unused;
     }
 };
 

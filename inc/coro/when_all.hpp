@@ -359,7 +359,7 @@ private:
     std::exception_ptr m_exception_ptr;
 };
 
-__attribute__((used)) template<typename return_type>
+template<typename return_type>
 class when_all_task
 {
 public:
