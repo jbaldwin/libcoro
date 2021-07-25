@@ -49,7 +49,7 @@ public:
     task_container(const task_container&) = delete;
     task_container(task_container&&)      = delete;
     auto operator=(const task_container&) -> task_container& = delete;
-    auto operator=(task_container&&) -> task_container& = delete;
+    auto operator=(task_container &&) -> task_container& = delete;
     ~task_container()
     {
         // This will hang the current thread.. but if tasks are not complete thats also pretty bad.
@@ -107,7 +107,7 @@ public:
      * the task container for newly stored tasks.
      * @return The number of tasks that were deleted.
      */
-    auto garbage_collect() -> std::size_t
+    auto garbage_collect() -> std::size_t __attribute__((used))
     {
         std::scoped_lock lk{m_mutex};
         return gc_internal();
