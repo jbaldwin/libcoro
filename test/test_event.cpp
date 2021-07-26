@@ -94,3 +94,171 @@ TEST_CASE("event reset", "[event]")
 
     REQUIRE(value2.promise().return_value() == 42);
 }
+
+TEST_CASE("event fifo", "[event]")
+{
+    coro::event e{};
+
+    // Need consistency FIFO on a single thread to verify the execution order is correct.
+    coro::thread_pool tp{coro::thread_pool::options{.thread_count = 1}};
+
+    std::atomic<uint64_t> counter{0};
+
+    auto make_waiter = [&](uint64_t value) -> coro::task<void> {
+        co_await tp.schedule();
+        co_await e;
+
+        counter++;
+        REQUIRE(counter == value);
+
+        co_return;
+    };
+
+    auto make_setter = [&]() -> coro::task<void> {
+        co_await tp.schedule();
+        REQUIRE(counter == 0);
+        e.set(coro::resume_order_policy::fifo);
+        co_return;
+    };
+
+    coro::sync_wait(
+        coro::when_all(make_waiter(1), make_waiter(2), make_waiter(3), make_waiter(4), make_waiter(5), make_setter()));
+
+    REQUIRE(counter == 5);
+}
+
+TEST_CASE("event fifo none", "[event]")
+{
+    coro::event e{};
+
+    // Need consistency FIFO on a single thread to verify the execution order is correct.
+    coro::thread_pool tp{coro::thread_pool::options{.thread_count = 1}};
+
+    std::atomic<uint64_t> counter{0};
+
+    auto make_setter = [&]() -> coro::task<void> {
+        co_await tp.schedule();
+        REQUIRE(counter == 0);
+        e.set(coro::resume_order_policy::fifo);
+        co_return;
+    };
+
+    coro::sync_wait(coro::when_all(make_setter()));
+
+    REQUIRE(counter == 0);
+}
+
+TEST_CASE("event fifo single", "[event]")
+{
+    coro::event e{};
+
+    // Need consistency FIFO on a single thread to verify the execution order is correct.
+    coro::thread_pool tp{coro::thread_pool::options{.thread_count = 1}};
+
+    std::atomic<uint64_t> counter{0};
+
+    auto make_waiter = [&](uint64_t value) -> coro::task<void> {
+        co_await tp.schedule();
+        co_await e;
+
+        counter++;
+        REQUIRE(counter == value);
+
+        co_return;
+    };
+
+    auto make_setter = [&]() -> coro::task<void> {
+        co_await tp.schedule();
+        REQUIRE(counter == 0);
+        e.set(coro::resume_order_policy::fifo);
+        co_return;
+    };
+
+    coro::sync_wait(coro::when_all(make_waiter(1), make_setter()));
+
+    REQUIRE(counter == 1);
+}
+
+TEST_CASE("event fifo executor", "[event]")
+{
+    coro::event e{};
+
+    // Need consistency FIFO on a single thread to verify the execution order is correct.
+    coro::thread_pool tp{coro::thread_pool::options{.thread_count = 1}};
+
+    std::atomic<uint64_t> counter{0};
+
+    auto make_waiter = [&](uint64_t value) -> coro::task<void> {
+        co_await tp.schedule();
+        co_await e;
+
+        counter++;
+        REQUIRE(counter == value);
+
+        co_return;
+    };
+
+    auto make_setter = [&]() -> coro::task<void> {
+        co_await tp.schedule();
+        REQUIRE(counter == 0);
+        e.set(tp, coro::resume_order_policy::fifo);
+        co_return;
+    };
+
+    coro::sync_wait(
+        coro::when_all(make_waiter(1), make_waiter(2), make_waiter(3), make_waiter(4), make_waiter(5), make_setter()));
+
+    REQUIRE(counter == 5);
+}
+
+TEST_CASE("event fifo none executor", "[event]")
+{
+    coro::event e{};
+
+    // Need consistency FIFO on a single thread to verify the execution order is correct.
+    coro::thread_pool tp{coro::thread_pool::options{.thread_count = 1}};
+
+    std::atomic<uint64_t> counter{0};
+
+    auto make_setter = [&]() -> coro::task<void> {
+        co_await tp.schedule();
+        REQUIRE(counter == 0);
+        e.set(tp, coro::resume_order_policy::fifo);
+        co_return;
+    };
+
+    coro::sync_wait(coro::when_all(make_setter()));
+
+    REQUIRE(counter == 0);
+}
+
+TEST_CASE("event fifo single executor", "[event]")
+{
+    coro::event e{};
+
+    // Need consistency FIFO on a single thread to verify the execution order is correct.
+    coro::thread_pool tp{coro::thread_pool::options{.thread_count = 1}};
+
+    std::atomic<uint64_t> counter{0};
+
+    auto make_waiter = [&](uint64_t value) -> coro::task<void> {
+        co_await tp.schedule();
+        co_await e;
+
+        counter++;
+        REQUIRE(counter == value);
+
+        co_return;
+    };
+
+    auto make_setter = [&]() -> coro::task<void> {
+        co_await tp.schedule();
+        REQUIRE(counter == 0);
+        e.set(tp, coro::resume_order_policy::fifo);
+        co_return;
+    };
+
+    coro::sync_wait(coro::when_all(make_waiter(1), make_setter()));
+
+    REQUIRE(counter == 1);
+}

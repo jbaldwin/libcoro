@@ -7,13 +7,20 @@ event::event(bool initially_set) noexcept : m_state((initially_set) ? static_cas
 {
 }
 
-auto event::set() noexcept -> void
+auto event::set(resume_order_policy policy) noexcept -> void
 {
     // Exchange the state to this, if the state was previously not this, then traverse the list
     // of awaiters and resume their coroutines.
     void* old_value = m_state.exchange(this, std::memory_order::acq_rel);
     if (old_value != this)
     {
+        // If FIFO has been requsted then reverse the order upon resuming.
+        if (policy == resume_order_policy::fifo)
+        {
+            old_value = reverse(static_cast<awaiter*>(old_value));
+        }
+        // else lifo nothing to do
+
         auto* waiters = static_cast<awaiter*>(old_value);
         while (waiters != nullptr)
         {
@@ -24,22 +31,25 @@ auto event::set() noexcept -> void
     }
 }
 
-// auto event::set(coro::thread_pool& tp) noexcept -> void
-// {
-//     // Exchange the state to this, if the state was previously not this, then traverse the list
-//     // of awaiters and resume their coroutines.
-//     void* old_value = m_state.exchange(this, std::memory_order::acq_rel);
-//     if (old_value != this)
-//     {
-//         auto* waiters = static_cast<awaiter*>(old_value);
-//         while (waiters != nullptr)
-//         {
-//             auto* next = waiters->m_next;
-//             tp.resume(waiters->m_awaiting_coroutine);
-//             waiters = next;
-//         }
-//     }
-// }
+auto event::reverse(awaiter* curr) -> awaiter*
+{
+    if (curr == nullptr || curr->m_next == nullptr)
+    {
+        return curr;
+    }
+
+    awaiter* prev = nullptr;
+    awaiter* next = nullptr;
+    while (curr != nullptr)
+    {
+        next         = curr->m_next;
+        curr->m_next = prev;
+        prev         = curr;
+        curr         = next;
+    }
+
+    return prev;
+}
 
 auto event::awaiter::await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept -> bool
 {

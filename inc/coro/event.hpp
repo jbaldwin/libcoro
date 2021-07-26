@@ -7,6 +7,16 @@
 
 namespace coro
 {
+enum class resume_order_policy
+{
+    /// Last in first out, this is the default policy and will execute the fastest
+    /// if you do not need the first waiter to execute first upon the event being set.
+    lifo,
+    /// First in first out, this policy has an extra overhead to reverse the order of
+    /// the waiters but will guarantee the ordering is fifo.
+    fifo
+};
+
 /**
  * Event is a manully triggered thread safe signal that can be co_await()'ed by multiple awaiters.
  * Each awaiter should co_await the event and upon the event being set each awaiter will have their
@@ -71,7 +81,7 @@ public:
     event(const event&) = delete;
     event(event&&)      = delete;
     auto operator=(const event&) -> event& = delete;
-    auto operator=(event&&) -> event& = delete;
+    auto operator=(event &&) -> event& = delete;
 
     /**
      * @return True if this event is currently in the set state.
@@ -81,19 +91,28 @@ public:
     /**
      * Sets this event and resumes all awaiters.  Note that all waiters will be resumed onto this
      * thread of execution.
+     * @param policy The order in which the waiters should be resumed, defaults to LIFO since it
+     *               is more efficient, FIFO requires reversing the order of the waiters first.
      */
-    auto set() noexcept -> void;
+    auto set(resume_order_policy policy = resume_order_policy::lifo) noexcept -> void;
 
     /**
      * Sets this event and resumes all awaiters onto the given executor.  This will distribute
      * the waiters across the executor's threads.
      */
     template<concepts::executor executor_type>
-    auto set(executor_type& e) noexcept -> void
+    auto set(executor_type& e, resume_order_policy policy = resume_order_policy::lifo) noexcept -> void
     {
         void* old_value = m_state.exchange(this, std::memory_order::acq_rel);
         if (old_value != this)
         {
+            // If FIFO has been requsted then reverse the order upon resuming.
+            if (policy == resume_order_policy::fifo)
+            {
+                old_value = reverse(static_cast<awaiter*>(old_value));
+            }
+            // else lifo nothing to do
+
             auto* waiters = static_cast<awaiter*>(old_value);
             while (waiters != nullptr)
             {
@@ -124,6 +143,12 @@ protected:
     /// 2) awaiter* == linked list of awaiters waiting for the event to trigger.
     /// 3) this == The event is triggered and all awaiters are resumed.
     mutable std::atomic<void*> m_state;
+
+private:
+    /**
+     * Reverses the set of waiters from LIFO->FIFO and returns the new head.
+     */
+    auto reverse(awaiter* head) -> awaiter*;
 };
 
 } // namespace coro
