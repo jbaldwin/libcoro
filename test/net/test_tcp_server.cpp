@@ -201,3 +201,103 @@ TEST_CASE("tcp_server with ssl", "[tcp_server]")
 
     coro::sync_wait(coro::when_all(make_server_task(), make_client_task()));
 }
+
+TEST_CASE("tcp_client with https://example.com", "[tcp_client]")
+{
+    const static std::string website = "example.com";
+
+    const static std::string http_request =
+        "GET / HTTP/1.1\r\n"
+        "Host: " +
+        website +
+        "\r\n"
+        "Accept: */*\r\n"
+        "User-Agent: libcoro-http\r\n"
+        "\r\n";
+
+    auto scheduler = std::make_shared<coro::io_scheduler>(
+        coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
+
+    coro::net::ssl_context client_ssl_context{};
+
+    auto make_get_ip_address = [&](coro::net::hostname hn) -> coro::task<coro::net::ip_address> {
+        co_await scheduler->schedule();
+        coro::net::dns_resolver resolver{scheduler, std::chrono::seconds{5}};
+
+        auto ip_addresses = (co_await resolver.host_by_name(hn))->ip_addresses();
+        if (!ip_addresses.empty())
+        {
+            co_return ip_addresses[0];
+        }
+        else
+        {
+            REQUIRE(false);
+            co_return coro::net::ip_address{};
+        }
+    };
+
+    auto make_client_task = [&]() -> coro::task<void> {
+        co_await scheduler->schedule();
+
+        auto ipaddr = co_await make_get_ip_address(coro::net::hostname{website});
+
+        coro::net::tcp_client client{
+            scheduler, coro::net::tcp_client::options{.address = ipaddr, .port = 443, .ssl_ctx = &client_ssl_context}};
+
+        std::cerr << "client.connect()\n";
+        auto cstatus = co_await client.connect();
+        REQUIRE(cstatus == coro::net::connect_status::connected);
+        std::cerr << "client.connected\n";
+
+        std::cerr << "client.ssl_handshake()\n";
+        auto hstatus = co_await client.ssl_handshake();
+        REQUIRE(hstatus == coro::net::ssl_handshake_status::ok);
+
+        std::cerr << "client.poll(write)\n";
+        auto pstatus = co_await client.poll(coro::poll_op::write);
+        REQUIRE(pstatus == coro::poll_status::event);
+
+        std::cerr << "client.send()\n";
+        auto [sstatus, remaining] = client.send(http_request);
+        REQUIRE(sstatus == coro::net::send_status::ok);
+        REQUIRE(remaining.empty());
+
+        std::string response;
+        response.resize(4096, '\0');
+        std::span<char> response_view = response;
+
+        while (true)
+        {
+            std::cerr << "client.poll(read)\n";
+            pstatus = co_await client.poll(coro::poll_op::read);
+            REQUIRE(pstatus == coro::poll_status::event);
+
+            std::cerr << "client.recv()\n";
+            auto [rstatus, rspan] = client.recv(response_view);
+            if (rstatus == coro::net::recv_status::would_block)
+            {
+                std::cerr << coro::net::to_string(rstatus) << "\n";
+                continue;
+            }
+            else
+            {
+                std::cerr << coro::net::to_string(rstatus) << "\n";
+                REQUIRE(rstatus == coro::net::recv_status::ok);
+                response_view = response_view.subspan(rspan.size());
+            }
+
+            if (response.find("</html>") != std::string::npos)
+            {
+                std::cerr << "FOUND </html>\n";
+                break;
+            }
+        }
+
+        std::cerr << "client received message:\n" << response << "\n";
+
+        std::cerr << "client finished\n";
+        co_return;
+    };
+
+    coro::sync_wait(make_client_task());
+}
