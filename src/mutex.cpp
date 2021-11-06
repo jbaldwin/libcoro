@@ -33,6 +33,7 @@ auto mutex::lock_operation::await_ready() const noexcept -> bool
 
 auto mutex::lock_operation::await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept -> bool
 {
+    m_awaiting_coroutine = awaiting_coroutine;
     void* current = m_mutex.m_state.load(std::memory_order::acquire);
     void* new_value;
 
@@ -57,10 +58,10 @@ auto mutex::lock_operation::await_suspend(std::coroutine_handle<> awaiting_corou
     if (current == unlocked_value)
     {
         std::atomic_thread_fence(std::memory_order::acquire);
+        m_awaiting_coroutine = nullptr; // nothing to await later since this doesn't suspend
         return false;
     }
 
-    m_awaiting_coroutine = awaiting_coroutine;
     return true;
 }
 
