@@ -80,7 +80,7 @@ public:
         return completion_notifier{};
     }
 
-    auto return_value() -> return_type&&
+    auto result() -> return_type&&
     {
         if (m_exception)
         {
@@ -123,7 +123,9 @@ public:
         return completion_notifier{};
     }
 
-    auto return_void() -> void
+    auto return_void() noexcept -> void {}
+
+    auto result() -> void
     {
         if (m_exception)
         {
@@ -169,12 +171,12 @@ public:
         if constexpr (std::is_same_v<void, return_type>)
         {
             // Propagate exceptions.
-            m_coroutine.promise().return_void();
+            m_coroutine.promise().result();
             return;
         }
         else
         {
-            return m_coroutine.promise().return_value();
+            return m_coroutine.promise().result();
         }
     }
 
