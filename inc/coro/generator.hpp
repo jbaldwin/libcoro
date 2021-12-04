@@ -41,7 +41,7 @@ public:
 
     auto unhandled_exception() -> void { m_exception = std::current_exception(); }
 
-    auto return_void() -> void {}
+    auto return_void() noexcept -> void {}
 
     auto value() const noexcept -> reference_type { return static_cast<reference_type>(*m_value); }
 

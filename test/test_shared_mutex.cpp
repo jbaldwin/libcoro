@@ -130,7 +130,7 @@ TEST_CASE("mutex many shared and exclusive waiters interleaved", "[shared_mutex]
             {
                 if (st.is_ready())
                 {
-                    stop = st.promise().return_value();
+                    stop = st.promise().result();
                 }
             }
         }

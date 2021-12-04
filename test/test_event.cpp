@@ -20,7 +20,7 @@ TEST_CASE("event single awaiter", "[event]")
     REQUIRE_FALSE(task.is_ready());
     e.set(); // this will automaticaly resume the task that is awaiting the event.
     REQUIRE(task.is_ready());
-    REQUIRE(task.promise().return_value() == 42);
+    REQUIRE(task.promise().result() == 42);
 }
 
 auto producer(coro::event& event) -> void
@@ -46,7 +46,7 @@ TEST_CASE("event one watcher", "[event]")
 
     producer(e);
 
-    REQUIRE(value.promise().return_value() == 42);
+    REQUIRE(value.promise().result() == 42);
 }
 
 TEST_CASE("event multiple watchers", "[event]")
@@ -65,9 +65,9 @@ TEST_CASE("event multiple watchers", "[event]")
 
     producer(e);
 
-    REQUIRE(value1.promise().return_value() == 42);
-    REQUIRE(value2.promise().return_value() == 42);
-    REQUIRE(value3.promise().return_value() == 42);
+    REQUIRE(value1.promise().result() == 42);
+    REQUIRE(value2.promise().result() == 42);
+    REQUIRE(value3.promise().result() == 42);
 }
 
 TEST_CASE("event reset", "[event]")
@@ -82,7 +82,7 @@ TEST_CASE("event reset", "[event]")
     REQUIRE_FALSE(value1.is_ready());
 
     producer(e);
-    REQUIRE(value1.promise().return_value() == 42);
+    REQUIRE(value1.promise().result() == 42);
 
     e.reset();
 
@@ -92,7 +92,7 @@ TEST_CASE("event reset", "[event]")
 
     producer(e);
 
-    REQUIRE(value2.promise().return_value() == 42);
+    REQUIRE(value2.promise().result() == 42);
 }
 
 TEST_CASE("event fifo", "[event]")

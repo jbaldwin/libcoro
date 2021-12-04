@@ -70,7 +70,7 @@ struct promise final : public promise_base
 
     auto return_value(return_type value) -> void { m_return_value = std::move(value); }
 
-    auto return_value() const& -> const return_type&
+    auto result() const& -> const return_type&
     {
         if (m_exception_ptr)
         {
@@ -80,7 +80,7 @@ struct promise final : public promise_base
         return m_return_value;
     }
 
-    auto return_value() && -> return_type&&
+    auto result() && -> return_type&&
     {
         if (m_exception_ptr)
         {
@@ -105,7 +105,9 @@ struct promise<void> : public promise_base
 
     auto get_return_object() noexcept -> task_type;
 
-    auto return_void() -> void
+    auto return_void() noexcept -> void {}
+
+    auto result() -> void
     {
         if (m_exception_ptr)
         {
@@ -143,7 +145,7 @@ public:
 
     explicit task(coroutine_handle handle) : m_coroutine(handle) {}
     task(const task&) = delete;
-    task(task&& other) noexcept : m_coroutine(std::exchange(other.m_coroutine, nullptr)) {}
+    task(task && other) noexcept : m_coroutine(std::exchange(other.m_coroutine, nullptr)) {}
 
     ~task()
     {
@@ -153,9 +155,9 @@ public:
         }
     }
 
-    auto operator=(const task&) -> task& = delete;
+    auto operator=(const task&)->task& = delete;
 
-    auto operator=(task&& other) noexcept -> task&
+    auto operator=(task&& other) noexcept->task&
     {
         if (std::addressof(other) != this)
         {
@@ -173,9 +175,9 @@ public:
     /**
      * @return True if the task is in its final suspend or if the task has been destroyed.
      */
-    auto is_ready() const noexcept -> bool { return m_coroutine == nullptr || m_coroutine.done(); }
+    auto is_ready() const noexcept->bool { return m_coroutine == nullptr || m_coroutine.done(); }
 
-    auto resume() -> bool
+    auto resume()->bool
     {
         if (!m_coroutine.done())
         {
@@ -184,7 +186,7 @@ public:
         return !m_coroutine.done();
     }
 
-    auto destroy() -> bool
+    auto destroy()->bool
     {
         if (m_coroutine != nullptr)
         {
@@ -205,12 +207,12 @@ public:
                 if constexpr (std::is_same_v<void, return_type>)
                 {
                     // Propagate uncaught exceptions.
-                    this->m_coroutine.promise().return_void();
+                    this->m_coroutine.promise().result();
                     return;
                 }
                 else
                 {
-                    return this->m_coroutine.promise().return_value();
+                    return this->m_coroutine.promise().result();
                 }
             }
         };
@@ -227,12 +229,12 @@ public:
                 if constexpr (std::is_same_v<void, return_type>)
                 {
                     // Propagate uncaught exceptions.
-                    this->m_coroutine.promise().return_void();
+                    this->m_coroutine.promise().result();
                     return;
                 }
                 else
                 {
-                    return std::move(this->m_coroutine.promise()).return_value();
+                    return std::move(this->m_coroutine.promise()).result();
                 }
             }
         };
@@ -240,12 +242,12 @@ public:
         return awaitable{m_coroutine};
     }
 
-    auto promise() & -> promise_type& { return m_coroutine.promise(); }
+    auto promise()&->promise_type& { return m_coroutine.promise(); }
 
-    auto promise() const& -> const promise_type& { return m_coroutine.promise(); }
-    auto promise() && -> promise_type&& { return std::move(m_coroutine.promise()); }
+    auto promise() const&->const promise_type& { return m_coroutine.promise(); }
+    auto promise()&&->promise_type&& { return std::move(m_coroutine.promise()); }
 
-    auto handle() -> coroutine_handle { return m_coroutine; }
+    auto handle()->coroutine_handle { return m_coroutine; }
 
 private:
     coroutine_handle m_coroutine{nullptr};

@@ -12,8 +12,8 @@ TEST_CASE("task hello world", "[task]")
     auto h = []() -> task_type { co_return "Hello"; }();
     auto w = []() -> task_type { co_return "World"; }();
 
-    REQUIRE(h.promise().return_value().empty());
-    REQUIRE(w.promise().return_value().empty());
+    REQUIRE(h.promise().result().empty());
+    REQUIRE(w.promise().result().empty());
 
     h.resume(); // task suspends immediately
     w.resume();
@@ -21,11 +21,11 @@ TEST_CASE("task hello world", "[task]")
     REQUIRE(h.is_ready());
     REQUIRE(w.is_ready());
 
-    auto w_value = std::move(w).promise().return_value();
+    auto w_value = std::move(w).promise().result();
 
-    REQUIRE(h.promise().return_value() == "Hello");
+    REQUIRE(h.promise().result() == "Hello");
     REQUIRE(w_value == "World");
-    REQUIRE(w.promise().return_value().empty());
+    REQUIRE(w.promise().result().empty());
 }
 
 TEST_CASE("task void", "[task]")
@@ -60,7 +60,7 @@ TEST_CASE("task exception thrown", "[task]")
     bool thrown{false};
     try
     {
-        auto value = task.promise().return_value();
+        auto value = task.promise().result();
     }
     catch (const std::exception& e)
     {
@@ -164,7 +164,7 @@ TEST_CASE("task multiple suspends return integer", "[task]")
 
     task.resume(); // third internal suspend
     REQUIRE(task.is_ready());
-    REQUIRE(task.promise().return_value() == 11);
+    REQUIRE(task.promise().result() == 11);
 }
 
 TEST_CASE("task resume from promise to coroutine handles of different types", "[task]")
@@ -193,7 +193,7 @@ TEST_CASE("task resume from promise to coroutine handles of different types", "[
 
     REQUIRE(task1.is_ready());
     REQUIRE(coro_handle1.done());
-    REQUIRE(task1.promise().return_value() == 42);
+    REQUIRE(task1.promise().result() == 42);
 
     REQUIRE(task2.is_ready());
     REQUIRE(coro_handle2.done());
@@ -208,7 +208,7 @@ TEST_CASE("task throws void", "[task]")
 
     REQUIRE_NOTHROW(task.resume());
     REQUIRE(task.is_ready());
-    REQUIRE_THROWS_AS(task.promise().return_void(), std::runtime_error);
+    REQUIRE_THROWS_AS(task.promise().result(), std::runtime_error);
 }
 
 TEST_CASE("task throws non-void l-value", "[task]")
@@ -220,7 +220,7 @@ TEST_CASE("task throws non-void l-value", "[task]")
 
     REQUIRE_NOTHROW(task.resume());
     REQUIRE(task.is_ready());
-    REQUIRE_THROWS_AS(task.promise().return_value(), std::runtime_error);
+    REQUIRE_THROWS_AS(task.promise().result(), std::runtime_error);
 }
 
 TEST_CASE("task throws non-void r-value", "[task]")
@@ -239,5 +239,5 @@ TEST_CASE("task throws non-void r-value", "[task]")
 
     task.resume();
     REQUIRE(task.is_ready());
-    REQUIRE_THROWS_AS(task.promise().return_value(), std::runtime_error);
+    REQUIRE_THROWS_AS(task.promise().result(), std::runtime_error);
 }

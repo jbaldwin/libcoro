@@ -340,7 +340,9 @@ public:
 
     auto unhandled_exception() noexcept -> void { m_exception_ptr = std::current_exception(); }
 
-    auto return_void() noexcept -> void
+    auto return_void() noexcept -> void {}
+
+    auto result() -> void
     {
         if (m_exception_ptr)
         {
@@ -393,7 +395,7 @@ public:
     {
         if constexpr (std::is_void_v<return_type>)
         {
-            m_coroutine.promise().return_void();
+            m_coroutine.promise().result();
             return void_value{};
         }
         else
@@ -406,7 +408,7 @@ public:
     {
         if constexpr (std::is_void_v<return_type>)
         {
-            m_coroutine.promise().return_void();
+            m_coroutine.promise().result();
             return void_value{};
         }
         else
@@ -419,7 +421,7 @@ public:
     {
         if constexpr (std::is_void_v<return_type>)
         {
-            m_coroutine.promise().return_void();
+            m_coroutine.promise().result();
             return void_value{};
         }
         else
