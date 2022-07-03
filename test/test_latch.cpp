@@ -1,4 +1,4 @@
-#include "catch.hpp"
+#include "catch_amalgamated.hpp"
 
 #include <coro/coro.hpp>
 
@@ -9,7 +9,8 @@ TEST_CASE("latch count=0", "[latch]")
 {
     coro::latch l{0};
 
-    auto make_task = [&]() -> coro::task<uint64_t> {
+    auto make_task = [&]() -> coro::task<uint64_t>
+    {
         co_await l;
         co_return 42;
     };
@@ -25,7 +26,8 @@ TEST_CASE("latch count=1", "[latch]")
 {
     coro::latch l{1};
 
-    auto make_task = [&]() -> coro::task<uint64_t> {
+    auto make_task = [&]() -> coro::task<uint64_t>
+    {
         auto workers = l.remaining();
         co_await l;
         co_return workers;
@@ -45,7 +47,8 @@ TEST_CASE("latch count=1 count_down=5", "[latch]")
 {
     coro::latch l{1};
 
-    auto make_task = [&]() -> coro::task<uint64_t> {
+    auto make_task = [&]() -> coro::task<uint64_t>
+    {
         auto workers = l.remaining();
         co_await l;
         co_return workers;
@@ -65,7 +68,8 @@ TEST_CASE("latch count=5 count_down=1 x5", "[latch]")
 {
     coro::latch l{5};
 
-    auto make_task = [&]() -> coro::task<uint64_t> {
+    auto make_task = [&]() -> coro::task<uint64_t>
+    {
         auto workers = l.remaining();
         co_await l;
         co_return workers;
@@ -93,7 +97,8 @@ TEST_CASE("latch count=5 count_down=5", "[latch]")
 {
     coro::latch l{5};
 
-    auto make_task = [&]() -> coro::task<uint64_t> {
+    auto make_task = [&]() -> coro::task<uint64_t>
+    {
         auto workers = l.remaining();
         co_await l;
         co_return workers;

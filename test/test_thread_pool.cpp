@@ -1,4 +1,4 @@
-#include "catch.hpp"
+#include "catch_amalgamated.hpp"
 
 #include <coro/coro.hpp>
 
@@ -8,7 +8,8 @@ TEST_CASE("thread_pool one worker one task", "[thread_pool]")
 {
     coro::thread_pool tp{coro::thread_pool::options{1}};
 
-    auto func = [&tp]() -> coro::task<uint64_t> {
+    auto func = [&tp]() -> coro::task<uint64_t>
+    {
         co_await tp.schedule(); // Schedule this coroutine on the scheduler.
         co_return 42;
     };
@@ -21,7 +22,8 @@ TEST_CASE("thread_pool one worker many tasks tuple", "[thread_pool]")
 {
     coro::thread_pool tp{coro::thread_pool::options{1}};
 
-    auto f = [&tp]() -> coro::task<uint64_t> {
+    auto f = [&tp]() -> coro::task<uint64_t>
+    {
         co_await tp.schedule(); // Schedule this coroutine on the scheduler.
         co_return 50;
     };
@@ -39,7 +41,8 @@ TEST_CASE("thread_pool one worker many tasks vector", "[thread_pool]")
 {
     coro::thread_pool tp{coro::thread_pool::options{1}};
 
-    auto f = [&tp]() -> coro::task<uint64_t> {
+    auto f = [&tp]() -> coro::task<uint64_t>
+    {
         co_await tp.schedule(); // Schedule this coroutine on the scheduler.
         co_return 50;
     };
@@ -67,7 +70,8 @@ TEST_CASE("thread_pool N workers 100k tasks", "[thread_pool]")
     constexpr const std::size_t iterations = 100'000;
     coro::thread_pool           tp{};
 
-    auto make_task = [](coro::thread_pool& tp) -> coro::task<uint64_t> {
+    auto make_task = [](coro::thread_pool& tp) -> coro::task<uint64_t>
+    {
         co_await tp.schedule();
         co_return 1;
     };
@@ -95,10 +99,12 @@ TEST_CASE("thread_pool 1 worker task spawns another task", "[thread_pool]")
 {
     coro::thread_pool tp{coro::thread_pool::options{1}};
 
-    auto f1 = [](coro::thread_pool& tp) -> coro::task<uint64_t> {
+    auto f1 = [](coro::thread_pool& tp) -> coro::task<uint64_t>
+    {
         co_await tp.schedule();
 
-        auto f2 = [](coro::thread_pool& tp) -> coro::task<uint64_t> {
+        auto f2 = [](coro::thread_pool& tp) -> coro::task<uint64_t>
+        {
             co_await tp.schedule();
             co_return 5;
         };
@@ -113,7 +119,8 @@ TEST_CASE("thread_pool shutdown", "[thread_pool]")
 {
     coro::thread_pool tp{coro::thread_pool::options{1}};
 
-    auto f = [](coro::thread_pool& tp) -> coro::task<bool> {
+    auto f = [](coro::thread_pool& tp) -> coro::task<bool>
+    {
         try
         {
             co_await tp.schedule();
@@ -168,7 +175,8 @@ TEST_CASE("thread_pool event jump threads", "[thread_pool]")
 
     coro::event e{};
 
-    auto make_tp1_task = [&]() -> coro::task<void> {
+    auto make_tp1_task = [&]() -> coro::task<void>
+    {
         co_await tp1.schedule();
         auto before_thread_id = std::this_thread::get_id();
         std::cerr << "before event thread_id = " << before_thread_id << "\n";
@@ -181,7 +189,8 @@ TEST_CASE("thread_pool event jump threads", "[thread_pool]")
         co_return;
     };
 
-    auto make_tp2_task = [&]() -> coro::task<void> {
+    auto make_tp2_task = [&]() -> coro::task<void>
+    {
         co_await tp2.schedule();
         std::this_thread::sleep_for(std::chrono::milliseconds{10});
         std::cerr << "setting event\n";

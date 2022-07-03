@@ -1,4 +1,4 @@
-#include "catch.hpp"
+#include "catch_amalgamated.hpp"
 
 #include <coro/coro.hpp>
 
@@ -20,7 +20,8 @@ TEST_CASE("io_scheduler schedule single task", "[io_scheduler]")
 {
     coro::io_scheduler s{coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}}};
 
-    auto make_task = [&]() -> coro::task<uint64_t> {
+    auto make_task = [&]() -> coro::task<uint64_t>
+    {
         co_await s.schedule();
         co_return 42;
     };
@@ -41,7 +42,8 @@ TEST_CASE("io_scheduler submit mutiple tasks", "[io_scheduler]")
     tasks.reserve(n);
     coro::io_scheduler s{};
 
-    auto make_task = [&]() -> coro::task<void> {
+    auto make_task = [&]() -> coro::task<void>
+    {
         co_await s.schedule();
         counter++;
         co_return;
@@ -70,7 +72,8 @@ TEST_CASE("io_scheduler task with multiple events", "[io_scheduler]")
     coro::event e2;
     coro::event e3;
 
-    auto make_wait_task = [&]() -> coro::task<void> {
+    auto make_wait_task = [&]() -> coro::task<void>
+    {
         co_await s.schedule();
         co_await e1;
         counter++;
@@ -81,7 +84,8 @@ TEST_CASE("io_scheduler task with multiple events", "[io_scheduler]")
         co_return;
     };
 
-    auto make_set_task = [&](coro::event& e) -> coro::task<void> {
+    auto make_set_task = [&](coro::event& e) -> coro::task<void>
+    {
         co_await s.schedule();
         e.set();
     };
@@ -101,14 +105,16 @@ TEST_CASE("io_scheduler task with read poll", "[io_scheduler]")
     auto               trigger_fd = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
     coro::io_scheduler s{coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}}};
 
-    auto make_poll_read_task = [&]() -> coro::task<void> {
+    auto make_poll_read_task = [&]() -> coro::task<void>
+    {
         co_await s.schedule();
         auto status = co_await s.poll(trigger_fd, coro::poll_op::read);
         REQUIRE(status == coro::poll_status::event);
         co_return;
     };
 
-    auto make_poll_write_task = [&]() -> coro::task<void> {
+    auto make_poll_write_task = [&]() -> coro::task<void>
+    {
         co_await s.schedule();
         uint64_t value{42};
         auto     unused = write(trigger_fd, &value, sizeof(value));
@@ -130,7 +136,8 @@ TEST_CASE("io_scheduler task with read poll with timeout", "[io_scheduler]")
     auto               trigger_fd = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
     coro::io_scheduler s{coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}}};
 
-    auto make_poll_read_task = [&]() -> coro::task<void> {
+    auto make_poll_read_task = [&]() -> coro::task<void>
+    {
         co_await s.schedule();
         // Poll with a timeout but don't timeout.
         auto status = co_await s.poll(trigger_fd, coro::poll_op::read, 50ms);
@@ -138,7 +145,8 @@ TEST_CASE("io_scheduler task with read poll with timeout", "[io_scheduler]")
         co_return;
     };
 
-    auto make_poll_write_task = [&]() -> coro::task<void> {
+    auto make_poll_write_task = [&]() -> coro::task<void>
+    {
         co_await s.schedule();
         uint64_t value{42};
         auto     unused = write(trigger_fd, &value, sizeof(value));
@@ -160,7 +168,8 @@ TEST_CASE("io_scheduler task with read poll timeout", "[io_scheduler]")
     auto               trigger_fd = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
     coro::io_scheduler s{coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}}};
 
-    auto make_task = [&]() -> coro::task<void> {
+    auto make_task = [&]() -> coro::task<void>
+    {
         co_await s.schedule();
         // Poll with a timeout and timeout.
         auto status = co_await s.poll(trigger_fd, coro::poll_op::read, 10ms);
@@ -211,7 +220,8 @@ TEST_CASE("io_scheduler separate thread resume", "[io_scheduler]")
 
     coro::event e{};
 
-    auto make_s1_task = [&]() -> coro::task<void> {
+    auto make_s1_task = [&]() -> coro::task<void>
+    {
         co_await s1.schedule();
         auto tid = std::this_thread::get_id();
         co_await e;
@@ -222,7 +232,8 @@ TEST_CASE("io_scheduler separate thread resume", "[io_scheduler]")
         co_return;
     };
 
-    auto make_s2_task = [&]() -> coro::task<void> {
+    auto make_s2_task = [&]() -> coro::task<void>
+    {
         co_await s2.schedule();
         // Wait a bit to be sure the wait on 'e' in the other scheduler is done first.
         std::this_thread::sleep_for(10ms);
@@ -242,7 +253,8 @@ TEST_CASE("io_scheduler separate thread resume spawned thread", "[io_scheduler]"
 {
     coro::io_scheduler s{coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}}};
 
-    auto make_task = [&]() -> coro::task<void> {
+    auto make_task = [&]() -> coro::task<void>
+    {
         co_await s.schedule();
         coro::event e{};
 
@@ -252,11 +264,13 @@ TEST_CASE("io_scheduler separate thread resume spawned thread", "[io_scheduler]"
         // the 3rd party function api will be set, they should have "user data" void* or ability
         // to capture variables via lambdas for on complete callbacks, here we mimic an on complete
         // callback by capturing the hande.
-        std::thread third_party_thread([&e, &s]() -> void {
-            // mimic some expensive computation
-            // Resume the coroutine back onto the scheduler, not this background thread.
-            e.set(s);
-        });
+        std::thread third_party_thread(
+            [&e, &s]() -> void
+            {
+                // mimic some expensive computation
+                // Resume the coroutine back onto the scheduler, not this background thread.
+                e.set(s);
+            });
         third_party_thread.detach();
 
         // Wait on the handle until the 3rd party service is completed.
@@ -279,23 +293,27 @@ TEST_CASE("io_scheduler separate thread resume with return", "[io_scheduler]")
     coro::event           service_done{};
     std::atomic<uint64_t> output;
 
-    std::thread service{[&]() -> void {
-        while (!start_service.is_set())
+    std::thread service{
+        [&]() -> void
         {
-            std::this_thread::sleep_for(1ms);
-        }
+            while (!start_service.is_set())
+            {
+                std::this_thread::sleep_for(1ms);
+            }
 
-        output = expected_value;
-        service_done.set(s);
-    }};
+            output = expected_value;
+            service_done.set(s);
+        }};
 
-    auto third_party_service = [&](int multiplier) -> coro::task<uint64_t> {
+    auto third_party_service = [&](int multiplier) -> coro::task<uint64_t>
+    {
         start_service.set();
         co_await service_done;
         co_return output* multiplier;
     };
 
-    auto make_task = [&]() -> coro::task<void> {
+    auto make_task = [&]() -> coro::task<void>
+    {
         co_await s.schedule();
 
         int      multiplier{5};
@@ -317,12 +335,14 @@ TEST_CASE("io_scheduler with basic task", "[io_scheduler]")
     constexpr std::size_t expected_value{5};
     coro::io_scheduler    s{coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}}};
 
-    auto add_data = [&](uint64_t val) -> coro::task<int> {
+    auto add_data = [&](uint64_t val) -> coro::task<int>
+    {
         co_await s.schedule();
         co_return val;
     };
 
-    auto func = [&]() -> coro::task<int> {
+    auto func = [&]() -> coro::task<int>
+    {
         co_await s.schedule();
 
         auto output_tasks = co_await coro::when_all(add_data(1), add_data(1), add_data(1), add_data(1), add_data(1));
@@ -349,7 +369,8 @@ TEST_CASE("io_scheduler scheduler_after", "[io_scheduler]")
     std::atomic<uint64_t>               counter{0};
     std::thread::id                     tid;
 
-    auto func = [&](coro::io_scheduler& s, std::chrono::milliseconds amount) -> coro::task<void> {
+    auto func = [&](coro::io_scheduler& s, std::chrono::milliseconds amount) -> coro::task<void>
+    {
         co_await s.schedule_after(amount);
         ++counter;
         // Make sure schedule after context switches into the worker thread.
@@ -405,7 +426,8 @@ TEST_CASE("io_scheduler schedule_at", "[io_scheduler]")
         .pool = coro::thread_pool::options{
             .thread_count = 1, .on_thread_start_functor = [&](std::size_t) { tid = std::this_thread::get_id(); }}}};
 
-    auto func = [&](std::chrono::steady_clock::time_point time) -> coro::task<void> {
+    auto func = [&](std::chrono::steady_clock::time_point time) -> coro::task<void>
+    {
         co_await s.schedule_at(time);
         ++counter;
         REQUIRE(tid == std::this_thread::get_id());
@@ -450,7 +472,8 @@ TEST_CASE("io_scheduler yield", "[io_scheduler]")
         .pool = coro::thread_pool::options{
             .thread_count = 1, .on_thread_start_functor = [&](std::size_t) { tid = std::this_thread::get_id(); }}}};
 
-    auto func = [&]() -> coro::task<void> {
+    auto func = [&]() -> coro::task<void>
+    {
         REQUIRE(tid != std::this_thread::get_id());
         co_await s.schedule();
         REQUIRE(tid == std::this_thread::get_id());
@@ -473,7 +496,8 @@ TEST_CASE("io_scheduler yield_for", "[io_scheduler]")
 
     const std::chrono::milliseconds wait_for{50};
 
-    auto make_task = [&]() -> coro::task<std::chrono::milliseconds> {
+    auto make_task = [&]() -> coro::task<std::chrono::milliseconds>
+    {
         co_await s.schedule();
         auto start = std::chrono::steady_clock::now();
         co_await s.yield_for(wait_for);
@@ -497,7 +521,8 @@ TEST_CASE("io_scheduler yield_until", "[io_scheduler]")
     const std::chrono::milliseconds epsilon{3};
     const std::chrono::milliseconds wait_for{50};
 
-    auto make_task = [&]() -> coro::task<std::chrono::milliseconds> {
+    auto make_task = [&]() -> coro::task<std::chrono::milliseconds>
+    {
         co_await s.schedule();
         auto start = std::chrono::steady_clock::now();
         co_await s.yield_until(start + wait_for);
@@ -519,12 +544,14 @@ TEST_CASE("io_scheduler multipler event waiters", "[io_scheduler]")
     coro::event                 e{};
     coro::io_scheduler          s{};
 
-    auto func = [&]() -> coro::task<uint64_t> {
+    auto func = [&]() -> coro::task<uint64_t>
+    {
         co_await e;
         co_return 1;
     };
 
-    auto spawn = [&]() -> coro::task<void> {
+    auto spawn = [&]() -> coro::task<void>
+    {
         co_await s.schedule();
         std::vector<coro::task<uint64_t>> tasks;
         for (size_t i = 0; i < total; ++i)
@@ -542,7 +569,8 @@ TEST_CASE("io_scheduler multipler event waiters", "[io_scheduler]")
         REQUIRE(counter == total);
     };
 
-    auto release = [&]() -> coro::task<void> {
+    auto release = [&]() -> coro::task<void>
+    {
         co_await s.schedule_after(10ms);
         e.set(s);
     };
@@ -564,7 +592,8 @@ TEST_CASE("io_scheduler self generating coroutine (stack overflow check)", "[io_
     std::vector<coro::task<void>> tasks;
     tasks.reserve(total);
 
-    auto func = [&](auto f) -> coro::task<void> {
+    auto func = [&](auto f) -> coro::task<void>
+    {
         co_await s.schedule();
         ++counter;
 
@@ -602,12 +631,13 @@ TEST_CASE("io_scheduler manual process events thread pool", "[io_scheduler]")
     coro::io_scheduler s{coro::io_scheduler::options{
         .thread_strategy = coro::io_scheduler::thread_strategy_t::manual,
         .pool            = coro::thread_pool::options{
-            .thread_count = 1,
+                       .thread_count = 1,
         }}};
 
     std::atomic<bool> polling{false};
 
-    auto make_poll_read_task = [&]() -> coro::task<void> {
+    auto make_poll_read_task = [&]() -> coro::task<void>
+    {
         std::cerr << "poll task start s.size() == " << s.size() << "\n";
         co_await s.schedule();
         polling = true;
@@ -618,7 +648,8 @@ TEST_CASE("io_scheduler manual process events thread pool", "[io_scheduler]")
         co_return;
     };
 
-    auto make_poll_write_task = [&]() -> coro::task<void> {
+    auto make_poll_write_task = [&]() -> coro::task<void>
+    {
         std::cerr << "write task start s.size() == " << s.size() << "\n";
         co_await s.schedule();
         uint64_t value{42};
@@ -657,7 +688,8 @@ TEST_CASE("io_scheduler manual process events inline", "[io_scheduler]")
         .thread_strategy    = coro::io_scheduler::thread_strategy_t::manual,
         .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline}};
 
-    auto make_poll_read_task = [&]() -> coro::task<void> {
+    auto make_poll_read_task = [&]() -> coro::task<void>
+    {
         std::cerr << "poll task start s.size() == " << s.size() << "\n";
         co_await s.schedule();
         std::cerr << "poll task polling s.size() == " << s.size() << "\n";
@@ -667,7 +699,8 @@ TEST_CASE("io_scheduler manual process events inline", "[io_scheduler]")
         co_return;
     };
 
-    auto make_poll_write_task = [&]() -> coro::task<void> {
+    auto make_poll_write_task = [&]() -> coro::task<void>
+    {
         std::cerr << "write task start s.size() == " << s.size() << "\n";
         co_await s.schedule();
         uint64_t value{42};
@@ -707,7 +740,8 @@ TEST_CASE("io_scheduler task throws", "[io_scheduler]")
 {
     coro::io_scheduler s{coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}}};
 
-    auto func = [&]() -> coro::task<uint64_t> {
+    auto func = [&]() -> coro::task<uint64_t>
+    {
         co_await s.schedule();
         throw std::runtime_error{"I always throw."};
         co_return 42;
@@ -720,7 +754,8 @@ TEST_CASE("io_scheduler task throws after resume", "[io_scheduler]")
 {
     coro::io_scheduler s{coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}}};
 
-    auto make_thrower = [&]() -> coro::task<bool> {
+    auto make_thrower = [&]() -> coro::task<bool>
+    {
         co_await s.schedule();
         std::cerr << "Throwing task is doing some work...\n";
         co_await s.yield();
