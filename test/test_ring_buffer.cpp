@@ -1,4 +1,4 @@
-#include "catch.hpp"
+#include "catch_amalgamated.hpp"
 
 #include <coro/coro.hpp>
 
@@ -17,7 +17,8 @@ TEST_CASE("ring_buffer single element", "[ring_buffer]")
 
     std::vector<uint64_t> output{};
 
-    auto make_producer_task = [&]() -> coro::task<void> {
+    auto make_producer_task = [&]() -> coro::task<void>
+    {
         for (size_t i = 1; i <= iterations; ++i)
         {
             std::cerr << "produce: " << i << "\n";
@@ -26,7 +27,8 @@ TEST_CASE("ring_buffer single element", "[ring_buffer]")
         co_return;
     };
 
-    auto make_consumer_task = [&]() -> coro::task<void> {
+    auto make_consumer_task = [&]() -> coro::task<void>
+    {
         for (size_t i = 1; i <= iterations; ++i)
         {
             auto value = co_await rb.consume();
@@ -55,7 +57,8 @@ TEST_CASE("ring_buffer many elements many producers many consumers", "[ring_buff
     coro::thread_pool               tp{coro::thread_pool::options{.thread_count = 4}};
     coro::ring_buffer<uint64_t, 64> rb{};
 
-    auto make_producer_task = [&]() -> coro::task<void> {
+    auto make_producer_task = [&]() -> coro::task<void>
+    {
         co_await tp.schedule();
         auto to_produce = iterations / producers;
 
@@ -75,7 +78,8 @@ TEST_CASE("ring_buffer many elements many producers many consumers", "[ring_buff
         co_return;
     };
 
-    auto make_consumer_task = [&]() -> coro::task<void> {
+    auto make_consumer_task = [&]() -> coro::task<void>
+    {
         co_await tp.schedule();
 
         try

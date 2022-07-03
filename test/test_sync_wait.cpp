@@ -1,4 +1,4 @@
-#include "catch.hpp"
+#include "catch_amalgamated.hpp"
 
 #include <coro/coro.hpp>
 
@@ -14,7 +14,8 @@ TEST_CASE("sync_wait void", "[sync_wait]")
 {
     std::string output;
 
-    auto func = [&]() -> coro::task<void> {
+    auto func = [&]() -> coro::task<void>
+    {
         output = "hello from sync_wait<void>\n";
         co_return;
     };
@@ -25,12 +26,14 @@ TEST_CASE("sync_wait void", "[sync_wait]")
 
 TEST_CASE("sync_wait task co_await single", "[sync_wait]")
 {
-    auto answer = []() -> coro::task<int> {
+    auto answer = []() -> coro::task<int>
+    {
         std::cerr << "\tThinking deep thoughts...\n";
         co_return 42;
     };
 
-    auto await_answer = [&]() -> coro::task<int> {
+    auto await_answer = [&]() -> coro::task<int>
+    {
         std::cerr << "\tStarting to wait for answer.\n";
         auto a = answer();
         std::cerr << "\tGot the coroutine, getting the value.\n";
@@ -49,7 +52,8 @@ TEST_CASE("sync_wait task co_await single", "[sync_wait]")
 
 TEST_CASE("sync_wait task that throws", "[sync_wait]")
 {
-    auto f = []() -> coro::task<uint64_t> {
+    auto f = []() -> coro::task<uint64_t>
+    {
         throw std::runtime_error("I always throw!");
         co_return 1;
     };

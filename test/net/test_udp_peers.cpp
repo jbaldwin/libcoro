@@ -1,4 +1,4 @@
-#include "catch.hpp"
+#include "catch_amalgamated.hpp"
 
 #include <coro/coro.hpp>
 
@@ -9,7 +9,8 @@ TEST_CASE("udp one way")
     auto scheduler = std::make_shared<coro::io_scheduler>(
         coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
 
-    auto make_send_task = [&]() -> coro::task<void> {
+    auto make_send_task = [&]() -> coro::task<void>
+    {
         co_await scheduler->schedule();
         coro::net::udp_peer       peer{scheduler};
         coro::net::udp_peer::info peer_info{};
@@ -21,7 +22,8 @@ TEST_CASE("udp one way")
         co_return;
     };
 
-    auto make_recv_task = [&]() -> coro::task<void> {
+    auto make_recv_task = [&]() -> coro::task<void>
+    {
         co_await scheduler->schedule();
         coro::net::udp_peer::info self_info{.address = coro::net::ip_address::from_string("0.0.0.0")};
 
@@ -58,7 +60,8 @@ TEST_CASE("udp echo peers")
                               uint16_t          peer_port,
                               bool              send_first,
                               const std::string my_msg,
-                              const std::string peer_msg) -> coro::task<void> {
+                              const std::string peer_msg) -> coro::task<void>
+    {
         co_await scheduler->schedule();
         coro::net::udp_peer::info my_info{.address = coro::net::ip_address::from_string("0.0.0.0"), .port = my_port};
         coro::net::udp_peer::info peer_info{

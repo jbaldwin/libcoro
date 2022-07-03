@@ -1,4 +1,4 @@
-#include "catch.hpp"
+#include "catch_amalgamated.hpp"
 
 #include <coro/coro.hpp>
 
@@ -17,7 +17,8 @@ TEST_CASE("generator infinite incrementing integer yield", "[generator]")
 {
     constexpr const int64_t max = 1024;
 
-    auto func = []() -> coro::generator<int64_t> {
+    auto func = []() -> coro::generator<int64_t>
+    {
         int64_t i{0};
         while (true)
         {

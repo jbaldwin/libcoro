@@ -1,4 +1,4 @@
-#include "catch.hpp"
+#include "catch_amalgamated.hpp"
 
 #include <coro/coro.hpp>
 
@@ -9,7 +9,8 @@ TEST_CASE("event single awaiter", "[event]")
 {
     coro::event e{};
 
-    auto func = [&]() -> coro::task<uint64_t> {
+    auto func = [&]() -> coro::task<uint64_t>
+    {
         co_await e;
         co_return 42;
     };
@@ -104,7 +105,8 @@ TEST_CASE("event fifo", "[event]")
 
     std::atomic<uint64_t> counter{0};
 
-    auto make_waiter = [&](uint64_t value) -> coro::task<void> {
+    auto make_waiter = [&](uint64_t value) -> coro::task<void>
+    {
         co_await tp.schedule();
         co_await e;
 
@@ -114,7 +116,8 @@ TEST_CASE("event fifo", "[event]")
         co_return;
     };
 
-    auto make_setter = [&]() -> coro::task<void> {
+    auto make_setter = [&]() -> coro::task<void>
+    {
         co_await tp.schedule();
         REQUIRE(counter == 0);
         e.set(coro::resume_order_policy::fifo);
@@ -136,7 +139,8 @@ TEST_CASE("event fifo none", "[event]")
 
     std::atomic<uint64_t> counter{0};
 
-    auto make_setter = [&]() -> coro::task<void> {
+    auto make_setter = [&]() -> coro::task<void>
+    {
         co_await tp.schedule();
         REQUIRE(counter == 0);
         e.set(coro::resume_order_policy::fifo);
@@ -157,7 +161,8 @@ TEST_CASE("event fifo single", "[event]")
 
     std::atomic<uint64_t> counter{0};
 
-    auto make_waiter = [&](uint64_t value) -> coro::task<void> {
+    auto make_waiter = [&](uint64_t value) -> coro::task<void>
+    {
         co_await tp.schedule();
         co_await e;
 
@@ -167,7 +172,8 @@ TEST_CASE("event fifo single", "[event]")
         co_return;
     };
 
-    auto make_setter = [&]() -> coro::task<void> {
+    auto make_setter = [&]() -> coro::task<void>
+    {
         co_await tp.schedule();
         REQUIRE(counter == 0);
         e.set(coro::resume_order_policy::fifo);
@@ -188,7 +194,8 @@ TEST_CASE("event fifo executor", "[event]")
 
     std::atomic<uint64_t> counter{0};
 
-    auto make_waiter = [&](uint64_t value) -> coro::task<void> {
+    auto make_waiter = [&](uint64_t value) -> coro::task<void>
+    {
         co_await tp.schedule();
         co_await e;
 
@@ -198,7 +205,8 @@ TEST_CASE("event fifo executor", "[event]")
         co_return;
     };
 
-    auto make_setter = [&]() -> coro::task<void> {
+    auto make_setter = [&]() -> coro::task<void>
+    {
         co_await tp.schedule();
         REQUIRE(counter == 0);
         e.set(tp, coro::resume_order_policy::fifo);
@@ -220,7 +228,8 @@ TEST_CASE("event fifo none executor", "[event]")
 
     std::atomic<uint64_t> counter{0};
 
-    auto make_setter = [&]() -> coro::task<void> {
+    auto make_setter = [&]() -> coro::task<void>
+    {
         co_await tp.schedule();
         REQUIRE(counter == 0);
         e.set(tp, coro::resume_order_policy::fifo);
@@ -241,7 +250,8 @@ TEST_CASE("event fifo single executor", "[event]")
 
     std::atomic<uint64_t> counter{0};
 
-    auto make_waiter = [&](uint64_t value) -> coro::task<void> {
+    auto make_waiter = [&](uint64_t value) -> coro::task<void>
+    {
         co_await tp.schedule();
         co_await e;
 
@@ -251,7 +261,8 @@ TEST_CASE("event fifo single executor", "[event]")
         co_return;
     };
 
-    auto make_setter = [&]() -> coro::task<void> {
+    auto make_setter = [&]() -> coro::task<void>
+    {
         co_await tp.schedule();
         REQUIRE(counter == 0);
         e.set(tp, coro::resume_order_policy::fifo);

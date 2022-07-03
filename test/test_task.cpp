@@ -1,4 +1,4 @@
-#include "catch.hpp"
+#include "catch_amalgamated.hpp"
 
 #include <coro/coro.hpp>
 
@@ -33,7 +33,8 @@ TEST_CASE("task void", "[task]")
     using namespace std::chrono_literals;
     using task_type = coro::task<>;
 
-    auto t = []() -> task_type {
+    auto t = []() -> task_type
+    {
         std::this_thread::sleep_for(10ms);
         co_return;
     }();
@@ -48,7 +49,8 @@ TEST_CASE("task exception thrown", "[task]")
 
     std::string throw_msg = "I'll be reached";
 
-    auto task = [&]() -> task_type {
+    auto task = [&]() -> task_type
+    {
         throw std::runtime_error(throw_msg);
         co_return "I'll never be reached";
     }();
@@ -73,8 +75,10 @@ TEST_CASE("task exception thrown", "[task]")
 
 TEST_CASE("task in a task", "[task]")
 {
-    auto outer_task = []() -> coro::task<> {
-        auto inner_task = []() -> coro::task<int> {
+    auto outer_task = []() -> coro::task<>
+    {
+        auto inner_task = []() -> coro::task<int>
+        {
             std::cerr << "inner_task start\n";
             std::cerr << "inner_task stop\n";
             co_return 42;
@@ -93,11 +97,14 @@ TEST_CASE("task in a task", "[task]")
 
 TEST_CASE("task in a task in a task", "[task]")
 {
-    auto task1 = []() -> coro::task<> {
+    auto task1 = []() -> coro::task<>
+    {
         std::cerr << "task1 start\n";
-        auto task2 = []() -> coro::task<int> {
+        auto task2 = []() -> coro::task<int>
+        {
             std::cerr << "\ttask2 start\n";
-            auto task3 = []() -> coro::task<int> {
+            auto task3 = []() -> coro::task<int>
+            {
                 std::cerr << "\t\ttask3 start\n";
                 std::cerr << "\t\ttask3 stop\n";
                 co_return 3;
@@ -123,7 +130,8 @@ TEST_CASE("task in a task in a task", "[task]")
 
 TEST_CASE("task multiple suspends return void", "[task]")
 {
-    auto task = []() -> coro::task<void> {
+    auto task = []() -> coro::task<void>
+    {
         co_await std::suspend_always{};
         co_await std::suspend_never{};
         co_await std::suspend_always{};
@@ -146,7 +154,8 @@ TEST_CASE("task multiple suspends return void", "[task]")
 
 TEST_CASE("task multiple suspends return integer", "[task]")
 {
-    auto task = []() -> coro::task<int> {
+    auto task = []() -> coro::task<int>
+    {
         co_await std::suspend_always{};
         co_await std::suspend_always{};
         co_await std::suspend_always{};
@@ -169,12 +178,14 @@ TEST_CASE("task multiple suspends return integer", "[task]")
 
 TEST_CASE("task resume from promise to coroutine handles of different types", "[task]")
 {
-    auto task1 = [&]() -> coro::task<int> {
+    auto task1 = [&]() -> coro::task<int>
+    {
         std::cerr << "Task ran\n";
         co_return 42;
     }();
 
-    auto task2 = [&]() -> coro::task<void> {
+    auto task2 = [&]() -> coro::task<void>
+    {
         std::cerr << "Task 2 ran\n";
         co_return;
     }();
@@ -201,7 +212,8 @@ TEST_CASE("task resume from promise to coroutine handles of different types", "[
 
 TEST_CASE("task throws void", "[task]")
 {
-    auto task = []() -> coro::task<void> {
+    auto task = []() -> coro::task<void>
+    {
         throw std::runtime_error{"I always throw."};
         co_return;
     }();
@@ -213,7 +225,8 @@ TEST_CASE("task throws void", "[task]")
 
 TEST_CASE("task throws non-void l-value", "[task]")
 {
-    auto task = []() -> coro::task<int> {
+    auto task = []() -> coro::task<int>
+    {
         throw std::runtime_error{"I always throw."};
         co_return 42;
     }();
@@ -230,7 +243,8 @@ TEST_CASE("task throws non-void r-value", "[task]")
         int m_value;
     };
 
-    auto task = []() -> coro::task<type> {
+    auto task = []() -> coro::task<type>
+    {
         type return_value{42};
 
         throw std::runtime_error{"I always throw."};

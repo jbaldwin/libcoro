@@ -1,4 +1,4 @@
-#include "catch.hpp"
+#include "catch_amalgamated.hpp"
 
 #include <coro/coro.hpp>
 
@@ -11,7 +11,8 @@ TEST_CASE("mutex single waiter not locked", "[mutex]")
 
     coro::mutex m;
 
-    auto make_emplace_task = [&](coro::mutex& m) -> coro::task<void> {
+    auto make_emplace_task = [&](coro::mutex& m) -> coro::task<void>
+    {
         std::cerr << "Acquiring lock\n";
         {
             auto scoped_lock = co_await m.lock();
@@ -48,7 +49,8 @@ TEST_CASE("mutex many waiters until event", "[mutex]")
     coro::mutex m; // acquires and holds the lock until the event is triggered
     coro::event e; // triggers the blocking thread to release the lock
 
-    auto make_task = [&](uint64_t id) -> coro::task<void> {
+    auto make_task = [&](uint64_t id) -> coro::task<void>
+    {
         co_await tp.schedule();
         std::cerr << "id = " << id << " waiting to acquire the lock\n";
         auto scoped_lock = co_await m.lock();
@@ -62,7 +64,8 @@ TEST_CASE("mutex many waiters until event", "[mutex]")
         co_return;
     };
 
-    auto make_block_task = [&]() -> coro::task<void> {
+    auto make_block_task = [&]() -> coro::task<void>
+    {
         co_await tp.schedule();
         std::cerr << "block task acquiring lock\n";
         auto scoped_lock = co_await m.lock();
@@ -72,7 +75,8 @@ TEST_CASE("mutex many waiters until event", "[mutex]")
         co_return;
     };
 
-    auto make_set_task = [&]() -> coro::task<void> {
+    auto make_set_task = [&]() -> coro::task<void>
+    {
         co_await tp.schedule();
         std::cerr << "set task setting event\n";
         e.set();
@@ -99,7 +103,8 @@ TEST_CASE("mutex scoped_lock unlock prior to scope exit", "[mutex]")
 {
     coro::mutex m;
 
-    auto make_task = [&]() -> coro::task<void> {
+    auto make_task = [&]() -> coro::task<void>
+    {
         {
             auto lk = co_await m.lock();
             REQUIRE_FALSE(m.try_lock());

@@ -1,4 +1,4 @@
-#include "catch.hpp"
+#include "catch_amalgamated.hpp"
 
 #include <coro/coro.hpp>
 
@@ -12,7 +12,8 @@ TEST_CASE("semaphore binary", "[semaphore]")
 
     coro::semaphore s{1};
 
-    auto make_emplace_task = [&](coro::semaphore& s) -> coro::task<void> {
+    auto make_emplace_task = [&](coro::semaphore& s) -> coro::task<void>
+    {
         std::cerr << "Acquiring semaphore\n";
         co_await s.acquire();
         REQUIRE_FALSE(s.try_acquire());
@@ -50,7 +51,8 @@ TEST_CASE("semaphore binary many waiters until event", "[semaphore]")
     coro::semaphore s{1}; // acquires and holds the semaphore until the event is triggered
     coro::event     e;    // triggers the blocking thread to release the semaphore
 
-    auto make_task = [&](uint64_t id) -> coro::task<void> {
+    auto make_task = [&](uint64_t id) -> coro::task<void>
+    {
         std::cerr << "id = " << id << " waiting to acquire the semaphore\n";
         co_await s.acquire();
 
@@ -64,7 +66,8 @@ TEST_CASE("semaphore binary many waiters until event", "[semaphore]")
         co_return;
     };
 
-    auto make_block_task = [&]() -> coro::task<void> {
+    auto make_block_task = [&]() -> coro::task<void>
+    {
         std::cerr << "block task acquiring lock\n";
         co_await s.acquire();
         REQUIRE_FALSE(s.try_acquire());
@@ -75,7 +78,8 @@ TEST_CASE("semaphore binary many waiters until event", "[semaphore]")
         co_return;
     };
 
-    auto make_set_task = [&]() -> coro::task<void> {
+    auto make_set_task = [&]() -> coro::task<void>
+    {
         std::cerr << "set task setting event\n";
         e.set();
         co_return;
@@ -108,7 +112,8 @@ TEST_CASE("semaphore ringbuffer", "[semaphore]")
 
     coro::semaphore s{2, 2};
 
-    auto make_consumer_task = [&](uint64_t id) -> coro::task<void> {
+    auto make_consumer_task = [&](uint64_t id) -> coro::task<void>
+    {
         co_await tp.schedule();
 
         try
@@ -131,7 +136,8 @@ TEST_CASE("semaphore ringbuffer", "[semaphore]")
         co_return;
     };
 
-    auto make_producer_task = [&]() -> coro::task<void> {
+    auto make_producer_task = [&]() -> coro::task<void>
+    {
         co_await tp.schedule();
 
         for (size_t i = 2; i < iterations; ++i)
@@ -170,7 +176,8 @@ TEST_CASE("semaphore ringbuffer many producers and consumers", "[semaphore]")
 
     coro::io_scheduler tp{}; // let er rip
 
-    auto make_consumer_task = [&](uint64_t id) -> coro::task<void> {
+    auto make_consumer_task = [&](uint64_t id) -> coro::task<void>
+    {
         co_await tp.schedule();
 
         try
@@ -190,7 +197,8 @@ TEST_CASE("semaphore ringbuffer many producers and consumers", "[semaphore]")
         co_return;
     };
 
-    auto make_producer_task = [&](uint64_t id) -> coro::task<void> {
+    auto make_producer_task = [&](uint64_t id) -> coro::task<void>
+    {
         co_await tp.schedule();
 
         for (size_t i = 0; i < iterations; ++i)

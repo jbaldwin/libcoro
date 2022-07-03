@@ -10,7 +10,7 @@ should_clang_format() {
 
     local result=0
 
-    # Ignore the test/catch.hpp file
+    # Ignore the test/catch*.hpp file
     if [[ "$1" != *"catch"* ]]; then
         for ext in $FILE_EXTS; do
             # Otherwise, if the extension is in the array of extensions to reformat, echo 1.

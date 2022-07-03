@@ -1,4 +1,4 @@
-#include "catch.hpp"
+#include "catch_amalgamated.hpp"
 
 #include <coro/coro.hpp>
 
@@ -12,7 +12,8 @@ TEST_CASE("mutex single waiter not locked exclusive", "[shared_mutex]")
 
     coro::shared_mutex<coro::thread_pool> m{tp};
 
-    auto make_emplace_task = [&](coro::shared_mutex<coro::thread_pool>& m) -> coro::task<void> {
+    auto make_emplace_task = [&](coro::shared_mutex<coro::thread_pool>& m) -> coro::task<void>
+    {
         std::cerr << "Acquiring lock exclusive\n";
         {
             auto scoped_lock = co_await m.lock();
@@ -46,7 +47,8 @@ TEST_CASE("mutex single waiter not locked shared", "[shared_mutex]")
 
     coro::shared_mutex<coro::thread_pool> m{tp};
 
-    auto make_emplace_task = [&](coro::shared_mutex<coro::thread_pool>& m) -> coro::task<void> {
+    auto make_emplace_task = [&](coro::shared_mutex<coro::thread_pool>& m) -> coro::task<void>
+    {
         std::cerr << "Acquiring lock shared\n";
         {
             auto scoped_lock = co_await m.lock_shared();
@@ -86,7 +88,8 @@ TEST_CASE("mutex many shared and exclusive waiters interleaved", "[shared_mutex]
 
     std::atomic<bool> read_value{false};
 
-    auto make_shared_task = [&]() -> coro::task<bool> {
+    auto make_shared_task = [&]() -> coro::task<bool>
+    {
         co_await tp->schedule();
         std::cerr << "make_shared_task shared lock acquiring\n";
         auto scoped_lock = co_await m.lock_shared();
@@ -96,7 +99,8 @@ TEST_CASE("mutex many shared and exclusive waiters interleaved", "[shared_mutex]
         co_return value;
     };
 
-    auto make_exclusive_task = [&]() -> coro::task<void> {
+    auto make_exclusive_task = [&]() -> coro::task<void>
+    {
         // Let some readers get through.
         co_await tp->yield_for(std::chrono::milliseconds{50});
 
@@ -113,7 +117,8 @@ TEST_CASE("mutex many shared and exclusive waiters interleaved", "[shared_mutex]
         co_return;
     };
 
-    auto make_shared_tasks_task = [&]() -> coro::task<void> {
+    auto make_shared_tasks_task = [&]() -> coro::task<void>
+    {
         co_await tp->schedule();
 
         std::vector<coro::task<bool>> shared_tasks{};
