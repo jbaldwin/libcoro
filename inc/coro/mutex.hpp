@@ -3,6 +3,7 @@
 #include <atomic>
 #include <coroutine>
 #include <mutex>
+#include <utility>
 
 namespace coro
 {
@@ -39,7 +40,7 @@ public:
     scoped_lock(const scoped_lock&) = delete;
     scoped_lock(scoped_lock&& other) : m_mutex(std::exchange(other.m_mutex, nullptr)) {}
     auto operator=(const scoped_lock&) -> scoped_lock& = delete;
-    auto operator                                      =(scoped_lock&& other) noexcept -> scoped_lock&
+    auto operator=(scoped_lock&& other) noexcept -> scoped_lock&
     {
         if (std::addressof(other) != this)
         {
@@ -64,10 +65,10 @@ public:
     explicit mutex() noexcept : m_state(const_cast<void*>(unlocked_value())) {}
     ~mutex() = default;
 
-    mutex(const mutex&) = delete;
-    mutex(mutex&&)      = delete;
+    mutex(const mutex&)                    = delete;
+    mutex(mutex&&)                         = delete;
     auto operator=(const mutex&) -> mutex& = delete;
-    auto operator=(mutex&&) -> mutex& = delete;
+    auto operator=(mutex&&) -> mutex&      = delete;
 
     struct lock_operation
     {

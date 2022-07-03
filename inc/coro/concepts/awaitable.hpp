@@ -20,7 +20,7 @@ template<typename type>
 concept awaiter = requires(type t, std::coroutine_handle<> c)
 {
     { t.await_ready() } -> std::same_as<bool>;
-    std::same_as<decltype(t.await_suspend(c)), void> ||
+    requires std::same_as<decltype(t.await_suspend(c)), void> ||
         std::same_as<decltype(t.await_suspend(c)), bool> ||
         std::same_as<decltype(t.await_suspend(c)), std::coroutine_handle<>>;
     { t.await_resume() };
@@ -40,7 +40,7 @@ template<typename type>
 concept awaiter_void = requires(type t, std::coroutine_handle<> c)
 {
     { t.await_ready() } -> std::same_as<bool>;
-    std::same_as<decltype(t.await_suspend(c)), void> ||
+    requires std::same_as<decltype(t.await_suspend(c)), void> ||
         std::same_as<decltype(t.await_suspend(c)), bool> ||
         std::same_as<decltype(t.await_suspend(c)), std::coroutine_handle<>>;
     {t.await_resume()} -> std::same_as<void>;

@@ -1,7 +1,7 @@
 # libcoro C++20 linux coroutine library
 
 [![CI](https://github.com/jbaldwin/libcoro/workflows/build/badge.svg)](https://github.com/jbaldwin/libcoro/workflows/build/badge.svg)
-[![Coverage Status](https://coveralls.io/repos/github/jbaldwin/libcoro/badge.svg?branch=master)](https://coveralls.io/github/jbaldwin/libcoro?branch=master)
+[![Coverage Status](https://coveralls.io/repos/github/jbaldwin/libcoro/badge.svg?branch=main)](https://coveralls.io/github/jbaldwin/libcoro?branch=main)
 [![Codacy Badge](https://app.codacy.com/project/badge/Grade/c190d4920e6749d4b4d1a9d7d6687f4f)](https://www.codacy.com/gh/jbaldwin/libcoro/dashboard?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=jbaldwin/libcoro&amp;utm_campaign=Badge_Grade)
 [![language][badge.language]][language]
 [![license][badge.license]][license]
@@ -511,7 +511,8 @@ int main()
 
     std::vector<coro::task<void>> tasks{};
 
-    auto make_producer_task = [&]() -> coro::task<void> {
+    auto make_producer_task = [&]() -> coro::task<void>
+    {
         co_await tp.schedule();
 
         for (size_t i = 1; i <= iterations; ++i)
@@ -535,8 +536,11 @@ int main()
         co_return;
     };
 
-    auto make_consumer_task = [&](size_t id) -> coro::task<void> {
+    auto make_consumer_task = [&](size_t id) -> coro::task<void>
+    {
         co_await tp.schedule();
+
+        bool needs_await{false};
 
         try
         {
@@ -553,6 +557,12 @@ int main()
             }
         }
         catch (const coro::stop_signal&)
+        {
+            // Cannot await in an exception handler.
+            needs_await = true;
+        }
+
+        if (needs_await)
         {
             auto scoped_lock = co_await m.lock();
             std::cerr << "\nconsumer " << id << " shutting down, stop signal received";
@@ -988,17 +998,18 @@ client: Hello from server 5
 #### Tested Distos
 
  * ubuntu:20.04
- * fedora:32-34
+ * ubuntu:22.04
+ * fedora:32-36
  * openSUSE/leap:15.2
 
 #### Cloning the project
-This project uses gitsubmodules, to properly checkout this project use:
+This project uses git submodules, to properly checkout this project use:
 
     git clone --recurse-submodules <libcoro-url>
 
 This project depends on the following git sub-modules:
- * [libc-ares](https://github.com/c-ares/c-ares) For async DNS resolver.
- * [catch2](https://github.com/catchorg/Catch2) For testing.
+ * [libc-ares](https://github.com/c-ares/c-ares) For async DNS resolver, this is a git submodule.
+ * [catch2](https://github.com/catchorg/Catch2) For testing, this is embedded in the `test/` directory.
 
 #### Building
     mkdir Release && cd Release
