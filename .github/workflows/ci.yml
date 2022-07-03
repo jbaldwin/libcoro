@@ -210,6 +210,74 @@ jobs:
                 run: |
                     cd build-release-g++
                     ctest -VV
+    build-fedora-35:
+        name: fedora-35
+        runs-on: ubuntu-latest
+        container:
+            image: fedora:35
+        steps:
+            -   name: dnf
+                run: |
+                    sudo dnf install -y \
+                        cmake \
+                        git \
+                        ninja-build \
+                        gcc-c++ \
+                        openssl \
+                        openssl-devel
+            -   name: Checkout # recurisve checkout requires git to be installed first
+                uses: actions/checkout@v2
+                with:
+                    submodules: recursive
+            -   name: build-release-g++
+                run: |
+                    mkdir build-release-g++
+                    cd build-release-g++
+                    cmake \
+                        -GNinja \
+                        -DCMAKE_BUILD_TYPE=Release \
+                        -DCMAKE_C_COMPILER=gcc \
+                        -DCMAKE_CXX_COMPILER=g++ \
+                        ..
+                    ninja
+            -   name: test-release-g++
+                run: |
+                    cd build-release-g++
+                    ctest -VV
+    build-fedora-36:
+        name: fedora-36
+        runs-on: ubuntu-latest
+        container:
+            image: fedora:36
+        steps:
+            -   name: dnf
+                run: |
+                    sudo dnf install -y \
+                        cmake \
+                        git \
+                        ninja-build \
+                        gcc-c++ \
+                        openssl \
+                        openssl-devel
+            -   name: Checkout # recurisve checkout requires git to be installed first
+                uses: actions/checkout@v2
+                with:
+                    submodules: recursive
+            -   name: build-release-g++
+                run: |
+                    mkdir build-release-g++
+                    cd build-release-g++
+                    cmake \
+                        -GNinja \
+                        -DCMAKE_BUILD_TYPE=Release \
+                        -DCMAKE_C_COMPILER=gcc \
+                        -DCMAKE_CXX_COMPILER=g++ \
+                        ..
+                    ninja
+            -   name: test-release-g++
+                run: |
+                    cd build-release-g++
+                    ctest -VV
     build-opensuse-15:
         name: opensuse-15
         runs-on: ubuntu-latest

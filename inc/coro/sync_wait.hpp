@@ -14,11 +14,11 @@ class sync_wait_event
 {
 public:
     sync_wait_event(bool initially_set = false);
-    sync_wait_event(const sync_wait_event&) = delete;
-    sync_wait_event(sync_wait_event&&)      = delete;
+    sync_wait_event(const sync_wait_event&)                    = delete;
+    sync_wait_event(sync_wait_event&&)                         = delete;
     auto operator=(const sync_wait_event&) -> sync_wait_event& = delete;
-    auto operator=(sync_wait_event &&) -> sync_wait_event& = delete;
-    ~sync_wait_event()                                     = default;
+    auto operator=(sync_wait_event&&) -> sync_wait_event&      = delete;
+    ~sync_wait_event()                                         = default;
 
     auto set() noexcept -> void;
     auto reset() noexcept -> void;
@@ -146,7 +146,7 @@ public:
     sync_wait_task(const sync_wait_task&) = delete;
     sync_wait_task(sync_wait_task&& other) noexcept : m_coroutine(std::exchange(other.m_coroutine, coroutine_type{})) {}
     auto operator=(const sync_wait_task&) -> sync_wait_task& = delete;
-    auto operator                                            =(sync_wait_task&& other) -> sync_wait_task&
+    auto operator=(sync_wait_task&& other) -> sync_wait_task&
     {
         if (std::addressof(other) != this)
         {
@@ -189,9 +189,7 @@ template<
     typename return_type = concepts::awaitable_traits<awaitable_type>::awaiter_return_type>
 static auto make_sync_wait_task(awaitable_type&& a) -> sync_wait_task<return_type> __attribute__((used));
 
-template<
-    concepts::awaitable awaitable_type,
-    typename return_type = concepts::awaitable_traits<awaitable_type>::awaiter_return_type>
+template<concepts::awaitable awaitable_type, typename return_type>
 static auto make_sync_wait_task(awaitable_type&& a) -> sync_wait_task<return_type>
 {
     if constexpr (std::is_void_v<return_type>)

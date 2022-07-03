@@ -17,7 +17,7 @@ concept promise = requires(type t)
 }
 && requires(type t, return_type return_value)
 {
-    std::same_as<decltype(t.return_void()), void> ||
+    requires std::same_as<decltype(t.return_void()), void> ||
         std::same_as<decltype(t.return_value(return_value)), void> ||
         requires { t.yield_value(return_value); };
 };

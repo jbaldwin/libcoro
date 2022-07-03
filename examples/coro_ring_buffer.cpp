@@ -11,7 +11,8 @@ int main()
 
     std::vector<coro::task<void>> tasks{};
 
-    auto make_producer_task = [&]() -> coro::task<void> {
+    auto make_producer_task = [&]() -> coro::task<void>
+    {
         co_await tp.schedule();
 
         for (size_t i = 1; i <= iterations; ++i)
@@ -35,8 +36,11 @@ int main()
         co_return;
     };
 
-    auto make_consumer_task = [&](size_t id) -> coro::task<void> {
+    auto make_consumer_task = [&](size_t id) -> coro::task<void>
+    {
         co_await tp.schedule();
+
+        bool needs_await{false};
 
         try
         {
@@ -53,6 +57,12 @@ int main()
             }
         }
         catch (const coro::stop_signal&)
+        {
+            // Cannot await in an exception handler.
+            needs_await = true;
+        }
+
+        if (needs_await)
         {
             auto scoped_lock = co_await m.lock();
             std::cerr << "\nconsumer " << id << " shutting down, stop signal received";
