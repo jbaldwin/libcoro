@@ -21,6 +21,7 @@ set(CARES_SHARED    OFF CACHE INTERNAL "")
 set(CARES_INSTALL   OFF CACHE INTERNAL "")
 
 add_subdirectory(vendor/c-ares/c-ares)
+add_subdirectory(vendor/tartanllama/expected)
 
 set(LIBCORO_SOURCE_FILES
     inc/coro/concepts/awaitable.hpp
@@ -56,7 +57,6 @@ set(LIBCORO_SOURCE_FILES
     inc/coro/ring_buffer.hpp
     inc/coro/semaphore.hpp src/semaphore.cpp
     inc/coro/shared_mutex.hpp
-    inc/coro/stop_signal.hpp
     inc/coro/sync_wait.hpp src/sync_wait.cpp
     inc/coro/task_container.hpp
     inc/coro/task.hpp
@@ -68,7 +68,7 @@ add_library(${PROJECT_NAME} STATIC ${LIBCORO_SOURCE_FILES})
 set_target_properties(${PROJECT_NAME} PROPERTIES LINKER_LANGUAGE CXX)
 target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_20)
 target_include_directories(${PROJECT_NAME} PUBLIC inc)
-target_link_libraries(${PROJECT_NAME} PUBLIC pthread c-ares ssl crypto)
+target_link_libraries(${PROJECT_NAME} PUBLIC pthread c-ares expected ssl crypto)
 
 if(${CMAKE_CXX_COMPILER_ID} MATCHES "GNU")
     if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "10.2.0")

@@ -7,14 +7,22 @@ int main()
     coro::thread_pool tp{coro::thread_pool::options{.thread_count = 8}};
     coro::semaphore   semaphore{2};
 
-    auto make_rate_limited_task = [&](uint64_t task_num) -> coro::task<void> {
+    auto make_rate_limited_task = [&](uint64_t task_num) -> coro::task<void>
+    {
         co_await tp.schedule();
 
         // This will only allow 2 tasks through at any given point in time, all other tasks will
         // await the resource to be available before proceeding.
-        co_await semaphore.acquire();
-        std::cout << task_num << ", ";
-        semaphore.release();
+        auto result = co_await semaphore.acquire();
+        if (result == coro::semaphore::acquire_result::acquired)
+        {
+            std::cout << task_num << ", ";
+            semaphore.release();
+        }
+        else
+        {
+            std::cout << task_num << " failed to acquire semaphore [" << coro::semaphore::to_string(result) << "],";
+        }
         co_return;
     };
 

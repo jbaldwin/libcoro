@@ -31,9 +31,11 @@ TEST_CASE("ring_buffer single element", "[ring_buffer]")
     {
         for (size_t i = 1; i <= iterations; ++i)
         {
-            auto value = co_await rb.consume();
+            auto expected = co_await rb.consume();
+            auto value    = std::move(*expected);
+
             std::cerr << "consume: " << value << "\n";
-            output.emplace_back(value);
+            output.emplace_back(std::move(value));
         }
         co_return;
     };
@@ -67,13 +69,13 @@ TEST_CASE("ring_buffer many elements many producers many consumers", "[ring_buff
             co_await rb.produce(i);
         }
 
-        // Wait for all the values to be consumed prior to sending the stop signal.
+        // Wait for all the values to be consumed prior to shutting down the ring buffer.
         while (!rb.empty())
         {
             co_await tp.yield();
         }
 
-        rb.stop_signal_notify_waiters(); // signal to all consumers (or even producers) we are done/shutting down.
+        rb.notify_waiters(); // signal to all consumers (or even producers) we are done/shutting down.
 
         co_return;
     };
@@ -82,18 +84,18 @@ TEST_CASE("ring_buffer many elements many producers many consumers", "[ring_buff
     {
         co_await tp.schedule();
 
-        try
+        while (true)
         {
-            while (true)
+            auto expected = co_await rb.consume();
+            if (!expected)
             {
-                auto value = co_await rb.consume();
-                (void)value;
-                co_await tp.yield(); // mimic some work
+                break;
             }
-        }
-        catch (const coro::stop_signal&)
-        {
-            // requested to stop/shutdown.
+
+            auto item = std::move(*expected);
+            (void)item;
+
+            co_await tp.yield(); // mimic some work
         }
 
         co_return;

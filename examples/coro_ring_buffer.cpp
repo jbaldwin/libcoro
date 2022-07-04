@@ -32,7 +32,7 @@ int main()
             auto scoped_lock = co_await m.lock();
             std::cerr << "\nproducer is sending stop signal";
         }
-        rb.stop_signal_notify_waiters();
+        rb.notify_waiters();
         co_return;
     };
 
@@ -40,32 +40,23 @@ int main()
     {
         co_await tp.schedule();
 
-        bool needs_await{false};
-
-        try
+        while (true)
         {
-            while (true)
+            auto expected    = co_await rb.consume();
+            auto scoped_lock = co_await m.lock(); // just for synchronizing std::cout/cerr
+            if (!expected)
             {
-                auto value = co_await rb.consume();
-                {
-                    auto scoped_lock = co_await m.lock();
-                    std::cout << "(id=" << id << ", v=" << value << "), ";
-                }
-
-                // Mimic doing some work on the consumed value.
-                co_await tp.yield();
+                std::cerr << "\nconsumer " << id << " shutting down, stop signal received";
+                break; // while
             }
-        }
-        catch (const coro::stop_signal&)
-        {
-            // Cannot await in an exception handler.
-            needs_await = true;
-        }
+            else
+            {
+                auto item = std::move(*expected);
+                std::cout << "(id=" << id << ", v=" << item << "), ";
+            }
 
-        if (needs_await)
-        {
-            auto scoped_lock = co_await m.lock();
-            std::cerr << "\nconsumer " << id << " shutting down, stop signal received";
+            // Mimic doing some work on the consumed value.
+            co_await tp.yield();
         }
 
         co_return;

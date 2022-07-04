@@ -116,21 +116,22 @@ TEST_CASE("semaphore ringbuffer", "[semaphore]")
     {
         co_await tp.schedule();
 
-        try
+        while (true)
         {
-            while (true)
+            std::cerr << "id = " << id << " waiting to acquire the semaphore\n";
+            auto result = co_await s.acquire();
+            if (result == coro::semaphore::acquire_result::acquired)
             {
-                std::cerr << "id = " << id << " waiting to acquire the semaphore\n";
-                co_await s.acquire();
                 std::cerr << "id = " << id << " semaphore acquired, consuming value\n";
 
                 value.fetch_add(1, std::memory_order::release);
                 // In the ringbfuffer acquire is 'consuming', we never release back into the buffer
             }
-        }
-        catch (const coro::stop_signal&)
-        {
-            std::cerr << "id = " << id << " exiting\n";
+            else
+            {
+                std::cerr << "id = " << id << " exiting\n";
+                break; // while
+            }
         }
 
         co_return;
@@ -152,7 +153,7 @@ TEST_CASE("semaphore ringbuffer", "[semaphore]")
         }
 
         std::cerr << "producer exiting\n";
-        s.stop_signal_notify_waiters();
+        s.notify_waiters();
         co_return;
     };
 
@@ -180,20 +181,20 @@ TEST_CASE("semaphore ringbuffer many producers and consumers", "[semaphore]")
     {
         co_await tp.schedule();
 
-        try
+        while (true)
         {
-            while (true)
+            auto result = co_await s.acquire();
+            if (result == coro::semaphore::acquire_result::acquired)
             {
-                co_await s.acquire();
                 co_await tp.schedule();
                 value.fetch_add(1, std::memory_order::relaxed);
             }
+            else
+            {
+                std::cerr << "consumer " << id << " exiting\n";
+                break; // while
+            }
         }
-        catch (const coro::stop_signal&)
-        {
-            std::cerr << "consumer " << id << " exiting\n";
-        }
-
         co_return;
     };
 
@@ -213,7 +214,7 @@ TEST_CASE("semaphore ringbuffer many producers and consumers", "[semaphore]")
 
         std::cerr << "producer " << id << " exiting\n";
 
-        s.stop_signal_notify_waiters();
+        s.notify_waiters();
 
         co_return;
     };

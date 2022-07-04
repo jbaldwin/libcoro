@@ -191,9 +191,7 @@ $ ./examples/coro_semaphore
 ```
 
 ### ring_buffer
-The `coro::ring_buffer<element, num_elements>` is thread safe async multi-producer multi-consumer statically sized ring buffer.  Producers will that try to produce a value when the ring buffer is full will suspend until space is available.  Consumers that try to consume a value when the ring buffer is empty will suspend until space is available.  All waiters on the ring buffer for producing or consuming are resumed in a LIFO manner when their respective operation becomes available.
-
-The `coro::ring_buffer` also works with `coro::stop_signal` in that if the ring buffers `stop_signal_notify_waiters()` function is called then any producers or consumers that are suspended and waiting will be awoken by throwing a `coro::stop_signal`.  This can be useful to write code that will always suspend if data cannot be produced or consumed for long running daemons but will need to break out of the suspend unpon shutdown.
+The `coro::ring_buffer<element, num_elements>` is thread safe async multi-producer multi-consumer statically sized ring buffer.  Producers that try to produce a value when the ring buffer is full will suspend until space is available.  Consumers that try to consume a value when the ring buffer is empty will suspend until space is available.  All waiters on the ring buffer for producing or consuming are resumed in a LIFO manner when their respective operation becomes available.
 
 ```C++
 ${EXAMPLE_CORO_RING_BUFFER_CPP}
@@ -324,6 +322,7 @@ This project uses git submodules, to properly checkout this project use:
 This project depends on the following git sub-modules:
  * [libc-ares](https://github.com/c-ares/c-ares) For async DNS resolver, this is a git submodule.
  * [catch2](https://github.com/catchorg/Catch2) For testing, this is embedded in the `test/` directory.
+ * [expected](https://github.com/TartanLlama/expected) For results on operations that can fail, this is embedded in the `vendor/` directory.
 
 #### Building
     mkdir Release && cd Release
@@ -386,7 +385,7 @@ The tests will automatically be run by github actions on creating a pull request
 
 File bug reports, feature requests and questions using [GitHub libcoro Issues](https://github.com/jbaldwin/libcoro/issues)
 
-Copyright © 2020-2021 Josh Baldwin
+Copyright © 2020-2022 Josh Baldwin
 
 [badge.language]: https://img.shields.io/badge/language-C%2B%2B20-yellow.svg
 [badge.license]: https://img.shields.io/badge/license-Apache--2.0-blue

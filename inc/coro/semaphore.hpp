@@ -1,16 +1,40 @@
 #pragma once
 
-#include "coro/stop_signal.hpp"
+#include <expected/expected.hpp>
 
 #include <atomic>
 #include <coroutine>
 #include <mutex>
+#include <string>
 
 namespace coro
 {
 class semaphore
 {
 public:
+    enum class acquire_result
+    {
+        acquired,
+        semaphore_stopped
+    };
+
+    static std::string acquire_result_acquired;
+    static std::string acquire_result_semaphore_stopped;
+    static std::string acquire_result_unknown;
+
+    static auto to_string(acquire_result ar) -> const std::string&
+    {
+        switch (ar)
+        {
+            case acquire_result::acquired:
+                return acquire_result_acquired;
+            case acquire_result::semaphore_stopped:
+                return acquire_result_semaphore_stopped;
+        }
+
+        return acquire_result_unknown;
+    }
+
     explicit semaphore(std::ptrdiff_t least_max_value_and_starting_value);
     explicit semaphore(std::ptrdiff_t least_max_value, std::ptrdiff_t starting_value);
     ~semaphore();
@@ -19,7 +43,7 @@ public:
     semaphore(semaphore&&)      = delete;
 
     auto operator=(const semaphore&) noexcept -> semaphore& = delete;
-    auto operator=(semaphore&&) noexcept -> semaphore& = delete;
+    auto operator=(semaphore&&) noexcept -> semaphore&      = delete;
 
     class acquire_operation
     {
@@ -28,7 +52,7 @@ public:
 
         auto await_ready() const noexcept -> bool;
         auto await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept -> bool;
-        auto await_resume() const -> void;
+        auto await_resume() const -> acquire_result;
 
     private:
         friend semaphore;
@@ -43,7 +67,6 @@ public:
     /**
      * Acquires a resource from the semaphore, if the semaphore has no resources available then
      * this will wait until a resource becomes available.
-     * @throws coro::stop_signal If the semaphore has been requested to stop.
      */
     [[nodiscard]] auto acquire() -> acquire_operation { return acquire_operation{*this}; }
 
@@ -67,7 +90,7 @@ public:
      * Stops the semaphore and will notify all release/acquire waiters to wake up in a failed state.
      * Once this is set it cannot be un-done and all future oprations on the semaphore will fail.
      */
-    auto stop_signal_notify_waiters() noexcept -> void;
+    auto notify_waiters() noexcept -> void;
 
 private:
     friend class release_operation;

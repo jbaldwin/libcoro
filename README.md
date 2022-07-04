@@ -464,14 +464,22 @@ int main()
     coro::thread_pool tp{coro::thread_pool::options{.thread_count = 8}};
     coro::semaphore   semaphore{2};
 
-    auto make_rate_limited_task = [&](uint64_t task_num) -> coro::task<void> {
+    auto make_rate_limited_task = [&](uint64_t task_num) -> coro::task<void>
+    {
         co_await tp.schedule();
 
         // This will only allow 2 tasks through at any given point in time, all other tasks will
         // await the resource to be available before proceeding.
-        co_await semaphore.acquire();
-        std::cout << task_num << ", ";
-        semaphore.release();
+        auto result = co_await semaphore.acquire();
+        if (result == coro::semaphore::acquire_result::acquired)
+        {
+            std::cout << task_num << ", ";
+            semaphore.release();
+        }
+        else
+        {
+            std::cout << task_num << " failed to acquire semaphore [" << coro::semaphore::to_string(result) << "],";
+        }
         co_return;
     };
 
@@ -493,9 +501,7 @@ $ ./examples/coro_semaphore
 ```
 
 ### ring_buffer
-The `coro::ring_buffer<element, num_elements>` is thread safe async multi-producer multi-consumer statically sized ring buffer.  Producers will that try to produce a value when the ring buffer is full will suspend until space is available.  Consumers that try to consume a value when the ring buffer is empty will suspend until space is available.  All waiters on the ring buffer for producing or consuming are resumed in a LIFO manner when their respective operation becomes available.
-
-The `coro::ring_buffer` also works with `coro::stop_signal` in that if the ring buffers `stop_signal_notify_waiters()` function is called then any producers or consumers that are suspended and waiting will be awoken by throwing a `coro::stop_signal`.  This can be useful to write code that will always suspend if data cannot be produced or consumed for long running daemons but will need to break out of the suspend unpon shutdown.
+The `coro::ring_buffer<element, num_elements>` is thread safe async multi-producer multi-consumer statically sized ring buffer.  Producers that try to produce a value when the ring buffer is full will suspend until space is available.  Consumers that try to consume a value when the ring buffer is empty will suspend until space is available.  All waiters on the ring buffer for producing or consuming are resumed in a LIFO manner when their respective operation becomes available.
 
 ```C++
 #include <coro/coro.hpp>
@@ -532,7 +538,7 @@ int main()
             auto scoped_lock = co_await m.lock();
             std::cerr << "\nproducer is sending stop signal";
         }
-        rb.stop_signal_notify_waiters();
+        rb.notify_waiters();
         co_return;
     };
 
@@ -540,32 +546,23 @@ int main()
     {
         co_await tp.schedule();
 
-        bool needs_await{false};
-
-        try
+        while (true)
         {
-            while (true)
+            auto expected    = co_await rb.consume();
+            auto scoped_lock = co_await m.lock(); // just for synchronizing std::cout/cerr
+            if (!expected)
             {
-                auto value = co_await rb.consume();
-                {
-                    auto scoped_lock = co_await m.lock();
-                    std::cout << "(id=" << id << ", v=" << value << "), ";
-                }
-
-                // Mimic doing some work on the consumed value.
-                co_await tp.yield();
+                std::cerr << "\nconsumer " << id << " shutting down, stop signal received";
+                break; // while
             }
-        }
-        catch (const coro::stop_signal&)
-        {
-            // Cannot await in an exception handler.
-            needs_await = true;
-        }
+            else
+            {
+                auto item = std::move(*expected);
+                std::cout << "(id=" << id << ", v=" << item << "), ";
+            }
 
-        if (needs_await)
-        {
-            auto scoped_lock = co_await m.lock();
-            std::cerr << "\nconsumer " << id << " shutting down, stop signal received";
+            // Mimic doing some work on the consumed value.
+            co_await tp.yield();
         }
 
         co_return;
@@ -1010,6 +1007,7 @@ This project uses git submodules, to properly checkout this project use:
 This project depends on the following git sub-modules:
  * [libc-ares](https://github.com/c-ares/c-ares) For async DNS resolver, this is a git submodule.
  * [catch2](https://github.com/catchorg/Catch2) For testing, this is embedded in the `test/` directory.
+ * [expected](https://github.com/TartanLlama/expected) For results on operations that can fail, this is embedded in the `vendor/` directory.
 
 #### Building
     mkdir Release && cd Release
@@ -1072,7 +1070,7 @@ The tests will automatically be run by github actions on creating a pull request
 
 File bug reports, feature requests and questions using [GitHub libcoro Issues](https://github.com/jbaldwin/libcoro/issues)
 
-Copyright © 2020-2021 Josh Baldwin
+Copyright © 2020-2022 Josh Baldwin
 
 [badge.language]: https://img.shields.io/badge/language-C%2B%2B20-yellow.svg
 [badge.license]: https://img.shields.io/badge/license-Apache--2.0-blue

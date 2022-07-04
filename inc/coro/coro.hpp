@@ -27,7 +27,6 @@
 #include "coro/ring_buffer.hpp"
 #include "coro/semaphore.hpp"
 #include "coro/shared_mutex.hpp"
-#include "coro/stop_signal.hpp"
 #include "coro/sync_wait.hpp"
 #include "coro/task.hpp"
 #include "coro/task_container.hpp"

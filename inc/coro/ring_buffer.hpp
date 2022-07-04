@@ -1,6 +1,6 @@
 #pragma once
 
-#include "coro/stop_signal.hpp"
+#include <expected/expected.hpp>
 
 #include <array>
 #include <atomic>
@@ -20,6 +20,17 @@ template<typename element, size_t num_elements>
 class ring_buffer
 {
 public:
+    enum class produce_result
+    {
+        produced,
+        ring_buffer_stopped
+    };
+
+    enum class consume_result
+    {
+        ring_buffer_stopped
+    };
+
     /**
      * @throws std::runtime_error If `num_elements` == 0.
      */
@@ -34,14 +45,14 @@ public:
     ~ring_buffer()
     {
         // Wake up anyone still using the ring buffer.
-        stop_signal_notify_waiters();
+        notify_waiters();
     }
 
     ring_buffer(const ring_buffer<element, num_elements>&) = delete;
     ring_buffer(ring_buffer<element, num_elements>&&)      = delete;
 
     auto operator=(const ring_buffer<element, num_elements>&) noexcept -> ring_buffer<element, num_elements>& = delete;
-    auto operator=(ring_buffer<element, num_elements>&&) noexcept -> ring_buffer<element, num_elements>& = delete;
+    auto operator=(ring_buffer<element, num_elements>&&) noexcept -> ring_buffer<element, num_elements>&      = delete;
 
     struct produce_operation
     {
@@ -70,14 +81,11 @@ public:
         }
 
         /**
-         * @throws coro::stop_signal if the operation was stopped.
+         * @return produce_result
          */
-        auto await_resume() -> void
+        auto await_resume() -> produce_result
         {
-            if (m_stopped)
-            {
-                throw stop_signal{};
-            }
+            return !m_stopped ? produce_result::produced : produce_result::ring_buffer_stopped;
         }
 
     private:
@@ -122,14 +130,13 @@ public:
         }
 
         /**
-         * @throws coro::stop_signal if the operation was stopped.
-         * @return The consumed element.
+         * @return The consumed element or std::nullopt if the consume has failed.
          */
-        auto await_resume() -> element
+        auto await_resume() -> tl::expected<element, consume_result>
         {
             if (m_stopped)
             {
-                throw stop_signal{};
+                return tl::make_unexpected(consume_result::ring_buffer_stopped);
             }
 
             return std::move(m_e);
@@ -179,11 +186,10 @@ public:
     auto empty() const -> bool { return size() == 0; }
 
     /**
-     * Stops all currently awaiting producers and consumers.  Their await_resume() function
-     * will throw a coro::stop_signal.  Further produce()/consume() calls will always throw
-     * a coro::stop_signal after this is called for this ring buffer.
+     * Wakes up all currently awaiting producers and consumers.  Their await_resume() function
+     * will return an expected consume result that the ring buffer has stopped.
      */
-    auto stop_signal_notify_waiters() -> void
+    auto notify_waiters() -> void
     {
         // Only wake up waiters once.
         if (m_stopped.load(std::memory_order::acquire))
