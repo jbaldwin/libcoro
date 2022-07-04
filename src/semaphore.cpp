@@ -2,6 +2,12 @@
 
 namespace coro
 {
+using namespace std::string_literals;
+
+std::string semaphore::acquire_result_acquired          = "acquired"s;
+std::string semaphore::acquire_result_semaphore_stopped = "semaphore_stopped"s;
+std::string semaphore::acquire_result_unknown           = "unknown"s;
+
 semaphore::semaphore(std::ptrdiff_t least_max_value_and_starting_value)
     : semaphore(least_max_value_and_starting_value, least_max_value_and_starting_value)
 {
@@ -15,7 +21,7 @@ semaphore::semaphore(std::ptrdiff_t least_max_value, std::ptrdiff_t starting_val
 
 semaphore::~semaphore()
 {
-    stop_signal_notify_waiters();
+    notify_waiters();
 }
 
 semaphore::acquire_operation::acquire_operation(semaphore& s) : m_semaphore(s)
@@ -62,12 +68,13 @@ auto semaphore::acquire_operation::await_suspend(std::coroutine_handle<> awaitin
     return true;
 }
 
-auto semaphore::acquire_operation::await_resume() const -> void
+auto semaphore::acquire_operation::await_resume() const -> acquire_result
 {
     if (m_semaphore.m_notify_all_set.load(std::memory_order::relaxed))
     {
-        throw coro::stop_signal{};
+        return acquire_result::semaphore_stopped;
     }
+    return acquire_result::acquired;
 }
 
 auto semaphore::release() -> void
@@ -107,7 +114,7 @@ auto semaphore::try_acquire() -> bool
     return true;
 }
 
-auto semaphore::stop_signal_notify_waiters() noexcept -> void
+auto semaphore::notify_waiters() noexcept -> void
 {
     m_notify_all_set.exchange(true, std::memory_order::release);
     while (true)
