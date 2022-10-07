@@ -1007,7 +1007,7 @@ This project uses git submodules, to properly checkout this project use:
 This project depends on the following git sub-modules:
  * [libc-ares](https://github.com/c-ares/c-ares) For async DNS resolver, this is a git submodule.
  * [catch2](https://github.com/catchorg/Catch2) For testing, this is embedded in the `test/` directory.
- * [expected](https://github.com/TartanLlama/expected) For results on operations that can fail, this is embedded in the `vendor/` directory.
+ * [expected](https://github.com/TartanLlama/expected) For results on operations that can fail, this is a git submodule in the `vendor/` directory.
 
 #### Building
     mkdir Release && cd Release

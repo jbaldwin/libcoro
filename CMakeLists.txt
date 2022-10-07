@@ -1,5 +1,9 @@
 cmake_minimum_required(VERSION 3.0)
-project(libcoro CXX)
+project(libcoro LANGUAGES CXX DESCRIPTION "C++20 coroutine library")
+
+if (NOT "$ENV{version}" STREQUAL "")
+    set(PROJECT_VERSION "$ENV{version}" CACHE INTERNAL "Copied from environment variable")
+endif()
 
 # Set the githooks directory to auto format and update the readme.
 message("${PROJECT_NAME} ${CMAKE_CURRENT_SOURCE_DIR} -> git config --local core.hooksPath .githooks")
@@ -93,3 +97,12 @@ endif()
 if(LIBCORO_BUILD_EXAMPLES)
     add_subdirectory(examples)
 endif()
+
+
+# generate pc file for pkg-config
+set(target1 ${PROJECT_NAME})
+configure_file(libcoro.pc.in libcoro.pc @ONLY)
+
+install(TARGETS libcoro)
+install(DIRECTORY inc/coro TYPE INCLUDE)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/libcoro.pc DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/../lib/pkgconfig)
