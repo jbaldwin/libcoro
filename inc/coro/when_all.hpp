@@ -84,7 +84,7 @@ class when_all_ready_awaitable<std::tuple<task_types...>>
 {
 public:
     explicit when_all_ready_awaitable(task_types&&... tasks) noexcept(
-        std::conjunction_v<std::is_nothrow_move_constructible_v<task_types>...>)
+        std::conjunction<std::is_nothrow_move_constructible<task_types>...>::value)
         : m_latch(sizeof...(task_types)),
           m_tasks(std::move(tasks)...)
     {
