@@ -67,6 +67,13 @@ public:
         auto await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept -> bool
         {
             std::unique_lock lk{m_rb.m_mutex};
+            // Its possible a consumer on another thread consumed an item between await_ready() and await_suspend()
+            // so we must check to see if tehre is space again.
+            if (m_rb.try_produce_locked(lk, m_e))
+            {
+                return false;
+            }
+
             // Don't suspend if the stop signal has been set.
             if (m_rb.m_stopped.load(std::memory_order::acquire))
             {
@@ -117,6 +124,13 @@ public:
         auto await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept -> bool
         {
             std::unique_lock lk{m_rb.m_mutex};
+            // We have to check again as there is a race condition between await_ready() and now on the mutex acquire.
+            // It is possible that a producer added items between await_ready() and await_suspend().
+            if (m_rb.try_consume_locked(lk, this))
+            {
+                return false;
+            }
+
             // Don't suspend if the stop signal has been set.
             if (m_rb.m_stopped.load(std::memory_order::acquire))
             {
@@ -191,13 +205,13 @@ public:
      */
     auto notify_waiters() -> void
     {
+        std::unique_lock lk{m_mutex};
         // Only wake up waiters once.
         if (m_stopped.load(std::memory_order::acquire))
         {
             return;
         }
 
-        std::unique_lock lk{m_mutex};
         m_stopped.exchange(true, std::memory_order::release);
 
         while (m_produce_waiters != nullptr)
