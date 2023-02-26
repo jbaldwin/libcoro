@@ -39,6 +39,7 @@
     - [coro::net::tcp_server](#io_scheduler)
         - Supports SSL/TLS via OpenSSL
     - coro::net::udp_peer
+* [Example TCP/HTTP Echo Server](#tcp_echo_server)
 
 ## Usage
 
@@ -293,6 +294,27 @@ server: Hello from client 4
 client: Hello from server 4
 server: Hello from client 5
 client: Hello from server 5
+```
+
+### tcp_echo_server
+See `examples/coro_tcp_echo_erver.cpp` for a basic TCP/HTTP echo server implementation.  You can use tools like `wrk`, `autocannon` or `ab` to benchmark against this echo server.
+
+Using a `Intel(R) Core(TM) i7-9750H CPU @ 2.60GHz`:
+
+```bash
+$ ./wrk -c 1000 -d 60s -t 6 http://127.0.0.1:8888/
+Running 1m test @ http://127.0.0.1:8888/
+  6 threads and 1000 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency     2.96ms    3.61ms  82.22ms   90.06%
+    Req/Sec    54.69k     6.75k   70.51k    80.88%
+  19569177 requests in 1.00m, 1.08GB read
+Requests/sec: 325778.99
+Transfer/sec:     18.33MB
+```
+
+```C++
+${EXAMPLE_CORO_TCP_ECHO_SERVER_CPP}
 ```
 
 ### Requirements

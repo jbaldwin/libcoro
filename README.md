@@ -39,6 +39,7 @@
     - [coro::net::tcp_server](#io_scheduler)
         - Supports SSL/TLS via OpenSSL
     - coro::net::udp_peer
+* [Example TCP/HTTP Echo Server](#tcp_echo_server)
 
 ## Usage
 
@@ -732,19 +733,21 @@ int main()
         // If the scheduler is in spawn mode this functor is called upon stopping the dedicated
         // event process thread.
         .on_io_thread_stop_functor = [] { std::cout << "io_scheduler::process event thread stop\n"; },
-        // The io scheduler uses a coro::thread_pool to process the events or tasks it is given.
-        // The tasks are not processed inline on the dedicated event processor thread so events can
-        // be received and handled as soon as a worker thread is available.  See the coro::thread_pool
-        // for the available options and their descriptions.
+        // The io scheduler can use a coro::thread_pool to process the events or tasks it is given.
+        // You can use an execution strategy of `process_tasks_inline` to have the event loop thread
+        // directly process the tasks, this might be desirable for small tasks vs a thread pool for large tasks.
         .pool =
             coro::thread_pool::options{
-                .thread_count = 2,
-                .on_thread_start_functor =
-                    [](size_t i) { std::cout << "io_scheduler::thread_pool worker " << i << " starting\n"; },
-                .on_thread_stop_functor =
-                    [](size_t i) { std::cout << "io_scheduler::thread_pool worker " << i << " stopping\n"; }}});
+                .thread_count            = 2,
+                .on_thread_start_functor = [](size_t i)
+                { std::cout << "io_scheduler::thread_pool worker " << i << " starting\n"; },
+                .on_thread_stop_functor = [](size_t i)
+                { std::cout << "io_scheduler::thread_pool worker " << i << " stopping\n"; },
+            },
+        .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_on_thread_pool});
 
-    auto make_server_task = [&]() -> coro::task<void> {
+    auto make_server_task = [&]() -> coro::task<void>
+    {
         // Start by creating a tcp server, we'll do this before putting it into the scheduler so
         // it is immediately available for the client to connect since this will create a socket,
         // bind the socket and start listening on that socket.  See tcp_server for more details on
@@ -831,7 +834,8 @@ int main()
         co_return;
     };
 
-    auto make_client_task = [&]() -> coro::task<void> {
+    auto make_client_task = [&]() -> coro::task<void>
+    {
         // Immediately schedule onto the scheduler.
         co_await scheduler->schedule();
 
@@ -978,6 +982,88 @@ server: Hello from client 4
 client: Hello from server 4
 server: Hello from client 5
 client: Hello from server 5
+```
+
+### tcp_echo_server
+See `examples/coro_tcp_echo_erver.cpp` for a basic TCP/HTTP echo server implementation.  You can use tools like `wrk`, `autocannon` or `ab` to benchmark against this echo server.
+
+Using a `Intel(R) Core(TM) i7-9750H CPU @ 2.60GHz`:
+
+```bash
+$ ./wrk -c 1000 -d 60s -t 6 http://127.0.0.1:8888/
+Running 1m test @ http://127.0.0.1:8888/
+  6 threads and 1000 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency     2.96ms    3.61ms  82.22ms   90.06%
+    Req/Sec    54.69k     6.75k   70.51k    80.88%
+  19569177 requests in 1.00m, 1.08GB read
+Requests/sec: 325778.99
+Transfer/sec:     18.33MB
+```
+
+```C++
+#include <coro/coro.hpp>
+
+auto main() -> int
+{
+    auto make_tcp_echo_server = [](std::shared_ptr<coro::io_scheduler> scheduler) -> coro::task<void>
+    {
+        auto make_on_connection_task = [](coro::net::tcp_client client) -> coro::task<void>
+        {
+            // Echo an basic http response or `buf` if you just want a true echo server.
+            // Using this allows us to use other http benchmarking tools other than `ab`.
+            std::string response = R"(
+HTTP/1.1 200 OK
+Content-Length: 0
+Connection: keep-alive
+
+)";
+
+            std::string buf(1024, '\0');
+
+            while (true)
+            {
+                co_await client.poll(coro::poll_op::read);
+                const auto [rstatus, rspan] = client.recv(buf);
+                if (rstatus == coro::net::recv_status::closed)
+                {
+                    co_return;
+                }
+                client.send(std::span<const char>{response});
+            }
+        };
+
+        co_await scheduler->schedule();
+        coro::net::tcp_server server{scheduler, coro::net::tcp_server::options{.port = 8888}};
+
+        while (true)
+        {
+            // Wait for a new connection.
+            auto pstatus = co_await server.poll();
+            if (pstatus == coro::poll_status::event)
+            {
+                auto client = server.accept();
+                if (client.socket().is_valid())
+                {
+                    scheduler->schedule(make_on_connection_task(std::move(client)));
+                }
+            }
+        }
+
+        co_return;
+    };
+
+    std::vector<coro::task<void>> workers{};
+    for (size_t i = 0; i < std::thread::hardware_concurrency(); ++i)
+    {
+        auto scheduler = std::make_shared<coro::io_scheduler>(coro::io_scheduler::options{
+            .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
+
+        workers.push_back(make_tcp_echo_server(scheduler));
+    }
+
+    coro::sync_wait(coro::when_all(std::move(workers)));
+}
 ```
 
 ### Requirements
