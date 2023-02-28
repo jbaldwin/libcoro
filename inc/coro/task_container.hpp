@@ -46,10 +46,10 @@ public:
 
         init(opts.reserve_size);
     }
-    task_container(const task_container&) = delete;
-    task_container(task_container&&)      = delete;
+    task_container(const task_container&)                    = delete;
+    task_container(task_container&&)                         = delete;
     auto operator=(const task_container&) -> task_container& = delete;
-    auto operator=(task_container &&) -> task_container& = delete;
+    auto operator=(task_container&&) -> task_container&      = delete;
     ~task_container()
     {
         // This will hang the current thread.. but if tasks are not complete thats also pretty bad.
@@ -93,13 +93,13 @@ public:
 
         // Store the task inside a cleanup task for self deletion.
         auto index     = *m_free_pos;
-        m_tasks[index] = make_cleanup_task(std::move(user_task), m_free_pos);
+        m_tasks[index] = {make_cleanup_task(std::move(user_task), m_free_pos)};
 
         // Mark the current used slot as used.
         std::advance(m_free_pos, 1);
 
         // Start executing from the cleanup task to schedule the user's task onto the thread pool.
-        m_tasks[index].resume();
+        m_tasks[index].value().resume();
     }
 
     /**
@@ -195,15 +195,10 @@ private:
         {
             for (const auto& pos : m_tasks_to_delete)
             {
-                // This doesn't actually 'delete' the task, it'll get overwritten when a
-                // new user task claims the free space.  It could be useful to actually
-                // delete the tasks so the coroutine stack frames are destroyed.  The advantage
-                // of letting a new task replace and old one though is that its a 1:1 exchange
-                // on delete and create, rather than a large pause here to delete all the
-                // completed tasks.
-
-                // Put the deleted position at the end of the free indexes list.
+                // Put the deleted position at the end of the free indexes list to be re-used.
                 m_task_indexes.splice(m_task_indexes.end(), m_task_indexes, pos);
+                // Call coroutine destructor.
+                m_tasks[*pos] = std::nullopt;
             }
             deleted = m_tasks_to_delete.size();
             m_tasks_to_delete.clear();
@@ -261,7 +256,7 @@ private:
     /// The number of alive tasks.
     std::atomic<std::size_t> m_size{};
     /// Maintains the lifetime of the tasks until they are completed.
-    std::vector<task<void>> m_tasks{};
+    std::vector<std::optional<task<void>>> m_tasks{};
     /// The full set of indexes into `m_tasks`.
     std::list<std::size_t> m_task_indexes{};
     /// The set of tasks that have completed and need to be deleted.

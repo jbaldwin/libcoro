@@ -50,7 +50,7 @@ public:
     socket(const socket&) = delete;
     socket(socket&& other) : m_fd(std::exchange(other.m_fd, -1)) {}
     auto operator=(const socket&) -> socket& = delete;
-    auto operator                            =(socket&& other) noexcept -> socket&;
+    auto operator=(socket&& other) noexcept -> socket&;
 
     ~socket() { close(); }
 
@@ -59,7 +59,7 @@ public:
      * not imply if the socket is still usable.
      * @return True if the socket file descriptor is > 0.
      */
-    auto is_valid() const -> bool { return m_fd != -1; }
+    auto is_valid() const -> bool { return m_fd > 0; }
 
     /**
      * @param block Sets the socket to the given blocking mode.

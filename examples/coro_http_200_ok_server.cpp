@@ -2,10 +2,16 @@
 
 auto main() -> int
 {
-    auto make_tcp_echo_server = [](std::shared_ptr<coro::io_scheduler> scheduler) -> coro::task<void>
+    auto make_http_200_ok_server = [](std::shared_ptr<coro::io_scheduler> scheduler) -> coro::task<void>
     {
         auto make_on_connection_task = [](coro::net::tcp_client client) -> coro::task<void>
         {
+            std::string response =
+                R"(HTTP/1.1 200 OK
+Content-Length: 0
+Connection: keep-alive
+
+)";
             std::string buf(1024, '\0');
 
             while (true)
@@ -16,7 +22,7 @@ auto main() -> int
                 switch (rstatus)
                 {
                     case coro::net::recv_status::ok:
-                        client.send(std::span<const char>{rspan});
+                        client.send(std::span<const char>{response});
                         break;
                     case coro::net::recv_status::would_block:
                         break;
@@ -62,7 +68,7 @@ auto main() -> int
         auto scheduler = std::make_shared<coro::io_scheduler>(coro::io_scheduler::options{
             .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
 
-        workers.push_back(make_tcp_echo_server(scheduler));
+        workers.push_back(make_http_200_ok_server(scheduler));
     }
 
     coro::sync_wait(coro::when_all(std::move(workers)));

@@ -985,7 +985,71 @@ client: Hello from server 5
 ```
 
 ### tcp_echo_server
-See `examples/coro_tcp_echo_erver.cpp` for a basic TCP/HTTP echo server implementation.  You can use tools like `wrk`, `autocannon` or `ab` to benchmark against this echo server.
+See [examples/coro_tcp_echo_erver.cpp](../examples/coro_tcp_echo_server.cpp) for a basic TCP echo server implementation.  You can use tools like `ab` to benchmark against this echo server.
+
+Using a `Intel(R) Core(TM) i7-9750H CPU @ 2.60GHz`:
+
+```bash
+$ ab -n 10000000 -c 1000 -k http://127.0.0.1:8888/
+This is ApacheBench, Version 2.3 <$Revision: 1879490 $>
+Copyright 1996 Adam Twiss, Zeus Technology Ltd, http://www.zeustech.net/
+Licensed to The Apache Software Foundation, http://www.apache.org/
+
+Benchmarking 127.0.0.1 (be patient)
+Completed 1000000 requests
+Completed 2000000 requests
+Completed 3000000 requests
+Completed 4000000 requests
+Completed 5000000 requests
+Completed 6000000 requests
+Completed 7000000 requests
+Completed 8000000 requests
+Completed 9000000 requests
+Completed 10000000 requests
+Finished 10000000 requests
+
+
+Server Software:        
+Server Hostname:        127.0.0.1
+Server Port:            8888
+
+Document Path:          /
+Document Length:        0 bytes
+
+Concurrency Level:      1000
+Time taken for tests:   90.290 seconds
+Complete requests:      10000000
+Failed requests:        0
+Non-2xx responses:      10000000
+Keep-Alive requests:    10000000
+Total transferred:      1060000000 bytes
+HTML transferred:       0 bytes
+Requests per second:    110753.80 [#/sec] (mean)
+Time per request:       9.029 [ms] (mean)
+Time per request:       0.009 [ms] (mean, across all concurrent requests)
+Transfer rate:          11464.75 [Kbytes/sec] received
+
+Connection Times (ms)
+              min  mean[+/-sd] median   max
+Connect:        0    0   0.2      0      24
+Processing:     2    9   1.6      9      77
+Waiting:        0    9   1.6      9      77
+Total:          2    9   1.6      9      88
+
+Percentage of the requests served within a certain time (ms)
+  50%      9
+  66%      9
+  75%     10
+  80%     10
+  90%     11
+  95%     12
+  98%     14
+  99%     15
+ 100%     88 (longest request)
+````
+
+### http_200_ok_server
+See [examples/coro_http_200_ok_erver.cpp](../examples/coro_http_200_ok_server.cpp) for a basic HTTP 200 OK response server implementation.  You can use tools like `wrk` or `autocannon` to benchmark against this HTTP 200 OK server.
 
 Using a `Intel(R) Core(TM) i7-9750H CPU @ 2.60GHz`:
 
@@ -999,71 +1063,6 @@ Running 1m test @ http://127.0.0.1:8888/
   19569177 requests in 1.00m, 1.08GB read
 Requests/sec: 325778.99
 Transfer/sec:     18.33MB
-```
-
-```C++
-#include <coro/coro.hpp>
-
-auto main() -> int
-{
-    auto make_tcp_echo_server = [](std::shared_ptr<coro::io_scheduler> scheduler) -> coro::task<void>
-    {
-        auto make_on_connection_task = [](coro::net::tcp_client client) -> coro::task<void>
-        {
-            // Echo an basic http response or `buf` if you just want a true echo server.
-            // Using this allows us to use other http benchmarking tools other than `ab`.
-            std::string response = R"(
-HTTP/1.1 200 OK
-Content-Length: 0
-Connection: keep-alive
-
-)";
-
-            std::string buf(1024, '\0');
-
-            while (true)
-            {
-                co_await client.poll(coro::poll_op::read);
-                const auto [rstatus, rspan] = client.recv(buf);
-                if (rstatus == coro::net::recv_status::closed)
-                {
-                    co_return;
-                }
-                client.send(std::span<const char>{response});
-            }
-        };
-
-        co_await scheduler->schedule();
-        coro::net::tcp_server server{scheduler, coro::net::tcp_server::options{.port = 8888}};
-
-        while (true)
-        {
-            // Wait for a new connection.
-            auto pstatus = co_await server.poll();
-            if (pstatus == coro::poll_status::event)
-            {
-                auto client = server.accept();
-                if (client.socket().is_valid())
-                {
-                    scheduler->schedule(make_on_connection_task(std::move(client)));
-                }
-            }
-        }
-
-        co_return;
-    };
-
-    std::vector<coro::task<void>> workers{};
-    for (size_t i = 0; i < std::thread::hardware_concurrency(); ++i)
-    {
-        auto scheduler = std::make_shared<coro::io_scheduler>(coro::io_scheduler::options{
-            .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
-
-        workers.push_back(make_tcp_echo_server(scheduler));
-    }
-
-    coro::sync_wait(coro::when_all(std::move(workers)));
-}
 ```
 
 ### Requirements
