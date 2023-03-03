@@ -88,10 +88,10 @@ public:
             .on_thread_start_functor = nullptr,
             .on_thread_stop_functor  = nullptr});
 
-    thread_pool(const thread_pool&) = delete;
-    thread_pool(thread_pool&&)      = delete;
+    thread_pool(const thread_pool&)                    = delete;
+    thread_pool(thread_pool&&)                         = delete;
     auto operator=(const thread_pool&) -> thread_pool& = delete;
-    auto operator=(thread_pool&&) -> thread_pool& = delete;
+    auto operator=(thread_pool&&) -> thread_pool&      = delete;
 
     virtual ~thread_pool();
 

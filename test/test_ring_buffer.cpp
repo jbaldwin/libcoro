@@ -117,3 +117,65 @@ TEST_CASE("ring_buffer many elements many producers many consumers", "[ring_buff
 
     REQUIRE(rb.empty());
 }
+
+TEST_CASE("ring_buffer producer consumer separate threads", "[ring_buffer]")
+{
+    // This test explicitly tests two independent threads producing and consuming from a ring_buffer.
+    // Issue #120 reported a race condition when the ring buffer is accessed on separate threads.
+
+    const size_t                   iterations = 10'000'000;
+    coro::ring_buffer<uint64_t, 2> rb{};
+
+    // We'll use an io schedule so we can use yield_for on shutdown since its two threads.
+    coro::io_scheduler producer_tp{coro::io_scheduler::options{
+        .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline}};
+    coro::thread_pool  consumer_tp{coro::thread_pool::options{.thread_count = 1}};
+
+    auto make_producer_task = [&]() -> coro::task<void>
+    {
+        for (size_t i = 0; i < iterations; ++i)
+        {
+            // This test has to constantly reschedule onto the other thread since the produce
+            // and consume calls will end up switching which "thread" is processing.
+            co_await producer_tp.schedule();
+            co_await rb.produce(i);
+        }
+
+        while (!rb.empty())
+        {
+            co_await producer_tp.yield_for(std::chrono::milliseconds{10});
+        }
+
+        rb.notify_waiters(); // Shut everything down.
+
+        co_return;
+    };
+
+    auto make_consumer_task = [&]() -> coro::task<void>
+    {
+        while (true)
+        {
+            co_await consumer_tp.schedule();
+            auto expected = co_await rb.consume();
+            if (!expected)
+            {
+                break;
+            }
+
+            auto item = std::move(*expected);
+            (void)item;
+
+            co_await consumer_tp.yield(); // mimic some work
+        }
+
+        co_return;
+    };
+
+    std::vector<coro::task<void>> tasks{};
+    tasks.emplace_back(make_producer_task());
+    tasks.emplace_back(make_consumer_task());
+
+    coro::sync_wait(coro::when_all(std::move(tasks)));
+
+    REQUIRE(rb.empty());
+}
