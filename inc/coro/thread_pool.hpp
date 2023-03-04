@@ -93,7 +93,7 @@ public:
     auto operator=(const thread_pool&) -> thread_pool& = delete;
     auto operator=(thread_pool&&) -> thread_pool&      = delete;
 
-    virtual ~thread_pool();
+    ~thread_pool();
 
     /**
      * @return The number of executor threads for processing tasks.
@@ -183,8 +183,10 @@ public:
      * Shutsdown the thread pool.  This will finish any tasks scheduled prior to calling this
      * function but will prevent the thread pool from scheduling any new tasks.  This call is
      * blocking and will wait until all inflight tasks are completed before returnin.
+     * This call can only be made once, any subsequent call will return false.
+     * @return True if this call shutdown the io_scheduler.
      */
-    auto shutdown() noexcept -> void;
+    auto shutdown() noexcept -> bool;
 
     /**
      * @return The number of tasks waiting in the task queue + the executing tasks.

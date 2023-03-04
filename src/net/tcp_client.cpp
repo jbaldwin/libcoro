@@ -1,5 +1,7 @@
 #include "coro/net/tcp_client.hpp"
 
+#include <coroutine>
+
 namespace coro::net
 {
 using namespace std::chrono_literals;
@@ -74,7 +76,8 @@ auto tcp_client::connect(std::chrono::milliseconds timeout) -> coro::task<connec
     }
 
     // This enforces the connection status is aways set on the client object upon returning.
-    auto return_value = [this](connect_status s) -> connect_status {
+    auto return_value = [this](connect_status s) -> connect_status
+    {
         m_connect_status = s;
         return s;
     };
@@ -141,7 +144,8 @@ auto tcp_client::ssl_handshake(std::chrono::milliseconds timeout) -> coro::task<
     }
 
     // Enforce on any return past here to set the cached handshake status.
-    auto return_value = [this](ssl_handshake_status s) -> ssl_handshake_status {
+    auto return_value = [this](ssl_handshake_status s) -> ssl_handshake_status
+    {
         m_ssl_info.m_ssl_handshake_status = s;
         return s;
     };

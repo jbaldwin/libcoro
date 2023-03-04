@@ -30,7 +30,6 @@
         - Can use coro::thread_pool for latency sensitive or long lived tasks.
         - Can use inline task processing for thread per core or short lived tasks.
         - Currently uses an epoll driver
-    - [coro::task_container](#task_container) for dynamic task lifetimes
 * Coroutine Networking
     - coro::net::dns_resolver for async dns
         - Uses libc-ares
@@ -39,7 +38,8 @@
     - [coro::net::tcp_server](#io_scheduler)
         - Supports SSL/TLS via OpenSSL
     - coro::net::udp_peer
-* [Example TCP/HTTP Echo Server](#tcp_echo_server)
+* [Example TCP Echo Server](#tcp_echo_server)
+* [Example HTTP 200 OK Echo Server](#http_200_ok_server)
 
 ## Usage
 
@@ -273,29 +273,6 @@ io_scheduler::thread_pool worker 1 stopping
 io_scheduler::process event thread stop
 ```
 
-### task_container
-`coro::task_container` is a special container type that will maintain the lifetime of tasks that do not have a known lifetime.  This is extremely useful for tasks that hold open connections to clients and possibly process multiple requests from that client before shutting down.  The task doesn't know how long it will be alive but at some point in the future it will complete and need to have its resources cleaned up.  The `coro::task_container` does this by wrapping the users task into anothe coroutine task that will mark itself for deletion upon completing within the parent task container.  The task container should then run garbage collection periodically, or by default when a new task is added, to prune completed tasks from the container.
-
-All tasks that are stored within a `coro::task_container` must have a `void` return type since their result cannot be accessed due to the task's lifetime being indeterminate.
-
-```C++
-${EXAMPLE_CORO_TASK_CONTAINER_CPP}
-```
-
-```bash
-$ ./examples/coro_task_container
-server: Hello from client 1
-client: Hello from server 1
-server: Hello from client 2
-client: Hello from server 2
-server: Hello from client 3
-client: Hello from server 3
-server: Hello from client 4
-client: Hello from server 4
-server: Hello from client 5
-client: Hello from server 5
-```
-
 ### tcp_echo_server
 See [examples/coro_tcp_echo_erver.cpp](../examples/coro_tcp_echo_server.cpp) for a basic TCP echo server implementation.  You can use tools like `ab` to benchmark against this echo server.
 
@@ -406,6 +383,8 @@ This project depends on the following git sub-modules:
  * [catch2](https://github.com/catchorg/Catch2) For testing, this is embedded in the `test/` directory.
  * [expected](https://github.com/TartanLlama/expected) For results on operations that can fail, this is a git submodule in the `vendor/` directory.
 
+c-ares::cares and tl::expected can be externally sourced using the `cmake` `option` `LIBCORO_EXTERNAL_DEPENDENCIES`.
+
 #### Building
     mkdir Release && cd Release
     cmake -DCMAKE_BUILD_TYPE=Release ..
@@ -413,11 +392,12 @@ This project depends on the following git sub-modules:
 
 CMake Options:
 
-| Name                   | Default | Description                                                   |
-|:-----------------------|:--------|:--------------------------------------------------------------|
-| LIBCORO_BUILD_TESTS    | ON      | Should the tests be built?                                    |
-| LIBCORO_CODE_COVERAGE  | OFF     | Should code coverage be enabled? Requires tests to be enabled |
-| LIBCORO_BUILD_EXAMPLES | ON      | Should the examples be built?                                 |
+| Name                          | Default | Description                                                   |
+|:------------------------------|:--------|:--------------------------------------------------------------|
+| LIBCORO_BUILD_TESTS           | ON      | Should the tests be built?                                    |
+| LIBCORO_CODE_COVERAGE         | OFF     | Should code coverage be enabled? Requires tests to be enabled |
+| LIBCORO_BUILD_EXAMPLES        | ON      | Should the examples be built?                                 |
+| LIBCORO_EXTERNAL_DEPENDENCIES | OFF     | Use find_package to resolve dependencies?                     |
 
 #### Adding to your project
 

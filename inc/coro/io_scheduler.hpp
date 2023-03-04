@@ -276,8 +276,10 @@ public:
     /**
      * Starts the shutdown of the io scheduler.  All currently executing and pending tasks will complete
      * prior to shutting down.  This call is blocking and will not return until all tasks complete.
+     * This call can only be made once, any subsequent call will return false.
+     * @return True if this call shutdown the io_scheduler.
      */
-    auto shutdown() noexcept -> void;
+    auto shutdown() noexcept -> bool;
 
 private:
     /// The configuration options.

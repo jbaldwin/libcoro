@@ -180,7 +180,7 @@ auto io_scheduler::poll(fd_t fd, coro::poll_op op, std::chrono::milliseconds tim
     co_return result;
 }
 
-auto io_scheduler::shutdown() noexcept -> void
+auto io_scheduler::shutdown() noexcept -> bool
 {
     // Only allow shutdown to occur once.
     if (m_shutdown_requested.exchange(true, std::memory_order::acq_rel) == false)
@@ -199,7 +199,10 @@ auto io_scheduler::shutdown() noexcept -> void
         {
             m_io_thread.join();
         }
+
+        return true;
     }
+    return false;
 }
 
 auto io_scheduler::process_events_manual(std::chrono::milliseconds timeout) -> void
@@ -253,11 +256,10 @@ auto io_scheduler::process_events_execute(std::chrono::milliseconds timeout) -> 
                 // Process scheduled coroutines.
                 process_scheduled_execute_inline();
             }
-            else if (handle_ptr == m_shutdown_ptr)
-                [[unlikely]]
-                {
-                    // Nothing to do , just needed to wake-up and smell the flowers
-                }
+            else if (handle_ptr == m_shutdown_ptr) [[unlikely]]
+            {
+                // Nothing to do , just needed to wake-up and smell the flowers
+            }
             else
             {
                 // Individual poll task wake-up.

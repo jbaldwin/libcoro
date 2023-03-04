@@ -12,16 +12,16 @@ concept executor = requires(type t, std::coroutine_handle<> c)
 {
     {
         t.schedule()
-    }
-    ->coro::concepts::awaiter;
+        } -> coro::concepts::awaiter;
     {
         t.yield()
-    }
-    ->coro::concepts::awaiter;
+        } -> coro::concepts::awaiter;
     {
         t.resume(c)
-    }
-    ->std::same_as<void>;
+        } -> std::same_as<void>;
+    {
+        t.shutdown()
+        } -> std::same_as<bool>;
 };
 
 } // namespace coro::concepts

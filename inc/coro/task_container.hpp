@@ -1,6 +1,7 @@
 #pragma once
 
 #include "coro/concepts/executor.hpp"
+#include "coro/event.hpp"
 #include "coro/task.hpp"
 
 #include <atomic>
@@ -8,6 +9,7 @@
 #include <list>
 #include <memory>
 #include <mutex>
+#include <thread>
 #include <vector>
 
 namespace coro
@@ -50,85 +52,39 @@ public:
     task_container(task_container&&)                         = delete;
     auto operator=(const task_container&) -> task_container& = delete;
     auto operator=(task_container&&) -> task_container&      = delete;
-    ~task_container()
-    {
-        // This will hang the current thread.. but if tasks are not complete thats also pretty bad.
-        while (!empty())
-        {
-            garbage_collect();
-        }
-    }
-
-    enum class garbage_collect_t
-    {
-        /// Execute garbage collection.
-        yes,
-        /// Do not execute garbage collection.
-        no
-    };
+    ~task_container() {}
 
     /**
      * Stores a user task and starts its execution on the container's thread pool.
      * @param user_task The scheduled user's task to store in this task container and start its execution.
-     * @param cleanup Should the task container run garbage collect at the beginning of this store
-     *                call?  Calling at regular intervals will reduce memory usage of completed
-     *                tasks and allow for the task container to re-use allocated space.
+     * @return True if the task has been started, false if the task_container has initiated a shutdown.
      */
-    auto start(coro::task<void>&& user_task, garbage_collect_t cleanup = garbage_collect_t::yes) -> void
+    auto start(coro::task<void>&& user_task) -> bool
     {
         m_size.fetch_add(1, std::memory_order::relaxed);
 
-        std::scoped_lock lk{m_mutex};
+        std::size_t index{};
 
-        if (cleanup == garbage_collect_t::yes)
         {
-            gc_internal();
+            std::scoped_lock lk{m_mutex};
+
+            // Only grow if completely full and attempting to add more.
+            if (m_free_pos == m_task_indexes.end())
+            {
+                m_free_pos = grow();
+            }
+
+            // Store the task inside a cleanup task for self deletion.
+            index          = *m_free_pos;
+            m_tasks[index] = make_cleanup_task(std::move(user_task), m_free_pos);
+
+            // Mark the current used slot as used.
+            std::advance(m_free_pos, 1);
         }
-
-        // Only grow if completely full and attempting to add more.
-        if (m_free_pos == m_task_indexes.end())
-        {
-            m_free_pos = grow();
-        }
-
-        // Store the task inside a cleanup task for self deletion.
-        auto index     = *m_free_pos;
-        m_tasks[index] = make_cleanup_task(std::move(user_task), m_free_pos);
-
-        // Mark the current used slot as used.
-        std::advance(m_free_pos, 1);
 
         // Start executing from the cleanup task to schedule the user's task onto the thread pool.
         m_tasks[index].resume();
-    }
-
-    /**
-     * Garbage collects any tasks that are marked as deleted.  This frees up space to be re-used by
-     * the task container for newly stored tasks.
-     * @return The number of tasks that were deleted.
-     */
-    auto garbage_collect() -> std::size_t __attribute__((used))
-    {
-        std::scoped_lock lk{m_mutex};
-        return gc_internal();
-    }
-
-    /**
-     * @return The number of tasks that are awaiting deletion.
-     */
-    auto delete_task_size() const -> std::size_t
-    {
-        std::atomic_thread_fence(std::memory_order::acquire);
-        return m_tasks_to_delete.size();
-    }
-
-    /**
-     * @return True if there are no tasks awaiting deletion.
-     */
-    auto delete_tasks_empty() const -> bool
-    {
-        std::atomic_thread_fence(std::memory_order::acquire);
-        return m_tasks_to_delete.empty();
+        return true;
     }
 
     /**
@@ -148,22 +104,6 @@ public:
     {
         std::atomic_thread_fence(std::memory_order::acquire);
         return m_tasks.size();
-    }
-
-    /**
-     * Will continue to garbage collect and yield until all tasks are complete.  This method can be
-     * co_await'ed to make it easier to wait for the task container to have all its tasks complete.
-     *
-     * This does not shut down the task container, but can be used when shutting down, or if your
-     * logic requires all the tasks contained within to complete, it is similar to coro::latch.
-     */
-    auto garbage_collect_and_yield_until_empty() -> coro::task<void>
-    {
-        while (!empty())
-        {
-            garbage_collect();
-            co_await m_executor_ptr->yield();
-        }
     }
 
 private:
@@ -186,32 +126,6 @@ private:
     }
 
     /**
-     * Interal GC call, expects the public function to lock.
-     */
-    auto gc_internal() -> std::size_t
-    {
-        std::size_t deleted{0};
-        if (!m_tasks_to_delete.empty())
-        {
-            for (const auto& pos : m_tasks_to_delete)
-            {
-                // This doesn't actually 'delete' the task, it'll get overwritten when a
-                // new user task claims the free space.  It could be useful to actually
-                // delete the tasks so the coroutine stack frames are destroyed.  The advantage
-                // of letting a new task replace and old one though is that its a 1:1 exchange
-                // on delete and create, rather than a large pause here to delete all the
-                // completed tasks.
-
-                // Put the deleted position at the end of the free indexes list.
-                m_task_indexes.splice(m_task_indexes.end(), m_task_indexes, pos);
-            }
-            deleted = m_tasks_to_delete.size();
-            m_tasks_to_delete.clear();
-        }
-        return deleted;
-    }
-
-    /**
      * Encapsulate the users tasks in a cleanup task which marks itself for deletion upon
      * completion.  Simply co_await the users task until its completed and then mark the given
      * position within the task manager as being deletable.  The scheduler's next iteration
@@ -223,10 +137,10 @@ private:
      * @param pos The position where the task data will be stored in the task manager.
      * @return The user's task wrapped in a self cleanup task.
      */
-    auto make_cleanup_task(task<void> user_task, task_position pos) -> coro::task<void>
+    auto make_cleanup_task(coro::task<void> user_task, task_position pos) -> coro::task<void>
     {
         // Immediately move the task onto the executor.
-        co_await m_executor_ptr->schedule();
+        co_await m_executor->schedule();
 
         try
         {
@@ -247,8 +161,18 @@ private:
             std::cerr << "coro::task_container user_task had unhandle exception, not derived from std::exception.\n";
         }
 
+        // Destroy the users coroutine frame to free resources.
+        user_task.destroy();
+
         std::scoped_lock lk{m_mutex};
-        m_tasks_to_delete.push_back(pos);
+        // Move this slot to be re-usable.
+        m_task_indexes.splice(m_task_indexes.end(), m_task_indexes, pos);
+        // If the task container was "full" we need to push the free pos back one to realize this slot is now free.
+        if (m_free_pos == m_task_indexes.end())
+        {
+            std::advance(m_free_pos, -1);
+        }
+
         // This has to be done within scope lock to make sure this coroutine task completes before the
         // task container object destructs -- if it was waiting on .empty() to become true.
         m_size.fetch_sub(1, std::memory_order::relaxed);
@@ -264,8 +188,6 @@ private:
     std::vector<task<void>> m_tasks{};
     /// The full set of indexes into `m_tasks`.
     std::list<std::size_t> m_task_indexes{};
-    /// The set of tasks that have completed and need to be deleted.
-    std::vector<task_position> m_tasks_to_delete{};
     /// The current free position within the task indexes list.  Anything before
     /// this point is used, itself and anything after is free.
     task_position m_free_pos{};

@@ -30,7 +30,6 @@
         - Can use coro::thread_pool for latency sensitive or long lived tasks.
         - Can use inline task processing for thread per core or short lived tasks.
         - Currently uses an epoll driver
-    - [coro::task_container](#task_container) for dynamic task lifetimes
 * Coroutine Networking
     - coro::net::dns_resolver for async dns
         - Uses libc-ares
@@ -39,7 +38,8 @@
     - [coro::net::tcp_server](#io_scheduler)
         - Supports SSL/TLS via OpenSSL
     - coro::net::udp_peer
-* [Example TCP/HTTP Echo Server](#tcp_echo_server)
+* [Example TCP Echo Server](#tcp_echo_server)
+* [Example HTTP 200 OK Echo Server](#http_200_ok_server)
 
 ## Usage
 
@@ -880,110 +880,6 @@ io_scheduler::thread_pool worker 1 stopping
 io_scheduler::process event thread stop
 ```
 
-### task_container
-`coro::task_container` is a special container type that will maintain the lifetime of tasks that do not have a known lifetime.  This is extremely useful for tasks that hold open connections to clients and possibly process multiple requests from that client before shutting down.  The task doesn't know how long it will be alive but at some point in the future it will complete and need to have its resources cleaned up.  The `coro::task_container` does this by wrapping the users task into anothe coroutine task that will mark itself for deletion upon completing within the parent task container.  The task container should then run garbage collection periodically, or by default when a new task is added, to prune completed tasks from the container.
-
-All tasks that are stored within a `coro::task_container` must have a `void` return type since their result cannot be accessed due to the task's lifetime being indeterminate.
-
-```C++
-#include <coro/coro.hpp>
-#include <iostream>
-
-int main()
-{
-    auto scheduler = std::make_shared<coro::io_scheduler>(
-        coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
-
-    auto make_server_task = [&]() -> coro::task<void> {
-        // This is the task that will handle processing a client's requests.
-        auto serve_client = [](coro::net::tcp_client client) -> coro::task<void> {
-            size_t requests{1};
-
-            while (true)
-            {
-                // Continue to accept more requests until the client closes the connection.
-                co_await client.poll(coro::poll_op::read);
-
-                std::string request(64, '\0');
-                auto [recv_status, recv_bytes] = client.recv(request);
-                if (recv_status == coro::net::recv_status::closed)
-                {
-                    break;
-                }
-
-                request.resize(recv_bytes.size());
-                std::cout << "server: " << request << "\n";
-
-                auto response = "Hello from server " + std::to_string(requests);
-                client.send(response);
-
-                ++requests;
-            }
-
-            co_return;
-        };
-
-        // Spin up the tcp_server and schedule it onto the io_scheduler.
-        coro::net::tcp_server server{scheduler};
-        co_await scheduler->schedule();
-
-        // All incoming connections will be stored into the task container until they are completed.
-        coro::task_container tc{scheduler};
-
-        // Wait for an incoming connection and accept it, this example will only use 1 connection.
-        co_await server.poll();
-        auto client = server.accept();
-        // Store the task that will serve the client into the container and immediately begin executing it
-        // on the task container's thread pool, which is the same as the scheduler.
-        tc.start(serve_client(std::move(client)));
-
-        // Wait for all clients to complete before shutting down the tcp_server.
-        co_await tc.garbage_collect_and_yield_until_empty();
-        co_return;
-    };
-
-    auto make_client_task = [&](size_t request_count) -> coro::task<void> {
-        co_await scheduler->schedule();
-        coro::net::tcp_client client{scheduler};
-
-        co_await client.connect();
-
-        // Send N requests on the same connection and wait for the server response to each one.
-        for (size_t i = 1; i <= request_count; ++i)
-        {
-            // Send the request data.
-            auto request = "Hello from client " + std::to_string(i);
-            client.send(request);
-
-            co_await client.poll(coro::poll_op::read);
-            std::string response(64, '\0');
-            auto [recv_status, recv_bytes] = client.recv(response);
-            response.resize(recv_bytes.size());
-
-            std::cout << "client: " << response << "\n";
-        }
-
-        co_return; // Upon exiting the tcp_client will close its connection to the server.
-    };
-
-    coro::sync_wait(coro::when_all(make_server_task(), make_client_task(5)));
-}
-```
-
-```bash
-$ ./examples/coro_task_container
-server: Hello from client 1
-client: Hello from server 1
-server: Hello from client 2
-client: Hello from server 2
-server: Hello from client 3
-client: Hello from server 3
-server: Hello from client 4
-client: Hello from server 4
-server: Hello from client 5
-client: Hello from server 5
-```
-
 ### tcp_echo_server
 See [examples/coro_tcp_echo_erver.cpp](../examples/coro_tcp_echo_server.cpp) for a basic TCP echo server implementation.  You can use tools like `ab` to benchmark against this echo server.
 
@@ -1094,6 +990,8 @@ This project depends on the following git sub-modules:
  * [catch2](https://github.com/catchorg/Catch2) For testing, this is embedded in the `test/` directory.
  * [expected](https://github.com/TartanLlama/expected) For results on operations that can fail, this is a git submodule in the `vendor/` directory.
 
+c-ares::cares and tl::expected can be externally sourced using the `cmake` `option` `LIBCORO_EXTERNAL_DEPENDENCIES`.
+
 #### Building
     mkdir Release && cd Release
     cmake -DCMAKE_BUILD_TYPE=Release ..
@@ -1101,11 +999,12 @@ This project depends on the following git sub-modules:
 
 CMake Options:
 
-| Name                   | Default | Description                                                   |
-|:-----------------------|:--------|:--------------------------------------------------------------|
-| LIBCORO_BUILD_TESTS    | ON      | Should the tests be built?                                    |
-| LIBCORO_CODE_COVERAGE  | OFF     | Should code coverage be enabled? Requires tests to be enabled |
-| LIBCORO_BUILD_EXAMPLES | ON      | Should the examples be built?                                 |
+| Name                          | Default | Description                                                   |
+|:------------------------------|:--------|:--------------------------------------------------------------|
+| LIBCORO_BUILD_TESTS           | ON      | Should the tests be built?                                    |
+| LIBCORO_CODE_COVERAGE         | OFF     | Should code coverage be enabled? Requires tests to be enabled |
+| LIBCORO_BUILD_EXAMPLES        | ON      | Should the examples be built?                                 |
+| LIBCORO_EXTERNAL_DEPENDENCIES | OFF     | Use find_package to resolve dependencies?                     |
 
 #### Adding to your project
 

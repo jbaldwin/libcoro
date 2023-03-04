@@ -55,7 +55,7 @@ auto thread_pool::resume(std::coroutine_handle<> handle) noexcept -> void
     schedule_impl(handle);
 }
 
-auto thread_pool::shutdown() noexcept -> void
+auto thread_pool::shutdown() noexcept -> bool
 {
     // Only allow shutdown to occur once.
     if (m_shutdown_requested.exchange(true, std::memory_order::acq_rel) == false)
@@ -72,7 +72,9 @@ auto thread_pool::shutdown() noexcept -> void
                 thread.join();
             }
         }
+        return true;
     }
+    return false;
 }
 
 auto thread_pool::executor(std::stop_token stop_token, std::size_t idx) -> void

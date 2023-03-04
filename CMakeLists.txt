@@ -25,9 +25,10 @@ message("${PROJECT_NAME} LIBCORO_CODE_COVERAGE         = ${LIBCORO_CODE_COVERAGE
 message("${PROJECT_NAME} LIBCORO_BUILD_EXAMPLES        = ${LIBCORO_BUILD_EXAMPLES}")
 
 if(NOT LIBCORO_EXTERNAL_DEPENDENCIES)
-    set(CARES_STATIC    ON  CACHE INTERNAL "")
-    set(CARES_SHARED    OFF CACHE INTERNAL "")
-    set(CARES_INSTALL   OFF CACHE INTERNAL "")
+    set(CARES_STATIC     ON  CACHE INTERNAL "")
+    set(CARES_STATIC_PIC ON  CACHE INTERNAL "")
+    set(CARES_SHARED     OFF CACHE INTERNAL "")
+    set(CARES_INSTALL    OFF CACHE INTERNAL "")
 
     add_subdirectory(vendor/c-ares/c-ares)
     add_subdirectory(vendor/tartanllama/expected)
@@ -79,7 +80,7 @@ set(LIBCORO_SOURCE_FILES
     inc/coro/when_all.hpp
 )
 
-add_library(${PROJECT_NAME} STATIC ${LIBCORO_SOURCE_FILES})
+add_library(${PROJECT_NAME} SHARED ${LIBCORO_SOURCE_FILES})
 set_target_properties(${PROJECT_NAME} PROPERTIES LINKER_LANGUAGE CXX PREFIX "")
 target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_20)
 target_include_directories(${PROJECT_NAME} PUBLIC inc)
@@ -90,7 +91,13 @@ if(${CMAKE_CXX_COMPILER_ID} MATCHES "GNU")
         message(FATAL_ERROR "gcc version ${CMAKE_CXX_COMPILER_VERSION} is unsupported, please upgrade to at least 10.2.0")
     endif()
 
-    target_compile_options(${PROJECT_NAME} PUBLIC -fcoroutines -Wall -Wextra -pipe)
+    set(GNU_COMPILER_OPTIONS  -Wall -Wextra -pipe)
+    if(${CMAKE_CXX_COMPILER_VERSION} VERSION_LESS 11)
+        list(APPEND GNU_COMPILER_OPTIONS -fcoroutines)
+    endif()
+    message("COMPILER_OPTIONS = ${GNU_COMPILER_OPTIONS}")
+
+    target_compile_options(${PROJECT_NAME} PUBLIC ${GNU_COMPILER_OPTIONS})
 elseif(${CMAKE_CXX_COMPILER_ID} MATCHES "Clang")
     message(FATAL_ERROR "Clang is currently not supported.")
 endif()
