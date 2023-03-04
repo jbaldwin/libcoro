@@ -59,7 +59,7 @@ public:
      * not imply if the socket is still usable.
      * @return True if the socket file descriptor is > 0.
      */
-    auto is_valid() const -> bool { return m_fd > 0; }
+    auto is_valid() const -> bool { return m_fd != -1; }
 
     /**
      * @param block Sets the socket to the given blocking mode.

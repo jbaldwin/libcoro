@@ -279,15 +279,6 @@ public:
      */
     auto shutdown() noexcept -> void;
 
-    // /**
-    //  * Cleans up finished tasks, e.g. runs destructors etc.
-    //  */
-    // auto garbage_collect() -> void
-    // {
-    //     auto* ptr = static_cast<coro::task_container<coro::io_scheduler>*>(m_owned_tasks);
-    //     ptr->garbage_collect();
-    // }
-
 private:
     /// The configuration options.
     options m_opts;
