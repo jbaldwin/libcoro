@@ -80,10 +80,10 @@ public:
                  .on_thread_stop_functor  = nullptr},
             .execution_strategy = execution_strategy_t::process_tasks_on_thread_pool});
 
-    io_scheduler(const io_scheduler&) = delete;
-    io_scheduler(io_scheduler&&)      = delete;
+    io_scheduler(const io_scheduler&)                    = delete;
+    io_scheduler(io_scheduler&&)                         = delete;
     auto operator=(const io_scheduler&) -> io_scheduler& = delete;
-    auto operator=(io_scheduler&&) -> io_scheduler& = delete;
+    auto operator=(io_scheduler&&) -> io_scheduler&      = delete;
 
     ~io_scheduler();
 

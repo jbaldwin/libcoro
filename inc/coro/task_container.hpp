@@ -46,10 +46,10 @@ public:
 
         init(opts.reserve_size);
     }
-    task_container(const task_container&) = delete;
-    task_container(task_container&&)      = delete;
+    task_container(const task_container&)                    = delete;
+    task_container(task_container&&)                         = delete;
     auto operator=(const task_container&) -> task_container& = delete;
-    auto operator=(task_container &&) -> task_container& = delete;
+    auto operator=(task_container&&) -> task_container&      = delete;
     ~task_container()
     {
         // This will hang the current thread.. but if tasks are not complete thats also pretty bad.

@@ -50,7 +50,7 @@ public:
     socket(const socket&) = delete;
     socket(socket&& other) : m_fd(std::exchange(other.m_fd, -1)) {}
     auto operator=(const socket&) -> socket& = delete;
-    auto operator                            =(socket&& other) noexcept -> socket&;
+    auto operator=(socket&& other) noexcept -> socket&;
 
     ~socket() { close(); }
 

@@ -39,6 +39,7 @@
     - [coro::net::tcp_server](#io_scheduler)
         - Supports SSL/TLS via OpenSSL
     - coro::net::udp_peer
+* [Example TCP/HTTP Echo Server](#tcp_echo_server)
 
 ## Usage
 
@@ -293,6 +294,87 @@ server: Hello from client 4
 client: Hello from server 4
 server: Hello from client 5
 client: Hello from server 5
+```
+
+### tcp_echo_server
+See [examples/coro_tcp_echo_erver.cpp](../examples/coro_tcp_echo_server.cpp) for a basic TCP echo server implementation.  You can use tools like `ab` to benchmark against this echo server.
+
+Using a `Intel(R) Core(TM) i7-9750H CPU @ 2.60GHz`:
+
+```bash
+$ ab -n 10000000 -c 1000 -k http://127.0.0.1:8888/
+This is ApacheBench, Version 2.3 <$Revision: 1879490 $>
+Copyright 1996 Adam Twiss, Zeus Technology Ltd, http://www.zeustech.net/
+Licensed to The Apache Software Foundation, http://www.apache.org/
+
+Benchmarking 127.0.0.1 (be patient)
+Completed 1000000 requests
+Completed 2000000 requests
+Completed 3000000 requests
+Completed 4000000 requests
+Completed 5000000 requests
+Completed 6000000 requests
+Completed 7000000 requests
+Completed 8000000 requests
+Completed 9000000 requests
+Completed 10000000 requests
+Finished 10000000 requests
+
+
+Server Software:        
+Server Hostname:        127.0.0.1
+Server Port:            8888
+
+Document Path:          /
+Document Length:        0 bytes
+
+Concurrency Level:      1000
+Time taken for tests:   90.290 seconds
+Complete requests:      10000000
+Failed requests:        0
+Non-2xx responses:      10000000
+Keep-Alive requests:    10000000
+Total transferred:      1060000000 bytes
+HTML transferred:       0 bytes
+Requests per second:    110753.80 [#/sec] (mean)
+Time per request:       9.029 [ms] (mean)
+Time per request:       0.009 [ms] (mean, across all concurrent requests)
+Transfer rate:          11464.75 [Kbytes/sec] received
+
+Connection Times (ms)
+              min  mean[+/-sd] median   max
+Connect:        0    0   0.2      0      24
+Processing:     2    9   1.6      9      77
+Waiting:        0    9   1.6      9      77
+Total:          2    9   1.6      9      88
+
+Percentage of the requests served within a certain time (ms)
+  50%      9
+  66%      9
+  75%     10
+  80%     10
+  90%     11
+  95%     12
+  98%     14
+  99%     15
+ 100%     88 (longest request)
+````
+
+### http_200_ok_server
+See [examples/coro_http_200_ok_erver.cpp](../examples/coro_http_200_ok_server.cpp) for a basic HTTP 200 OK response server implementation.  You can use tools like `wrk` or `autocannon` to benchmark against this HTTP 200 OK server.
+
+Using a `Intel(R) Core(TM) i7-9750H CPU @ 2.60GHz`:
+
+```bash
+$ ./wrk -c 1000 -d 60s -t 6 http://127.0.0.1:8888/
+Running 1m test @ http://127.0.0.1:8888/
+  6 threads and 1000 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency     2.96ms    3.61ms  82.22ms   90.06%
+    Req/Sec    54.69k     6.75k   70.51k    80.88%
+  19569177 requests in 1.00m, 1.08GB read
+Requests/sec: 325778.99
+Transfer/sec:     18.33MB
 ```
 
 ### Requirements
