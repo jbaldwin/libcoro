@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.0)
 project(libcoro LANGUAGES CXX DESCRIPTION "C++20 coroutine library")
 
+include(GNUInstallDirs)
+
 if (NOT "$ENV{version}" STREQUAL "")
     set(PROJECT_VERSION "$ENV{version}" CACHE INTERNAL "Copied from environment variable")
 endif()
@@ -105,4 +107,4 @@ configure_file(libcoro.pc.in libcoro.pc @ONLY)
 
 install(TARGETS libcoro)
 install(DIRECTORY inc/coro TYPE INCLUDE)
-install(FILES ${CMAKE_CURRENT_BINARY_DIR}/libcoro.pc DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/../lib/pkgconfig)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/libcoro.pc DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig)
