@@ -14,20 +14,29 @@ execute_process(
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
-option(LIBCORO_BUILD_TESTS    "Build the tests, Default=ON." ON)
-option(LIBCORO_CODE_COVERAGE  "Enable code coverage, tests must also be enabled, Default=OFF" OFF)
-option(LIBCORO_BUILD_EXAMPLES "Build the examples, Default=ON." ON)
+option(LIBCORO_EXTERNAL_DEPENDENCIES "Use find_package to resolve dependencies, Default=OFF." OFF)
+option(LIBCORO_BUILD_TESTS           "Build the tests, Default=ON." ON)
+option(LIBCORO_CODE_COVERAGE         "Enable code coverage, tests must also be enabled, Default=OFF" OFF)
+option(LIBCORO_BUILD_EXAMPLES        "Build the examples, Default=ON." ON)
 
-message("${PROJECT_NAME} LIBCORO_BUILD_TESTS      = ${LIBCORO_BUILD_TESTS}")
-message("${PROJECT_NAME} LIBCORO_CODE_COVERAGE    = ${LIBCORO_CODE_COVERAGE}")
-message("${PROJECT_NAME} LIBCORO_BUILD_EXAMPLES   = ${LIBCORO_BUILD_EXAMPLES}")
+message("${PROJECT_NAME} LIBCORO_EXTERNAL_DEPENDENCIES = ${LIBCORO_EXTERNAL_DEPENDENCIES}")
+message("${PROJECT_NAME} LIBCORO_BUILD_TESTS           = ${LIBCORO_BUILD_TESTS}")
+message("${PROJECT_NAME} LIBCORO_CODE_COVERAGE         = ${LIBCORO_CODE_COVERAGE}")
+message("${PROJECT_NAME} LIBCORO_BUILD_EXAMPLES        = ${LIBCORO_BUILD_EXAMPLES}")
 
-set(CARES_STATIC    ON  CACHE INTERNAL "")
-set(CARES_SHARED    OFF CACHE INTERNAL "")
-set(CARES_INSTALL   OFF CACHE INTERNAL "")
+if(NOT LIBCORO_EXTERNAL_DEPENDENCIES)
+    set(CARES_STATIC    ON  CACHE INTERNAL "")
+    set(CARES_SHARED    OFF CACHE INTERNAL "")
+    set(CARES_INSTALL   OFF CACHE INTERNAL "")
 
-add_subdirectory(vendor/c-ares/c-ares)
-add_subdirectory(vendor/tartanllama/expected)
+    add_subdirectory(vendor/c-ares/c-ares)
+    add_subdirectory(vendor/tartanllama/expected)
+else()
+    find_package(c-ares CONFIG REQUIRED)
+    find_package(tl-expected CONFIG REQUIRED)
+endif()
+
+find_package(OpenSSL REQUIRED)
 
 set(LIBCORO_SOURCE_FILES
     inc/coro/concepts/awaitable.hpp
@@ -74,7 +83,7 @@ add_library(${PROJECT_NAME} STATIC ${LIBCORO_SOURCE_FILES})
 set_target_properties(${PROJECT_NAME} PROPERTIES LINKER_LANGUAGE CXX)
 target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_20)
 target_include_directories(${PROJECT_NAME} PUBLIC inc)
-target_link_libraries(${PROJECT_NAME} PUBLIC pthread c-ares expected ssl crypto)
+target_link_libraries(${PROJECT_NAME} PUBLIC pthread c-ares::cares tl::expected OpenSSL::SSL OpenSSL::Crypto)
 
 if(${CMAKE_CXX_COMPILER_ID} MATCHES "GNU")
     if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "10.2.0")
