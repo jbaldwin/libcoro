@@ -453,6 +453,9 @@ target_link_libraries(${PROJECT_NAME} PUBLIC libcoro)
 
 ```
 
+##### Conan
+libcoro is available via the [Conan](https://conan.io/center/libcoro) package manager.
+
 #### Tests
 The tests will automatically be run by github actions on creating a pull request.  They can also be ran locally:
 
