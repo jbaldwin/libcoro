@@ -1123,7 +1123,6 @@ target_link_libraries(${PROJECT_NAME} PUBLIC libcoro)
 ##### FetchContent
 CMake can include the project directly by downloading the source, compiling and linking to your project via FetchContent, below is an example on how you might do this within your project.
 
-
 ```cmake
 cmake_minimum_required(VERSION 3.11)
 
@@ -1140,6 +1139,9 @@ FetchContent_MakeAvailable(libcoro)
 target_link_libraries(${PROJECT_NAME} PUBLIC libcoro)
 
 ```
+    
+##### Conan
+libcoro is available via the [Conan](https://conan.io/center/libcoro) package manager.
 
 #### Tests
 The tests will automatically be run by github actions on creating a pull request.  They can also be ran locally:
