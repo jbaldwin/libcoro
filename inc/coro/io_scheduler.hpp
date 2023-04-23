@@ -279,6 +279,17 @@ public:
      */
     auto shutdown() noexcept -> void;
 
+    /**
+     * Scans for completed coroutines and destroys them freeing up resources.  This is also done on starting
+     * new tasks but this allows the user to cleanup resources manually.  One usage might be making sure sockets
+     * are cleaned up as soon as possible.
+     */
+    auto garbage_collect() noexcept -> void
+    {
+        auto* ptr = static_cast<coro::task_container<coro::io_scheduler>*>(m_owned_tasks);
+        ptr->garbage_collect();
+    }
+
 private:
     /// The configuration options.
     options m_opts;

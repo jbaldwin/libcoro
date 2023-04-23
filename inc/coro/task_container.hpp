@@ -195,15 +195,10 @@ private:
         {
             for (const auto& pos : m_tasks_to_delete)
             {
-                // This doesn't actually 'delete' the task, it'll get overwritten when a
-                // new user task claims the free space.  It could be useful to actually
-                // delete the tasks so the coroutine stack frames are destroyed.  The advantage
-                // of letting a new task replace and old one though is that its a 1:1 exchange
-                // on delete and create, rather than a large pause here to delete all the
-                // completed tasks.
-
                 // Put the deleted position at the end of the free indexes list.
                 m_task_indexes.splice(m_task_indexes.end(), m_task_indexes, pos);
+                // Destroy the cleanup task and the user task.
+                m_tasks[*pos].destroy();
             }
             deleted = m_tasks_to_delete.size();
             m_tasks_to_delete.clear();

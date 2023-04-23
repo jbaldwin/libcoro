@@ -44,6 +44,11 @@ Connection: keep-alive
             {
                 case coro::poll_status::event:
                 {
+                    // Coroutines in the scheduler are cleaned up when another once replaces them, but sockets need
+                    // to be manually "closed" otherwise we could run out of file descriptors if the ulimit isn't high
+                    // enough. Calling garbage collect here will destroy completed coroutine frames.
+                    scheduler->garbage_collect();
+
                     auto client = server.accept();
                     if (client.socket().is_valid())
                     {
