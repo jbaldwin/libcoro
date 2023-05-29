@@ -381,6 +381,9 @@ Transfer/sec:     18.33MB
     C++20 Compiler with coroutine support
         g++10.2.1
         g++10.3.1
+        g++11
+        g++12
+        g++13
     CMake
     make or ninja
     pthreads
@@ -391,9 +394,8 @@ Transfer/sec:     18.33MB
 
 #### Tested Distos
 
- * ubuntu:20.04
- * ubuntu:22.04
- * fedora:32-36
+ * ubuntu:20.04, 22.04
+ * fedora:32-38
  * openSUSE/leap:15.2
 
 #### Cloning the project
