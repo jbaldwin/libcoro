@@ -1083,7 +1083,7 @@ Transfer/sec:     18.33MB
 #### Tested Distos
 
  * ubuntu:20.04, 22.04
- * fedora:32-38
+ * fedora:32-37
  * openSUSE/leap:15.2
 
 #### Cloning the project
