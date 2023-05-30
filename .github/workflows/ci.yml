@@ -24,7 +24,7 @@ jobs:
                         ninja-build \
                         g++-10 \
                         libssl-dev
-            -   name: Checkout # recurisve checkout requires git to be installed first
+            -   name: Checkout
                 uses: actions/checkout@v2
                 with:
                     submodules: recursive
@@ -46,6 +46,9 @@ jobs:
     build-ubuntu-22-04:
         name: ubuntu-22.04
         runs-on: ubuntu-latest
+        strategy:
+            matrix:
+                gplusplus_version: [11, 12, 13]
         container:
             image: ubuntu:22.04
             env:
@@ -62,9 +65,9 @@ jobs:
                         cmake \
                         git \
                         ninja-build \
-                        g++ \
+                        g++-${{ matrix.gplusplus_version }} \
                         libssl-dev
-            -   name: Checkout # recurisve checkout requires git to be installed first
+            -   name: Checkout
                 uses: actions/checkout@v2
                 with:
                     submodules: recursive
@@ -83,11 +86,16 @@ jobs:
                 run: |
                     cd build-release-g++
                     ctest -VV
-    build-fedora-32:
-        name: fedora-32
+
+    build-fedora-32-to-37:
+        name: fedora-${{ matrix.fedora_version }}
         runs-on: ubuntu-latest
+        strategy:
+            fail-fast: false
+            matrix:
+                fedora_version: [32, 33, 34, 35, 36, 37]
         container:
-            image: fedora:32
+            image: fedora:${{ matrix.fedora_version }}
         steps:
             -   name: dnf
                 run: |
@@ -96,25 +104,12 @@ jobs:
                         git \
                         ninja-build \
                         gcc-c++ \
-                        lcov \
                         openssl \
                         openssl-devel
-            -   name: Checkout # recurisve checkout requires git to be installed first
+            -   name: Checkout
                 uses: actions/checkout@v2
                 with:
                     submodules: recursive
-            -   name: build-debug-g++
-                run: |
-                    mkdir build-debug-g++
-                    cd build-debug-g++
-                    cmake \
-                        -GNinja \
-                        -DLIBCORO_CODE_COVERAGE=ON \
-                        -DCMAKE_BUILD_TYPE=Debug \
-                        -DCMAKE_C_COMPILER=gcc \
-                        -DCMAKE_CXX_COMPILER=g++ \
-                        ..
-                    ninja
             -   name: build-release-g++
                 run: |
                     mkdir build-release-g++
@@ -131,153 +126,30 @@ jobs:
                     cd build-release-g++
                     ctest -VV
             -   name: Build coverage info
+                if: ${{ matrix.fedora_version == 32 }}
                 run: |
+                    sudo dnf install -y \
+                        lcov
+                    mkdir build-debug-g++
                     cd build-debug-g++
+                    cmake \
+                        -GNinja \
+                        -DLIBCORO_CODE_COVERAGE=ON \
+                        -DCMAKE_BUILD_TYPE=Debug \
+                        -DCMAKE_C_COMPILER=gcc \
+                        -DCMAKE_CXX_COMPILER=g++ \
+                        ..
+                    ninja
                     ctest -VV
                     gcov -o ./test/CMakeFiles/libcoro_tests.dir/main.cpp.o ./test/libcoro_tests
                     lcov --include "*/inc/coro/*" --include "*/src/*" --exclude "test/*" -o libcoro_tests.info -c -d .
             -   name: Coveralls GitHub Action
                 uses: coverallsapp/github-action@v1.0.1
+                if: ${{ matrix.fedora_version == 32 }}
                 with:
                     github-token: ${{ secrets.GITHUB_TOKEN }}
                     path-to-lcov: build-debug-g++/libcoro_tests.info
 
-    build-fedora-33:
-        name: fedora-33
-        runs-on: ubuntu-latest
-        container:
-            image: fedora:33
-        steps:
-            -   name: dnf
-                run: |
-                    sudo dnf install -y \
-                        cmake \
-                        git \
-                        ninja-build \
-                        gcc-c++-10.3.1 \
-                        openssl \
-                        openssl-devel
-            -   name: Checkout # recurisve checkout requires git to be installed first
-                uses: actions/checkout@v2
-                with:
-                    submodules: recursive
-            -   name: build-release-g++
-                run: |
-                    mkdir build-release-g++
-                    cd build-release-g++
-                    cmake \
-                        -GNinja \
-                        -DCMAKE_BUILD_TYPE=Release \
-                        -DCMAKE_C_COMPILER=gcc \
-                        -DCMAKE_CXX_COMPILER=g++ \
-                        ..
-                    ninja
-            -   name: test-release-g++
-                run: |
-                    cd build-release-g++
-                    ctest -VV
-    build-fedora-34:
-        name: fedora-34
-        runs-on: ubuntu-latest
-        container:
-            image: fedora:34
-        steps:
-            -   name: dnf
-                run: |
-                    sudo dnf install -y \
-                        cmake \
-                        git \
-                        ninja-build \
-                        gcc-c++ \
-                        openssl \
-                        openssl-devel
-            -   name: Checkout # recurisve checkout requires git to be installed first
-                uses: actions/checkout@v2
-                with:
-                    submodules: recursive
-            -   name: build-release-g++
-                run: |
-                    mkdir build-release-g++
-                    cd build-release-g++
-                    cmake \
-                        -GNinja \
-                        -DCMAKE_BUILD_TYPE=Release \
-                        -DCMAKE_C_COMPILER=gcc \
-                        -DCMAKE_CXX_COMPILER=g++ \
-                        ..
-                    ninja
-            -   name: test-release-g++
-                run: |
-                    cd build-release-g++
-                    ctest -VV
-    build-fedora-35:
-        name: fedora-35
-        runs-on: ubuntu-latest
-        container:
-            image: fedora:35
-        steps:
-            -   name: dnf
-                run: |
-                    sudo dnf install -y \
-                        cmake \
-                        git \
-                        ninja-build \
-                        gcc-c++ \
-                        openssl \
-                        openssl-devel
-            -   name: Checkout # recurisve checkout requires git to be installed first
-                uses: actions/checkout@v2
-                with:
-                    submodules: recursive
-            -   name: build-release-g++
-                run: |
-                    mkdir build-release-g++
-                    cd build-release-g++
-                    cmake \
-                        -GNinja \
-                        -DCMAKE_BUILD_TYPE=Release \
-                        -DCMAKE_C_COMPILER=gcc \
-                        -DCMAKE_CXX_COMPILER=g++ \
-                        ..
-                    ninja
-            -   name: test-release-g++
-                run: |
-                    cd build-release-g++
-                    ctest -VV
-    build-fedora-36:
-        name: fedora-36
-        runs-on: ubuntu-latest
-        container:
-            image: fedora:36
-        steps:
-            -   name: dnf
-                run: |
-                    sudo dnf install -y \
-                        cmake \
-                        git \
-                        ninja-build \
-                        gcc-c++ \
-                        openssl \
-                        openssl-devel
-            -   name: Checkout # recurisve checkout requires git to be installed first
-                uses: actions/checkout@v2
-                with:
-                    submodules: recursive
-            -   name: build-release-g++
-                run: |
-                    mkdir build-release-g++
-                    cd build-release-g++
-                    cmake \
-                        -GNinja \
-                        -DCMAKE_BUILD_TYPE=Release \
-                        -DCMAKE_C_COMPILER=gcc \
-                        -DCMAKE_CXX_COMPILER=g++ \
-                        ..
-                    ninja
-            -   name: test-release-g++
-                run: |
-                    cd build-release-g++
-                    ctest -VV
     build-opensuse-15:
         name: opensuse-15
         runs-on: ubuntu-latest
@@ -294,7 +166,7 @@ jobs:
                         gcc10-c++ \
                         openssl \
                         openssl-devel
-            -   name: Checkout # recurisve checkout requires git to be installed first
+            -   name: Checkout
                 uses: actions/checkout@v2
                 with:
                     submodules: recursive
