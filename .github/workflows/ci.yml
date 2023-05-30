@@ -91,6 +91,7 @@ jobs:
         name: fedora-${{ matrix.fedora_version }}
         runs-on: ubuntu-latest
         strategy:
+            fail-fast: false
             matrix:
                 fedora_version: [32, 34, 35, 36, 37, 38]
         container:
