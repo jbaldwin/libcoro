@@ -255,6 +255,7 @@ TEST_CASE("benchmark counter task scheduler{1} yield", "[benchmark]")
     REQUIRE(counter == iterations);
 }
 
+#ifdef LIBCORO_FEATURE_NETWORKING
 TEST_CASE("benchmark counter task scheduler{1} yield_for", "[benchmark]")
 {
     constexpr std::size_t iterations = default_iterations;
@@ -751,3 +752,4 @@ TEST_CASE("benchmark tcp_server echo server inline", "[benchmark]")
         std::cerr << ms.count() << " : " << count << "\n";
     }
 }
+#endif

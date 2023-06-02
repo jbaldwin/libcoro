@@ -86,6 +86,22 @@ jobs:
                 run: |
                     cd build-release-g++
                     ctest -VV
+            -   name: build-release-g++-feature-networking-disabled
+                run: |
+                    mkdir build-release-g++-feature-networking-disabled
+                    cd build-release-g++-feature-networking-disabled
+                    cmake \
+                        -GNinja \
+                        -DCMAKE_BUILD_TYPE=Release \
+                        -DCMAKE_C_COMPILER=gcc \
+                        -DCMAKE_CXX_COMPILER=g++ \
+                        -DLIBCORO_FEATURE_NETWORKING=OFF \
+                        ..
+                    ninja
+            -   name: test-release-g++-feature-networking-disabled
+                run: |
+                    cd build-release-g++-feature-networking-disabled
+                    ctest -VV
 
     build-fedora-32-to-37:
         name: fedora-${{ matrix.fedora_version }}
