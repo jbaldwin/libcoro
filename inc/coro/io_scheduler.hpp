@@ -2,10 +2,13 @@
 
 #include "coro/detail/poll_info.hpp"
 #include "coro/fd.hpp"
-#include "coro/net/socket.hpp"
 #include "coro/poll.hpp"
 #include "coro/task_container.hpp"
 #include "coro/thread_pool.hpp"
+
+#ifdef LIBCORO_FEATURE_NETWORKING
+    #include "coro/net/socket.hpp"
+#endif
 
 #include <chrono>
 #include <functional>
@@ -211,6 +214,7 @@ public:
     [[nodiscard]] auto poll(fd_t fd, coro::poll_op op, std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
         -> coro::task<poll_status>;
 
+#ifdef LIBCORO_FEATURE_NETWORKING
     /**
      * Polls the given coro::net::socket for the given operations.
      * @param sock The socket to poll for events on.
@@ -225,6 +229,7 @@ public:
     {
         return poll(sock.native_handle(), op, timeout);
     }
+#endif
 
     /**
      * Resumes execution of a direct coroutine handle on this io scheduler.
@@ -271,7 +276,10 @@ public:
     /**
      * @return True if the task queue is empty and zero tasks are currently executing.
      */
-    auto empty() const noexcept -> bool { return size() == 0; }
+    auto empty() const noexcept -> bool
+    {
+        return size() == 0;
+    }
 
     /**
      * Starts the shutdown of the io scheduler.  All currently executing and pending tasks will complete
@@ -281,7 +289,7 @@ public:
 
     /**
      * Scans for completed coroutines and destroys them freeing up resources.  This is also done on starting
-     * new tasks but this allows the user to cleanup resources manually.  One usage might be making sure sockets
+     * new tasks but this allows the user to cleanup resources manually.  One usage might be making sure fds
      * are cleaned up as soon as possible.
      */
     auto garbage_collect() noexcept -> void

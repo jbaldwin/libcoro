@@ -22,11 +22,13 @@ option(LIBCORO_EXTERNAL_DEPENDENCIES "Use find_package to resolve dependencies, 
 option(LIBCORO_BUILD_TESTS           "Build the tests, Default=ON." ON)
 option(LIBCORO_CODE_COVERAGE         "Enable code coverage, tests must also be enabled, Default=OFF" OFF)
 option(LIBCORO_BUILD_EXAMPLES        "Build the examples, Default=ON." ON)
+option(LIBCORO_FEATURE_NETWORKING    "Include networking features, Default=ON." ON)
 
 message("${PROJECT_NAME} LIBCORO_EXTERNAL_DEPENDENCIES = ${LIBCORO_EXTERNAL_DEPENDENCIES}")
 message("${PROJECT_NAME} LIBCORO_BUILD_TESTS           = ${LIBCORO_BUILD_TESTS}")
 message("${PROJECT_NAME} LIBCORO_CODE_COVERAGE         = ${LIBCORO_CODE_COVERAGE}")
 message("${PROJECT_NAME} LIBCORO_BUILD_EXAMPLES        = ${LIBCORO_BUILD_EXAMPLES}")
+message("${PROJECT_NAME} LIBCORO_FEATURE_NETWORKING    = ${LIBCORO_FEATURE_NETWORKING}")
 
 if(NOT LIBCORO_EXTERNAL_DEPENDENCIES)
     set(CARES_STATIC    ON  CACHE INTERNAL "")
@@ -52,19 +54,6 @@ set(LIBCORO_SOURCE_FILES
     inc/coro/detail/poll_info.hpp
     inc/coro/detail/void_value.hpp
 
-    inc/coro/net/connect.hpp src/net/connect.cpp
-    inc/coro/net/dns_resolver.hpp src/net/dns_resolver.cpp
-    inc/coro/net/hostname.hpp
-    inc/coro/net/ip_address.hpp src/net/ip_address.cpp
-    inc/coro/net/recv_status.hpp src/net/recv_status.cpp
-    inc/coro/net/send_status.hpp src/net/send_status.cpp
-    inc/coro/net/socket.hpp src/net/socket.cpp
-    inc/coro/net/ssl_context.hpp src/net/ssl_context.cpp
-    inc/coro/net/ssl_handshake_status.hpp
-    inc/coro/net/tcp_client.hpp src/net/tcp_client.cpp
-    inc/coro/net/tcp_server.hpp src/net/tcp_server.cpp
-    inc/coro/net/udp_peer.hpp src/net/udp_peer.cpp
-
     inc/coro/coro.hpp
     inc/coro/event.hpp src/event.cpp
     inc/coro/fd.hpp
@@ -83,11 +72,33 @@ set(LIBCORO_SOURCE_FILES
     inc/coro/when_all.hpp
 )
 
+
+
+if(LIBCORO_FEATURE_NETWORKING)
+    list(APPEND LIBCORO_SOURCE_FILES
+        inc/coro/net/connect.hpp src/net/connect.cpp
+        inc/coro/net/dns_resolver.hpp src/net/dns_resolver.cpp
+        inc/coro/net/hostname.hpp
+        inc/coro/net/ip_address.hpp src/net/ip_address.cpp
+        inc/coro/net/recv_status.hpp src/net/recv_status.cpp
+        inc/coro/net/send_status.hpp src/net/send_status.cpp
+        inc/coro/net/socket.hpp src/net/socket.cpp
+        inc/coro/net/ssl_context.hpp src/net/ssl_context.cpp
+        inc/coro/net/ssl_handshake_status.hpp
+        inc/coro/net/tcp_client.hpp src/net/tcp_client.cpp
+        inc/coro/net/tcp_server.hpp src/net/tcp_server.cpp
+        inc/coro/net/udp_peer.hpp src/net/udp_peer.cpp
+    )
+endif()
+
 add_library(${PROJECT_NAME} STATIC ${LIBCORO_SOURCE_FILES})
 set_target_properties(${PROJECT_NAME} PROPERTIES LINKER_LANGUAGE CXX PREFIX "")
 target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_20)
 target_include_directories(${PROJECT_NAME} PUBLIC inc)
 target_link_libraries(${PROJECT_NAME} PUBLIC pthread c-ares::cares tl::expected OpenSSL::SSL OpenSSL::Crypto)
+if(LIBCORO_FEATURE_NETWORKING)
+    target_compile_definitions(${PROJECT_NAME} PUBLIC LIBCORO_FEATURE_NETWORKING)
+endif()
 
 if(${CMAKE_CXX_COMPILER_ID} MATCHES "GNU")
     if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "10.2.0")
