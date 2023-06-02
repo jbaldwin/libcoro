@@ -415,11 +415,13 @@ This project depends on the following git sub-modules:
 
 CMake Options:
 
-| Name                   | Default | Description                                                   |
-|:-----------------------|:--------|:--------------------------------------------------------------|
-| LIBCORO_BUILD_TESTS    | ON      | Should the tests be built?                                    |
-| LIBCORO_CODE_COVERAGE  | OFF     | Should code coverage be enabled? Requires tests to be enabled |
-| LIBCORO_BUILD_EXAMPLES | ON      | Should the examples be built?                                 |
+| Name                          | Default | Description                                                                   |
+|:------------------------------|:--------|:------------------------------------------------------------------------------|
+| LIBCORO_EXTERNAL_DEPENDENCIES | OFF     | Use CMake find_package to resolve dependencies instead of embedded libraries. |
+| LIBCORO_BUILD_TESTS           | ON      | Should the tests be built?                                                    |
+| LIBCORO_CODE_COVERAGE         | OFF     | Should code coverage be enabled? Requires tests to be enabled.                |
+| LIBCORO_BUILD_EXAMPLES        | ON      | Should the examples be built?                                                 |
+| LIBCORO_FEATURE_NETWORKING    | ON      | Include networking features.                                                  |
 
 #### Adding to your project
 
