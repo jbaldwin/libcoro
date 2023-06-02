@@ -47,8 +47,6 @@ else()
     find_package(tl-expected CONFIG REQUIRED)
 endif()
 
-find_package(OpenSSL REQUIRED)
-
 set(LIBCORO_SOURCE_FILES
     inc/coro/concepts/awaitable.hpp
     inc/coro/concepts/buffer.hpp
@@ -78,6 +76,7 @@ set(LIBCORO_SOURCE_FILES
 )
 
 if(LIBCORO_FEATURE_NETWORKING)
+    find_package(OpenSSL REQUIRED)
     list(APPEND LIBCORO_SOURCE_FILES
         inc/coro/net/connect.hpp src/net/connect.cpp
         inc/coro/net/dns_resolver.hpp src/net/dns_resolver.cpp
@@ -98,8 +97,9 @@ add_library(${PROJECT_NAME} STATIC ${LIBCORO_SOURCE_FILES})
 set_target_properties(${PROJECT_NAME} PROPERTIES LINKER_LANGUAGE CXX PREFIX "")
 target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_20)
 target_include_directories(${PROJECT_NAME} PUBLIC inc)
-target_link_libraries(${PROJECT_NAME} PUBLIC pthread c-ares::cares tl::expected OpenSSL::SSL OpenSSL::Crypto)
+target_link_libraries(${PROJECT_NAME} PUBLIC pthread c-ares::cares tl::expected)
 if(LIBCORO_FEATURE_NETWORKING)
+    target_link_libraries(${PROJECT_NAME} PUBLIC OpenSSL::SSL OpenSSL::Crypto)
     target_compile_definitions(${PROJECT_NAME} PUBLIC LIBCORO_FEATURE_NETWORKING)
 endif()
 
