@@ -3,13 +3,14 @@
 
 #include <signal.h>
 
+#ifdef LIBCORO_FEATURE_NETWORKING
 /**
  * This structure invokes a constructor to setup some global test settings that are needed prior
  * to executing the tests.
  */
-struct test_setup
+struct test_setup_networking
 {
-    test_setup()
+    test_setup_networking()
     {
         // Ignore SIGPIPE, the library should be handling these gracefully.
         signal(SIGPIPE, SIG_IGN);
@@ -21,7 +22,7 @@ struct test_setup
         (void)unused;
     }
 
-    ~test_setup()
+    ~test_setup_networking()
     {
         // Cleanup the temporary key.pem and cert.pem files.
         auto unused = system("rm key.pem cert.pem");
@@ -29,4 +30,5 @@ struct test_setup
     }
 };
 
-static test_setup g_test_setup{};
+static test_setup_networking g_test_setup_networking{};
+#endif
