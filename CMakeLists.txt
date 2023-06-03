@@ -35,6 +35,11 @@ if(NOT LIBCORO_EXTERNAL_DEPENDENCIES)
     set(CARES_SHARED    OFF CACHE INTERNAL "")
     set(CARES_INSTALL   OFF CACHE INTERNAL "")
 
+    if(NOT LIBCORO_BUILD_TESTS)
+        # Disable testing in expected
+        set(BUILD_TESTING OFF CACHE INTERNAL "")
+    endif()
+
     add_subdirectory(vendor/c-ares/c-ares)
     add_subdirectory(vendor/tartanllama/expected)
 else()
@@ -71,8 +76,6 @@ set(LIBCORO_SOURCE_FILES
     inc/coro/thread_pool.hpp src/thread_pool.cpp
     inc/coro/when_all.hpp
 )
-
-
 
 if(LIBCORO_FEATURE_NETWORKING)
     list(APPEND LIBCORO_SOURCE_FILES
