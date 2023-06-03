@@ -31,20 +31,25 @@ message("${PROJECT_NAME} LIBCORO_BUILD_EXAMPLES        = ${LIBCORO_BUILD_EXAMPLE
 message("${PROJECT_NAME} LIBCORO_FEATURE_NETWORKING    = ${LIBCORO_FEATURE_NETWORKING}")
 
 if(NOT LIBCORO_EXTERNAL_DEPENDENCIES)
-    set(CARES_STATIC    ON  CACHE INTERNAL "")
-    set(CARES_SHARED    OFF CACHE INTERNAL "")
-    set(CARES_INSTALL   OFF CACHE INTERNAL "")
-
     if(NOT LIBCORO_BUILD_TESTS)
         # Disable testing in expected
         set(BUILD_TESTING OFF CACHE INTERNAL "")
     endif()
-
-    add_subdirectory(vendor/c-ares/c-ares)
     add_subdirectory(vendor/tartanllama/expected)
 else()
-    find_package(c-ares CONFIG REQUIRED)
     find_package(tl-expected CONFIG REQUIRED)
+endif()
+
+if(LIBCORO_FEATURE_NETWORKING)
+    if(NOT LIBCORO_EXTERNAL_DEPENDENCIES)
+        set(CARES_STATIC    ON  CACHE INTERNAL "")
+        set(CARES_SHARED    OFF CACHE INTERNAL "")
+        set(CARES_INSTALL   OFF CACHE INTERNAL "")
+
+        add_subdirectory(vendor/c-ares/c-ares)
+    else()
+        find_package(c-ares CONFIG REQUIRED)
+    endif()
 endif()
 
 set(LIBCORO_SOURCE_FILES
@@ -97,8 +102,9 @@ add_library(${PROJECT_NAME} STATIC ${LIBCORO_SOURCE_FILES})
 set_target_properties(${PROJECT_NAME} PROPERTIES LINKER_LANGUAGE CXX PREFIX "")
 target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_20)
 target_include_directories(${PROJECT_NAME} PUBLIC inc)
-target_link_libraries(${PROJECT_NAME} PUBLIC pthread c-ares::cares tl::expected)
+target_link_libraries(${PROJECT_NAME} PUBLIC pthread tl::expected)
 if(LIBCORO_FEATURE_NETWORKING)
+    target_link_libraries(${PROJECT_NAME} PUBLIC c-ares::cares)
     target_link_libraries(${PROJECT_NAME} PUBLIC OpenSSL::SSL OpenSSL::Crypto)
     target_compile_definitions(${PROJECT_NAME} PUBLIC LIBCORO_FEATURE_NETWORKING)
 endif()
