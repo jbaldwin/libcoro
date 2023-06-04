@@ -985,7 +985,7 @@ client: Hello from server 5
 ```
 
 ### tcp_echo_server
-See [examples/coro_tcp_echo_erver.cpp](../examples/coro_tcp_echo_server.cpp) for a basic TCP echo server implementation.  You can use tools like `ab` to benchmark against this echo server.
+See [examples/coro_tcp_echo_erver.cpp](./examples/coro_tcp_echo_server.cpp) for a basic TCP echo server implementation.  You can use tools like `ab` to benchmark against this echo server.
 
 Using a `Intel(R) Core(TM) i7-9750H CPU @ 2.60GHz`:
 
@@ -1049,7 +1049,7 @@ Percentage of the requests served within a certain time (ms)
 ````
 
 ### http_200_ok_server
-See [examples/coro_http_200_ok_erver.cpp](../examples/coro_http_200_ok_server.cpp) for a basic HTTP 200 OK response server implementation.  You can use tools like `wrk` or `autocannon` to benchmark against this HTTP 200 OK server.
+See [examples/coro_http_200_ok_erver.cpp](./examples/coro_http_200_ok_server.cpp) for a basic HTTP 200 OK response server implementation.  You can use tools like `wrk` or `autocannon` to benchmark against this HTTP 200 OK server.
 
 Using a `Intel(R) Core(TM) i7-9750H CPU @ 2.60GHz`:
 
