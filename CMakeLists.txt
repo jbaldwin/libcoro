@@ -30,24 +30,24 @@ message("${PROJECT_NAME} LIBCORO_CODE_COVERAGE         = ${LIBCORO_CODE_COVERAGE
 message("${PROJECT_NAME} LIBCORO_BUILD_EXAMPLES        = ${LIBCORO_BUILD_EXAMPLES}")
 message("${PROJECT_NAME} LIBCORO_FEATURE_NETWORKING    = ${LIBCORO_FEATURE_NETWORKING}")
 
-if(NOT LIBCORO_EXTERNAL_DEPENDENCIES)
-    set(CARES_STATIC    ON  CACHE INTERNAL "")
-    set(CARES_SHARED    OFF CACHE INTERNAL "")
-    set(CARES_INSTALL   OFF CACHE INTERNAL "")
-
+if(LIBCORO_EXTERNAL_DEPENDENCIES)
+    if(LIBCORO_FEATURE_NETWORKING)
+        find_package(c-ares CONFIG REQUIRED)
+    endif()
+    find_package(tl-expected CONFIG REQUIRED)
+else()
     if(NOT LIBCORO_BUILD_TESTS)
         # Disable testing in expected
         set(BUILD_TESTING OFF CACHE INTERNAL "")
     endif()
-
-    add_subdirectory(vendor/c-ares/c-ares)
+    if(LIBCORO_FEATURE_NETWORKING)
+        set(CARES_STATIC    ON  CACHE INTERNAL "")
+        set(CARES_SHARED    OFF CACHE INTERNAL "")
+        set(CARES_INSTALL   OFF CACHE INTERNAL "")
+        add_subdirectory(vendor/c-ares/c-ares)
+    endif()
     add_subdirectory(vendor/tartanllama/expected)
-else()
-    find_package(c-ares CONFIG REQUIRED)
-    find_package(tl-expected CONFIG REQUIRED)
 endif()
-
-find_package(OpenSSL REQUIRED)
 
 set(LIBCORO_SOURCE_FILES
     inc/coro/concepts/awaitable.hpp
@@ -78,6 +78,7 @@ set(LIBCORO_SOURCE_FILES
 )
 
 if(LIBCORO_FEATURE_NETWORKING)
+    find_package(OpenSSL REQUIRED)
     list(APPEND LIBCORO_SOURCE_FILES
         inc/coro/net/connect.hpp src/net/connect.cpp
         inc/coro/net/dns_resolver.hpp src/net/dns_resolver.cpp
@@ -98,8 +99,9 @@ add_library(${PROJECT_NAME} STATIC ${LIBCORO_SOURCE_FILES})
 set_target_properties(${PROJECT_NAME} PROPERTIES LINKER_LANGUAGE CXX PREFIX "")
 target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_20)
 target_include_directories(${PROJECT_NAME} PUBLIC inc)
-target_link_libraries(${PROJECT_NAME} PUBLIC pthread c-ares::cares tl::expected OpenSSL::SSL OpenSSL::Crypto)
+target_link_libraries(${PROJECT_NAME} PUBLIC pthread tl::expected)
 if(LIBCORO_FEATURE_NETWORKING)
+    target_link_libraries(${PROJECT_NAME} PUBLIC c-ares::cares OpenSSL::SSL OpenSSL::Crypto)
     target_compile_definitions(${PROJECT_NAME} PUBLIC LIBCORO_FEATURE_NETWORKING)
 endif()
 
