@@ -24,7 +24,9 @@ enum class recv_status : int64_t
     not_connected       = ENOTCONN,
     not_a_socket        = ENOTSOCK,
 
+#ifdef LIBCORO_FEATURE_SSL
     ssl_error = -3
+#endif
 };
 
 auto to_string(recv_status status) -> const std::string&;

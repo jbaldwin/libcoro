@@ -54,7 +54,10 @@ auto tcp_server::accept() -> coro::net::tcp_client
         tcp_client::options{
             .address = net::ip_address{ip_addr_view, static_cast<net::domain_t>(client.sin_family)},
             .port    = ntohs(client.sin_port),
-            .ssl_ctx = m_options.ssl_ctx}};
+#ifdef LIBCORO_FEATURE_SSL
+            .ssl_ctx = m_options.ssl_ctx
+#endif
+        }};
 };
 
 } // namespace coro::net

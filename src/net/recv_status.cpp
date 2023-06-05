@@ -17,7 +17,9 @@ static const std::string recv_status_not_connected{"not_connected"};
 static const std::string recv_status_not_a_socket{"not_a_socket"};
 static const std::string recv_status_unknown{"unknown"};
 
+#ifdef LIBCORO_FEATURE_SSL
 static const std::string recv_status_ssl_error{"ssl_error"};
+#endif
 
 auto to_string(recv_status status) -> const std::string&
 {
@@ -49,8 +51,10 @@ auto to_string(recv_status status) -> const std::string&
         case recv_status::not_a_socket:
             return recv_status_not_a_socket;
 
+#ifdef LIBCORO_FEATURE_SSL
         case recv_status::ssl_error:
             return recv_status_ssl_error;
+#endif
     }
 
     return recv_status_unknown;

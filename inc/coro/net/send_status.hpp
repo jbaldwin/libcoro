@@ -26,7 +26,9 @@ enum class send_status : int64_t
     operationg_not_supported = EOPNOTSUPP,
     pipe_closed              = EPIPE,
 
+#ifdef LIBCORO_FEATURE_SSL
     ssl_error = -3
+#endif
 };
 
 } // namespace coro::net
