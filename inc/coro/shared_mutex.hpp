@@ -1,6 +1,6 @@
 #pragma once
 
-#include "coro/concepts/executor.hpp"
+#include "concepts/executor.hpp"
 
 #include <atomic>
 #include <coroutine>

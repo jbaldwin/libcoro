@@ -1,6 +1,6 @@
 #pragma once
 
-#include "coro/concepts/promise.hpp"
+#include "concepts/promise.hpp"
 
 #include <coroutine>
 #include <exception>

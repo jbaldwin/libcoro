@@ -1,16 +1,16 @@
 #pragma once
 
-#include "coro/concepts/buffer.hpp"
-#include "coro/io_scheduler.hpp"
-#include "coro/net/connect.hpp"
-#include "coro/net/ip_address.hpp"
-#include "coro/net/recv_status.hpp"
-#include "coro/net/send_status.hpp"
-#include "coro/net/socket.hpp"
-#include "coro/net/ssl_context.hpp"
-#include "coro/net/ssl_handshake_status.hpp"
-#include "coro/poll.hpp"
-#include "coro/task.hpp"
+#include "../concepts/buffer.hpp"
+#include "../io_scheduler.hpp"
+#include "connect.hpp"
+#include "ip_address.hpp"
+#include "recv_status.hpp"
+#include "send_status.hpp"
+#include "socket.hpp"
+#include "ssl_context.hpp"
+#include "ssl_handshake_status.hpp"
+#include "../poll.hpp"
+#include "../task.hpp"
 
 #include <chrono>
 #include <memory>

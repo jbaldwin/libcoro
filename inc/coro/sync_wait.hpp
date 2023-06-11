@@ -1,7 +1,7 @@
 #pragma once
 
-#include "coro/concepts/awaitable.hpp"
-#include "coro/when_all.hpp"
+#include "concepts/awaitable.hpp"
+#include "when_all.hpp"
 
 #include <condition_variable>
 #include <mutex>

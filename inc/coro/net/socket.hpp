@@ -1,7 +1,7 @@
 #pragma once
 
-#include "coro/net/ip_address.hpp"
-#include "coro/poll.hpp"
+#include "ip_address.hpp"
+#include "../poll.hpp"
 
 #include <arpa/inet.h>
 #include <fcntl.h>

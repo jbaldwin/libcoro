@@ -1,9 +1,9 @@
 #pragma once
 
-#include "coro/net/ip_address.hpp"
-#include "coro/net/socket.hpp"
-#include "coro/net/tcp_client.hpp"
-#include "coro/task.hpp"
+#include "ip_address.hpp"
+#include "socket.hpp"
+#include "tcp_client.hpp"
+#include "../task.hpp"
 
 #include <fcntl.h>
 #include <sys/socket.h>

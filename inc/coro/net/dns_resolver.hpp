@@ -1,11 +1,11 @@
 #pragma once
 
-#include "coro/fd.hpp"
-#include "coro/io_scheduler.hpp"
-#include "coro/net/hostname.hpp"
-#include "coro/net/ip_address.hpp"
-#include "coro/task.hpp"
-#include "coro/task_container.hpp"
+#include "../fd.hpp"
+#include "../io_scheduler.hpp"
+#include "hostname.hpp"
+#include "ip_address.hpp"
+#include "../task.hpp"
+#include "../task_container.hpp"
 
 #include <ares.h>
 

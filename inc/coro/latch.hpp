@@ -1,7 +1,7 @@
 #pragma once
 
-#include "coro/event.hpp"
-#include "coro/thread_pool.hpp"
+#include "event.hpp"
+#include "thread_pool.hpp"
 
 #include <atomic>
 

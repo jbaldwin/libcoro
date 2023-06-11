@@ -1,6 +1,6 @@
 #pragma once
 
-#include "coro/concepts/awaitable.hpp"
+#include "awaitable.hpp"
 
 #include <concepts>
 

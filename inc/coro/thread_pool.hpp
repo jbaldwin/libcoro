@@ -1,8 +1,8 @@
 #pragma once
 
-#include "coro/concepts/range_of.hpp"
-#include "coro/event.hpp"
-#include "coro/task.hpp"
+#include "concepts/range_of.hpp"
+#include "event.hpp"
+#include "task.hpp"
 
 #include <atomic>
 #include <condition_variable>

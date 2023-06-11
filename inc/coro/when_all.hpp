@@ -1,7 +1,7 @@
 #pragma once
 
-#include "coro/concepts/awaitable.hpp"
-#include "coro/detail/void_value.hpp"
+#include "concepts/awaitable.hpp"
+#include "detail/void_value.hpp"
 
 #include <atomic>
 #include <coroutine>

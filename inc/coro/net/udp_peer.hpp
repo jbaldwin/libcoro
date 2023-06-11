@@ -1,12 +1,12 @@
 #pragma once
 
-#include "coro/concepts/buffer.hpp"
-#include "coro/io_scheduler.hpp"
-#include "coro/net/ip_address.hpp"
-#include "coro/net/recv_status.hpp"
-#include "coro/net/send_status.hpp"
-#include "coro/net/socket.hpp"
-#include "coro/task.hpp"
+#include "../concepts/buffer.hpp"
+#include "../io_scheduler.hpp"
+#include "ip_address.hpp"
+#include "recv_status.hpp"
+#include "send_status.hpp"
+#include "socket.hpp"
+#include "../task.hpp"
 
 #include <chrono>
 #include <span>

@@ -1,7 +1,7 @@
 #pragma once
 
-#include "coro/fd.hpp"
-#include "coro/poll.hpp"
+#include "../fd.hpp"
+#include "../poll.hpp"
 
 #include <atomic>
 #include <chrono>

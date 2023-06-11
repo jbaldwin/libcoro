@@ -1,7 +1,7 @@
 #pragma once
 
-#include "coro/concepts/executor.hpp"
-#include "coro/task.hpp"
+#include "concepts/executor.hpp"
+#include "task.hpp"
 
 #include <atomic>
 #include <iostream>

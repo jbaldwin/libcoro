@@ -1,13 +1,13 @@
 #pragma once
 
-#include "coro/detail/poll_info.hpp"
-#include "coro/fd.hpp"
-#include "coro/poll.hpp"
-#include "coro/task_container.hpp"
-#include "coro/thread_pool.hpp"
+#include "detail/poll_info.hpp"
+#include "fd.hpp"
+#include "poll.hpp"
+#include "task_container.hpp"
+#include "thread_pool.hpp"
 
 #ifdef LIBCORO_FEATURE_NETWORKING
-    #include "coro/net/socket.hpp"
+    #include "net/socket.hpp"
 #endif
 
 #include <chrono>
