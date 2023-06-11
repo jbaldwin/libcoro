@@ -1,3 +1,5 @@
+#ifndef ARDUINO
+
 #include "coro/semaphore.hpp"
 
 namespace coro
@@ -136,3 +138,5 @@ auto semaphore::notify_waiters() noexcept -> void
 }
 
 } // namespace coro
+
+#endif // ARDUINO

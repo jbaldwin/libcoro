@@ -1,3 +1,5 @@
+#ifndef ARDUINO
+
 #include "coro/net/tcp_client.hpp"
 
 namespace coro::net
@@ -271,3 +273,5 @@ auto tcp_client::ssl_shutdown_and_free(
 #endif
 
 } // namespace coro::net
+
+#endif // ARDUINO

@@ -1,3 +1,5 @@
+#ifndef ARDUINO
+
 #include "coro/thread_pool.hpp"
 
 #include <iostream>
@@ -127,3 +129,5 @@ auto thread_pool::schedule_impl(std::coroutine_handle<> handle) noexcept -> void
 }
 
 } // namespace coro
+
+#endif // ARDUINO

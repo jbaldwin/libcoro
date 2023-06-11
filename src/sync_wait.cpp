@@ -1,3 +1,5 @@
+#ifndef ARDUINO
+
 #include "coro/sync_wait.hpp"
 
 namespace coro::detail
@@ -29,3 +31,5 @@ auto sync_wait_event::wait() noexcept -> void
 }
 
 } // namespace coro::detail
+
+#endif // ARDUINO

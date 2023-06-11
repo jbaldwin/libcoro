@@ -1,3 +1,5 @@
+#ifndef ARDUINO
+
 #include "coro/net/ip_address.hpp"
 
 namespace coro::net
@@ -18,3 +20,5 @@ auto to_string(domain_t domain) -> const std::string&
 }
 
 } // namespace coro::net
+
+#endif // ARDUINO

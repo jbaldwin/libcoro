@@ -1,3 +1,5 @@
+#ifndef ARDUINO
+
 #include "coro/mutex.hpp"
 
 #include <iostream>
@@ -111,3 +113,5 @@ auto mutex::unlock() -> void
 }
 
 } // namespace coro
+
+#endif // ARDUINO

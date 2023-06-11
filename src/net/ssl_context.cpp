@@ -1,3 +1,5 @@
+#ifndef ARDUINO
+
 #include "coro/net/ssl_context.hpp"
 
 #include <iostream>
@@ -63,3 +65,5 @@ ssl_context::~ssl_context()
 }
 
 } // namespace coro::net
+
+#endif // ARDUINO

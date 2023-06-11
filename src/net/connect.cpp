@@ -1,3 +1,5 @@
+#ifndef ARDUINO
+
 #include "coro/net/connect.hpp"
 
 #include <stdexcept>
@@ -27,3 +29,5 @@ auto to_string(const connect_status& status) -> const std::string&
 }
 
 } // namespace coro::net
+
+#endif // ARDUINO

@@ -1,3 +1,5 @@
+#ifndef ARDUINO
+
 #include "coro/io_scheduler.hpp"
 
 #include <atomic>
@@ -498,3 +500,5 @@ auto io_scheduler::update_timeout(time_point now) -> void
 }
 
 } // namespace coro
+
+#endif // ARDUINO

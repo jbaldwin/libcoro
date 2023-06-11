@@ -1,3 +1,5 @@
+#ifndef ARDUINO
+
 #include "coro/net/dns_resolver.hpp"
 
 #include <arpa/inet.h>
@@ -191,3 +193,5 @@ auto dns_resolver::make_poll_task(fd_t fd, poll_op ops) -> coro::task<void>
 };
 
 } // namespace coro::net
+
+#endif // ARDUINO

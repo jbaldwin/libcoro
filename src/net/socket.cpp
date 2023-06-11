@@ -1,3 +1,5 @@
+#ifndef ARDUINO
+
 #include "coro/net/socket.hpp"
 
 namespace coro::net
@@ -128,3 +130,5 @@ auto make_accept_socket(const socket::options& opts, const net::ip_address& addr
 }
 
 } // namespace coro::net
+
+#endif // ARDUINO

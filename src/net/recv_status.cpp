@@ -1,3 +1,5 @@
+#ifndef ARDUINO
+
 #include "coro/net/recv_status.hpp"
 
 namespace coro::net
@@ -61,3 +63,5 @@ auto to_string(recv_status status) -> const std::string&
 }
 
 } // namespace coro::net
+
+#endif // ARDUINO

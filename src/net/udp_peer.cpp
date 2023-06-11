@@ -1,3 +1,5 @@
+#ifndef ARDUINO
+
 #include "coro/net/udp_peer.hpp"
 
 namespace coro::net
@@ -19,3 +21,5 @@ udp_peer::udp_peer(std::shared_ptr<io_scheduler> scheduler, const info& bind_inf
 }
 
 } // namespace coro::net
+
+#endif // ARDUINO

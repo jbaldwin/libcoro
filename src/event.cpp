@@ -1,3 +1,5 @@
+#ifndef ARDUINO
+
 #include "coro/event.hpp"
 #include "coro/thread_pool.hpp"
 
@@ -81,3 +83,5 @@ auto event::reset() noexcept -> void
 }
 
 } // namespace coro
+
+#endif // ARDUINO

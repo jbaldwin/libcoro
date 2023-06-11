@@ -1,3 +1,5 @@
+#ifndef ARDUINO
+
 #include "coro/net/tcp_server.hpp"
 
 #include "coro/io_scheduler.hpp"
@@ -61,3 +63,5 @@ auto tcp_server::accept() -> coro::net::tcp_client
 };
 
 } // namespace coro::net
+
+#endif // ARDUINO
