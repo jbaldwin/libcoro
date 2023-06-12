@@ -22,6 +22,7 @@ option(LIBCORO_EXTERNAL_DEPENDENCIES "Use Cmake find_package to resolve dependen
 option(LIBCORO_BUILD_TESTS           "Build the tests, Default=ON." ON)
 option(LIBCORO_CODE_COVERAGE         "Enable code coverage, tests must also be enabled, Default=OFF" OFF)
 option(LIBCORO_BUILD_EXAMPLES        "Build the examples, Default=ON." ON)
+option(LIBCORO_FEATURE_THREADING     "Include multithreading features, Default=ON." ON)
 option(LIBCORO_FEATURE_NETWORKING    "Include networking features, Default=ON." ON)
 option(LIBCORO_FEATURE_SSL           "Include SSL encryption features, Default=ON." ON)
 
@@ -29,6 +30,7 @@ message("${PROJECT_NAME} LIBCORO_EXTERNAL_DEPENDENCIES = ${LIBCORO_EXTERNAL_DEPE
 message("${PROJECT_NAME} LIBCORO_BUILD_TESTS           = ${LIBCORO_BUILD_TESTS}")
 message("${PROJECT_NAME} LIBCORO_CODE_COVERAGE         = ${LIBCORO_CODE_COVERAGE}")
 message("${PROJECT_NAME} LIBCORO_BUILD_EXAMPLES        = ${LIBCORO_BUILD_EXAMPLES}")
+message("${PROJECT_NAME} LIBCORO_FEATURE_THREADING     = ${LIBCORO_FEATURE_THREADING}")
 message("${PROJECT_NAME} LIBCORO_FEATURE_NETWORKING    = ${LIBCORO_FEATURE_NETWORKING}")
 message("${PROJECT_NAME} LIBCORO_FEATURE_SSL           = ${LIBCORO_FEATURE_SSL}")
 
@@ -53,31 +55,38 @@ endif()
 
 set(LIBCORO_SOURCE_FILES
     inc/coro/concepts/awaitable.hpp
-    inc/coro/concepts/buffer.hpp
-    inc/coro/concepts/executor.hpp
     inc/coro/concepts/promise.hpp
-    inc/coro/concepts/range_of.hpp
 
-    inc/coro/detail/poll_info.hpp
     inc/coro/detail/void_value.hpp
 
     inc/coro/coro.hpp
-    inc/coro/event.hpp src/event.cpp
-    inc/coro/fd.hpp
     inc/coro/generator.hpp
-    inc/coro/io_scheduler.hpp src/io_scheduler.cpp
-    inc/coro/latch.hpp
-    inc/coro/mutex.hpp src/mutex.cpp
-    inc/coro/poll.hpp
-    inc/coro/ring_buffer.hpp
-    inc/coro/semaphore.hpp src/semaphore.cpp
-    inc/coro/shared_mutex.hpp
-    inc/coro/sync_wait.hpp src/sync_wait.cpp
-    inc/coro/task_container.hpp
     inc/coro/task.hpp
-    inc/coro/thread_pool.hpp src/thread_pool.cpp
     inc/coro/when_all.hpp
 )
+
+if(LIBCORO_FEATURE_THREADING)
+    list(APPEND LIBCORO_SOURCE_FILES
+        inc/coro/concepts/buffer.hpp
+        inc/coro/concepts/executor.hpp
+        inc/coro/concepts/range_of.hpp
+
+        inc/coro/detail/poll_info.hpp
+
+        inc/coro/event.hpp src/event.cpp
+        inc/coro/fd.hpp
+        inc/coro/io_scheduler.hpp src/io_scheduler.cpp
+        inc/coro/latch.hpp
+        inc/coro/mutex.hpp src/mutex.cpp
+        inc/coro/poll.hpp
+        inc/coro/ring_buffer.hpp
+        inc/coro/semaphore.hpp src/semaphore.cpp
+        inc/coro/shared_mutex.hpp
+        inc/coro/sync_wait.hpp src/sync_wait.cpp
+        inc/coro/task_container.hpp
+        inc/coro/thread_pool.hpp src/thread_pool.cpp
+    )
+endif()
 
 if(LIBCORO_FEATURE_NETWORKING)
     list(APPEND LIBCORO_SOURCE_FILES
