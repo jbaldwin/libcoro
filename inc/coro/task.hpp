@@ -60,27 +60,48 @@ protected:
 template<typename return_type>
 struct promise final : public promise_base
 {
-    using task_type        = task<return_type>;
-    using coroutine_handle = std::coroutine_handle<promise<return_type>>;
+    using task_type                                = task<return_type>;
+    using coroutine_handle                         = std::coroutine_handle<promise<return_type>>;
+    static constexpr bool return_type_is_reference = std::is_lvalue_reference_v<return_type>;
+    using type_to_return = std::conditional_t<return_type_is_reference, return_type, const return_type&>;
 
     promise() noexcept = default;
     ~promise()         = default;
 
     auto get_return_object() noexcept -> task_type;
 
-    auto return_value(return_type value) -> void { m_return_value = std::move(value); }
+    auto return_value(return_type value) -> void
+    {
+        if constexpr (return_type_is_reference)
+        {
+            m_return_value.reset();
+            m_return_value = value;
+        }
+        else
+        {
+            m_return_value = std::move(value);
+        }
+    }
 
-    auto result() const& -> const return_type&
+    auto result() const& -> type_to_return
     {
         if (m_exception_ptr)
         {
             std::rethrow_exception(m_exception_ptr);
         }
 
-        return m_return_value;
+        if constexpr (return_type_is_reference)
+        {
+            return *m_return_value;
+        }
+        else
+        {
+            return m_return_value;
+        }
     }
 
     auto result() && -> return_type&&
+        requires(not return_type_is_reference)
     {
         if (m_exception_ptr)
         {
@@ -91,7 +112,11 @@ struct promise final : public promise_base
     }
 
 private:
-    return_type m_return_value;
+    using bare_return_type = std::remove_reference_t<return_type>;
+    using held_type        = std::
+        conditional_t<return_type_is_reference, std::optional<std::reference_wrapper<bare_return_type>>, return_type>;
+
+    held_type m_return_value;
 };
 
 template<>
@@ -145,7 +170,7 @@ public:
 
     explicit task(coroutine_handle handle) : m_coroutine(handle) {}
     task(const task&) = delete;
-    task(task && other) noexcept : m_coroutine(std::exchange(other.m_coroutine, nullptr)) {}
+    task(task&& other) noexcept : m_coroutine(std::exchange(other.m_coroutine, nullptr)) {}
 
     ~task()
     {
@@ -155,9 +180,9 @@ public:
         }
     }
 
-    auto operator=(const task&)->task& = delete;
+    auto operator=(const task&) -> task& = delete;
 
-    auto operator=(task&& other) noexcept->task&
+    auto operator=(task&& other) noexcept -> task&
     {
         if (std::addressof(other) != this)
         {
@@ -175,9 +200,9 @@ public:
     /**
      * @return True if the task is in its final suspend or if the task has been destroyed.
      */
-    auto is_ready() const noexcept->bool { return m_coroutine == nullptr || m_coroutine.done(); }
+    auto is_ready() const noexcept -> bool { return m_coroutine == nullptr || m_coroutine.done(); }
 
-    auto resume()->bool
+    auto resume() -> bool
     {
         if (!m_coroutine.done())
         {
@@ -186,7 +211,7 @@ public:
         return !m_coroutine.done();
     }
 
-    auto destroy()->bool
+    auto destroy() -> bool
     {
         if (m_coroutine != nullptr)
         {
@@ -242,12 +267,12 @@ public:
         return awaitable{m_coroutine};
     }
 
-    auto promise()&->promise_type& { return m_coroutine.promise(); }
+    auto promise() & -> promise_type& { return m_coroutine.promise(); }
 
-    auto promise() const&->const promise_type& { return m_coroutine.promise(); }
-    auto promise()&&->promise_type&& { return std::move(m_coroutine.promise()); }
+    auto promise() const& -> const promise_type& { return m_coroutine.promise(); }
+    auto promise() && -> promise_type&& { return std::move(m_coroutine.promise()); }
 
-    auto handle()->coroutine_handle { return m_coroutine; }
+    auto handle() -> coroutine_handle { return m_coroutine; }
 
 private:
     coroutine_handle m_coroutine{nullptr};

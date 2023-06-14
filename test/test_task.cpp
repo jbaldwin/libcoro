@@ -255,3 +255,41 @@ TEST_CASE("task throws non-void r-value", "[task]")
     REQUIRE(task.is_ready());
     REQUIRE_THROWS_AS(task.promise().result(), std::runtime_error);
 }
+
+TEST_CASE("const task returning a reference", "[task]")
+{
+    struct type
+    {
+        int m_value;
+    };
+
+    type return_value{42};
+
+    auto task = [&]() -> coro::task<const type&> { co_return std::ref(return_value); }();
+
+    task.resume();
+    REQUIRE(task.is_ready());
+    auto& result = task.promise().result();
+    REQUIRE(result.m_value == 42);
+    REQUIRE(std::addressof(return_value) == std::addressof(result));
+    static_assert(std::is_same_v<decltype(task.promise().result()), const type&>);
+}
+
+TEST_CASE("mutable task returning a reference", "[task]")
+{
+    struct type
+    {
+        int m_value;
+    };
+
+    type return_value{42};
+
+    auto task = [&]() -> coro::task<type&> { co_return std::ref(return_value); }();
+
+    task.resume();
+    REQUIRE(task.is_ready());
+    auto& result = task.promise().result();
+    REQUIRE(result.m_value == 42);
+    REQUIRE(std::addressof(return_value) == std::addressof(result));
+    static_assert(std::is_same_v<decltype(task.promise().result()), type&>);
+}
