@@ -132,7 +132,14 @@ if(${CMAKE_CXX_COMPILER_ID} MATCHES "GNU")
         message(FATAL_ERROR "gcc version ${CMAKE_CXX_COMPILER_VERSION} is unsupported, please upgrade to at least 10.2.0")
     endif()
 
-    target_compile_options(${PROJECT_NAME} PUBLIC -std=c++20 -fcoroutines -fconcepts -fexceptions -Wall -Wextra -pipe)
+    target_compile_options(${PROJECT_NAME} PUBLIC
+        $<$<COMPILE_LANGUAGE:CXX>:-std=c++20>
+        $<$<COMPILE_LANGUAGE:CXX>:-fcoroutines>
+        $<$<COMPILE_LANGUAGE:CXX>:-fconcepts>
+        $<$<COMPILE_LANGUAGE:CXX>:-fexceptions>
+        $<$<COMPILE_LANGUAGE:CXX>:-Wall>
+        $<$<COMPILE_LANGUAGE:CXX>:-Wextra>
+        $<$<COMPILE_LANGUAGE:CXX>:-pipe>)
 elseif(${CMAKE_CXX_COMPILER_ID} MATCHES "Clang")
     message(FATAL_ERROR "Clang is currently not supported.")
 endif()
