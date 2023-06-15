@@ -92,7 +92,7 @@ struct promise final : public promise_base
 
         if constexpr (return_type_is_reference)
         {
-            return *m_return_value;
+            return m_return_value.value();
         }
         else
         {
