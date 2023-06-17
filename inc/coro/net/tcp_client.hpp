@@ -7,8 +7,10 @@
 #include "coro/net/recv_status.hpp"
 #include "coro/net/send_status.hpp"
 #include "coro/net/socket.hpp"
-#include "coro/net/ssl_context.hpp"
-#include "coro/net/ssl_handshake_status.hpp"
+#ifdef LIBCORO_FEATURE_SSL
+    #include "coro/net/ssl_context.hpp"
+    #include "coro/net/ssl_handshake_status.hpp"
+#endif
 #include "coro/poll.hpp"
 #include "coro/task.hpp"
 
@@ -29,8 +31,10 @@ public:
         net::ip_address address{net::ip_address::from_string("127.0.0.1")};
         /// The port to connect to.
         uint16_t port{8080};
+#ifdef LIBCORO_FEATURE_SSL
         /// Should this tcp_client connect using a secure connection SSL/TLS?
         ssl_context* ssl_ctx{nullptr};
+#endif
     };
 
     /**
@@ -43,11 +47,16 @@ public:
     tcp_client(
         std::shared_ptr<io_scheduler> scheduler,
         options                       opts = options{
-            .address = {net::ip_address::from_string("127.0.0.1")}, .port = 8080, .ssl_ctx = nullptr});
+                                  .address = {net::ip_address::from_string("127.0.0.1")},
+                                  .port    = 8080,
+#ifdef LIBCORO_FEATURE_SSL
+            .ssl_ctx = nullptr
+#endif
+        });
     tcp_client(const tcp_client&) = delete;
     tcp_client(tcp_client&& other);
     auto operator=(const tcp_client&) noexcept -> tcp_client& = delete;
-    auto operator                                             =(tcp_client&& other) noexcept -> tcp_client&;
+    auto operator=(tcp_client&& other) noexcept -> tcp_client&;
     ~tcp_client();
 
     /**
@@ -66,6 +75,7 @@ public:
      */
     auto connect(std::chrono::milliseconds timeout = std::chrono::milliseconds{0}) -> coro::task<net::connect_status>;
 
+#ifdef LIBCORO_FEATURE_SSL
     /**
      * If this client is connected and the connection is SSL/TLS then perform the ssl handshake.
      * This must be done after a successful connect() call for clients that are initiating a
@@ -91,6 +101,7 @@ public:
      */
     auto ssl_handshake(std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
         -> coro::task<ssl_handshake_status>;
+#endif
 
     /**
      * Polls for the given operation on this client's tcp socket.  This should be done prior to
@@ -122,8 +133,10 @@ public:
             return {recv_status::ok, std::span<char>{}};
         }
 
+#ifdef LIBCORO_FEATURE_SSL
         if (m_options.ssl_ctx == nullptr)
         {
+#endif
             auto bytes_recv = ::recv(m_socket.native_handle(), buffer.data(), buffer.size(), 0);
             if (bytes_recv > 0)
             {
@@ -140,6 +153,7 @@ public:
                 // Report the error to the user.
                 return {static_cast<recv_status>(errno), std::span<char>{}};
             }
+#ifdef LIBCORO_FEATURE_SSL
         }
         else
         {
@@ -165,6 +179,7 @@ public:
                 return {recv_status::ok, std::span<char>{buffer.data(), static_cast<size_t>(bytes_recv)}};
             }
         }
+#endif
     }
 
     /**
@@ -185,8 +200,10 @@ public:
             return {send_status::ok, std::span<const char>{buffer.data(), buffer.size()}};
         }
 
+#ifdef LIBCORO_FEATURE_SSL
         if (m_options.ssl_ctx == nullptr)
         {
+#endif
             auto bytes_sent = ::send(m_socket.native_handle(), buffer.data(), buffer.size(), 0);
             if (bytes_sent >= 0)
             {
@@ -198,6 +215,7 @@ public:
                 // Due to the error none of the bytes were written.
                 return {static_cast<send_status>(errno), std::span<const char>{buffer.data(), buffer.size()}};
             }
+#ifdef LIBCORO_FEATURE_SSL
         }
         else
         {
@@ -223,9 +241,11 @@ public:
                 return {send_status::ok, std::span<const char>{buffer.data() + bytes_sent, buffer.size() - bytes_sent}};
             }
         }
+#endif
     }
 
 private:
+#ifdef LIBCORO_FEATURE_SSL
     struct ssl_deleter
     {
         auto operator()(SSL* ssl) const -> void { SSL_free(ssl); }
@@ -277,6 +297,7 @@ private:
         /// The result of the ssl handshake.
         std::optional<ssl_handshake_status> m_ssl_handshake_status{std::nullopt};
     };
+#endif
 
     /// The tcp_server creates already connected clients and provides a tcp socket pre-built.
     friend tcp_server;
@@ -290,6 +311,7 @@ private:
     net::socket m_socket{-1};
     /// Cache the status of the connect in the event the user calls connect() again.
     std::optional<net::connect_status> m_connect_status{std::nullopt};
+#ifdef LIBCORO_FEATURE_SSL
     /// SSL/TLS specific information if m_options.ssl_ctx != nullptr.
     ssl_info m_ssl_info{};
 
@@ -298,6 +320,7 @@ private:
         net::socket                   s,
         ssl_unique_ptr                ssl_ptr,
         std::chrono::milliseconds     timeout = std::chrono::milliseconds{0}) -> coro::task<void>;
+#endif
 };
 
 } // namespace coro::net

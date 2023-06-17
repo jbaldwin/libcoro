@@ -15,7 +15,9 @@ class io_scheduler;
 
 namespace coro::net
 {
+#ifdef LIBCORO_FEATURE_SSL
 class ssl_context;
+#endif
 
 class tcp_server
 {
@@ -28,21 +30,29 @@ public:
         uint16_t port{8080};
         /// The kernel backlog of connections to buffer.
         int32_t backlog{128};
+#ifdef LIBCORO_FEATURE_SSL
         /// Should this tcp server use TLS/SSL?  If provided all accepted connections will use the
         /// given SSL certificate and private key to secure the connections.
         ssl_context* ssl_ctx{nullptr};
+#endif
     };
 
     tcp_server(
         std::shared_ptr<io_scheduler> scheduler,
         options                       opts = options{
-            .address = net::ip_address::from_string("0.0.0.0"), .port = 8080, .backlog = 128, .ssl_ctx = nullptr});
+                                  .address = net::ip_address::from_string("0.0.0.0"),
+                                  .port    = 8080,
+                                  .backlog = 128,
+#ifdef LIBCORO_FEATURE_SSL
+            .ssl_ctx = nullptr
+#endif
+        });
 
     tcp_server(const tcp_server&) = delete;
     tcp_server(tcp_server&& other);
     auto operator=(const tcp_server&) -> tcp_server& = delete;
-    auto operator                                    =(tcp_server&& other) -> tcp_server&;
-    ~tcp_server()                                    = default;
+    auto operator=(tcp_server&& other) -> tcp_server&;
+    ~tcp_server() = default;
 
     /**
      * Polls for new incoming tcp connections.
