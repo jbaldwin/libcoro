@@ -54,58 +54,58 @@ else()
 endif()
 
 set(LIBCORO_SOURCE_FILES
-    inc/coro/concepts/awaitable.hpp
-    inc/coro/concepts/promise.hpp
+    src/coro/concepts/awaitable.hpp
+    src/coro/concepts/promise.hpp
 
-    inc/coro/detail/void_value.hpp
+    src/coro/detail/void_value.hpp
 
-    inc/coro/coro.hpp
-    inc/coro/generator.hpp
-    inc/coro/task.hpp
-    inc/coro/when_all.hpp
+    src/coro/coro.hpp
+    src/coro/generator.hpp
+    src/coro/task.hpp
+    src/coro/when_all.hpp
 )
 
 if(LIBCORO_FEATURE_THREADING)
     list(APPEND LIBCORO_SOURCE_FILES
-        inc/coro/concepts/buffer.hpp
-        inc/coro/concepts/executor.hpp
-        inc/coro/concepts/range_of.hpp
+        src/coro/concepts/buffer.hpp
+        src/coro/concepts/executor.hpp
+        src/coro/concepts/range_of.hpp
 
-        inc/coro/detail/poll_info.hpp
+        src/coro/detail/poll_info.hpp
 
-        inc/coro/event.hpp src/event.cpp
-        inc/coro/fd.hpp
-        inc/coro/io_scheduler.hpp src/io_scheduler.cpp
-        inc/coro/latch.hpp
-        inc/coro/mutex.hpp src/mutex.cpp
-        inc/coro/poll.hpp
-        inc/coro/ring_buffer.hpp
-        inc/coro/semaphore.hpp src/semaphore.cpp
-        inc/coro/shared_mutex.hpp
-        inc/coro/sync_wait.hpp src/sync_wait.cpp
-        inc/coro/task_container.hpp
-        inc/coro/thread_pool.hpp src/thread_pool.cpp
+        src/coro/event.hpp src/event.cpp
+        src/coro/fd.hpp
+        src/coro/io_scheduler.hpp src/io_scheduler.cpp
+        src/coro/latch.hpp
+        src/coro/mutex.hpp src/mutex.cpp
+        src/coro/poll.hpp
+        src/coro/ring_buffer.hpp
+        src/coro/semaphore.hpp src/semaphore.cpp
+        src/coro/shared_mutex.hpp
+        src/coro/sync_wait.hpp src/sync_wait.cpp
+        src/coro/task_container.hpp
+        src/coro/thread_pool.hpp src/thread_pool.cpp
     )
 endif()
 
 if(LIBCORO_FEATURE_NETWORKING)
     list(APPEND LIBCORO_SOURCE_FILES
-        inc/coro/net/connect.hpp src/net/connect.cpp
-        inc/coro/net/dns_resolver.hpp src/net/dns_resolver.cpp
-        inc/coro/net/hostname.hpp
-        inc/coro/net/ip_address.hpp src/net/ip_address.cpp
-        inc/coro/net/recv_status.hpp src/net/recv_status.cpp
-        inc/coro/net/send_status.hpp src/net/send_status.cpp
-        inc/coro/net/socket.hpp src/net/socket.cpp
-        inc/coro/net/tcp_client.hpp src/net/tcp_client.cpp
-        inc/coro/net/tcp_server.hpp src/net/tcp_server.cpp
-        inc/coro/net/udp_peer.hpp src/net/udp_peer.cpp
+        src/coro/net/connect.hpp src/net/connect.cpp
+        src/coro/net/dns_resolver.hpp src/net/dns_resolver.cpp
+        src/coro/net/hostname.hpp
+        src/coro/net/ip_address.hpp src/net/ip_address.cpp
+        src/coro/net/recv_status.hpp src/net/recv_status.cpp
+        src/coro/net/send_status.hpp src/net/send_status.cpp
+        src/coro/net/socket.hpp src/net/socket.cpp
+        src/coro/net/tcp_client.hpp src/net/tcp_client.cpp
+        src/coro/net/tcp_server.hpp src/net/tcp_server.cpp
+        src/coro/net/udp_peer.hpp src/net/udp_peer.cpp
     )
     if(LIBCORO_FEATURE_SSL)
         find_package(OpenSSL REQUIRED)
         list(APPEND LIBCORO_SOURCE_FILES
-            inc/coro/net/ssl_context.hpp src/net/ssl_context.cpp
-            inc/coro/net/ssl_handshake_status.hpp
+            src/coro/net/ssl_context.hpp src/net/ssl_context.cpp
+            src/coro/net/ssl_handshake_status.hpp
         )
     endif()
 endif()
@@ -113,7 +113,7 @@ endif()
 add_library(${PROJECT_NAME} STATIC ${LIBCORO_SOURCE_FILES})
 set_target_properties(${PROJECT_NAME} PROPERTIES LINKER_LANGUAGE CXX PREFIX "")
 target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_20)
-target_include_directories(${PROJECT_NAME} PUBLIC inc)
+target_include_directories(${PROJECT_NAME} PUBLIC src)
 if(LIBCORO_FEATURE_THREADING)
     target_link_libraries(${PROJECT_NAME} PUBLIC pthread tl::expected)
     target_compile_definitions(${PROJECT_NAME} PUBLIC LIBCORO_FEATURE_THREADING)
@@ -164,5 +164,5 @@ set(target1 ${PROJECT_NAME})
 configure_file(libcoro.pc.in libcoro.pc @ONLY)
 
 install(TARGETS libcoro)
-install(DIRECTORY inc/coro TYPE INCLUDE)
+install(DIRECTORY src/coro TYPE INCLUDE)
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/libcoro.pc DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig)
