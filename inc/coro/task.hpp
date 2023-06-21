@@ -4,6 +4,7 @@
 
 #include <coroutine>
 #include <exception>
+#include <optional>
 #include <utility>
 
 namespace coro
