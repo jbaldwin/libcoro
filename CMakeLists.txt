@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.0)
 project(libcoro 
-    VERSION 0.7.0
+    VERSION 0.8.0
     LANGUAGES CXX 
     DESCRIPTION "C++20 coroutine library"
 )
