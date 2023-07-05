@@ -8,9 +8,9 @@ template<typename T = void>
 struct task_completion_source
 {
 private:
-    coro::task<> suspend() { co_await std::suspend_always(); }
-    coro::task<> suspended{suspend()};
-    T            value;
+    coro::task<>     suspend() { co_await std::suspend_always(); }
+    coro::task<>     suspended{suspend()};
+    std::optional<T> value;
 
 public:
     task_completion_source() {}
@@ -32,8 +32,9 @@ public:
     }
     coro::task<T> task()
     {
-        co_await suspended;
-        co_return std::move(value);
+        if (!value.has_value())
+            co_await suspended;
+        co_return std::move(value.value());
     }
 };
 
@@ -41,8 +42,9 @@ template<>
 struct task_completion_source<void>
 {
 private:
-    coro::task<> suspend() { co_await std::suspend_always(); }
-    coro::task<> suspended{suspend()};
+    coro::task<>      suspend() { co_await std::suspend_always(); }
+    coro::task<>      suspended{suspend()};
+    std::atomic<bool> ready{false};
 
 public:
     task_completion_source() {}
@@ -52,11 +54,13 @@ public:
     auto operator=(task_completion_source&& other) noexcept -> task_completion_source& = default;
     void set_value()
     {
+        ready.store(true);
         suspended.resume();
     }
     coro::task<> task()
     {
-        co_await suspended;
+        if (!ready.load())
+            co_await suspended;
         co_return;
     }
 };
