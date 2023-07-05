@@ -4,7 +4,7 @@
 
 namespace coro
 {
-template<typename T>
+template<typename T = void>
 struct task_completion_source
 {
 private:
@@ -34,6 +34,30 @@ public:
     {
         co_await suspended;
         co_return std::move(value);
+    }
+};
+
+template<>
+struct task_completion_source<void>
+{
+private:
+    coro::task<> suspend() { co_await std::suspend_always(); }
+    coro::task<> suspended{suspend()};
+
+public:
+    task_completion_source() {}
+    task_completion_source(const task_completion_source&)           = delete;
+    task_completion_source(task_completion_source&& other) noexcept = default;
+    auto operator=(const task_completion_source&) -> task_completion_source& = delete;
+    auto operator=(task_completion_source&& other) noexcept -> task_completion_source& = default;
+    void set_value()
+    {
+        suspended.resume();
+    }
+    coro::task<> task()
+    {
+        co_await suspended;
+        co_return;
     }
 };
 
