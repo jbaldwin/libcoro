@@ -8,8 +8,22 @@ template<typename T = void>
 struct task_completion_source
 {
 private:
-    coro::task<>     suspend() { co_await std::suspend_always(); }
-    coro::task<>     suspended{suspend()};
+    struct suspend
+    {
+        std::atomic<bool>                    ready{false};
+        std::atomic<std::coroutine_handle<>> coroutine{nullptr};
+
+        bool await_ready() noexcept { return ready.exchange(true); }
+        void await_suspend(std::coroutine_handle<> handle) noexcept
+        {
+            coroutine.store(handle);
+            ready.store(false);
+        }
+        constexpr void await_resume() const noexcept {}
+    };
+
+    suspend awaitable;
+
     std::optional<T> value;
 
 public:
@@ -20,20 +34,29 @@ public:
     auto operator=(task_completion_source&& other) noexcept -> task_completion_source& = default;
     void set_value(const T& v)
     {
+        if (value.has_value())
+            return;
         value = v;
         std::atomic_thread_fence(std::memory_order_release);
-        suspended.resume();
+        for (bool expect{false}; !awaitable.ready.compare_exchange_weak(expect, true); expect = false) {}
+        auto coroutine = awaitable.coroutine.load();
+        if (coroutine)
+            coroutine.resume();
     }
     void set_value(T&& v)
     {
+        if (value.has_value())
+            return;
         value = std::move(v);
         std::atomic_thread_fence(std::memory_order_release);
-        suspended.resume();
+        for (bool expect{false}; !awaitable.ready.compare_exchange_weak(expect, true); expect = false) {}
+        auto coroutine = awaitable.coroutine.load();
+        if (coroutine)
+            coroutine.resume();
     }
     coro::task<T> task()
     {
-        if (!value.has_value())
-            co_await suspended;
+        co_await awaitable;
         co_return std::move(value.value());
     }
 };
@@ -42,9 +65,23 @@ template<>
 struct task_completion_source<void>
 {
 private:
-    coro::task<>      suspend() { co_await std::suspend_always(); }
-    coro::task<>      suspended{suspend()};
-    std::atomic<bool> ready{false};
+    struct suspend
+    {
+        std::atomic<bool>                    ready{false};
+        std::atomic<std::coroutine_handle<>> coroutine{nullptr};
+
+        bool await_ready() noexcept { return ready.exchange(true); }
+        void await_suspend(std::coroutine_handle<> handle) noexcept
+        {
+            coroutine.store(handle);
+            ready.store(false);
+        }
+        constexpr void await_resume() const noexcept {}
+    };
+
+    suspend awaitable;
+
+    std::atomic<bool> is_set{false};
 
 public:
     task_completion_source() {}
@@ -54,13 +91,17 @@ public:
     auto operator=(task_completion_source&& other) noexcept -> task_completion_source& = default;
     void set_value()
     {
-        ready.store(true);
-        suspended.resume();
+        for (bool expect{false}; !is_set.compare_exchange_strong(expect, true);)
+            return;
+        std::atomic_thread_fence(std::memory_order_release);
+        for (bool expect{false}; !awaitable.ready.compare_exchange_weak(expect, true); expect = false) {}
+        auto coroutine = awaitable.coroutine.load();
+        if (coroutine)
+            coroutine.resume();
     }
     coro::task<> task()
     {
-        if (!ready.load())
-            co_await suspended;
+        co_await awaitable;
         co_return;
     }
 };
