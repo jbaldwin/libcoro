@@ -62,6 +62,7 @@ set(LIBCORO_SOURCE_FILES
     inc/coro/coro.hpp
     inc/coro/generator.hpp
     inc/coro/task.hpp
+    inc/coro/task_completion_source.hpp
     inc/coro/when_all.hpp
 )
 
