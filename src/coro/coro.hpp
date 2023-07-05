@@ -38,4 +38,5 @@
 
 #include "coro/generator.hpp"
 #include "coro/task.hpp"
+#include "coro/task_completion_source.hpp"
 #include "coro/when_all.hpp"
