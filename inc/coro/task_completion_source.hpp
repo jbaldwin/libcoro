@@ -13,9 +13,9 @@ private:
     struct suspendable
     {
         explicit suspendable() {}
-        suspendable(const suspendable&)                                                              = delete;
-        suspendable(suspendable&& other) noexcept                                                    = delete;
-        auto                                 operator=(const suspendable&) -> suspendable&           = delete;
+        suspendable(const suspendable&)              = delete;
+        suspendable(suspendable&& other) noexcept    = delete;
+        auto                                 operator=(const suspendable&) -> suspendable& = delete;
         auto                                 operator=(suspendable&& other) noexcept -> suspendable& = delete;
         std::atomic<bool>                    is_set{false};
         T                                    value;
@@ -28,16 +28,16 @@ private:
             coroutine.store(handle);
             ready.store(false);
         }
-        constexpr void await_resume() const noexcept {}
+        T await_resume() const noexcept { return std::move(value); }
     };
 
     std::shared_ptr<suspendable> suspender{std::make_shared<suspendable>()};
 
 public:
     task_completion_source() {}
-    task_completion_source(const task_completion_source&)                              = delete;
-    task_completion_source(task_completion_source&& other) noexcept                    = default;
-    auto operator=(const task_completion_source&) -> task_completion_source&           = delete;
+    task_completion_source(const task_completion_source&)           = delete;
+    task_completion_source(task_completion_source&& other) noexcept = default;
+    auto operator=(const task_completion_source&) -> task_completion_source& = delete;
     auto operator=(task_completion_source&& other) noexcept -> task_completion_source& = default;
     void set_value(const T& v)
     {
@@ -65,8 +65,7 @@ public:
     {
         auto  suspender_ptr = suspender;
         auto& suspend       = *suspender_ptr;
-        co_await suspend;
-        co_return std::move(suspend.value);
+        co_return co_await suspend;
     }
 };
 
@@ -77,9 +76,9 @@ private:
     struct suspendable
     {
         explicit suspendable() {}
-        suspendable(const suspendable&)                                                              = delete;
-        suspendable(suspendable&& other) noexcept                                                    = delete;
-        auto                                 operator=(const suspendable&) -> suspendable&           = delete;
+        suspendable(const suspendable&)              = delete;
+        suspendable(suspendable&& other) noexcept    = delete;
+        auto                                 operator=(const suspendable&) -> suspendable& = delete;
         auto                                 operator=(suspendable&& other) noexcept -> suspendable& = delete;
         std::atomic<bool>                    ready{false};
         std::atomic<std::coroutine_handle<>> coroutine{nullptr};
@@ -99,9 +98,9 @@ private:
 
 public:
     task_completion_source() {}
-    task_completion_source(const task_completion_source&)                              = delete;
-    task_completion_source(task_completion_source&& other) noexcept                    = default;
-    auto operator=(const task_completion_source&) -> task_completion_source&           = delete;
+    task_completion_source(const task_completion_source&)           = delete;
+    task_completion_source(task_completion_source&& other) noexcept = default;
+    auto operator=(const task_completion_source&) -> task_completion_source& = delete;
     auto operator=(task_completion_source&& other) noexcept -> task_completion_source& = default;
     void set_value()
     {
@@ -118,7 +117,6 @@ public:
         auto  suspender_ptr = suspender;
         auto& suspend       = *suspender_ptr;
         co_await suspend;
-        co_return;
     }
 };
 
