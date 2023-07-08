@@ -13,9 +13,9 @@ private:
     struct suspendable
     {
         explicit suspendable() {}
-        suspendable(const suspendable&)              = delete;
-        suspendable(suspendable&& other) noexcept    = delete;
-        auto                                 operator=(const suspendable&) -> suspendable& = delete;
+        suspendable(const suspendable&)                                                              = delete;
+        suspendable(suspendable&& other) noexcept                                                    = delete;
+        auto                                 operator=(const suspendable&) -> suspendable&           = delete;
         auto                                 operator=(suspendable&& other) noexcept -> suspendable& = delete;
         std::atomic<bool>                    is_set{false};
         T                                    value;
@@ -35,9 +35,9 @@ private:
 
 public:
     task_completion_source() {}
-    task_completion_source(const task_completion_source&)           = delete;
-    task_completion_source(task_completion_source&& other) noexcept = default;
-    auto operator=(const task_completion_source&) -> task_completion_source& = delete;
+    task_completion_source(const task_completion_source&)                              = delete;
+    task_completion_source(task_completion_source&& other) noexcept                    = default;
+    auto operator=(const task_completion_source&) -> task_completion_source&           = delete;
     auto operator=(task_completion_source&& other) noexcept -> task_completion_source& = default;
     void set_value(const T& v)
     {
@@ -54,7 +54,7 @@ public:
     {
         for (bool expect{false}; !suspender->is_set.compare_exchange_strong(expect, true);)
             return;
-        suspender->value = v;
+        suspender->value = std::move(v);
         std::atomic_thread_fence(std::memory_order_release);
         for (bool expect{false}; !suspender->ready.compare_exchange_weak(expect, true); expect = false) {}
         auto coroutine = suspender->coroutine.load();
@@ -77,9 +77,9 @@ private:
     struct suspendable
     {
         explicit suspendable() {}
-        suspendable(const suspendable&)              = delete;
-        suspendable(suspendable&& other) noexcept    = delete;
-        auto                                 operator=(const suspendable&) -> suspendable& = delete;
+        suspendable(const suspendable&)                                                              = delete;
+        suspendable(suspendable&& other) noexcept                                                    = delete;
+        auto                                 operator=(const suspendable&) -> suspendable&           = delete;
         auto                                 operator=(suspendable&& other) noexcept -> suspendable& = delete;
         std::atomic<bool>                    ready{false};
         std::atomic<std::coroutine_handle<>> coroutine{nullptr};
@@ -99,9 +99,9 @@ private:
 
 public:
     task_completion_source() {}
-    task_completion_source(const task_completion_source&)           = delete;
-    task_completion_source(task_completion_source&& other) noexcept = default;
-    auto operator=(const task_completion_source&) -> task_completion_source& = delete;
+    task_completion_source(const task_completion_source&)                              = delete;
+    task_completion_source(task_completion_source&& other) noexcept                    = default;
+    auto operator=(const task_completion_source&) -> task_completion_source&           = delete;
     auto operator=(task_completion_source&& other) noexcept -> task_completion_source& = default;
     void set_value()
     {
