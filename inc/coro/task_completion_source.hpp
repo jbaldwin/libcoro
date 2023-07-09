@@ -21,13 +21,14 @@ private:
         std::shared_ptr<T>                   value;
         std::atomic<std::coroutine_handle<>> coroutine{nullptr};
     };
-    struct awaitable
+    struct awaiter
     {
-        explicit awaitable(std::shared_ptr<state_type>& _state) : state(_state) {}
-        awaitable(const awaitable&)           = default;
-        awaitable(awaitable&& other) noexcept = default;
-        auto                        operator=(const awaitable&) -> awaitable& = default;
-        auto                        operator=(awaitable&& other) noexcept -> awaitable& = default;
+        explicit awaiter() {}
+        explicit awaiter(std::shared_ptr<state_type>& _state) : state(_state) {}
+        awaiter(const awaiter&)           = default;
+        awaiter(awaiter&& other) noexcept = default;
+        auto                        operator=(const awaiter&) -> awaiter& = default;
+        auto                        operator=(awaiter&& other) noexcept -> awaiter& = default;
         std::shared_ptr<state_type> state;
 
         bool await_ready() const noexcept { return state->ready.exchange(true); }
@@ -64,7 +65,7 @@ public:
         for (bool expect{false}; !state->ready.compare_exchange_weak(expect, true); expect = false) {}
     }
     auto               handle() const { return state->coroutine.load(); }
-    [[nodiscard]] auto token() { return awaitable(state); }
+    [[nodiscard]] auto token() { return awaiter(state); }
 };
 
 template<>
@@ -82,13 +83,13 @@ private:
         std::atomic<bool>                    ready{false};
         std::atomic<std::coroutine_handle<>> coroutine{nullptr};
     };
-    struct awaitable
+    struct awaiter
     {
-        explicit awaitable(std::shared_ptr<state_type>& _state) : state(_state) {}
-        awaitable(const awaitable&)           = default;
-        awaitable(awaitable&& other) noexcept = default;
-        auto                        operator=(const awaitable&) -> awaitable& = default;
-        auto                        operator=(awaitable&& other) noexcept -> awaitable& = default;
+        explicit awaiter(std::shared_ptr<state_type>& _state) : state(_state) {}
+        awaiter(const awaiter&)           = default;
+        awaiter(awaiter&& other) noexcept = default;
+        auto                        operator=(const awaiter&) -> awaiter& = default;
+        auto                        operator=(awaiter&& other) noexcept -> awaiter& = default;
         std::shared_ptr<state_type> state;
 
         bool await_ready() const noexcept { return state->ready.exchange(true); }
@@ -116,7 +117,7 @@ public:
         for (bool expect{false}; !state->ready.compare_exchange_weak(expect, true); expect = false) {}
     }
     auto               handle() const { return state->coroutine.load(); }
-    [[nodiscard]] auto token() { return awaitable(state); }
+    [[nodiscard]] auto token() { return awaiter(state); }
 };
 
 } // namespace coro
