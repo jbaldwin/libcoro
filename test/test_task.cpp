@@ -12,8 +12,8 @@ TEST_CASE("task hello world", "[task]")
     auto h = []() -> task_type { co_return "Hello"; }();
     auto w = []() -> task_type { co_return "World"; }();
 
-    REQUIRE(h.promise().result().empty());
-    REQUIRE(w.promise().result().empty());
+    REQUIRE_THROWS_AS(h.promise().result(), std::runtime_error);
+    REQUIRE_THROWS_AS(w.promise().result(), std::runtime_error);
 
     h.resume(); // task suspends immediately
     w.resume();
@@ -292,4 +292,23 @@ TEST_CASE("mutable task returning a reference", "[task]")
     REQUIRE(result.m_value == 42);
     REQUIRE(std::addressof(return_value) == std::addressof(result));
     static_assert(std::is_same_v<decltype(task.promise().result()), type&>);
+}
+
+TEST_CASE("task doesn't require default constructor", "[task]")
+{
+    // https://github.com/jbaldwin/libcoro/issues/163
+    // Reported issue that the return type required a default constructor.
+    // This test explicitly creates an object that does not have a default
+    // constructor to verify that the default constructor isn't required.
+
+    struct A
+    {
+        A(int value) : m_value(value) {}
+
+        int m_value{};
+    };
+
+    auto make_task = []() -> coro::task<A> { co_return A(42); };
+
+    REQUIRE(coro::sync_wait(make_task()).m_value == 42);
 }

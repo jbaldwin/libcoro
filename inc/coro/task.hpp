@@ -80,7 +80,7 @@ struct promise final : public promise_base
         }
         else
         {
-            m_return_value = std::move(value);
+            m_return_value = {std::move(value)};
         }
     }
 
@@ -91,33 +91,38 @@ struct promise final : public promise_base
             std::rethrow_exception(m_exception_ptr);
         }
 
-        if constexpr (return_type_is_reference)
+        if (m_return_value.has_value())
         {
             return m_return_value.value();
         }
-        else
-        {
-            return m_return_value;
-        }
+
+        // Throwing here is acceptable because it should require the user to never initiate the coroutine.
+        throw std::runtime_error{"The return value was never set, did you execute the coroutine?"};
     }
 
-    auto result() && -> return_type&&
-        requires(not return_type_is_reference)
+    auto result() && -> return_type&& requires(not return_type_is_reference)
     {
         if (m_exception_ptr)
         {
             std::rethrow_exception(m_exception_ptr);
         }
 
-        return std::move(m_return_value);
+        if (m_return_value.has_value())
+        {
+            return std::move(m_return_value.value());
+        }
+
+        throw std::runtime_error{"The return value was never set, did you execute the coroutine?"};
     }
 
 private:
     using bare_return_type = std::remove_reference_t<return_type>;
-    using held_type        = std::
-        conditional_t<return_type_is_reference, std::optional<std::reference_wrapper<bare_return_type>>, return_type>;
+    using held_type        = std::conditional_t<
+        return_type_is_reference,
+        std::optional<std::reference_wrapper<bare_return_type>>,
+        std::optional<return_type>>;
 
-    held_type m_return_value;
+    held_type m_return_value{};
 };
 
 template<>
