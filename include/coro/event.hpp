@@ -78,10 +78,10 @@ public:
     explicit event(bool initially_set = false) noexcept;
     ~event() = default;
 
-    event(const event&) = delete;
-    event(event&&)      = delete;
+    event(const event&)                    = delete;
+    event(event&&)                         = delete;
     auto operator=(const event&) -> event& = delete;
-    auto operator=(event &&) -> event& = delete;
+    auto operator=(event&&) -> event&      = delete;
 
     /**
      * @return True if this event is currently in the set state.

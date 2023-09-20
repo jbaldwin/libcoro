@@ -61,10 +61,10 @@ class dns_resolver
 {
 public:
     explicit dns_resolver(std::shared_ptr<io_scheduler> scheduler, std::chrono::milliseconds timeout);
-    dns_resolver(const dns_resolver&) = delete;
-    dns_resolver(dns_resolver&&)      = delete;
+    dns_resolver(const dns_resolver&)                             = delete;
+    dns_resolver(dns_resolver&&)                                  = delete;
     auto operator=(const dns_resolver&) noexcept -> dns_resolver& = delete;
-    auto operator=(dns_resolver&&) noexcept -> dns_resolver& = delete;
+    auto operator=(dns_resolver&&) noexcept -> dns_resolver&      = delete;
     ~dns_resolver();
 
     /**

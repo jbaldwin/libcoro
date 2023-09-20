@@ -33,10 +33,10 @@ struct poll_info
     poll_info()  = default;
     ~poll_info() = default;
 
-    poll_info(const poll_info&) = delete;
-    poll_info(poll_info&&)      = delete;
+    poll_info(const poll_info&)                    = delete;
+    poll_info(poll_info&&)                         = delete;
     auto operator=(const poll_info&) -> poll_info& = delete;
-    auto operator=(poll_info&&) -> poll_info& = delete;
+    auto operator=(poll_info&&) -> poll_info&      = delete;
 
     struct poll_awaiter
     {

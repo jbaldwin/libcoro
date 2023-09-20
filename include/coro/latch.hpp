@@ -26,10 +26,10 @@ public:
      */
     latch(std::ptrdiff_t count) noexcept : m_count(count), m_event(count <= 0) {}
 
-    latch(const latch&) = delete;
-    latch(latch&&)      = delete;
+    latch(const latch&)                    = delete;
+    latch(latch&&)                         = delete;
     auto operator=(const latch&) -> latch& = delete;
-    auto operator=(latch&&) -> latch& = delete;
+    auto operator=(latch&&) -> latch&      = delete;
 
     /**
      * @return True if the latch has been counted down to zero.

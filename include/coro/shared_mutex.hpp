@@ -88,10 +88,10 @@ public:
     }
     ~shared_mutex() = default;
 
-    shared_mutex(const shared_mutex&) = delete;
-    shared_mutex(shared_mutex&&)      = delete;
+    shared_mutex(const shared_mutex&)                    = delete;
+    shared_mutex(shared_mutex&&)                         = delete;
     auto operator=(const shared_mutex&) -> shared_mutex& = delete;
-    auto operator=(shared_mutex&&) -> shared_mutex& = delete;
+    auto operator=(shared_mutex&&) -> shared_mutex&      = delete;
 
     struct lock_operation
     {
