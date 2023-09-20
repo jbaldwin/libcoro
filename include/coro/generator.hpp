@@ -129,7 +129,7 @@ public:
     generator(generator&& other) noexcept : m_coroutine(other.m_coroutine) { other.m_coroutine = nullptr; }
 
     auto operator=(const generator&) = delete;
-    auto operator                    =(generator&& other) noexcept -> generator&
+    auto operator=(generator&& other) noexcept -> generator&
     {
         m_coroutine       = other.m_coroutine;
         other.m_coroutine = nullptr;

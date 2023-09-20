@@ -43,11 +43,11 @@ public:
      */
     explicit udp_peer(std::shared_ptr<io_scheduler> scheduler, const info& bind_info);
 
-    udp_peer(const udp_peer&) = delete;
-    udp_peer(udp_peer&&)      = default;
+    udp_peer(const udp_peer&)                             = delete;
+    udp_peer(udp_peer&&)                                  = default;
     auto operator=(const udp_peer&) noexcept -> udp_peer& = delete;
-    auto operator=(udp_peer&&) noexcept -> udp_peer& = default;
-    ~udp_peer()                                      = default;
+    auto operator=(udp_peer&&) noexcept -> udp_peer&      = default;
+    ~udp_peer()                                           = default;
 
     /**
      * @param op The poll operation to perform on the udp socket.  Note that if this is a send only

@@ -37,11 +37,11 @@ public:
 
         std::copy(binary_address.begin(), binary_address.end(), m_data.begin());
     }
-    ip_address(const ip_address&) = default;
-    ip_address(ip_address&&)      = default;
+    ip_address(const ip_address&)                             = default;
+    ip_address(ip_address&&)                                  = default;
     auto operator=(const ip_address&) noexcept -> ip_address& = default;
-    auto operator=(ip_address&&) noexcept -> ip_address& = default;
-    ~ip_address()                                        = default;
+    auto operator=(ip_address&&) noexcept -> ip_address&      = default;
+    ~ip_address()                                             = default;
 
     auto domain() const -> domain_t { return m_domain; }
     auto data() const -> std::span<const uint8_t>
