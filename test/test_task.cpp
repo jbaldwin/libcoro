@@ -3,6 +3,7 @@
 #include <coro/coro.hpp>
 
 #include <chrono>
+#include <iostream>
 #include <thread>
 
 TEST_CASE("task hello world", "[task]")

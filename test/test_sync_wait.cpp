@@ -2,6 +2,8 @@
 
 #include <coro/coro.hpp>
 
+#include <iostream>
+
 TEST_CASE("sync_wait simple integer return", "[sync_wait]")
 {
     auto func = []() -> coro::task<int> { co_return 11; };

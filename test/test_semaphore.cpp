@@ -4,6 +4,7 @@
 
 #include <chrono>
 #include <thread>
+#include <iostream>
 #include <vector>
 
 TEST_CASE("semaphore binary", "[semaphore]")
