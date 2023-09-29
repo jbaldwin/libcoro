@@ -1109,6 +1109,7 @@ This project depends on the following git sub-modules:
  * [libc-ares](https://github.com/c-ares/c-ares) For async DNS resolver, this is a git submodule.
  * [catch2](https://github.com/catchorg/Catch2) For testing, this is embedded in the `test/` directory.
  * [expected](https://github.com/TartanLlama/expected) For results on operations that can fail, this is a git submodule in the `vendor/` directory.
+   * `-std=c++23` will use `std::expected` instead, g++ however with this flag isn't setting a high enough `__cplusplus` value to properly trigger on yet.
 
 #### Building
     mkdir Release && cd Release
@@ -1117,15 +1118,15 @@ This project depends on the following git sub-modules:
 
 CMake Options:
 
-| Name                          | Default | Description                                                                   |
-|:------------------------------|:--------|:------------------------------------------------------------------------------|
-| LIBCORO_EXTERNAL_DEPENDENCIES | OFF     | Use CMake find_package to resolve dependencies instead of embedded libraries. |
-| LIBCORO_BUILD_TESTS           | ON      | Should the tests be built?                                                    |
-| LIBCORO_CODE_COVERAGE         | OFF     | Should code coverage be enabled? Requires tests to be enabled.                |
-| LIBCORO_BUILD_EXAMPLES        | ON      | Should the examples be built?                                                 |
-| LIBCORO_FEATURE_THREADING     | ON      | Include the features depending on multi-threading support by the standard lib.                                                  |
-| LIBCORO_FEATURE_NETWORKING    | ON      | Include networking features.                                                  |
-| LIBCORO_FEATURE_SSL           | ON      | Include SSL features. Requires networking to be enabled.                                                  |
+| Name                          | Default | Description                                                                    |
+|:------------------------------|:--------|:-------------------------------------------------------------------------------|
+| LIBCORO_EXTERNAL_DEPENDENCIES | OFF     | Use CMake find_package to resolve dependencies instead of embedded libraries.  |
+| LIBCORO_BUILD_TESTS           | ON      | Should the tests be built?                                                     |
+| LIBCORO_CODE_COVERAGE         | OFF     | Should code coverage be enabled? Requires tests to be enabled.                 |
+| LIBCORO_BUILD_EXAMPLES        | ON      | Should the examples be built?                                                  |
+| LIBCORO_FEATURE_THREADING     | ON      | Include the features depending on multi-threading support by the standard lib. |
+| LIBCORO_FEATURE_NETWORKING    | ON      | Include networking features.                                                   |
+| LIBCORO_FEATURE_SSL           | ON      | Include SSL features. Requires networking to be enabled.                       |
 
 #### Adding to your project
 

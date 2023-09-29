@@ -1,3 +1,7 @@
+#if __cplusplus < 202002L
+    #error libcoro requires C++20 or greater
+#endif
+
 #include "coro/event.hpp"
 #include "coro/thread_pool.hpp"
 

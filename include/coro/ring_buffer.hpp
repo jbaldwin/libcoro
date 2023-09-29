@@ -1,6 +1,6 @@
 #pragma once
 
-#include <tl/expected.hpp>
+#include <coro/expected.hpp>
 
 #include <array>
 #include <atomic>
@@ -140,11 +140,11 @@ public:
         /**
          * @return The consumed element or std::nullopt if the consume has failed.
          */
-        auto await_resume() -> tl::expected<element, consume_result>
+        auto await_resume() -> expected<element, consume_result>
         {
             if (m_stopped)
             {
-                return tl::make_unexpected(consume_result::ring_buffer_stopped);
+                return unexpected<consume_result>(consume_result::ring_buffer_stopped);
             }
 
             return std::move(m_e);

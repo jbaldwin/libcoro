@@ -1,10 +1,16 @@
 #pragma once
 
+#if __cplusplus < 202002L
+    #error "libcoro requires C++20 or greater"
+#endif
+
 #include "coro/concepts/awaitable.hpp"
 #include "coro/concepts/buffer.hpp"
 #include "coro/concepts/executor.hpp"
 #include "coro/concepts/promise.hpp"
 #include "coro/concepts/range_of.hpp"
+
+#include "coro/expected.hpp"
 
 #ifdef LIBCORO_FEATURE_THREADING
     #include "coro/io_scheduler.hpp"
