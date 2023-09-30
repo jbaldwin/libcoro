@@ -55,36 +55,35 @@ endif()
 
 set(LIBCORO_SOURCE_FILES
     include/coro/concepts/awaitable.hpp
+    include/coro/concepts/buffer.hpp
+    include/coro/concepts/executor.hpp
     include/coro/concepts/promise.hpp
+    include/coro/concepts/range_of.hpp
 
     include/coro/detail/void_value.hpp
 
     include/coro/coro.hpp
+    include/coro/event.hpp src/event.cpp
     include/coro/generator.hpp
+    include/coro/latch.hpp
+    include/coro/mutex.hpp src/mutex.cpp
+    include/coro/ring_buffer.hpp
+    include/coro/semaphore.hpp src/semaphore.cpp
+    include/coro/shared_mutex.hpp
+    include/coro/sync_wait.hpp src/sync_wait.cpp
     include/coro/task.hpp
+    include/coro/task_container.hpp
+    include/coro/thread_pool.hpp src/thread_pool.cpp
     include/coro/when_all.hpp
 )
 
 if(LIBCORO_FEATURE_THREADING)
     list(APPEND LIBCORO_SOURCE_FILES
-        include/coro/concepts/buffer.hpp
-        include/coro/concepts/executor.hpp
-        include/coro/concepts/range_of.hpp
-
         include/coro/detail/poll_info.hpp
 
-        include/coro/event.hpp src/event.cpp
         include/coro/fd.hpp
         include/coro/io_scheduler.hpp src/io_scheduler.cpp
-        include/coro/latch.hpp
-        include/coro/mutex.hpp src/mutex.cpp
         include/coro/poll.hpp
-        include/coro/ring_buffer.hpp
-        include/coro/semaphore.hpp src/semaphore.cpp
-        include/coro/shared_mutex.hpp
-        include/coro/sync_wait.hpp src/sync_wait.cpp
-        include/coro/task_container.hpp
-        include/coro/thread_pool.hpp src/thread_pool.cpp
     )
 endif()
 
@@ -113,7 +112,7 @@ endif()
 add_library(${PROJECT_NAME} STATIC ${LIBCORO_SOURCE_FILES})
 set_target_properties(${PROJECT_NAME} PROPERTIES LINKER_LANGUAGE CXX PREFIX "")
 target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_20)
-target_include_directories(${PROJECT_NAME} PUBLIC include)
+target_include_directories(${PROJECT_NAME} PUBLIC include vendor/tartanllama/expected/include)
 if(LIBCORO_FEATURE_THREADING)
     target_link_libraries(${PROJECT_NAME} PUBLIC pthread tl::expected)
     target_compile_definitions(${PROJECT_NAME} PUBLIC LIBCORO_FEATURE_THREADING)
