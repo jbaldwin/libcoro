@@ -1,7 +1,6 @@
 #pragma once
 
 #include "coro/concepts/awaitable.hpp"
-#include "coro/when_all.hpp"
 
 #include <condition_variable>
 #include <mutex>
@@ -89,6 +88,8 @@ public:
 
         return static_cast<return_type&&>(*m_return_value);
     }
+    void return_void() noexcept {}
+
 
 private:
     std::remove_reference_t<return_type>* m_return_value;
