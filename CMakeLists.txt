@@ -59,6 +59,7 @@ set(LIBCORO_SOURCE_FILES
 
     include/coro/detail/void_value.hpp
 
+    include/coro/attribute.hpp
     include/coro/coro.hpp
     include/coro/generator.hpp
     include/coro/task.hpp
