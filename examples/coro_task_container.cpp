@@ -26,6 +26,9 @@ int main()
                 request.resize(recv_bytes.size());
                 std::cout << "server: " << request << "\n";
 
+                // Make sure the client socket can be written to.
+                co_await client.poll(coro::poll_op::write);
+
                 auto response = "Hello from server " + std::to_string(requests);
                 client.send(response);
 
@@ -63,6 +66,9 @@ int main()
         // Send N requests on the same connection and wait for the server response to each one.
         for (size_t i = 1; i <= request_count; ++i)
         {
+            // Make sure the client socket can be written to.
+            co_await client.poll(coro::poll_op::write);
+
             // Send the request data.
             auto request = "Hello from client " + std::to_string(i);
             client.send(request);
