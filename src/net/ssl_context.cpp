@@ -13,12 +13,21 @@ ssl_context::ssl_context()
         std::scoped_lock g{m_ssl_context_mutex};
         if (m_ssl_context_count == 0)
         {
+
+#if defined(OPENSSL_VERSION_NUMBER) && OPENSSL_VERSION_NUMBER >= 0x10100000L
             OPENSSL_init_ssl(0, nullptr);
+#else
+            SSL_library_init();
+#endif
         }
         ++m_ssl_context_count;
     }
 
+#if !defined(LIBRESSL_VERSION_NUMBER) && OPENSSL_VERSION_NUMBER >= 0x10100000L
     m_ssl_ctx = SSL_CTX_new(TLS_method());
+#else
+    m_ssl_ctx = SSL_CTX_new(SSLv23_method());
+#endif
     if (m_ssl_ctx == nullptr)
     {
         throw std::runtime_error{"Failed to initialize OpenSSL Context object."};
