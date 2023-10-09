@@ -1,5 +1,6 @@
 #pragma once
 
+#include "coro/attribute.hpp"
 #include "coro/concepts/awaitable.hpp"
 #include "coro/detail/void_value.hpp"
 
@@ -438,8 +439,8 @@ private:
 
 template<
     concepts::awaitable awaitable,
-    typename return_type = concepts::awaitable_traits<awaitable&&>::awaiter_return_type>
-static auto make_when_all_task(awaitable a) -> when_all_task<return_type> __attribute__((used));
+    typename return_type = typename concepts::awaitable_traits<awaitable&&>::awaiter_return_type>
+static auto make_when_all_task(awaitable a) -> when_all_task<return_type> __ATTRIBUTE__(used);
 
 template<concepts::awaitable awaitable, typename return_type>
 static auto make_when_all_task(awaitable a) -> when_all_task<return_type>
@@ -468,7 +469,7 @@ template<concepts::awaitable... awaitables_type>
 template<
     std::ranges::range  range_type,
     concepts::awaitable awaitable_type = std::ranges::range_value_t<range_type>,
-    typename return_type               = concepts::awaitable_traits<awaitable_type>::awaiter_return_type>
+    typename return_type               = typename concepts::awaitable_traits<awaitable_type>::awaiter_return_type>
 [[nodiscard]] auto when_all(range_type awaitables)
     -> detail::when_all_ready_awaitable<std::vector<detail::when_all_task<return_type>>>
 {
