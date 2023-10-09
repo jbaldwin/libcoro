@@ -1,5 +1,6 @@
 #pragma once
 
+#include "coro/attribute.hpp"
 #include "coro/concepts/executor.hpp"
 #include "coro/task.hpp"
 
@@ -107,7 +108,7 @@ public:
      * the task container for newly stored tasks.
      * @return The number of tasks that were deleted.
      */
-    auto garbage_collect() -> std::size_t __attribute__((used))
+    auto garbage_collect() -> std::size_t __ATTRIBUTE__(used)
     {
         std::scoped_lock lk{m_mutex};
         return gc_internal();
