@@ -313,3 +313,17 @@ TEST_CASE("task doesn't require default constructor", "[task]")
 
     REQUIRE(coro::sync_wait(make_task()).m_value == 42);
 }
+
+TEST_CASE("task supports instantiation with rvalue reference", "[task]")
+{
+    // https://github.com/jbaldwin/libcoro/issues/180
+    // Reported issue that the return type cannot be rvalue reference.
+    // This test explicitly creates an coroutine that returns a task
+    // instantiated with rvalue reference to verify that rvalue
+    // reference is supported.
+
+    int  i         = 42;
+    auto make_task = [&i]() -> coro::task<int&&> { co_return std::move(i); };
+    int  ret       = coro::sync_wait(make_task());
+    REQUIRE(ret == 42);
+}
