@@ -22,6 +22,8 @@ Connection: keep-alive
                 switch (rstatus)
                 {
                     case coro::net::recv_status::ok:
+                        // Make sure the client socket can be written to.
+                        co_await client.poll(coro::poll_op::write);
                         client.send(std::span<const char>{response});
                         break;
                     case coro::net::recv_status::would_block:
