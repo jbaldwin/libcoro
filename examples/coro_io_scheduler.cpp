@@ -129,10 +129,13 @@ int main()
         // Connect to the server.
         co_await client.connect();
 
+        // Make sure the client socket can be written to.
+        co_await client.poll(coro::poll_op::write);
+
         // Send the request data.
         client.send(std::string_view{"Hello from client."});
 
-        // Wait for the response an receive it.
+        // Wait for the response and receive it.
         co_await client.poll(coro::poll_op::read);
         std::string response(256, '\0');
         auto [recv_status, recv_bytes] = client.recv(response);

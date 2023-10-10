@@ -64,8 +64,7 @@ struct promise final : public promise_base
 {
     using task_type                                = task<return_type>;
     using coroutine_handle                         = std::coroutine_handle<promise<return_type>>;
-    static constexpr bool return_type_is_reference = std::is_lvalue_reference_v<return_type>;
-    using type_to_return = std::conditional_t<return_type_is_reference, return_type, const return_type&>;
+    static constexpr bool return_type_is_reference = std::is_reference_v<return_type>;
 
     promise() noexcept = default;
     ~promise()         = default;
@@ -76,8 +75,7 @@ struct promise final : public promise_base
     {
         if constexpr (return_type_is_reference)
         {
-            m_return_value.reset();
-            m_return_value = value;
+            m_return_value = std::addressof(value);
         }
         else
         {
@@ -85,43 +83,60 @@ struct promise final : public promise_base
         }
     }
 
-    auto result() const& -> type_to_return
+    auto result() const& -> decltype(auto)
     {
         if (m_exception_ptr)
         {
             std::rethrow_exception(m_exception_ptr);
         }
 
-        if (m_return_value.has_value())
+        if constexpr (return_type_is_reference)
         {
-            return m_return_value.value();
+            if (m_return_value)
+            {
+                return static_cast<return_type>(*m_return_value);
+            }
+        }
+        else
+        {
+            if (m_return_value.has_value())
+            {
+                return m_return_value.value();
+            }
         }
 
         // Throwing here is acceptable because it should require the user to never initiate the coroutine.
         throw std::runtime_error{"The return value was never set, did you execute the coroutine?"};
     }
 
-    auto result() && -> return_type&& requires(not return_type_is_reference)
+    auto result() && -> decltype(auto)
     {
         if (m_exception_ptr)
         {
             std::rethrow_exception(m_exception_ptr);
         }
 
-        if (m_return_value.has_value())
+        if constexpr (return_type_is_reference)
         {
-            return std::move(m_return_value.value());
+            if (m_return_value)
+            {
+                return static_cast<return_type>(*m_return_value);
+            }
+        }
+        else
+        {
+            if (m_return_value.has_value())
+            {
+                return std::move(m_return_value.value());
+            }
         }
 
         throw std::runtime_error{"The return value was never set, did you execute the coroutine?"};
     }
 
 private:
-    using bare_return_type = std::remove_reference_t<return_type>;
-    using held_type        = std::conditional_t<
-        return_type_is_reference,
-        std::optional<std::reference_wrapper<bare_return_type>>,
-        std::optional<return_type>>;
+    using held_type =
+        std::conditional_t<return_type_is_reference, std::remove_reference_t<return_type>*, std::optional<return_type>>;
 
     held_type m_return_value{};
 };
