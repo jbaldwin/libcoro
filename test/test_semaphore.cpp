@@ -176,7 +176,7 @@ TEST_CASE("semaphore ringbuffer many producers and consumers", "[semaphore]")
 
     coro::semaphore s{50, 0};
 
-    coro::io_scheduler tp{}; // let er rip
+    coro::thread_pool tp{}; // let er rip
 
     auto make_consumer_task = [&](uint64_t id) -> coro::task<void>
     {
@@ -210,7 +210,7 @@ TEST_CASE("semaphore ringbuffer many producers and consumers", "[semaphore]")
 
         while (value.load(std::memory_order::relaxed) < iterations)
         {
-            co_await tp.yield_for(std::chrono::milliseconds{1});
+            co_await tp.yield();
         }
 
         std::cerr << "producer " << id << " exiting\n";
