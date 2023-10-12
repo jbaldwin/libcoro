@@ -250,7 +250,7 @@ public:
     }
 
 private:
-    friend class lock_operation;
+    friend struct lock_operation;
 
     enum class state
     {

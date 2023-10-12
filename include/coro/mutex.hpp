@@ -105,7 +105,7 @@ public:
     auto unlock() -> void;
 
 private:
-    friend class lock_operation;
+    friend struct lock_operation;
 
     /// unlocked -> state == unlocked_value()
     /// locked but empty waiter list == nullptr

@@ -98,7 +98,7 @@ public:
     /**
      * @return The number of executor threads for processing tasks.
      */
-    auto thread_count() const noexcept -> uint32_t { return m_threads.size(); }
+    auto thread_count() const noexcept -> size_t { return m_threads.size(); }
 
     /**
      * Schedules the currently executing coroutine to be run on this thread pool.  This must be
