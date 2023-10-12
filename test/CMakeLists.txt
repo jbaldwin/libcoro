@@ -6,6 +6,7 @@ set(LIBCORO_TEST_SOURCE_FILES
     test_generator.cpp
     test_latch.cpp
     test_mutex.cpp
+    test_ring_buffer.cpp
     test_semaphore.cpp
     test_shared_mutex.cpp
     test_sync_wait.cpp
@@ -29,7 +30,6 @@ if(LIBCORO_FEATURE_THREADING)
     list(APPEND LIBCORO_TEST_SOURCE_FILES
         bench.cpp
         test_io_scheduler.cpp
-        test_ring_buffer.cpp
     )
 endif()
 

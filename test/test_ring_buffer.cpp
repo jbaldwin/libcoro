@@ -127,9 +127,8 @@ TEST_CASE("ring_buffer producer consumer separate threads", "[ring_buffer]")
     coro::ring_buffer<uint64_t, 2> rb{};
 
     // We'll use an io schedule so we can use yield_for on shutdown since its two threads.
-    coro::io_scheduler producer_tp{coro::io_scheduler::options{
-        .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline}};
-    coro::thread_pool  consumer_tp{coro::thread_pool::options{.thread_count = 1}};
+    coro::thread_pool producer_tp{coro::thread_pool::options{.thread_count = 1}};
+    coro::thread_pool consumer_tp{coro::thread_pool::options{.thread_count = 1}};
 
     auto make_producer_task = [&]() -> coro::task<void>
     {
@@ -143,7 +142,7 @@ TEST_CASE("ring_buffer producer consumer separate threads", "[ring_buffer]")
 
         while (!rb.empty())
         {
-            co_await producer_tp.yield_for(std::chrono::milliseconds{10});
+            co_await producer_tp.yield();
         }
 
         rb.notify_waiters(); // Shut everything down.
