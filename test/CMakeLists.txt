@@ -7,8 +7,10 @@ set(LIBCORO_TEST_SOURCE_FILES
     test_latch.cpp
     test_mutex.cpp
     test_semaphore.cpp
+    test_shared_mutex.cpp
     test_sync_wait.cpp
     test_task.cpp
+    test_thread_pool.cpp
     test_when_all.cpp
 
     catch_amalgamated.cpp
@@ -28,8 +30,6 @@ if(LIBCORO_FEATURE_THREADING)
         bench.cpp
         test_io_scheduler.cpp
         test_ring_buffer.cpp
-        test_shared_mutex.cpp
-        test_thread_pool.cpp
     )
 endif()
 
