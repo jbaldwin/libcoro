@@ -1,23 +1,14 @@
 #pragma once
 
 #include "coro/concepts/awaitable.hpp"
+#include "coro/concepts/buffer.hpp"
+#include "coro/concepts/executor.hpp"
 #include "coro/concepts/promise.hpp"
+#include "coro/concepts/range_of.hpp"
 
 #ifdef LIBCORO_FEATURE_THREADING
-    #include "coro/concepts/buffer.hpp"
-    #include "coro/concepts/executor.hpp"
-    #include "coro/concepts/range_of.hpp"
-    #include "coro/event.hpp"
     #include "coro/io_scheduler.hpp"
-    #include "coro/latch.hpp"
-    #include "coro/mutex.hpp"
     #include "coro/poll.hpp"
-    #include "coro/ring_buffer.hpp"
-    #include "coro/semaphore.hpp"
-    #include "coro/shared_mutex.hpp"
-    #include "coro/sync_wait.hpp"
-    #include "coro/task_container.hpp"
-    #include "coro/thread_pool.hpp"
 #endif
 
 #ifdef LIBCORO_FEATURE_NETWORKING
@@ -36,6 +27,15 @@
     #include "coro/net/udp_peer.hpp"
 #endif
 
+#include "coro/event.hpp"
 #include "coro/generator.hpp"
+#include "coro/latch.hpp"
+#include "coro/mutex.hpp"
+#include "coro/ring_buffer.hpp"
+#include "coro/semaphore.hpp"
+#include "coro/shared_mutex.hpp"
+#include "coro/sync_wait.hpp"
 #include "coro/task.hpp"
+#include "coro/task_container.hpp"
+#include "coro/thread_pool.hpp"
 #include "coro/when_all.hpp"
