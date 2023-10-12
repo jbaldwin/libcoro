@@ -1,7 +1,7 @@
-cmake_minimum_required(VERSION 3.0)
-project(libcoro 
+cmake_minimum_required(VERSION 3.15)
+project(libcoro
     VERSION 0.9.0
-    LANGUAGES CXX 
+    LANGUAGES CXX
     DESCRIPTION "C++20 coroutine library"
 )
 
@@ -142,6 +142,8 @@ if(${CMAKE_CXX_COMPILER_ID} MATCHES "GNU")
         $<$<COMPILE_LANGUAGE:CXX>:-pipe>)
 elseif(${CMAKE_CXX_COMPILER_ID} MATCHES "Clang")
     message(FATAL_ERROR "Clang is currently not supported.")
+elseif(MSVC)
+    target_compile_options(${PROJECT_NAME} PRIVATE /W4)
 endif()
 
 if(LIBCORO_BUILD_TESTS)
