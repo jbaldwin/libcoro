@@ -34,7 +34,7 @@ class sync_wait_task_promise_base
 {
 public:
     sync_wait_task_promise_base() noexcept = default;
-    virtual ~sync_wait_task_promise_base() = default;
+    ~sync_wait_task_promise_base()         = default;
 
     auto initial_suspend() noexcept -> std::suspend_always { return {}; }
 
@@ -51,8 +51,8 @@ class sync_wait_task_promise : public sync_wait_task_promise_base
 public:
     using coroutine_type = std::coroutine_handle<sync_wait_task_promise<return_type>>;
 
-    sync_wait_task_promise() noexcept  = default;
-    ~sync_wait_task_promise() override = default;
+    sync_wait_task_promise() noexcept = default;
+    ~sync_wait_task_promise()         = default;
 
     auto start(sync_wait_event& event)
     {
@@ -91,7 +91,6 @@ public:
     }
     void return_void() noexcept {}
 
-
 private:
     std::remove_reference_t<return_type>* m_return_value;
 };
@@ -102,8 +101,8 @@ class sync_wait_task_promise<void> : public sync_wait_task_promise_base
     using coroutine_type = std::coroutine_handle<sync_wait_task_promise<void>>;
 
 public:
-    sync_wait_task_promise() noexcept  = default;
-    ~sync_wait_task_promise() override = default;
+    sync_wait_task_promise() noexcept = default;
+    ~sync_wait_task_promise()         = default;
 
     auto start(sync_wait_event& event)
     {
