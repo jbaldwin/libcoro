@@ -50,11 +50,11 @@ TEST_CASE("task exception thrown", "[task]")
 
     std::string throw_msg = "I'll be reached";
 
-    auto task = [&]() -> task_type
+    auto task = [](std::string& throw_msg) -> task_type
     {
         throw std::runtime_error(throw_msg);
         co_return "I'll never be reached";
-    }();
+    }(throw_msg);
 
     task.resume();
 
@@ -266,7 +266,7 @@ TEST_CASE("const task returning a reference", "[task]")
 
     type return_value{42};
 
-    auto task = [&]() -> coro::task<const type&> { co_return std::ref(return_value); }();
+    auto task = [](type& return_value) -> coro::task<const type&> { co_return std::ref(return_value); }(return_value);
 
     task.resume();
     REQUIRE(task.is_ready());
@@ -285,7 +285,7 @@ TEST_CASE("mutable task returning a reference", "[task]")
 
     type return_value{42};
 
-    auto task = [&]() -> coro::task<type&> { co_return std::ref(return_value); }();
+    auto task = [](type& return_value) -> coro::task<type&> { co_return std::ref(return_value); }(return_value);
 
     task.resume();
     REQUIRE(task.is_ready());

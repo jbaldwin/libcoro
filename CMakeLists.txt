@@ -141,7 +141,12 @@ if(${CMAKE_CXX_COMPILER_ID} MATCHES "GNU")
         $<$<COMPILE_LANGUAGE:CXX>:-Wextra>
         $<$<COMPILE_LANGUAGE:CXX>:-pipe>)
 elseif(${CMAKE_CXX_COMPILER_ID} MATCHES "Clang")
-    message(FATAL_ERROR "Clang is currently not supported.")
+    target_compile_options(${PROJECT_NAME} PUBLIC
+        $<$<COMPILE_LANGUAGE:CXX>:-std=c++20>
+        $<$<COMPILE_LANGUAGE:CXX>:-fexceptions>
+        $<$<COMPILE_LANGUAGE:CXX>:-Wall>
+        $<$<COMPILE_LANGUAGE:CXX>:-Wextra>
+        $<$<COMPILE_LANGUAGE:CXX>:-pipe>)
 endif()
 
 if(LIBCORO_BUILD_TESTS)
@@ -150,7 +155,7 @@ if(LIBCORO_BUILD_TESTS)
         target_link_libraries(${PROJECT_NAME} PRIVATE gcov)
     endif()
 
-    enable_testing()
+    include(CTest)
     add_subdirectory(test)
 endif()
 

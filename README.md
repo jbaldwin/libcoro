@@ -149,14 +149,17 @@ The `coro::generator<T>` construct is a coroutine which can generate one or more
 
 int main()
 {
-    auto task = [](uint64_t count_to) -> coro::task<void> {
+    auto task = [](uint64_t count_to) -> coro::task<void>
+    {
         // Create a generator function that will yield and incrementing
         // number each time its called.
-        auto gen = []() -> coro::generator<uint64_t> {
+        auto gen = []() -> coro::generator<uint64_t>
+        {
             uint64_t i = 0;
             while (true)
             {
-                co_yield i++;
+                co_yield i;
+                ++i;
             }
         };
 
