@@ -120,6 +120,7 @@ jobs:
                     apt-get -y upgrade
                     apt install -y build-essential software-properties-common
                     apt-get install -y \
+                        wget \
                         cmake \
                         git \
                         ninja-build \
