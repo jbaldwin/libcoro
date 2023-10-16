@@ -102,6 +102,68 @@ jobs:
                 run: |
                     cd build-release-g++-feature-networking-disabled
                     ctest -VV
+    build-ubuntu-22-04-clang:
+        name: ubuntu-22.04-clang
+        runs-on: ubuntu-latest
+        strategy:
+            matrix:
+                clang_version: [16]
+        container:
+            image: ubuntu:22.04
+            env:
+                TZ: America/New_York
+                DEBIAN_FRONTEND: noninteractive
+        steps:
+            -   name: apt
+                run: |
+                    apt-get update
+                    apt-get -y upgrade
+                    apt install -y build-essential software-properties-common
+                    apt-get install -y \
+                        cmake \
+                        git \
+                        ninja-build \
+                        libssl-dev
+            -   name: install-clang
+                run: |
+                    wget https://apt.llvm.org/llvm.sh
+                    chmod +x llvm.sh
+                    ./llvm.sh ${{ matrix.clang_version }}
+            -   name: Checkout
+                uses: actions/checkout@v2
+                with:
+                    submodules: recursive
+            -   name: build-release-clang++
+                run: |
+                    mkdir build-release-clang++
+                    cd build-release-clang++
+                    cmake \
+                        -GNinja \
+                        -DCMAKE_BUILD_TYPE=Release \
+                        -DCMAKE_C_COMPILER=clang \
+                        -DCMAKE_CXX_COMPILER=clang++ \
+                        ..
+                    ninja
+            -   name: test-release-clang++
+                run: |
+                    cd build-release-clang++
+                    ctest -VV
+            -   name: build-release-clang++-feature-networking-disabled
+                run: |
+                    mkdir build-release-clang++-feature-networking-disabled
+                    cd build-release-clang++-feature-networking-disabled
+                    cmake \
+                        -GNinja \
+                        -DCMAKE_BUILD_TYPE=Release \
+                        -DCMAKE_C_COMPILER=clang \
+                        -DCMAKE_CXX_COMPILER=clang++ \
+                        -DLIBCORO_FEATURE_NETWORKING=OFF \
+                        ..
+                    ninja
+            -   name: test-release-clang++-feature-networking-disabled
+                run: |
+                    cd build-release-clang++-feature-networking-disabled
+                    ctest -VV
 
     build-fedora-32-to-37:
         name: fedora-${{ matrix.fedora_version }}

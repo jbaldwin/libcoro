@@ -34,7 +34,6 @@ class sync_wait_task_promise_base
 {
 public:
     sync_wait_task_promise_base() noexcept = default;
-    ~sync_wait_task_promise_base()         = default;
 
     auto initial_suspend() noexcept -> std::suspend_always { return {}; }
 
@@ -43,6 +42,8 @@ public:
 protected:
     sync_wait_event*   m_event{nullptr};
     std::exception_ptr m_exception;
+
+    ~sync_wait_task_promise_base() = default;
 };
 
 template<typename return_type>

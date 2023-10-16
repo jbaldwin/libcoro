@@ -141,6 +141,10 @@ if(${CMAKE_CXX_COMPILER_ID} MATCHES "GNU")
         $<$<COMPILE_LANGUAGE:CXX>:-Wextra>
         $<$<COMPILE_LANGUAGE:CXX>:-pipe>)
 elseif(${CMAKE_CXX_COMPILER_ID} MATCHES "Clang")
+    if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "16.0.0")
+        message(FATAL_ERROR "Clang version ${CMAKE_CXX_COMPILER_VERSION} is unsupported, please upgrade to at least 16.0.0")
+    endif()
+
     target_compile_options(${PROJECT_NAME} PUBLIC
         $<$<COMPILE_LANGUAGE:CXX>:-std=c++20>
         $<$<COMPILE_LANGUAGE:CXX>:-fexceptions>
