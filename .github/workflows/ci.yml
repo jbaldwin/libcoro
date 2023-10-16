@@ -201,3 +201,21 @@ jobs:
                 run: |
                     cd build-release-g++
                     ctest -VV
+    build-windows-2022:
+        name: windows-2022
+        runs-on: windows-latest
+        steps:
+            -   name: Checkout
+                uses: actions/checkout@v2
+                with:
+                    submodules: recursive
+            -   name: build-release-cl
+                run: |
+                    mkdir build-release-cl
+                    cd build-release-cl
+                    cmake -DCMAKE_BUILD_TYPE=Release ..
+                    cmake --build ..
+            -   name: test-release-cl
+                run: |
+                    cd build-release-cl
+                    ctest -VV
