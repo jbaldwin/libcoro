@@ -141,8 +141,8 @@ jobs:
                     cmake \
                         -GNinja \
                         -DCMAKE_BUILD_TYPE=Release \
-                        -DCMAKE_C_COMPILER=clang \
-                        -DCMAKE_CXX_COMPILER=clang++ \
+                        -DCMAKE_C_COMPILER=clang-${{ matrix.clang_version }} \
+                        -DCMAKE_CXX_COMPILER=clang++-${{ matrix.clang_version }} \
                         ..
                     ninja
             -   name: test-release-clang++
@@ -156,8 +156,8 @@ jobs:
                     cmake \
                         -GNinja \
                         -DCMAKE_BUILD_TYPE=Release \
-                        -DCMAKE_C_COMPILER=clang \
-                        -DCMAKE_CXX_COMPILER=clang++ \
+                        -DCMAKE_C_COMPILER=clang-${{ matrix.clang_version }} \
+                        -DCMAKE_CXX_COMPILER=clang++-${{ matrix.clang_version }} \
                         -DLIBCORO_FEATURE_NETWORKING=OFF \
                         ..
                     ninja
