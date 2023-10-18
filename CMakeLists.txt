@@ -1,7 +1,7 @@
-cmake_minimum_required(VERSION 3.0)
-project(libcoro 
+cmake_minimum_required(VERSION 3.15)
+project(libcoro
     VERSION 0.9.0
-    LANGUAGES CXX 
+    LANGUAGES CXX
     DESCRIPTION "C++20 coroutine library"
 )
 
@@ -151,6 +151,8 @@ elseif(${CMAKE_CXX_COMPILER_ID} MATCHES "Clang")
         $<$<COMPILE_LANGUAGE:CXX>:-Wall>
         $<$<COMPILE_LANGUAGE:CXX>:-Wextra>
         $<$<COMPILE_LANGUAGE:CXX>:-pipe>)
+elseif(MSVC)
+    target_compile_options(${PROJECT_NAME} PUBLIC /W4)
 endif()
 
 if(LIBCORO_BUILD_TESTS)

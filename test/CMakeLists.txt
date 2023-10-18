@@ -47,6 +47,8 @@ if(${CMAKE_CXX_COMPILER_ID} MATCHES "GNU")
     target_compile_options(${PROJECT_NAME} PUBLIC -fcoroutines -Wall -Wextra -pipe)
 elseif(${CMAKE_CXX_COMPILER_ID} MATCHES "Clang")
     target_compile_options(${PROJECT_NAME} PUBLIC -Wall -Wextra -pipe)
+elseif(MSVC)
+    target_compile_options(${PROJECT_NAME} PUBLIC /W4)
 endif()
 
 add_test(NAME libcoro_tests COMMAND ${PROJECT_NAME})
