@@ -169,7 +169,7 @@ endif()
 
 
 # generate pc file for pkg-config
-set(target1 ${PROJECT_NAME})
+string(REGEX REPLACE "^lib" "" target1 ${PROJECT_NAME})
 configure_file(libcoro.pc.in libcoro.pc @ONLY)
 
 install(TARGETS libcoro)
