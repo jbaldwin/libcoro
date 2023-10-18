@@ -1,7 +1,7 @@
-cmake_minimum_required(VERSION 3.0)
-project(libcoro 
+cmake_minimum_required(VERSION 3.15)
+project(libcoro
     VERSION 0.9.0
-    LANGUAGES CXX 
+    LANGUAGES CXX
     DESCRIPTION "C++20 coroutine library"
 )
 
@@ -141,7 +141,18 @@ if(${CMAKE_CXX_COMPILER_ID} MATCHES "GNU")
         $<$<COMPILE_LANGUAGE:CXX>:-Wextra>
         $<$<COMPILE_LANGUAGE:CXX>:-pipe>)
 elseif(${CMAKE_CXX_COMPILER_ID} MATCHES "Clang")
-    message(FATAL_ERROR "Clang is currently not supported.")
+    if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "16.0.0")
+        message(FATAL_ERROR "Clang version ${CMAKE_CXX_COMPILER_VERSION} is unsupported, please upgrade to at least 16.0.0")
+    endif()
+
+    target_compile_options(${PROJECT_NAME} PUBLIC
+        $<$<COMPILE_LANGUAGE:CXX>:-std=c++20>
+        $<$<COMPILE_LANGUAGE:CXX>:-fexceptions>
+        $<$<COMPILE_LANGUAGE:CXX>:-Wall>
+        $<$<COMPILE_LANGUAGE:CXX>:-Wextra>
+        $<$<COMPILE_LANGUAGE:CXX>:-pipe>)
+elseif(MSVC)
+    target_compile_options(${PROJECT_NAME} PUBLIC /W4)
 endif()
 
 if(LIBCORO_BUILD_TESTS)
@@ -150,7 +161,7 @@ if(LIBCORO_BUILD_TESTS)
         target_link_libraries(${PROJECT_NAME} PRIVATE gcov)
     endif()
 
-    enable_testing()
+    include(CTest)
     add_subdirectory(test)
 endif()
 
@@ -160,7 +171,7 @@ endif()
 
 
 # generate pc file for pkg-config
-set(target1 ${PROJECT_NAME})
+string(REGEX REPLACE "^lib" "" target1 ${PROJECT_NAME})
 configure_file(libcoro.pc.in libcoro.pc @ONLY)
 
 install(TARGETS libcoro)
