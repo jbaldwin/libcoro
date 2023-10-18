@@ -276,9 +276,9 @@ jobs:
                 run: |
                     mkdir build-release-cl
                     cd build-release-cl
-                    cmake -DCMAKE_BUILD_TYPE=Release ..
-                    cmake --build ..
+                    cmake ..
+                    cmake --build . --config Release
             -   name: test-release-cl
                 run: |
                     cd build-release-cl
-                    ctest -VV
+                    ctest --build-config Release -VV
