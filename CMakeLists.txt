@@ -1,4 +1,5 @@
 cmake_minimum_required(VERSION 3.15)
+include(CMakeDependentOption)
 project(libcoro
     VERSION 0.9.0
     LANGUAGES CXX
@@ -22,9 +23,9 @@ option(LIBCORO_EXTERNAL_DEPENDENCIES "Use Cmake find_package to resolve dependen
 option(LIBCORO_BUILD_TESTS           "Build the tests, Default=ON." ON)
 option(LIBCORO_CODE_COVERAGE         "Enable code coverage, tests must also be enabled, Default=OFF" OFF)
 option(LIBCORO_BUILD_EXAMPLES        "Build the examples, Default=ON." ON)
-option(LIBCORO_FEATURE_THREADING     "Include multithreading features, Default=ON." ON)
-option(LIBCORO_FEATURE_NETWORKING    "Include networking features, Default=ON." ON)
-option(LIBCORO_FEATURE_SSL           "Include SSL encryption features, Default=ON." ON)
+cmake_dependent_option(LIBCORO_FEATURE_THREADING "Include multithreading features, Default=ON." ON "NOT MSVC" OFF)
+cmake_dependent_option(LIBCORO_FEATURE_NETWORKING "Include networking features, Default=ON." ON "NOT MSVC" OFF)
+cmake_dependent_option(LIBCORO_FEATURE_SSL "Include SSL encryption features, Default=ON." ON "NOT MSVC" OFF)
 
 message("${PROJECT_NAME} LIBCORO_EXTERNAL_DEPENDENCIES = ${LIBCORO_EXTERNAL_DEPENDENCIES}")
 message("${PROJECT_NAME} LIBCORO_BUILD_TESTS           = ${LIBCORO_BUILD_TESTS}")
