@@ -36,7 +36,7 @@ public:
      */
     ring_buffer()
     {
-        if (num_elements == 0)
+        if constexpr (num_elements == 0)
         {
             throw std::runtime_error{"num_elements cannot be zero"};
         }
