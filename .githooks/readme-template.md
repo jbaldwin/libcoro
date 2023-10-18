@@ -384,6 +384,8 @@ Transfer/sec:     18.33MB
         g++11
         g++12
         g++13
+        clang++16
+        clang++17
     CMake
     make or ninja
     pthreads
