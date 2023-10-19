@@ -107,13 +107,9 @@ struct promise final : public promise_base
             return_type ref = static_cast<Value&&>(value);
             new (m_storage) stored_type(std::addressof(ref));
         }
-        else if constexpr (std::is_constructible_v<stored_type, Value&&>)
-        {
-            new (m_storage) stored_type(static_cast<Value&&>(value));
-        }
         else
         {
-            new (m_storage) stored_type(static_cast<const std::remove_reference_t<Value>&>(value));
+            new (m_storage) stored_type(static_cast<Value&&>(value));
         }
         m_state = task_state::value;
     }
