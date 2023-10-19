@@ -1,10 +1,7 @@
 #pragma once
 
-#include "coro/concepts/promise.hpp"
-
 #include <coroutine>
 #include <exception>
-#include <optional>
 #include <stdexcept>
 #include <utility>
 
@@ -46,99 +43,194 @@ struct promise_base
     promise_base() noexcept = default;
     ~promise_base()         = default;
 
-    auto initial_suspend() { return std::suspend_always{}; }
+    auto initial_suspend() noexcept { return std::suspend_always{}; }
 
-    auto final_suspend() noexcept(true) { return final_awaitable{}; }
-
-    auto unhandled_exception() -> void { m_exception_ptr = std::current_exception(); }
+    auto final_suspend() noexcept { return final_awaitable{}; }
 
     auto continuation(std::coroutine_handle<> continuation) noexcept -> void { m_continuation = continuation; }
 
 protected:
     std::coroutine_handle<> m_continuation{nullptr};
-    std::exception_ptr      m_exception_ptr{};
 };
 
 template<typename return_type>
 struct promise final : public promise_base
 {
+    enum class task_state : unsigned char
+    {
+        empty,
+        value,
+        exception,
+    };
     using task_type                                = task<return_type>;
     using coroutine_handle                         = std::coroutine_handle<promise<return_type>>;
     static constexpr bool return_type_is_reference = std::is_reference_v<return_type>;
+    using stored_type                              = std::conditional_t<
+                                     return_type_is_reference,
+                                     std::remove_reference_t<return_type>*,
+                                     std::remove_const_t<return_type>>;
+    static constexpr auto storage_align = alignof(std::exception_ptr) > alignof(stored_type)
+                                              ? alignof(std::exception_ptr)
+                                              : alignof(stored_type);
+    static constexpr auto storage_size  = sizeof(std::exception_ptr) > sizeof(stored_type) ? sizeof(std::exception_ptr)
+                                                                                           : sizeof(stored_type);
 
-    promise() noexcept = default;
-    ~promise()         = default;
+    promise() noexcept : m_state(task_state::empty) {}
+    promise(const promise&)             = delete;
+    promise(promise&& other)            = delete;
+    promise& operator=(const promise&)  = delete;
+    promise& operator=(promise&& other) = delete;
+    ~promise()
+    {
+        if (m_state == task_state::value)
+        {
+            if constexpr (not return_type_is_reference)
+            {
+                access_value().~stored_type();
+            }
+        }
+        else if (m_state == task_state::exception)
+        {
+            access_exception().~exception_ptr();
+        }
+    }
 
     auto get_return_object() noexcept -> task_type;
 
-    auto return_value(return_type value) -> void
+    template<typename Value>
+        requires(return_type_is_reference and std::is_constructible_v<return_type, Value &&>) or
+                (not return_type_is_reference and std::is_constructible_v<stored_type, Value &&>)
+    auto return_value(Value&& value) -> void
     {
         if constexpr (return_type_is_reference)
         {
-            m_return_value = std::addressof(value);
+            return_type ref = static_cast<Value&&>(value);
+            new (m_storage) stored_type(std::addressof(ref));
+        }
+        else if constexpr (std::is_constructible_v<stored_type, Value&&>)
+        {
+            new (m_storage) stored_type(static_cast<Value&&>(value));
         }
         else
         {
-            m_return_value = {std::move(value)};
+            new (m_storage) stored_type(static_cast<const std::remove_reference_t<Value>&>(value));
+        }
+        m_state = task_state::value;
+    }
+
+    auto return_value(stored_type value) -> void
+        requires(not return_type_is_reference)
+    {
+        if constexpr (std::is_move_constructible_v<stored_type>)
+        {
+            new (m_storage) stored_type(std::move(value));
+        }
+        else
+        {
+            new (m_storage) stored_type(value);
+        }
+        m_state = task_state::value;
+    }
+
+    auto unhandled_exception() noexcept -> void
+    {
+        new (m_storage) std::exception_ptr(std::current_exception());
+        m_state = task_state::exception;
+    }
+
+    auto result() & -> decltype(auto)
+    {
+        switch (m_state)
+        {
+            case task_state::value:
+                if constexpr (return_type_is_reference)
+                {
+                    return static_cast<return_type>(*access_value());
+                }
+                else
+                {
+                    return static_cast<const stored_type&>(access_value());
+                }
+                break;
+            case task_state::exception:
+                std::rethrow_exception(access_exception());
+                break;
+            default:
+                throw std::runtime_error{"The return value was never set, did you execute the coroutine?"};
+                break;
         }
     }
 
     auto result() const& -> decltype(auto)
     {
-        if (m_exception_ptr)
+        switch (m_state)
         {
-            std::rethrow_exception(m_exception_ptr);
+            case task_state::value:
+                if constexpr (return_type_is_reference)
+                {
+                    return static_cast<std::add_const_t<return_type>>(*access_value());
+                }
+                else
+                {
+                    return static_cast<const stored_type&>(access_value());
+                }
+                break;
+            case task_state::exception:
+                std::rethrow_exception(access_exception());
+                break;
+            default:
+                throw std::runtime_error{"The return value was never set, did you execute the coroutine?"};
+                break;
         }
-
-        if constexpr (return_type_is_reference)
-        {
-            if (m_return_value)
-            {
-                return static_cast<return_type>(*m_return_value);
-            }
-        }
-        else
-        {
-            if (m_return_value.has_value())
-            {
-                return m_return_value.value();
-            }
-        }
-
-        // Throwing here is acceptable because it should require the user to never initiate the coroutine.
-        throw std::runtime_error{"The return value was never set, did you execute the coroutine?"};
     }
 
     auto result() && -> decltype(auto)
     {
-        if (m_exception_ptr)
+        switch (m_state)
         {
-            std::rethrow_exception(m_exception_ptr);
+            case task_state::value:
+                if constexpr (return_type_is_reference)
+                {
+                    return static_cast<return_type>(*access_value());
+                }
+                else if constexpr (std::is_move_constructible_v<stored_type>)
+                {
+                    return static_cast<stored_type&&>(access_value());
+                }
+                else
+                {
+                    return static_cast<const stored_type&&>(access_value());
+                }
+                break;
+            case task_state::exception:
+                std::rethrow_exception(access_exception());
+                break;
+            default:
+                throw std::runtime_error{"The return value was never set, did you execute the coroutine?"};
+                break;
         }
-
-        if constexpr (return_type_is_reference)
-        {
-            if (m_return_value)
-            {
-                return static_cast<return_type>(*m_return_value);
-            }
-        }
-        else
-        {
-            if (m_return_value.has_value())
-            {
-                return std::move(m_return_value.value());
-            }
-        }
-
-        throw std::runtime_error{"The return value was never set, did you execute the coroutine?"};
     }
 
 private:
-    using held_type =
-        std::conditional_t<return_type_is_reference, std::remove_reference_t<return_type>*, std::optional<return_type>>;
+    alignas(storage_align) unsigned char m_storage[storage_size];
+    task_state m_state;
 
-    held_type m_return_value{};
+    const stored_type& access_value() const noexcept
+    {
+        return *std::launder(reinterpret_cast<const stored_type*>(m_storage));
+    }
+
+    stored_type& access_value() noexcept { return *std::launder(reinterpret_cast<stored_type*>(m_storage)); }
+
+    const std::exception_ptr& access_exception() const noexcept
+    {
+        return *std::launder(reinterpret_cast<const std::exception_ptr*>(m_storage));
+    }
+
+    std::exception_ptr& access_exception() noexcept
+    {
+        return *std::launder(reinterpret_cast<std::exception_ptr*>(m_storage));
+    }
 };
 
 template<>
@@ -147,12 +239,18 @@ struct promise<void> : public promise_base
     using task_type        = task<void>;
     using coroutine_handle = std::coroutine_handle<promise<void>>;
 
-    promise() noexcept = default;
-    ~promise()         = default;
+    promise() noexcept                  = default;
+    promise(const promise&)             = delete;
+    promise(promise&& other)            = delete;
+    promise& operator=(const promise&)  = delete;
+    promise& operator=(promise&& other) = delete;
+    ~promise()                          = default;
 
     auto get_return_object() noexcept -> task_type;
 
     auto return_void() noexcept -> void {}
+
+    auto unhandled_exception() noexcept -> void { m_exception_ptr = std::current_exception(); }
 
     auto result() -> void
     {
@@ -161,6 +259,9 @@ struct promise<void> : public promise_base
             std::rethrow_exception(m_exception_ptr);
         }
     }
+
+private:
+    std::exception_ptr m_exception_ptr{nullptr};
 };
 
 } // namespace detail
@@ -249,19 +350,7 @@ public:
     {
         struct awaitable : public awaitable_base
         {
-            auto await_resume() -> decltype(auto)
-            {
-                if constexpr (std::is_same_v<void, return_type>)
-                {
-                    // Propagate uncaught exceptions.
-                    this->m_coroutine.promise().result();
-                    return;
-                }
-                else
-                {
-                    return this->m_coroutine.promise().result();
-                }
-            }
+            auto await_resume() -> decltype(auto) { return this->m_coroutine.promise().result(); }
         };
 
         return awaitable{m_coroutine};
@@ -271,26 +360,13 @@ public:
     {
         struct awaitable : public awaitable_base
         {
-            auto await_resume() -> decltype(auto)
-            {
-                if constexpr (std::is_same_v<void, return_type>)
-                {
-                    // Propagate uncaught exceptions.
-                    this->m_coroutine.promise().result();
-                    return;
-                }
-                else
-                {
-                    return std::move(this->m_coroutine.promise()).result();
-                }
-            }
+            auto await_resume() -> decltype(auto) { return std::move(this->m_coroutine.promise()).result(); }
         };
 
         return awaitable{m_coroutine};
     }
 
     auto promise() & -> promise_type& { return m_coroutine.promise(); }
-
     auto promise() const& -> const promise_type& { return m_coroutine.promise(); }
     auto promise() && -> promise_type&& { return std::move(m_coroutine.promise()); }
 
