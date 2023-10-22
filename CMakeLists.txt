@@ -1,4 +1,5 @@
 cmake_minimum_required(VERSION 3.15)
+include(CMakeDependentOption)
 project(libcoro
     VERSION 0.9.0
     LANGUAGES CXX
@@ -22,9 +23,9 @@ option(LIBCORO_EXTERNAL_DEPENDENCIES "Use Cmake find_package to resolve dependen
 option(LIBCORO_BUILD_TESTS           "Build the tests, Default=ON." ON)
 option(LIBCORO_CODE_COVERAGE         "Enable code coverage, tests must also be enabled, Default=OFF" OFF)
 option(LIBCORO_BUILD_EXAMPLES        "Build the examples, Default=ON." ON)
-option(LIBCORO_FEATURE_THREADING     "Include multithreading features, Default=ON." ON)
-option(LIBCORO_FEATURE_NETWORKING    "Include networking features, Default=ON." ON)
-option(LIBCORO_FEATURE_SSL           "Include SSL encryption features, Default=ON." ON)
+cmake_dependent_option(LIBCORO_FEATURE_THREADING "Include multithreading features, Default=ON." ON "NOT MSVC" OFF)
+cmake_dependent_option(LIBCORO_FEATURE_NETWORKING "Include networking features, Default=ON." ON "NOT MSVC" OFF)
+cmake_dependent_option(LIBCORO_FEATURE_SSL "Include SSL encryption features, Default=ON." ON "NOT MSVC" OFF)
 
 message("${PROJECT_NAME} LIBCORO_EXTERNAL_DEPENDENCIES = ${LIBCORO_EXTERNAL_DEPENDENCIES}")
 message("${PROJECT_NAME} LIBCORO_BUILD_TESTS           = ${LIBCORO_BUILD_TESTS}")
@@ -114,6 +115,10 @@ add_library(${PROJECT_NAME} STATIC ${LIBCORO_SOURCE_FILES})
 set_target_properties(${PROJECT_NAME} PROPERTIES LINKER_LANGUAGE CXX PREFIX "")
 target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_20)
 target_include_directories(${PROJECT_NAME} PUBLIC include)
+if(MSVC)
+    # Not sure why this is only needed on Windows.
+    target_include_directories(${PROJECT_NAME} PUBLIC vendor/tartanllama/expected/include)
+endif()
 if(LIBCORO_FEATURE_THREADING)
     target_link_libraries(${PROJECT_NAME} PUBLIC pthread tl::expected)
     target_compile_definitions(${PROJECT_NAME} PUBLIC LIBCORO_FEATURE_THREADING)
