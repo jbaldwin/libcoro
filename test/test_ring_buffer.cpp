@@ -5,11 +5,6 @@
 #include <chrono>
 #include <thread>
 
-TEST_CASE("ring_buffer zero num_elements", "[ring_buffer]")
-{
-    REQUIRE_THROWS(coro::ring_buffer<uint64_t, 0>{});
-}
-
 TEST_CASE("ring_buffer single element", "[ring_buffer]")
 {
     const size_t                   iterations = 10;

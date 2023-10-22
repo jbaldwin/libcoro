@@ -32,15 +32,9 @@ public:
     };
 
     /**
-     * @throws std::runtime_error If `num_elements` == 0.
+     * static_assert If `num_elements` == 0.
      */
-    ring_buffer()
-    {
-        if constexpr (num_elements == 0)
-        {
-            throw std::runtime_error{"num_elements cannot be zero"};
-        }
-    }
+    ring_buffer() { static_assert(num_elements != 0, "num_elements cannot be zero"); }
 
     ~ring_buffer()
     {
