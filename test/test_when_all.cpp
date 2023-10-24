@@ -124,7 +124,6 @@ TEST_CASE("when_all inside coroutine", "[when_all]")
         tasks.emplace_back(make_task(2));
         tasks.emplace_back(make_task(3));
 
-        // auto tasks = std::vector<coro::task<uint64_t>>{make_task(1), make_task(2), make_task(3)};
         auto output_tasks = co_await coro::when_all(std::move(tasks));
 
         uint64_t result{0};
