@@ -1,6 +1,6 @@
 #pragma once
 
-#if (__cplusplus > 202002L)
+#if (__cpp_lib_expected)
     #include <expected>
 namespace coro
 {

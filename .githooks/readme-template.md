@@ -1,4 +1,4 @@
-# libcoro C++20 linux coroutine library
+# libcoro C++20 coroutine library
 
 [![CI](https://github.com/jbaldwin/libcoro/workflows/build/badge.svg)](https://github.com/jbaldwin/libcoro/workflows/build/badge.svg)
 [![Coverage Status](https://coveralls.io/repos/github/jbaldwin/libcoro/badge.svg?branch=issue-1/ci)](https://coveralls.io/github/jbaldwin/libcoro?branch=issue-1/ci)
@@ -386,6 +386,10 @@ Transfer/sec:     18.33MB
         g++13
         clang++16
         clang++17
+        MSVC Windows 2022 CL
+            No io_scheduler support
+            No networking support
+            No SSL support
     CMake
     make or ninja
     pthreads
@@ -409,7 +413,7 @@ This project depends on the following git sub-modules:
  * [libc-ares](https://github.com/c-ares/c-ares) For async DNS resolver, this is a git submodule.
  * [catch2](https://github.com/catchorg/Catch2) For testing, this is embedded in the `test/` directory.
  * [expected](https://github.com/TartanLlama/expected) For results on operations that can fail, this is a git submodule in the `vendor/` directory.
-   * `-std=c++23` will use `std::expected` instead, g++ however with this flag isn't setting a high enough `__cplusplus` value to properly trigger on yet.
+   * `-std=c++23` if it supports `__cpp_lib_expected` will use `std::expected` instead.
 
 #### Building
     mkdir Release && cd Release
@@ -418,15 +422,15 @@ This project depends on the following git sub-modules:
 
 CMake Options:
 
-| Name                          | Default | Description                                                                    |
-|:------------------------------|:--------|:-------------------------------------------------------------------------------|
-| LIBCORO_EXTERNAL_DEPENDENCIES | OFF     | Use CMake find_package to resolve dependencies instead of embedded libraries.  |
-| LIBCORO_BUILD_TESTS           | ON      | Should the tests be built?                                                     |
-| LIBCORO_CODE_COVERAGE         | OFF     | Should code coverage be enabled? Requires tests to be enabled.                 |
-| LIBCORO_BUILD_EXAMPLES        | ON      | Should the examples be built?                                                  |
-| LIBCORO_FEATURE_THREADING     | ON      | Include the features depending on multi-threading support by the standard lib. |
-| LIBCORO_FEATURE_NETWORKING    | ON      | Include networking features.                                                   |
-| LIBCORO_FEATURE_SSL           | ON      | Include SSL features. Requires networking to be enabled.                       |
+| Name                          | Default | Description                                                                                        |
+|:------------------------------|:--------|:---------------------------------------------------------------------------------------------------|
+| LIBCORO_EXTERNAL_DEPENDENCIES | OFF     | Use CMake find_package to resolve dependencies instead of embedded libraries.                      |
+| LIBCORO_BUILD_TESTS           | ON      | Should the tests be built?                                                                         |
+| LIBCORO_CODE_COVERAGE         | OFF     | Should code coverage be enabled? Requires tests to be enabled.                                     |
+| LIBCORO_BUILD_EXAMPLES        | ON      | Should the examples be built?                                                                      |
+| LIBCORO_FEATURE_THREADING     | ON      | Include the features depending on multi-threading support by the standard lib. MSVC not supported. |
+| LIBCORO_FEATURE_NETWORKING    | ON      | Include networking features. MSVC not supported.                                                   |
+| LIBCORO_FEATURE_SSL           | ON      | Include SSL features. Requires networking to be enabled. MSVC not supported.                       |
 
 #### Adding to your project
 
@@ -479,7 +483,7 @@ The tests will automatically be run by github actions on creating a pull request
 
 File bug reports, feature requests and questions using [GitHub libcoro Issues](https://github.com/jbaldwin/libcoro/issues)
 
-Copyright © 2020-2022 Josh Baldwin
+Copyright © 2020-2023 Josh Baldwin
 
 [badge.language]: https://img.shields.io/badge/language-C%2B%2B20-yellow.svg
 [badge.license]: https://img.shields.io/badge/license-Apache--2.0-blue
