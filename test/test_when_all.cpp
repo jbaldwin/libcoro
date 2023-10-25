@@ -107,3 +107,34 @@ TEST_CASE("when_all multple task withs list container", "[when_all]")
 
     REQUIRE(counter == 1850);
 }
+
+TEST_CASE("when_all inside coroutine", "[when_all]")
+{
+    coro::thread_pool tp{};
+    auto              make_task = [&](uint64_t amount) -> coro::task<uint64_t>
+    {
+        co_await tp.schedule();
+        co_return amount;
+    };
+
+    auto runner_task = [&]() -> coro::task<uint64_t>
+    {
+        std::list<coro::task<uint64_t>> tasks;
+        tasks.emplace_back(make_task(1));
+        tasks.emplace_back(make_task(2));
+        tasks.emplace_back(make_task(3));
+
+        auto output_tasks = co_await coro::when_all(std::move(tasks));
+
+        uint64_t result{0};
+        for (const auto& task : output_tasks)
+        {
+            result += task.return_value();
+        }
+        co_return result;
+    };
+
+    auto result = coro::sync_wait(runner_task());
+
+    REQUIRE(result == (1 + 2 + 3));
+}
