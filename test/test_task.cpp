@@ -387,10 +387,11 @@ TEST_CASE("task supports instantiation with non assignable type", "[task]")
     REQUIRE(std::addressof(move_ret.i) == std::addressof(i));
     REQUIRE(move_construct_only::move_count == 2);
 
-    auto move_task2 = [&i]() -> coro::task<move_construct_only> { co_return i; };
-    auto move_ret2  = coro::sync_wait(move_task2());
+    move_construct_only::move_count = 0;
+    auto move_task2                 = [&i]() -> coro::task<move_construct_only> { co_return i; };
+    auto move_ret2                  = coro::sync_wait(move_task2());
     REQUIRE(std::addressof(move_ret2.i) == std::addressof(i));
-    REQUIRE(move_construct_only::move_count == 3);
+    REQUIRE(move_construct_only::move_count == 1);
 
     copy_construct_only::copy_count = 0;
     auto copy_task                  = [&i]() -> coro::task<copy_construct_only> { co_return copy_construct_only(i); };
@@ -398,10 +399,11 @@ TEST_CASE("task supports instantiation with non assignable type", "[task]")
     REQUIRE(copy_ret.i == 42);
     REQUIRE(copy_construct_only::copy_count == 2);
 
-    auto copy_task2 = [&i]() -> coro::task<copy_construct_only> { co_return i; };
-    auto copy_ret2  = coro::sync_wait(copy_task2());
+    copy_construct_only::copy_count = 0;
+    auto copy_task2                 = [&i]() -> coro::task<copy_construct_only> { co_return i; };
+    auto copy_ret2                  = coro::sync_wait(copy_task2());
     REQUIRE(copy_ret2.i == 42);
-    REQUIRE(copy_construct_only::copy_count == 3);
+    REQUIRE(copy_construct_only::copy_count == 1);
 
     move_copy_construct_only::move_count = 0;
     move_copy_construct_only::copy_count = 0;
@@ -415,13 +417,27 @@ TEST_CASE("task supports instantiation with non assignable type", "[task]")
     REQUIRE(move_copy_construct_only::copy_count == 1);
 
     auto make_tuple_task = [&i]() -> coro::task<std::tuple<int, int>> {
-        co_return {i, i};
+        co_return {i, i * 2};
     };
     auto tuple_ret = coro::sync_wait(make_tuple_task());
     REQUIRE(std::get<0>(tuple_ret) == 42);
-    REQUIRE(std::get<1>(tuple_ret) == 42);
+    REQUIRE(std::get<1>(tuple_ret) == 84);
 
     auto  make_ref_task = [&i]() -> coro::task<int&> { co_return std::ref(i); };
     auto& ref_ret       = coro::sync_wait(make_ref_task());
     REQUIRE(std::addressof(ref_ret) == std::addressof(i));
+}
+
+TEST_CASE("task promise sizeof", "[task]")
+{
+    REQUIRE(sizeof(coro::detail::promise<void>) == sizeof(std::coroutine_handle<>) + sizeof(std::exception_ptr));
+    REQUIRE(
+        sizeof(coro::detail::promise<int32_t>) ==
+        sizeof(std::coroutine_handle<>) + sizeof(std::variant<int32_t, std::exception_ptr>));
+    REQUIRE(
+        sizeof(coro::detail::promise<int64_t>) ==
+        sizeof(std::coroutine_handle<>) + sizeof(std::variant<int64_t, std::exception_ptr>));
+    REQUIRE(
+        sizeof(coro::detail::promise<std::vector<int64_t>>) ==
+        sizeof(std::coroutine_handle<>) + sizeof(std::variant<std::vector<int64_t>, std::exception_ptr>));
 }
