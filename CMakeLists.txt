@@ -23,7 +23,7 @@ option(LIBCORO_EXTERNAL_DEPENDENCIES "Use Cmake find_package to resolve dependen
 option(LIBCORO_BUILD_TESTS           "Build the tests, Default=ON." ON)
 option(LIBCORO_CODE_COVERAGE         "Enable code coverage, tests must also be enabled, Default=OFF" OFF)
 option(LIBCORO_BUILD_EXAMPLES        "Build the examples, Default=ON." ON)
-cmake_dependent_option(LIBCORO_FEATURE_THREADING "Include multithreading features, Default=ON." ON "NOT MSVC" OFF)
+cmake_dependent_option(LIBCORO_FEATURE_PLATFORM "Include linux platform features, Default=ON." ON "NOT MSVC" OFF)
 cmake_dependent_option(LIBCORO_FEATURE_NETWORKING "Include networking features, Default=ON." ON "NOT MSVC" OFF)
 cmake_dependent_option(LIBCORO_FEATURE_SSL "Include SSL encryption features, Default=ON." ON "NOT MSVC" OFF)
 
@@ -31,7 +31,7 @@ message("${PROJECT_NAME} LIBCORO_EXTERNAL_DEPENDENCIES = ${LIBCORO_EXTERNAL_DEPE
 message("${PROJECT_NAME} LIBCORO_BUILD_TESTS           = ${LIBCORO_BUILD_TESTS}")
 message("${PROJECT_NAME} LIBCORO_CODE_COVERAGE         = ${LIBCORO_CODE_COVERAGE}")
 message("${PROJECT_NAME} LIBCORO_BUILD_EXAMPLES        = ${LIBCORO_BUILD_EXAMPLES}")
-message("${PROJECT_NAME} LIBCORO_FEATURE_THREADING     = ${LIBCORO_FEATURE_THREADING}")
+message("${PROJECT_NAME} LIBCORO_FEATURE_PLATFORM      = ${LIBCORO_FEATURE_PLATFORM}")
 message("${PROJECT_NAME} LIBCORO_FEATURE_NETWORKING    = ${LIBCORO_FEATURE_NETWORKING}")
 message("${PROJECT_NAME} LIBCORO_FEATURE_SSL           = ${LIBCORO_FEATURE_SSL}")
 
@@ -79,7 +79,7 @@ set(LIBCORO_SOURCE_FILES
     include/coro/when_all.hpp
 )
 
-if(LIBCORO_FEATURE_THREADING)
+if(LIBCORO_FEATURE_PLATFORM)
     list(APPEND LIBCORO_SOURCE_FILES
         include/coro/detail/poll_info.hpp
 
@@ -119,9 +119,9 @@ if(MSVC)
     # Not sure why this is only needed on Windows.
     target_include_directories(${PROJECT_NAME} PUBLIC vendor/tartanllama/expected/include)
 endif()
-if(LIBCORO_FEATURE_THREADING)
+if(LIBCORO_FEATURE_PLATFORM)
     target_link_libraries(${PROJECT_NAME} PUBLIC pthread tl::expected)
-    target_compile_definitions(${PROJECT_NAME} PUBLIC LIBCORO_FEATURE_THREADING)
+    target_compile_definitions(${PROJECT_NAME} PUBLIC LIBCORO_FEATURE_PLATFORM)
 endif()
 if(LIBCORO_FEATURE_NETWORKING)
     target_link_libraries(${PROJECT_NAME} PUBLIC c-ares::cares)

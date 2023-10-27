@@ -26,7 +26,7 @@ if(LIBCORO_FEATURE_NETWORKING)
     )
 endif()
 
-if(LIBCORO_FEATURE_THREADING)
+if(LIBCORO_FEATURE_PLATFORM)
     list(APPEND LIBCORO_TEST_SOURCE_FILES
         bench.cpp
         test_io_scheduler.cpp

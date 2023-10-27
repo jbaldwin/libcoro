@@ -428,7 +428,7 @@ CMake Options:
 | LIBCORO_BUILD_TESTS           | ON      | Should the tests be built?                                                                         |
 | LIBCORO_CODE_COVERAGE         | OFF     | Should code coverage be enabled? Requires tests to be enabled.                                     |
 | LIBCORO_BUILD_EXAMPLES        | ON      | Should the examples be built?                                                                      |
-| LIBCORO_FEATURE_THREADING     | ON      | Include the features depending on multi-threading support by the standard lib. MSVC not supported. |
+| LIBCORO_FEATURE_PLATFORM      | ON      | Include the features depending on the linux platform. MSVC not supported.                          |
 | LIBCORO_FEATURE_NETWORKING    | ON      | Include networking features. MSVC not supported.                                                   |
 | LIBCORO_FEATURE_SSL           | ON      | Include SSL features. Requires networking to be enabled. MSVC not supported.                       |
 
