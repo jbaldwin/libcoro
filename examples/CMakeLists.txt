@@ -10,7 +10,7 @@ target_link_libraries(coro_generator PUBLIC libcoro)
 add_executable(coro_event coro_event.cpp)
 target_link_libraries(coro_event PUBLIC libcoro)
 
-if(LIBCORO_FEATURE_THREADING)
+if(LIBCORO_FEATURE_PLATFORM)
     add_executable(coro_latch coro_latch.cpp)
     target_link_libraries(coro_latch PUBLIC libcoro)
 endif()

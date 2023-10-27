@@ -80,7 +80,7 @@ TEST_CASE("mutex single waiter not locked shared", "[shared_mutex]")
     m.unlock();
 }
 
-#ifdef LIBCORO_FEATURE_THREADING
+#ifdef LIBCORO_FEATURE_PLATFORM
 TEST_CASE("mutex many shared and exclusive waiters interleaved", "[shared_mutex]")
 {
     auto tp = std::make_shared<coro::io_scheduler>(

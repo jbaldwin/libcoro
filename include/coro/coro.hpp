@@ -8,7 +8,7 @@
 
 #include "coro/expected.hpp"
 
-#ifdef LIBCORO_FEATURE_THREADING
+#ifdef LIBCORO_FEATURE_PLATFORM
     #include "coro/io_scheduler.hpp"
     #include "coro/poll.hpp"
 #endif
