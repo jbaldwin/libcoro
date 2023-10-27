@@ -1,9 +1,5 @@
 #pragma once
 
-#if __cplusplus < 202002L
-    #error "libcoro requires C++20 or greater"
-#endif
-
 #include "coro/concepts/awaitable.hpp"
 #include "coro/concepts/buffer.hpp"
 #include "coro/concepts/executor.hpp"
