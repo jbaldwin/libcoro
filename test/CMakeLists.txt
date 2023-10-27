@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.0)
+cmake_minimum_required(VERSION 3.12)
 project(libcoro_test)
 
 set(LIBCORO_TEST_SOURCE_FILES

@@ -6,6 +6,8 @@
 #include "coro/concepts/promise.hpp"
 #include "coro/concepts/range_of.hpp"
 
+#include "coro/expected.hpp"
+
 #ifdef LIBCORO_FEATURE_THREADING
     #include "coro/io_scheduler.hpp"
     #include "coro/poll.hpp"
