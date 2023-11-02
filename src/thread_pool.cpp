@@ -66,6 +66,9 @@ auto thread_pool::shutdown() noexcept -> void
             std::unique_lock<std::mutex> lk{m_wait_mutex};
             m_wait_cv.notify_all();
         }
+#else
+        m_wait_cv.notify_all();
+#endif
 
         for (auto& thread : m_threads)
         {
@@ -94,7 +97,6 @@ auto thread_pool::executor(std::size_t idx) -> void
                 return m_size.load(std::memory_order::acquire) > 0 ||
                        m_shutdown_requested.load(std::memory_order::acquire);
             });
-
         // Process this batch until the queue is empty.
         while (!m_queue.empty())
         {
