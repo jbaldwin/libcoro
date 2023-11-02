@@ -12,7 +12,7 @@
 #include <mutex>
 #include <optional>
 #include <ranges>
-#ifdef LIBCORO_USE_JTHREADS
+#ifdef __cpp_lib_jthread
     #include <stop_token>
 #endif
 #include <thread>
@@ -218,7 +218,7 @@ private:
     /// The configuration options.
     options m_opts;
     /// The background executor threads.
-#ifdef LIBCORO_USE_JTHREADS
+#ifdef __cpp_lib_jthread
     std::vector<std::jthread> m_threads;
 #else
     std::vector<std::thread> m_threads;
@@ -235,7 +235,7 @@ private:
      * @param stop_token Token which signals when shutdown() has been called.
      * @param idx The executor's idx for internal data structure accesses.
      */
-#ifdef LIBCORO_USE_JTHREADS
+#ifdef __cpp_lib_jthread
     auto executor(std::stop_token stop_token, std::size_t idx) -> void;
 #else
     auto                     executor(std::size_t idx) -> void;
