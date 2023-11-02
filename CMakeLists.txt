@@ -128,11 +128,6 @@ set_target_properties(${PROJECT_NAME} PROPERTIES LINKER_LANGUAGE CXX PREFIX "")
 target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_20)
 target_include_directories(${PROJECT_NAME} PUBLIC include)
 
-if(NOT DEFINED EMSCRIPTEN)
-  # emsdk does not yet support jthreads
-  target_compile_definitions(${PROJECT_NAME} PUBLIC LIBCORO_USE_JTHREADS)
-endif()
-
 if(LIBCORO_FEATURE_PLATFORM)
     target_compile_definitions(${PROJECT_NAME} PUBLIC LIBCORO_FEATURE_PLATFORM)
 endif()
