@@ -12,6 +12,9 @@
 #include <mutex>
 #include <optional>
 #include <ranges>
+#ifdef LIBCORO_USE_JTHREADS
+    #include <stop_token>
+#endif
 #include <thread>
 #include <variant>
 #include <vector>
@@ -215,7 +218,11 @@ private:
     /// The configuration options.
     options m_opts;
     /// The background executor threads.
+#ifdef LIBCORO_USE_JTHREADS
     std::vector<std::jthread> m_threads;
+#else
+    std::vector<std::thread> m_threads;
+#endif
 
     /// Mutex for executor threads to sleep on the condition variable.
     std::mutex m_wait_mutex;
@@ -228,7 +235,11 @@ private:
      * @param stop_token Token which signals when shutdown() has been called.
      * @param idx The executor's idx for internal data structure accesses.
      */
+#ifdef LIBCORO_USE_JTHREADS
     auto executor(std::stop_token stop_token, std::size_t idx) -> void;
+#else
+    auto                     executor(std::size_t idx) -> void;
+#endif
 
     /**
      * @param handle Schedules the given coroutine to be executed upon the first available thread.

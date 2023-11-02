@@ -11,7 +11,7 @@ template<typename E>
 using unexpected = std::unexpected<E>;
 } // namespace coro
 #else
-    #include <tl/expected.hpp>
+    #include "coro/detail/tl_expected.hpp"
 namespace coro
 {
 template<typename T, typename E>
