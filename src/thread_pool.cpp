@@ -66,9 +66,7 @@ auto thread_pool::shutdown() noexcept -> void
             std::unique_lock<std::mutex> lk{m_wait_mutex};
             m_wait_cv.notify_all();
         }
-#else
         m_wait_cv.notify_all();
-#endif
 
         for (auto& thread : m_threads)
         {
@@ -86,6 +84,7 @@ auto thread_pool::executor(std::size_t idx) -> void
     {
         m_opts.on_thread_start_functor(idx);
     }
+
 
     // Process until shutdown is requested and the total number of tasks reaches zero.
     while (!m_shutdown_requested.load(std::memory_order::acquire) || m_size.load(std::memory_order::acquire) > 0)

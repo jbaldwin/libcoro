@@ -129,8 +129,10 @@ target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_20)
 target_include_directories(${PROJECT_NAME} PUBLIC include)
 
 if(LIBCORO_FEATURE_PLATFORM)
+    target_link_libraries(${PROJECT_NAME} PUBLIC pthread)
     target_compile_definitions(${PROJECT_NAME} PUBLIC LIBCORO_FEATURE_PLATFORM)
-endif()
+  endif()
+
 if(LIBCORO_FEATURE_NETWORKING)
     target_link_libraries(${PROJECT_NAME} PUBLIC c-ares::cares)
     target_compile_definitions(${PROJECT_NAME} PUBLIC LIBCORO_FEATURE_NETWORKING)

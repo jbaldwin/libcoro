@@ -12,9 +12,6 @@
 #include <mutex>
 #include <optional>
 #include <ranges>
-#ifdef __cpp_lib_jthread
-    #include <stop_token>
-#endif
 #include <thread>
 #include <variant>
 #include <vector>
@@ -228,7 +225,6 @@ private:
      * Each background thread runs from this function.
      * @param idx The executor's idx for internal data structure accesses.
      */
-
     auto executor(std::size_t idx) -> void;
     /**
      * @param handle Schedules the given coroutine to be executed upon the first available thread.
