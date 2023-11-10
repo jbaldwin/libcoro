@@ -24,11 +24,7 @@ thread_pool::thread_pool(options opts) : m_opts(std::move(opts))
 
     for (uint32_t i = 0; i < m_opts.thread_count; ++i)
     {
-#ifdef __cpp_lib_jthread
-        m_threads.emplace_back([this, i](std::stop_token st) { executor(std::move(st), i); });
-#else
         m_threads.emplace_back([this, i]() { executor(i); });
-#endif
     }
 }
 
@@ -64,14 +60,7 @@ auto thread_pool::shutdown() noexcept -> void
     // Only allow shutdown to occur once.
     if (m_shutdown_requested.exchange(true, std::memory_order::acq_rel) == false)
     {
-#ifdef __cpp_lib_jthread
-        for (auto& thread : m_threads)
-        {
-            thread.request_stop();
-        }
-#else
         m_wait_cv.notify_all();
-#endif
 
         for (auto& thread : m_threads)
         {
@@ -83,32 +72,20 @@ auto thread_pool::shutdown() noexcept -> void
     }
 }
 
-#ifdef __cpp_lib_jthread
-auto thread_pool::executor(std::stop_token stop_token, std::size_t idx) -> void
-#else
 auto thread_pool::executor(std::size_t idx) -> void
-#endif
 {
     if (m_opts.on_thread_start_functor != nullptr)
     {
         m_opts.on_thread_start_functor(idx);
     }
 
-#ifdef __cpp_lib_jthread
-    while (!stop_token.stop_requested())
-#else
     while (!m_shutdown_requested.load(std::memory_order::relaxed))
-#endif
     {
         // Wait until the queue has operations to execute or shutdown has been requested.
         while (true)
         {
             std::unique_lock<std::mutex> lk{m_wait_mutex};
-#ifdef __cpp_lib_jthread
-            m_wait_cv.wait(lk, stop_token, [this] { return !m_queue.empty(); });
-#else
             m_wait_cv.wait(lk, [this] { return !m_queue.empty() or m_shutdown_requested; });
-#endif
             if (m_queue.empty())
             {
                 lk.unlock(); // would happen on scope destruction, but being explicit/faster(?)
