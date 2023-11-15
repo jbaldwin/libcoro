@@ -24,7 +24,7 @@ public:
      * @param count The number of tasks to wait to complete, if this is zero or negative then the
      *              latch starts 'completed' immediately and execution is resumed with no suspension.
      */
-    latch(std::ptrdiff_t count) noexcept : m_count(count), m_event(count <= 0) {}
+    latch(std::int64_t count) noexcept : m_count(count), m_event(count <= 0) {}
 
     latch(const latch&)                    = delete;
     latch(latch&&)                         = delete;
@@ -45,7 +45,7 @@ public:
      * If the latch counter goes to zero then the task awaiting the latch is resumed.
      * @param n The number of tasks to complete towards the latch, defaults to 1.
      */
-    auto count_down(std::ptrdiff_t n = 1) noexcept -> void
+    auto count_down(std::int64_t n = 1) noexcept -> void
     {
         if (m_count.fetch_sub(n, std::memory_order::acq_rel) <= n)
         {
@@ -54,12 +54,12 @@ public:
     }
 
     /**
-     * If the latch counter goes to then the task awaiting the latch is resumed on the given
+     * If the latch counter goes to zero then the task awaiting the latch is resumed on the given
      * thread pool.
      * @param tp The thread pool to schedule the task that is waiting on the latch on.
      * @param n The number of tasks to complete towards the latch, defaults to 1.
      */
-    auto count_down(coro::thread_pool& tp, std::ptrdiff_t n = 1) noexcept -> void
+    auto count_down(coro::thread_pool& tp, std::int64_t n = 1) noexcept -> void
     {
         if (m_count.fetch_sub(n, std::memory_order::acq_rel) <= n)
         {
@@ -71,8 +71,8 @@ public:
 
 private:
     /// The number of tasks to wait for completion before triggering the event to resume.
-    std::atomic<std::ptrdiff_t> m_count;
-    /// The event to trigger when the latch counter reaches zero, this resume the coroutine that
+    std::atomic<std::int64_t> m_count;
+    /// The event to trigger when the latch counter reaches zero, this resumes the coroutine that
     /// is co_await'ing on the latch.
     event m_event;
 };
