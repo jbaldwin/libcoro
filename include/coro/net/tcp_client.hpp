@@ -33,7 +33,7 @@ public:
         uint16_t port{8080};
 #ifdef LIBCORO_FEATURE_SSL
         /// Should this tcp_client connect using a secure connection SSL/TLS?
-        ssl_context* ssl_ctx{nullptr};
+        std::shared_ptr<ssl_context> ssl_ctx{nullptr};
 #endif
     };
 

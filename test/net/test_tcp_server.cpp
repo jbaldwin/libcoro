@@ -89,11 +89,6 @@ TEST_CASE("tcp_server with ssl", "[tcp_server]")
     auto scheduler = std::make_shared<coro::io_scheduler>(
         coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
 
-    coro::net::ssl_context client_ssl_context{};
-
-    coro::net::ssl_context server_ssl_context{
-        "cert.pem", coro::net::ssl_file_type::pem, "key.pem", coro::net::ssl_file_type::pem};
-
     std::string client_msg = "Hello world from SSL client!";
     std::string server_msg = "Hello world from SSL server!!";
 
@@ -101,7 +96,8 @@ TEST_CASE("tcp_server with ssl", "[tcp_server]")
     {
         co_await scheduler->schedule();
 
-        coro::net::tcp_client client{scheduler, coro::net::tcp_client::options{.ssl_ctx = &client_ssl_context}};
+        coro::net::tcp_client client{
+            scheduler, coro::net::tcp_client::options{.ssl_ctx = std::make_shared<coro::net::ssl_context>()}};
 
         std::cerr << "client.connect()\n";
         auto cstatus = co_await client.connect();
@@ -158,7 +154,11 @@ TEST_CASE("tcp_server with ssl", "[tcp_server]")
     {
         co_await scheduler->schedule();
 
-        coro::net::tcp_server server{scheduler, coro::net::tcp_server::options{.ssl_ctx = &server_ssl_context}};
+        coro::net::tcp_server server{
+            scheduler,
+            coro::net::tcp_server::options{
+                .ssl_ctx = std::make_shared<coro::net::ssl_context>(
+                    "cert.pem", coro::net::ssl_file_type::pem, "key.pem", coro::net::ssl_file_type::pem)}};
 
         std::cerr << "server.poll()\n";
         auto pstatus = co_await server.poll();
