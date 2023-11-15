@@ -33,7 +33,7 @@ public:
 #ifdef LIBCORO_FEATURE_SSL
         /// Should this tcp server use TLS/SSL?  If provided all accepted connections will use the
         /// given SSL certificate and private key to secure the connections.
-        ssl_context* ssl_ctx{nullptr};
+        std::shared_ptr<ssl_context> ssl_ctx{nullptr};
 #endif
     };
 
