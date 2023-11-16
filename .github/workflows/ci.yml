@@ -281,8 +281,8 @@ jobs:
             -   name: test-release-cl
                 run: |
                     cd build-release-cl
-    build-emscripten-3.1.45:
-        name: emscripten-3.1.45
+    build-emscripten-3_1_45:
+        name: emscripten-3_1_45
         runs-on: ubuntu-latest
         container:
             image: ubuntu:22.04
