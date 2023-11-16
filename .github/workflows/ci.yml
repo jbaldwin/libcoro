@@ -299,7 +299,7 @@ jobs:
                         cmake \
                         git \
                         ninja-build \
-                        node
+                        node.js
             -   name: Checkout
                 uses: actions/checkout@v2
                 with:
