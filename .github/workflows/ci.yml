@@ -316,7 +316,7 @@ jobs:
                     cd emsdk
                     . ./emsdk_env.sh
                     cd ..
-                    mkdir build-release-em
+                    mkdir build-release-emscripten
                     cd build-release-emscripten
                     emcmake cmake \
                         -GNinja \
