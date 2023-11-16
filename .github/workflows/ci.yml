@@ -308,11 +308,8 @@ jobs:
             -   name: install-emsdk
                 run: |
                     git clone https://github.com/emscripten-core/emsdk.git
-                    pwd
-                    ls -l emsdk
-                    cd ./emsdk
-                    emsdk install 3.1.45
-                    emsdk activate 3.1.45
+                    ./emsdk install 3.1.45
+                    ./emsdk activate 3.1.45
             -   name: build-release-emscripten
                 run: |
                     cd emsdk
