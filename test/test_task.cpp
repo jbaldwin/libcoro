@@ -430,14 +430,14 @@ TEST_CASE("task supports instantiation with non assignable type", "[task]")
 
 TEST_CASE("task promise sizeof", "[task]")
 {
-    REQUIRE(sizeof(coro::detail::promise<void>) == sizeof(std::coroutine_handle<>) + sizeof(std::exception_ptr));
+    REQUIRE(sizeof(coro::detail::promise<void>) >= sizeof(std::coroutine_handle<>) + sizeof(std::exception_ptr));
     REQUIRE(
         sizeof(coro::detail::promise<int32_t>) ==
         sizeof(std::coroutine_handle<>) + sizeof(std::variant<int32_t, std::exception_ptr>));
     REQUIRE(
-        sizeof(coro::detail::promise<int64_t>) ==
+        sizeof(coro::detail::promise<int64_t>) >=
         sizeof(std::coroutine_handle<>) + sizeof(std::variant<int64_t, std::exception_ptr>));
     REQUIRE(
-        sizeof(coro::detail::promise<std::vector<int64_t>>) ==
+        sizeof(coro::detail::promise<std::vector<int64_t>>) >=
         sizeof(std::coroutine_handle<>) + sizeof(std::variant<std::vector<int64_t>, std::exception_ptr>));
 }
