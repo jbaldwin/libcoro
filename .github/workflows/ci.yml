@@ -299,8 +299,7 @@ jobs:
                         cmake \
                         git \
                         ninja-build \
-                        g++-10 \
-                        libssl-dev
+                        node
             -   name: Checkout
                 uses: actions/checkout@v2
                 with:
@@ -327,4 +326,3 @@ jobs:
                 run: |
                     cd build-release-emscripten
                     node ./test/libcoro_test.js
-                    ctest --build-config Release -VV
