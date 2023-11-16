@@ -314,7 +314,7 @@ jobs:
             -   name: build-release-emscripten
                 run: |
                     cd emsdk
-                    source ./emsdk_env.sh
+                    . ./emsdk_env.sh
                     cd ..
                     mkdir build-release-em
                     cd build-release-emscripten
