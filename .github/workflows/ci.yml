@@ -307,14 +307,12 @@ jobs:
                 with:
                     submodules: recursive
             -   name: install-emsdk
-                needs: Checkout
                 run: |
                     git clone https://github.com/emscripten-core/emsdk.git
                     cd emsdk
                     emsdk install 3.1.45
                     emsdk activate 3.1.45
             -   name: build-release-emscripten
-                needs: install-emsdk
                 run: |
                     cd emsdk
                     source ./emsdk_env.sh
