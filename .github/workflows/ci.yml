@@ -325,4 +325,4 @@ jobs:
             -   name: test-release-emscripten
                 run: |
                     cd build-release-emscripten
-                    node ./test/libcoro_test.js
+                    node --experimental-wasm-eh ./test/libcoro_test.js
