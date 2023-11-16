@@ -298,8 +298,7 @@ jobs:
                     apt-get install -y \
                         cmake \
                         git \
-                        ninja-build \
-                        nodejs
+                        ninja-build
             -   name: Checkout
                 uses: actions/checkout@v2
                 with:
@@ -324,5 +323,7 @@ jobs:
                     ninja
             -   name: test-release-emscripten
                 run: |
-                    cd build-release-emscripten
+                    cd emsdk
+                    . ./emsdk_env.sh
+                    cd ../build-release-emscripten
                     node --experimental-wasm-eh ./test/libcoro_test.js
