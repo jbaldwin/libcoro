@@ -3,6 +3,7 @@
 #include <coro/coro.hpp>
 
 #include <list>
+#include <ranges>
 #include <vector>
 
 TEST_CASE("when_all single task with tuple container", "[when_all]")
@@ -136,5 +137,36 @@ TEST_CASE("when_all inside coroutine", "[when_all]")
 
     auto result = coro::sync_wait(runner_task());
 
+    REQUIRE(result == (1 + 2 + 3));
+}
+
+TEST_CASE("when_all use std::ranges::view", "[when_all]")
+{
+    coro::thread_pool tp{};
+
+    auto make_task = [&](uint64_t amount) -> coro::task<uint64_t>
+    {
+        co_await tp.schedule();
+        co_return amount;
+    };
+
+    auto make_runner_task = [&]() -> coro::task<uint64_t>
+    {
+        std::vector<coro::task<uint64_t>> tasks;
+        tasks.emplace_back(make_task(1));
+        tasks.emplace_back(make_task(2));
+        tasks.emplace_back(make_task(3));
+
+        auto output_tasks = co_await coro::when_all(std::ranges::views::all(tasks));
+
+        uint64_t result{0};
+        for (const auto& task : output_tasks)
+        {
+            result += task.return_value();
+        }
+        co_return result;
+    };
+
+    auto result = coro::sync_wait(make_runner_task());
     REQUIRE(result == (1 + 2 + 3));
 }
