@@ -482,7 +482,7 @@ template<
     }
 
     // Wrap each task into a when_all_task.
-    for (auto& a : awaitables)
+    for (auto&& a : awaitables)
     {
         output_tasks.emplace_back(detail::make_when_all_task(std::move(a)));
     }
