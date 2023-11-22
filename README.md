@@ -61,7 +61,7 @@ int main()
 
     // Create a task that awaits the doubling of its given value and
     // then returns the result after adding 5.
-    auto double_and_add_5_task = [${EXAMPLE_CORO_TASK_CPP}](uint64_t input) -> coro::task<uint64_t> {
+    auto double_and_add_5_task = [&](uint64_t input) -> coro::task<uint64_t> {
         auto doubled = co_await double_task(input);
         co_return doubled + 5;
     };
@@ -81,14 +81,14 @@ int main()
         // While the default move constructors will work for this struct the example
         // inserts explicit print statements to show the task is moving the value
         // out correctly.
-        expensive_struct(const expensive_struct${EXAMPLE_CORO_TASK_CPP}) = delete;
-        auto operator=(const expensive_struct${EXAMPLE_CORO_TASK_CPP}) -> expensive_struct${EXAMPLE_CORO_TASK_CPP} = delete;
+        expensive_struct(const expensive_struct&) = delete;
+        auto operator=(const expensive_struct&) -> expensive_struct& = delete;
 
-        expensive_struct(expensive_struct${EXAMPLE_CORO_TASK_CPP}${EXAMPLE_CORO_TASK_CPP} other) : id(std::move(other.id)), records(std::move(other.records))
+        expensive_struct(expensive_struct&& other) : id(std::move(other.id)), records(std::move(other.records))
         {
             std::cout << "expensive_struct() move constructor called\n";
         }
-        auto operator=(expensive_struct${EXAMPLE_CORO_TASK_CPP}${EXAMPLE_CORO_TASK_CPP} other) -> expensive_struct${EXAMPLE_CORO_TASK_CPP}
+        auto operator=(expensive_struct&& other) -> expensive_struct&
         {
             if (std::addressof(other) != this)
             {
@@ -198,7 +198,7 @@ int main()
     coro::event e;
 
     // These tasks will wait until the given event has been set before advancing.
-    auto make_wait_task = [](const coro::event${EXAMPLE_CORO_EVENT_CPP} e, uint64_t i) -> coro::task<void> {
+    auto make_wait_task = [](const coro::event& e, uint64_t i) -> coro::task<void> {
         std::cout << "task " << i << " is waiting on the event...\n";
         co_await e;
         std::cout << "task " << i << " event triggered, now resuming.\n";
@@ -206,7 +206,7 @@ int main()
     };
 
     // This task will trigger the event allowing all waiting tasks to proceed.
-    auto make_set_task = [](coro::event${EXAMPLE_CORO_EVENT_CPP} e) -> coro::task<void> {
+    auto make_set_task = [](coro::event& e) -> coro::task<void> {
         std::cout << "set task is triggering the event\n";
         e.set();
         co_return;
@@ -245,7 +245,7 @@ int main()
     coro::io_scheduler tp{coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}}};
 
     // This task will wait until the given latch setters have completed.
-    auto make_latch_task = [](coro::latch${EXAMPLE_CORO_LATCH_CPP} l) -> coro::task<void> {
+    auto make_latch_task = [](coro::latch& l) -> coro::task<void> {
         // It seems like the dependent worker tasks could be created here, but in that case it would
         // be superior to simply do: `co_await coro::when_all(tasks);`
         // It is also important to note that the last dependent task will resume the waiting latch
@@ -261,7 +261,7 @@ int main()
 
     // This task does 'work' and counts down on the latch when completed.  The final child task to
     // complete will end up resuming the latch task when the latch's count reaches zero.
-    auto make_worker_task = [](coro::io_scheduler${EXAMPLE_CORO_LATCH_CPP} tp, coro::latch${EXAMPLE_CORO_LATCH_CPP} l, int64_t i) -> coro::task<void> {
+    auto make_worker_task = [](coro::io_scheduler& tp, coro::latch& l, int64_t i) -> coro::task<void> {
         // Schedule the worker task onto the thread pool.
         co_await tp.schedule();
         std::cout << "worker task " << i << " is working...\n";
@@ -324,7 +324,7 @@ int main()
     std::vector<uint64_t> output{};
     coro::mutex           mutex;
 
-    auto make_critical_section_task = [${EXAMPLE_CORO_MUTEX_CPP}](uint64_t i) -> coro::task<void> {
+    auto make_critical_section_task = [&](uint64_t i) -> coro::task<void> {
         co_await tp.schedule();
         // To acquire a mutex lock co_await its lock() function.  Upon acquiring the lock the
         // lock() function returns a coro::scoped_lock that holds the mutex and automatically
@@ -348,7 +348,7 @@ int main()
 
     // The output will be variable per run depending on how the tasks are picked up on the
     // thread pool workers.
-    for (const auto${EXAMPLE_CORO_MUTEX_CPP} value : output)
+    for (const auto& value : output)
     {
         std::cout << value << ", ";
     }
@@ -384,7 +384,7 @@ int main()
     auto               tp = std::make_shared<coro::thread_pool>(coro::thread_pool::options{.thread_count = 1});
     coro::shared_mutex mutex{tp};
 
-    auto make_shared_task = [${EXAMPLE_CORO_SHARED_MUTEX_CPP}](uint64_t i) -> coro::task<void> {
+    auto make_shared_task = [&](uint64_t i) -> coro::task<void> {
         co_await tp->schedule();
         {
             std::cerr << "shared task " << i << " lock_shared()\n";
@@ -398,7 +398,7 @@ int main()
         co_return;
     };
 
-    auto make_exclusive_task = [${EXAMPLE_CORO_SHARED_MUTEX_CPP}]() -> coro::task<void> {
+    auto make_exclusive_task = [&]() -> coro::task<void> {
         co_await tp->schedule();
 
         std::cerr << "exclusive task lock()\n";
@@ -468,7 +468,7 @@ int main()
     coro::thread_pool tp{coro::thread_pool::options{.thread_count = 8}};
     coro::semaphore   semaphore{2};
 
-    auto make_rate_limited_task = [${EXAMPLE_CORO_SEMAPHORE_CPP}](uint64_t task_num) -> coro::task<void>
+    auto make_rate_limited_task = [&](uint64_t task_num) -> coro::task<void>
     {
         co_await tp.schedule();
 
@@ -521,7 +521,7 @@ int main()
 
     std::vector<coro::task<void>> tasks{};
 
-    auto make_producer_task = [${EXAMPLE_CORO_RING_BUFFER_CPP}]() -> coro::task<void>
+    auto make_producer_task = [&]() -> coro::task<void>
     {
         co_await tp.schedule();
 
@@ -546,7 +546,7 @@ int main()
         co_return;
     };
 
-    auto make_consumer_task = [${EXAMPLE_CORO_RING_BUFFER_CPP}](size_t id) -> coro::task<void>
+    auto make_consumer_task = [&](size_t id) -> coro::task<void>
     {
         co_await tp.schedule();
 
@@ -623,7 +623,7 @@ int main()
             std::cout << "thread pool worker " << worker_idx << " is shutting down.\n";
         }}};
 
-    auto offload_task = [${EXAMPLE_CORO_THREAD_POOL_CPP}](uint64_t child_idx) -> coro::task<uint64_t> {
+    auto offload_task = [&](uint64_t child_idx) -> coro::task<uint64_t> {
         // Start by scheduling this offload worker task onto the thread pool.
         co_await tp.schedule();
         // Now any code below this schedule() line will be executed on one of the thread pools
@@ -654,7 +654,7 @@ int main()
         co_return calculation;
     };
 
-    auto primary_task = [${EXAMPLE_CORO_THREAD_POOL_CPP}]() -> coro::task<uint64_t> {
+    auto primary_task = [&]() -> coro::task<uint64_t> {
         const size_t                      num_children{10};
         std::vector<coro::task<uint64_t>> child_tasks{};
         child_tasks.reserve(num_children);
@@ -668,7 +668,7 @@ int main()
 
         // Sum up the results of the completed child tasks.
         size_t calculation{0};
-        for (const auto${EXAMPLE_CORO_THREAD_POOL_CPP} task : results)
+        for (const auto& task : results)
         {
             calculation += task.return_value();
         }
@@ -749,7 +749,7 @@ int main()
             },
         .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_on_thread_pool});
 
-    auto make_server_task = [${EXAMPLE_CORO_IO_SCHEDULER_CPP}]() -> coro::task<void>
+    auto make_server_task = [&]() -> coro::task<void>
     {
         // Start by creating a tcp server, we'll do this before putting it into the scheduler so
         // it is immediately available for the client to connect since this will create a socket,
@@ -837,7 +837,7 @@ int main()
         co_return;
     };
 
-    auto make_client_task = [${EXAMPLE_CORO_IO_SCHEDULER_CPP}]() -> coro::task<void>
+    auto make_client_task = [&]() -> coro::task<void>
     {
         // Immediately schedule onto the scheduler.
         co_await scheduler->schedule();
@@ -900,7 +900,7 @@ int main()
     auto scheduler = std::make_shared<coro::io_scheduler>(
         coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
 
-    auto make_server_task = [${EXAMPLE_CORO_TASK_CONTAINER_CPP}]() -> coro::task<void> {
+    auto make_server_task = [&]() -> coro::task<void> {
         // This is the task that will handle processing a client's requests.
         auto serve_client = [](coro::net::tcp_client client) -> coro::task<void> {
             size_t requests{1};
@@ -951,7 +951,7 @@ int main()
         co_return;
     };
 
-    auto make_client_task = [${EXAMPLE_CORO_TASK_CONTAINER_CPP}](size_t request_count) -> coro::task<void> {
+    auto make_client_task = [&](size_t request_count) -> coro::task<void> {
         co_await scheduler->schedule();
         coro::net::tcp_client client{scheduler};
 
@@ -1021,7 +1021,7 @@ Completed 10000000 requests
 Finished 10000000 requests
 
 
-Server Software:
+Server Software:        
 Server Hostname:        127.0.0.1
 Server Port:            8888
 
@@ -1112,6 +1112,8 @@ This project uses git submodules, to properly checkout this project use:
 This project depends on the following git sub-modules:
  * [libc-ares](https://github.com/c-ares/c-ares) For async DNS resolver, this is a git submodule.
  * [catch2](https://github.com/catchorg/Catch2) For testing, this is embedded in the `test/` directory.
+ * [expected](https://github.com/TartanLlama/expected) For results on operations that can fail, this is a git submodule in the `vendor/` directory.
+   * `-std=c++23` if it supports `__cpp_lib_expected` will use `std::expected` instead.
 
 #### Building
     mkdir Release && cd Release
