@@ -76,6 +76,7 @@ set(LIBCORO_SOURCE_FILES
     include/coro/task.hpp
     include/coro/task_container.hpp
     include/coro/thread_pool.hpp src/thread_pool.cpp
+    include/coro/time.hpp
     include/coro/when_all.hpp
 )
 

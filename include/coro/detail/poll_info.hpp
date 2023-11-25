@@ -2,9 +2,9 @@
 
 #include "coro/fd.hpp"
 #include "coro/poll.hpp"
+#include "coro/time.hpp"
 
 #include <atomic>
-#include <chrono>
 #include <coroutine>
 #include <map>
 #include <optional>
@@ -26,9 +26,7 @@ namespace coro::detail
  */
 struct poll_info
 {
-    using clock        = std::chrono::steady_clock;
-    using time_point   = clock::time_point;
-    using timed_events = std::multimap<time_point, detail::poll_info*>;
+    using timed_events = std::multimap<coro::time_point, detail::poll_info*>;
 
     poll_info()  = default;
     ~poll_info() = default;
