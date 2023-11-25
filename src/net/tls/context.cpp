@@ -1,26 +1,25 @@
-#include "coro/net/ssl_context.hpp"
+#include "coro/net/tls/context.hpp"
 
 #include <iostream>
 
-namespace coro::net
+namespace coro::net::tls
 {
-uint64_t   ssl_context::m_ssl_context_count{0};
-std::mutex ssl_context::m_ssl_context_mutex{};
+static uint64_t   g_tls_context_count{0};
+static std::mutex g_tls_context_mutex{};
 
-ssl_context::ssl_context()
+context::context(verify_peer_t verify_peer)
 {
     {
-        std::scoped_lock g{m_ssl_context_mutex};
-        if (m_ssl_context_count == 0)
+        std::scoped_lock g{g_tls_context_mutex};
+        if (g_tls_context_count == 0)
         {
-
 #if defined(OPENSSL_VERSION_NUMBER) && OPENSSL_VERSION_NUMBER >= 0x10100000L
             OPENSSL_init_ssl(0, nullptr);
 #else
             SSL_library_init();
 #endif
         }
-        ++m_ssl_context_count;
+        ++g_tls_context_count;
     }
 
 #if !defined(LIBRESSL_VERSION_NUMBER) && OPENSSL_VERSION_NUMBER >= 0x10100000L
@@ -35,14 +34,22 @@ ssl_context::ssl_context()
 
     // Disable SSLv3
     SSL_CTX_set_options(m_ssl_ctx, SSL_OP_ALL | SSL_OP_NO_SSLv3);
+    // Abort handshake if certificate verification fails.
+    if (verify_peer == verify_peer_t::yes)
+    {
+        SSL_CTX_set_verify(m_ssl_ctx, SSL_VERIFY_PEER, NULL);
+    }
+    // Set the minimum TLS version, as of this TLSv1.1 or earlier are deprecated.
+    SSL_CTX_set_min_proto_version(m_ssl_ctx, TLS1_2_VERSION);
 }
 
-ssl_context::ssl_context(
+context::context(
     std::filesystem::path certificate,
-    ssl_file_type         certificate_type,
+    tls_file_type         certificate_type,
     std::filesystem::path private_key,
-    ssl_file_type         private_key_type)
-    : ssl_context()
+    tls_file_type         private_key_type,
+    verify_peer_t         verify_peer)
+    : context(verify_peer)
 {
     if (auto r = SSL_CTX_use_certificate_file(m_ssl_ctx, certificate.c_str(), static_cast<int>(certificate_type));
         r != 1)
@@ -62,7 +69,7 @@ ssl_context::ssl_context(
     }
 }
 
-ssl_context::~ssl_context()
+context::~context()
 {
     if (m_ssl_ctx != nullptr)
     {
@@ -71,4 +78,4 @@ ssl_context::~ssl_context()
     }
 }
 
-} // namespace coro::net
+} // namespace coro::net::tls

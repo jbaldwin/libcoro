@@ -32,13 +32,13 @@
         - Currently uses an epoll driver
     - [coro::task_container](#task_container) for dynamic task lifetimes
 * Coroutine Networking
-    - coro::net::dns_resolver for async dns
+    - coro::net::dns::resolver for async dns
         - Uses libc-ares
-    - [coro::net::tcp_client](#io_scheduler)
-        - Supports SSL/TLS via OpenSSL
-    - [coro::net::tcp_server](#io_scheduler)
-        - Supports SSL/TLS via OpenSSL
-    - coro::net::udp_peer
+    - [coro::net::tcp::client](#io_scheduler)
+    - [coro::net::tcp::server](#io_scheduler)
+    - coro::net::tls::client (OpenSSL)
+    - coro::net::tls::server (OpenSSL)
+    - coro::net::udp::peer
 * [Example TCP/HTTP Echo Server](#tcp_echo_server)
 
 ## Usage
@@ -718,7 +718,7 @@ The `coro::io_scheduler` can use a dedicated spawned thread for processing event
 
 Before getting to an example there are two methods of scheduling work onto an i/o scheduler, the first is by having the caller maintain the lifetime of the task being scheduled and the second is by moving or transfering owership of the task into the i/o scheduler.  The first can allow for return values but requires the caller to manage the lifetime of the coroutine while the second requires the return type of the task to be void but allows for variable or unknown task lifetimes.  Transferring task lifetime to the scheduler can be useful, e.g. for a network request.
 
-The example provided here shows an i/o scheduler that spins up a basic `coro::net::tcp_server` and a `coro::net::tcp_client` that will connect to each other and then send a request and a response.
+The example provided here shows an i/o scheduler that spins up a basic `coro::net::tcp::server` and a `coro::net::tcp::client` that will connect to each other and then send a request and a response.
 
 ```C++
 #include <coro/coro.hpp>
@@ -753,9 +753,9 @@ int main()
     {
         // Start by creating a tcp server, we'll do this before putting it into the scheduler so
         // it is immediately available for the client to connect since this will create a socket,
-        // bind the socket and start listening on that socket.  See tcp_server for more details on
+        // bind the socket and start listening on that socket.  See tcp::server for more details on
         // how to specify the local address and port to bind to as well as enabling SSL/TLS.
-        coro::net::tcp_server server{scheduler};
+        coro::net::tcp::server server{scheduler};
 
         // Now scheduler this task onto the scheduler.
         co_await scheduler->schedule();
@@ -842,9 +842,9 @@ int main()
         // Immediately schedule onto the scheduler.
         co_await scheduler->schedule();
 
-        // Create the tcp_client with the default settings, see tcp_client for how to set the
+        // Create the tcp::client with the default settings, see tcp::client for how to set the
         // ip address, port, and optionally enabling SSL/TLS.
-        coro::net::tcp_client client{scheduler};
+        coro::net::tcp::client client{scheduler};
 
         // Ommitting error checking code for the client, each step should check the status and
         // verify the number of bytes sent or received.
@@ -900,9 +900,11 @@ int main()
     auto scheduler = std::make_shared<coro::io_scheduler>(
         coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
 
-    auto make_server_task = [&]() -> coro::task<void> {
+    auto make_server_task = [&]() -> coro::task<void>
+    {
         // This is the task that will handle processing a client's requests.
-        auto serve_client = [](coro::net::tcp_client client) -> coro::task<void> {
+        auto serve_client = [](coro::net::tcp::client client) -> coro::task<void>
+        {
             size_t requests{1};
 
             while (true)
@@ -932,8 +934,8 @@ int main()
             co_return;
         };
 
-        // Spin up the tcp_server and schedule it onto the io_scheduler.
-        coro::net::tcp_server server{scheduler};
+        // Spin up the tcp::server and schedule it onto the io_scheduler.
+        coro::net::tcp::server server{scheduler};
         co_await scheduler->schedule();
 
         // All incoming connections will be stored into the task container until they are completed.
@@ -946,14 +948,15 @@ int main()
         // on the task container's thread pool, which is the same as the scheduler.
         tc.start(serve_client(std::move(client)));
 
-        // Wait for all clients to complete before shutting down the tcp_server.
+        // Wait for all clients to complete before shutting down the tcp::server.
         co_await tc.garbage_collect_and_yield_until_empty();
         co_return;
     };
 
-    auto make_client_task = [&](size_t request_count) -> coro::task<void> {
+    auto make_client_task = [&](size_t request_count) -> coro::task<void>
+    {
         co_await scheduler->schedule();
-        coro::net::tcp_client client{scheduler};
+        coro::net::tcp::client client{scheduler};
 
         co_await client.connect();
 
@@ -975,7 +978,7 @@ int main()
             std::cout << "client: " << response << "\n";
         }
 
-        co_return; // Upon exiting the tcp_client will close its connection to the server.
+        co_return; // Upon exiting the tcp::client will close its connection to the server.
     };
 
     coro::sync_wait(coro::when_all(make_server_task(), make_client_task(5)));
@@ -1128,7 +1131,7 @@ CMake Options:
 | LIBCORO_BUILD_EXAMPLES        | ON      | Should the examples be built?                                                                      |
 | LIBCORO_FEATURE_PLATFORM      | ON      | Include the features depending on the linux platform. MSVC not supported.                          |
 | LIBCORO_FEATURE_NETWORKING    | ON      | Include networking features. MSVC not supported.                                                   |
-| LIBCORO_FEATURE_SSL           | ON      | Include SSL features. Requires networking to be enabled. MSVC not supported.                       |
+| LIBCORO_FEATURE_TLS           | ON      | Include TLS features. Requires networking to be enabled. MSVC not supported.                       |
 
 #### Adding to your project
 
@@ -1174,7 +1177,7 @@ The tests will automatically be run by github actions on creating a pull request
     ctest -VV
 
     # Or invoke directly, can pass the name of tests to execute, the framework used is catch2.
-    # Tests are tagged with their group, below is howt o run all of the coro::net::tcp_server tests:
+    # Tests are tagged with their group, below is howt o run all of the coro::net::tcp::server tests:
     ./Debug/test/libcoro_test "[tcp_server]"
 
 ### Support

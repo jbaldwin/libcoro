@@ -1,14 +1,14 @@
-#include "coro/net/udp_peer.hpp"
+#include "coro/net/udp/peer.hpp"
 
-namespace coro::net
+namespace coro::net::udp
 {
-udp_peer::udp_peer(std::shared_ptr<io_scheduler> scheduler, net::domain_t domain)
+peer::peer(std::shared_ptr<io_scheduler> scheduler, net::domain_t domain)
     : m_io_scheduler(std::move(scheduler)),
       m_socket(net::make_socket(net::socket::options{domain, net::socket::type_t::udp, net::socket::blocking_t::no}))
 {
 }
 
-udp_peer::udp_peer(std::shared_ptr<io_scheduler> scheduler, const info& bind_info)
+peer::peer(std::shared_ptr<io_scheduler> scheduler, const info& bind_info)
     : m_io_scheduler(std::move(scheduler)),
       m_socket(net::make_accept_socket(
           net::socket::options{bind_info.address.domain(), net::socket::type_t::udp, net::socket::blocking_t::no},
@@ -18,4 +18,4 @@ udp_peer::udp_peer(std::shared_ptr<io_scheduler> scheduler, const info& bind_inf
 {
 }
 
-} // namespace coro::net
+} // namespace coro::net::udp

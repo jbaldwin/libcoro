@@ -5,7 +5,6 @@ namespace coro::net
 static const std::string recv_status_ok{"ok"};
 static const std::string recv_status_closed{"closed"};
 static const std::string recv_status_udp_not_bound{"udp_not_bound"};
-// static const std::string recv_status_try_again{"try_again"};
 static const std::string recv_status_would_block{"would_block"};
 static const std::string recv_status_bad_file_descriptor{"bad_file_descriptor"};
 static const std::string recv_status_connection_refused{"connection_refused"};
@@ -16,10 +15,6 @@ static const std::string recv_status_no_memory{"no_memory"};
 static const std::string recv_status_not_connected{"not_connected"};
 static const std::string recv_status_not_a_socket{"not_a_socket"};
 static const std::string recv_status_unknown{"unknown"};
-
-#ifdef LIBCORO_FEATURE_SSL
-static const std::string recv_status_ssl_error{"ssl_error"};
-#endif
 
 auto to_string(recv_status status) -> const std::string&
 {
@@ -50,11 +45,6 @@ auto to_string(recv_status status) -> const std::string&
             return recv_status_not_connected;
         case recv_status::not_a_socket:
             return recv_status_not_a_socket;
-
-#ifdef LIBCORO_FEATURE_SSL
-        case recv_status::ssl_error:
-            return recv_status_ssl_error;
-#endif
     }
 
     return recv_status_unknown;

@@ -1,26 +1,26 @@
-#include "coro/net/dns_resolver.hpp"
+#include "coro/net/dns/resolver.hpp"
 
 #include <arpa/inet.h>
 #include <iostream>
 #include <netdb.h>
 
-namespace coro::net
+namespace coro::net::dns
 {
-uint64_t   dns_resolver::m_ares_count{0};
-std::mutex dns_resolver::m_ares_mutex{};
+uint64_t   resolver::m_ares_count{0};
+std::mutex resolver::m_ares_mutex{};
 
 auto ares_dns_callback(void* arg, int status, int /*timeouts*/, struct hostent* host) -> void
 {
-    auto& result = *static_cast<dns_result*>(arg);
+    auto& result = *static_cast<coro::net::dns::result*>(arg);
     --result.m_pending_dns_requests;
 
     if (host == nullptr || status != ARES_SUCCESS)
     {
-        result.m_status = dns_status::error;
+        result.m_status = status::error;
     }
     else
     {
-        result.m_status = dns_status::complete;
+        result.m_status = status::complete;
 
         for (size_t i = 0; host->h_addr_list[i] != nullptr; ++i)
         {
@@ -39,21 +39,21 @@ auto ares_dns_callback(void* arg, int status, int /*timeouts*/, struct hostent* 
     }
 }
 
-dns_result::dns_result(coro::io_scheduler& scheduler, coro::event& resume, uint64_t pending_dns_requests)
+result::result(coro::io_scheduler& scheduler, coro::event& resume, uint64_t pending_dns_requests)
     : m_io_scheduler(scheduler),
       m_resume(resume),
       m_pending_dns_requests(pending_dns_requests)
 {
 }
 
-dns_resolver::dns_resolver(std::shared_ptr<io_scheduler> scheduler, std::chrono::milliseconds timeout)
+resolver::resolver(std::shared_ptr<io_scheduler> scheduler, std::chrono::milliseconds timeout)
     : m_io_scheduler(std::move(scheduler)),
       m_timeout(timeout),
       m_task_container(m_io_scheduler)
 {
     if (m_io_scheduler == nullptr)
     {
-        throw std::runtime_error{"dns_resolver cannot have nullptr scheduler"};
+        throw std::runtime_error{"dns resolver cannot have nullptr scheduler"};
     }
 
     {
@@ -76,7 +76,7 @@ dns_resolver::dns_resolver(std::shared_ptr<io_scheduler> scheduler, std::chrono:
     }
 }
 
-dns_resolver::~dns_resolver()
+resolver::~resolver()
 {
     if (m_ares_channel != nullptr)
     {
@@ -94,10 +94,10 @@ dns_resolver::~dns_resolver()
     }
 }
 
-auto dns_resolver::host_by_name(const net::hostname& hn) -> coro::task<std::unique_ptr<dns_result>>
+auto resolver::host_by_name(const net::hostname& hn) -> coro::task<std::unique_ptr<result>>
 {
     coro::event resume_event{};
-    auto        result_ptr = std::make_unique<dns_result>(*m_io_scheduler.get(), resume_event, 2);
+    auto        result_ptr = std::make_unique<result>(*m_io_scheduler.get(), resume_event, 2);
 
     ares_gethostbyname(m_ares_channel, hn.data().data(), AF_INET, ares_dns_callback, result_ptr.get());
     ares_gethostbyname(m_ares_channel, hn.data().data(), AF_INET6, ares_dns_callback, result_ptr.get());
@@ -110,7 +110,7 @@ auto dns_resolver::host_by_name(const net::hostname& hn) -> coro::task<std::uniq
     co_return result_ptr;
 }
 
-auto dns_resolver::ares_poll() -> void
+auto resolver::ares_poll() -> void
 {
     std::array<ares_socket_t, ARES_GETSOCK_MAXNUM> ares_sockets{};
     std::array<poll_op, ARES_GETSOCK_MAXNUM>       poll_ops{};
@@ -158,7 +158,7 @@ auto dns_resolver::ares_poll() -> void
     }
 }
 
-auto dns_resolver::make_poll_task(fd_t fd, poll_op ops) -> coro::task<void>
+auto resolver::make_poll_task(fd_t fd, poll_op ops) -> coro::task<void>
 {
     auto result = co_await m_io_scheduler->poll(fd, ops, m_timeout);
     switch (result)
@@ -190,4 +190,4 @@ auto dns_resolver::make_poll_task(fd_t fd, poll_op ops) -> coro::task<void>
     co_return;
 };
 
-} // namespace coro::net
+} // namespace coro::net::dns

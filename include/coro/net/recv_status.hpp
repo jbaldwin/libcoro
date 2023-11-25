@@ -12,8 +12,9 @@ enum class recv_status : int64_t
     /// The peer closed the socket.
     closed = -1,
     /// The udp socket has not been bind()'ed to a local port.
-    udp_not_bound       = -2,
-    try_again           = EAGAIN,
+    udp_not_bound = -2,
+    try_again     = EAGAIN,
+    // Note: that only the tcp::client will return this, a tls::client returns the specific ssl_would_block_* status'.
     would_block         = EWOULDBLOCK,
     bad_file_descriptor = EBADF,
     connection_refused  = ECONNREFUSED,
@@ -23,10 +24,6 @@ enum class recv_status : int64_t
     no_memory           = ENOMEM,
     not_connected       = ENOTCONN,
     not_a_socket        = ENOTSOCK,
-
-#ifdef LIBCORO_FEATURE_SSL
-    ssl_error = -3
-#endif
 };
 
 auto to_string(recv_status status) -> const std::string&;

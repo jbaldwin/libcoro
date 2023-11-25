@@ -15,7 +15,7 @@ struct test_setup_networking
         // Ignore SIGPIPE, the library should be handling these gracefully.
         signal(SIGPIPE, SIG_IGN);
 
-    #ifdef LIBCORO_FEATURE_SSL
+    #ifdef LIBCORO_FEATURE_TLS
         // For SSL/TLS tests create a localhost cert.pem and key.pem, tests expected these files
         // to be generated into the same directory that the tests are running in.
         auto unused = system(

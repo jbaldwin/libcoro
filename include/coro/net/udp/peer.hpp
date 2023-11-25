@@ -17,9 +17,9 @@ namespace coro
 class io_scheduler;
 } // namespace coro
 
-namespace coro::net
+namespace coro::net::udp
 {
-class udp_peer
+class peer
 {
 public:
     struct info
@@ -36,18 +36,18 @@ public:
      * Creates a udp peer that can send packets but not receive them.  This udp peer will not explicitly
      * bind to a local ip+port.
      */
-    explicit udp_peer(std::shared_ptr<io_scheduler> scheduler, net::domain_t domain = net::domain_t::ipv4);
+    explicit peer(std::shared_ptr<io_scheduler> scheduler, net::domain_t domain = net::domain_t::ipv4);
 
     /**
      * Creates a udp peer that can send and receive packets.  This peer will bind to the given ip_port.
      */
-    explicit udp_peer(std::shared_ptr<io_scheduler> scheduler, const info& bind_info);
+    explicit peer(std::shared_ptr<io_scheduler> scheduler, const info& bind_info);
 
-    udp_peer(const udp_peer&)                             = delete;
-    udp_peer(udp_peer&&)                                  = default;
-    auto operator=(const udp_peer&) noexcept -> udp_peer& = delete;
-    auto operator=(udp_peer&&) noexcept -> udp_peer&      = default;
-    ~udp_peer()                                           = default;
+    peer(const peer&)                             = default;
+    peer(peer&&)                                  = default;
+    auto operator=(const peer&) noexcept -> peer& = default;
+    auto operator=(peer&&) noexcept -> peer&      = default;
+    ~peer()                                       = default;
 
     /**
      * @param op The poll operation to perform on the udp socket.  Note that if this is a send only
@@ -103,12 +103,12 @@ public:
      *         it might not fill the entire buffer.
      */
     template<concepts::mutable_buffer buffer_type>
-    auto recvfrom(buffer_type&& buffer) -> std::tuple<recv_status, udp_peer::info, std::span<char>>
+    auto recvfrom(buffer_type&& buffer) -> std::tuple<recv_status, peer::info, std::span<char>>
     {
         // The user must bind locally to be able to receive packets.
         if (!m_bound)
         {
-            return {recv_status::udp_not_bound, udp_peer::info{}, std::span<char>{}};
+            return {recv_status::udp_not_bound, peer::info{}, std::span<char>{}};
         }
 
         sockaddr_in peer{};
@@ -119,7 +119,7 @@ public:
 
         if (bytes_read < 0)
         {
-            return {static_cast<recv_status>(errno), udp_peer::info{}, std::span<char>{}};
+            return {static_cast<recv_status>(errno), peer::info{}, std::span<char>{}};
         }
 
         std::span<const uint8_t> ip_addr_view{
@@ -129,7 +129,7 @@ public:
 
         return {
             recv_status::ok,
-            udp_peer::info{
+            peer::info{
                 .address = net::ip_address{ip_addr_view, static_cast<net::domain_t>(peer.sin_family)},
                 .port    = ntohs(peer.sin_port)},
             std::span<char>{buffer.data(), static_cast<size_t>(bytes_read)}};
@@ -144,4 +144,4 @@ private:
     bool m_bound{false};
 };
 
-} // namespace coro::net
+} // namespace coro::net::udp

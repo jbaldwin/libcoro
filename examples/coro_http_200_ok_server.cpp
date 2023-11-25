@@ -4,7 +4,7 @@ auto main() -> int
 {
     auto make_http_200_ok_server = [](std::shared_ptr<coro::io_scheduler> scheduler) -> coro::task<void>
     {
-        auto make_on_connection_task = [](coro::net::tcp_client client) -> coro::task<void>
+        auto make_on_connection_task = [](coro::net::tcp::client client) -> coro::task<void>
         {
             std::string response =
                 R"(HTTP/1.1 200 OK
@@ -36,7 +36,7 @@ Connection: keep-alive
         };
 
         co_await scheduler->schedule();
-        coro::net::tcp_server server{scheduler, coro::net::tcp_server::options{.port = 8888}};
+        coro::net::tcp::server server{scheduler, coro::net::tcp::server::options{.port = 8888}};
 
         while (true)
         {

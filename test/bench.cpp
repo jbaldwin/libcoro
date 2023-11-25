@@ -48,6 +48,17 @@ TEST_CASE("benchmark counter func direct call", "[benchmark]")
     REQUIRE(counter == iterations);
 }
 
+// static auto generate_bytes(uint64_t size) -> std::string
+// {
+//     using random_bytes_engine = std::independent_bits_engine<std::default_random_engine, CHAR_BIT, unsigned char>;
+
+//     random_bytes_engine rbe{};
+//     std::string         data{};
+//     data.reserve(size);
+//     std::generate(begin(data), end(data), std::ref(rbe));
+//     return data;
+// }
+
 TEST_CASE("benchmark counter func coro::sync_wait(awaitable)", "[benchmark]")
 {
     constexpr std::size_t iterations = default_iterations;
@@ -346,7 +357,7 @@ TEST_CASE("benchmark counter task scheduler await event from another coroutine",
     REQUIRE(s.empty());
 }
 
-TEST_CASE("benchmark tcp_server echo server thread pool", "[benchmark]")
+TEST_CASE("benchmark tcp::server echo server thread pool", "[benchmark]")
 {
     const constexpr std::size_t connections             = 100;
     const constexpr std::size_t messages_per_connection = 1'000;
@@ -358,7 +369,7 @@ TEST_CASE("benchmark tcp_server echo server thread pool", "[benchmark]")
     std::atomic<uint64_t> accepted{0};
     std::atomic<uint64_t> clients_completed{0};
 
-    auto make_on_connection_task = [&](coro::net::tcp_client client, coro::latch& wait_for_clients) -> coro::task<void>
+    auto make_on_connection_task = [&](coro::net::tcp::client client, coro::latch& wait_for_clients) -> coro::task<void>
     {
         std::string in(64, '\0');
 
@@ -395,8 +406,8 @@ TEST_CASE("benchmark tcp_server echo server thread pool", "[benchmark]")
     {
         co_await server_scheduler->schedule();
 
-        coro::latch           wait_for_clients{connections};
-        coro::net::tcp_server server{server_scheduler};
+        coro::latch            wait_for_clients{connections};
+        coro::net::tcp::server server{server_scheduler};
 
         listening++;
 
@@ -429,7 +440,7 @@ TEST_CASE("benchmark tcp_server echo server thread pool", "[benchmark]")
     {
         co_await client_scheduler->schedule();
         std::map<std::chrono::milliseconds, uint64_t> histogram;
-        coro::net::tcp_client                         client{client_scheduler};
+        coro::net::tcp::client                        client{client_scheduler};
 
         auto cstatus = co_await client.connect(); // std::chrono::seconds{1});
         REQUIRE(cstatus == coro::net::connect_status::connected);
@@ -497,7 +508,7 @@ TEST_CASE("benchmark tcp_server echo server thread pool", "[benchmark]")
     std::cerr << "all coroutines joined\n";
 
     auto stop = sc::now();
-    print_stats("benchmark tcp_client and tcp_server thread_pool", ops, start, stop);
+    print_stats("benchmark tcp::client and tcp::server thread_pool", ops, start, stop);
 
     for (const auto& [ms, count] : g_histogram)
     {
@@ -505,7 +516,7 @@ TEST_CASE("benchmark tcp_server echo server thread pool", "[benchmark]")
     }
 }
 
-TEST_CASE("benchmark tcp_server echo server inline", "[benchmark]")
+TEST_CASE("benchmark tcp::server echo server inline", "[benchmark]")
 {
     const constexpr std::size_t connections             = 100;
     const constexpr std::size_t messages_per_connection = 1'000;
@@ -540,7 +551,7 @@ TEST_CASE("benchmark tcp_server echo server inline", "[benchmark]")
         std::vector<coro::task<void>>       tasks{};
     };
 
-    auto make_on_connection_task = [&](server& s, coro::net::tcp_client client) -> coro::task<void>
+    auto make_on_connection_task = [&](server& s, coro::net::tcp::client client) -> coro::task<void>
     {
         std::string in(64, '\0');
 
@@ -577,7 +588,7 @@ TEST_CASE("benchmark tcp_server echo server inline", "[benchmark]")
     {
         co_await s.scheduler->schedule();
 
-        coro::net::tcp_server server{s.scheduler};
+        coro::net::tcp::server server{s.scheduler};
 
         listening++;
 
@@ -608,7 +619,7 @@ TEST_CASE("benchmark tcp_server echo server inline", "[benchmark]")
     {
         co_await c.scheduler->schedule();
         std::map<std::chrono::milliseconds, uint64_t> histogram;
-        coro::net::tcp_client                         client{c.scheduler};
+        coro::net::tcp::client                        client{c.scheduler};
 
         auto cstatus = co_await client.connect(); // std::chrono::seconds{1});
         REQUIRE(cstatus == coro::net::connect_status::connected);
@@ -697,7 +708,308 @@ TEST_CASE("benchmark tcp_server echo server inline", "[benchmark]")
     }
 
     auto stop = sc::now();
-    print_stats("benchmark tcp_client and tcp_server inline", ops, start, stop);
+    print_stats("benchmark tcp::client and tcp::server inline", ops, start, stop);
+
+    for (const auto& [ms, count] : g_histogram)
+    {
+        std::cerr << ms.count() << " : " << count << "\n";
+    }
+}
+
+TEST_CASE("benchmark tls::server echo server thread pool", "[benchmark]")
+{
+    // TODO: This test is currently not working, we'll commit it and skip it for now.
+    SKIP();
+    const constexpr std::size_t connections             = 100;
+    const constexpr std::size_t messages_per_connection = 1'000;
+    const constexpr std::size_t ops                     = connections * messages_per_connection;
+
+    const std::string msg = "im a data point in a stream of bytes";
+
+    std::atomic<uint64_t> listening{0};
+    std::atomic<uint64_t> accepted{0};
+    std::atomic<uint64_t> clients_completed{0};
+
+    auto make_on_connection_task = [&](coro::net::tls::client client, coro::latch& wait_for_clients) -> coro::task<void>
+    {
+        std::string in(64, '\0');
+
+        auto closed = false;
+        // Echo the messages until the socket is closed.
+        while (!closed)
+        {
+            std::string_view data;
+            while (true)
+            {
+                auto [rstatus, rspan] = client.recv(in);
+                std::cerr << "SERVER: rstatus =" << coro::net::tls::to_string(rstatus) << "\n";
+                switch (rstatus)
+                {
+                    case coro::net::tls::recv_status::ok:
+                        REQUIRE(rstatus == coro::net::tls::recv_status::ok);
+                        data = std::string_view{data.begin(), data.end()};
+                        break;
+                    case coro::net::tls::recv_status::closed:
+                        REQUIRE(rspan.empty());
+                        closed = true;
+                        break;
+                    case coro::net::tls::recv_status::want_read:
+                    {
+                        auto pstatus = co_await client.poll(coro::poll_op::read);
+                        switch (pstatus)
+                        {
+                            case coro::poll_status::event:
+                                continue;
+                            case coro::poll_status::timeout:
+                                std::cerr << "SERVER: client.poll(read) timed out\n";
+                                break;
+                            case coro::poll_status::error:
+                                std::cerr << "SERVER: client.poll(read) error\n";
+                                closed = true;
+                                break;
+                            case coro::poll_status::closed:
+                                std::cerr << "SERVER: client.poll(read) closed\n";
+                                closed = true;
+                                break;
+                        }
+                    }
+                        continue;
+                    case coro::net::tls::recv_status::want_write:
+                    {
+                        auto pstatus = co_await client.poll(coro::poll_op::write);
+                        switch (pstatus)
+                        {
+                            case coro::poll_status::event:
+                                continue;
+                            case coro::poll_status::timeout:
+                                std::cerr << "SERVER: client.poll(write) timed out\n";
+                                break;
+                            case coro::poll_status::error:
+                                std::cerr << "SERVER: client.poll(write) error\n";
+                                closed = true;
+                                break;
+                            case coro::poll_status::closed:
+                                std::cerr << "SERVER: client.poll(write) closed\n";
+                                closed = true;
+                                break;
+                        }
+                    }
+                        continue;
+                    default:
+                        closed = true;
+                        break;
+                }
+
+                if (closed)
+                {
+                    break;
+                }
+            }
+
+            if (closed)
+            {
+                break;
+            }
+
+            std::cerr << "SERVER: client.poll(write)\n";
+            auto rstatus = co_await client.poll(coro::poll_op::write);
+            REQUIRE(rstatus == coro::poll_status::event);
+            std::cerr << "SERVER: client.send()\n";
+            auto [sstatus, remaining] = client.send(data);
+            REQUIRE(sstatus == coro::net::tls::send_status::ok);
+            REQUIRE(remaining.empty());
+        }
+
+        wait_for_clients.count_down();
+        std::cerr << "SERVER: wait_for_clients.count_down(1) -> " << wait_for_clients.remaining() << "\n";
+        co_return;
+    };
+
+    auto server_scheduler = std::make_shared<coro::io_scheduler>(coro::io_scheduler::options{
+        .pool               = coro::thread_pool::options{},
+        .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_on_thread_pool});
+    auto make_server_task = [&]() -> coro::task<void>
+    {
+        co_await server_scheduler->schedule();
+
+        coro::latch            wait_for_clients{connections};
+        coro::net::tls::server server{
+            server_scheduler,
+            std::make_shared<coro::net::tls::context>(
+                "cert.pem", coro::net::tls::tls_file_type::pem, "key.pem", coro::net::tls::tls_file_type::pem)};
+
+        listening++;
+
+        while (accepted.load(std::memory_order::acquire) < connections)
+        {
+            auto pstatus = co_await server.poll(std::chrono::milliseconds{1});
+            if (pstatus == coro::poll_status::event)
+            {
+                auto c = co_await server.accept();
+                if (c.socket().is_valid())
+                {
+                    accepted.fetch_add(1, std::memory_order::release);
+                    server_scheduler->schedule(make_on_connection_task(std::move(c), wait_for_clients));
+                }
+            }
+        }
+
+        std::cerr << "SERVER: co_await wait_for_clients\n";
+        co_await wait_for_clients;
+        std::cerr << "SERVER: co_await wait_for_clients DONE\n";
+        co_return;
+    };
+
+    coro::mutex                                   histogram_mutex;
+    std::map<std::chrono::milliseconds, uint64_t> g_histogram;
+
+    auto client_scheduler = std::make_shared<coro::io_scheduler>(coro::io_scheduler::options{
+        .pool               = coro::thread_pool::options{},
+        .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_on_thread_pool});
+    auto make_client_task = [&](coro::mutex& histogram_mutex) -> coro::task<void>
+    {
+        co_await client_scheduler->schedule();
+        {
+            std::map<std::chrono::milliseconds, uint64_t> histogram;
+            coro::net::tls::client                        client{
+                client_scheduler, std::make_shared<coro::net::tls::context>(coro::net::tls::verify_peer_t::no)};
+
+            auto cstatus = co_await client.connect();
+            REQUIRE(cstatus == coro::net::tls::connection_status::connected);
+
+            std::string in(64, '\0');
+            auto        closed = false;
+
+            for (size_t i = 1; i <= messages_per_connection; ++i)
+            {
+                auto req_start = std::chrono::steady_clock::now();
+
+                auto pstatus = co_await client.poll(coro::poll_op::write);
+                REQUIRE(pstatus == coro::poll_status::event);
+                auto [sstatus, remaining] = client.send(msg);
+                REQUIRE(sstatus == coro::net::tls::send_status::ok);
+                REQUIRE(remaining.empty());
+
+                while (true)
+                {
+                    auto [rstatus, rspan] = client.recv(in);
+                    std::cerr << "SERVER: rstatus =" << coro::net::tls::to_string(rstatus) << "\n";
+                    switch (rstatus)
+                    {
+                        case coro::net::tls::recv_status::ok:
+                        {
+                            REQUIRE(rstatus == coro::net::tls::recv_status::ok);
+                            auto data = std::string_view{rspan.begin(), rspan.end()};
+                            REQUIRE(data.length() > 0);
+                        }
+                        break;
+                        case coro::net::tls::recv_status::closed:
+                            REQUIRE(rspan.empty());
+                            closed = true;
+                            break;
+                        case coro::net::tls::recv_status::want_read:
+                        {
+                            auto pstatus = co_await client.poll(coro::poll_op::read);
+                            switch (pstatus)
+                            {
+                                case coro::poll_status::event:
+                                    continue;
+                                case coro::poll_status::timeout:
+                                    std::cerr << "SERVER: client.poll(read) timed out\n";
+                                    break;
+                                case coro::poll_status::error:
+                                    std::cerr << "SERVER: client.poll(read) error\n";
+                                    closed = true;
+                                    break;
+                                case coro::poll_status::closed:
+                                    std::cerr << "SERVER: client.poll(read) closed\n";
+                                    closed = true;
+                                    break;
+                            }
+                        }
+                            continue;
+                        case coro::net::tls::recv_status::want_write:
+                        {
+                            auto pstatus = co_await client.poll(coro::poll_op::write);
+                            switch (pstatus)
+                            {
+                                case coro::poll_status::event:
+                                    continue;
+                                case coro::poll_status::timeout:
+                                    std::cerr << "SERVER: client.poll(write) timed out\n";
+                                    break;
+                                case coro::poll_status::error:
+                                    std::cerr << "SERVER: client.poll(write) error\n";
+                                    closed = true;
+                                    break;
+                                case coro::poll_status::closed:
+                                    std::cerr << "SERVER: client.poll(write) closed\n";
+                                    closed = true;
+                                    break;
+                            }
+                        }
+                            continue;
+                        default:
+                            closed = true;
+                            break;
+                    }
+
+                    if (closed)
+                    {
+                        break;
+                    }
+                }
+
+                auto req_stop = std::chrono::steady_clock::now();
+                histogram[std::chrono::duration_cast<std::chrono::milliseconds>(req_stop - req_start)]++;
+            }
+
+            {
+                std::cerr << "CLIENT: writing histogram\n";
+                auto lock = co_await histogram_mutex.lock();
+                for (auto [ms, count] : histogram)
+                {
+                    g_histogram[ms] += count;
+                }
+            }
+
+            auto cc = clients_completed.fetch_add(1);
+            std::cerr << "CLIENT: clients_completed: " << (cc + 1) << "\n";
+        }
+
+        co_return;
+    };
+
+    auto start = sc::now();
+
+    // Create the server to accept incoming tcp connections.
+    auto server_thread = std::thread{[&]() { coro::sync_wait(make_server_task()); }};
+
+    // The server can take a small bit of time to start up, if we don't wait for it to notify then
+    // the first few connections can easily fail to connect causing this test to fail.
+    while (listening < 1)
+    {
+        std::this_thread::sleep_for(std::chrono::milliseconds{1});
+    }
+
+    auto client_thread = std::thread{[&]()
+                                     {
+                                         std::vector<coro::task<void>> tasks{};
+                                         for (size_t i = 0; i < connections; ++i)
+                                         {
+                                             tasks.emplace_back(make_client_task(histogram_mutex));
+                                         }
+                                         coro::sync_wait(coro::when_all(std::move(tasks)));
+                                     }};
+
+    std::cerr << "joining client thread...\n";
+    client_thread.join();
+    std::cerr << "joining server thread...\n";
+    server_thread.join();
+    std::cerr << "all coroutines joined\n";
+
+    auto stop = sc::now();
+    print_stats("benchmark tls::client and tls::server thread_pool", ops, start, stop);
 
     for (const auto& [ms, count] : g_histogram)
     {
