@@ -79,13 +79,13 @@ auto thread_pool::executor(std::size_t idx) -> void
         m_opts.on_thread_start_functor(idx);
     }
 
-    while (!m_shutdown_requested.load(std::memory_order::relaxed))
+    while (!m_shutdown_requested.load(std::memory_order::acquire))
     {
         // Wait until the queue has operations to execute or shutdown has been requested.
         while (true)
         {
             std::unique_lock<std::mutex> lk{m_wait_mutex};
-            m_wait_cv.wait(lk, [this] { return !m_queue.empty() or m_shutdown_requested; });
+            m_wait_cv.wait(lk, [this] { return !m_queue.empty() || m_shutdown_requested.load(std::memory_order::acquire); });
             if (m_queue.empty())
             {
                 lk.unlock(); // would happen on scope destruction, but being explicit/faster(?)
