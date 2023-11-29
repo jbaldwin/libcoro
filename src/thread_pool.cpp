@@ -58,7 +58,7 @@ auto thread_pool::resume(std::coroutine_handle<> handle) noexcept -> void
 auto thread_pool::shutdown() noexcept -> void
 {
     // Only allow shutdown to occur once.
-    if (m_shutdown_requested.exchange(true, std::memory_order::acq_rel) == false)
+    if (m_shutdown_requested.exchange(true, std::memory_order::seq_cst) == false)
     {
         m_wait_cv.notify_all();
 
@@ -79,13 +79,13 @@ auto thread_pool::executor(std::size_t idx) -> void
         m_opts.on_thread_start_functor(idx);
     }
 
-    while (!m_shutdown_requested.load(std::memory_order::acquire))
+    while (!m_shutdown_requested.load(std::memory_order::seq_cst))
     {
         // Wait until the queue has operations to execute or shutdown has been requested.
         while (true)
         {
             std::unique_lock<std::mutex> lk{m_wait_mutex};
-            m_wait_cv.wait(lk, [this] { return !m_queue.empty() || m_shutdown_requested.load(std::memory_order::acquire); });
+            m_wait_cv.wait(lk, [this] { return !m_queue.empty() || m_shutdown_requested.load(std::memory_order::seq_cst); });
             if (m_queue.empty())
             {
                 lk.unlock(); // would happen on scope destruction, but being explicit/faster(?)
