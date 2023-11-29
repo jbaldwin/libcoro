@@ -183,7 +183,7 @@ auto io_scheduler::poll(fd_t fd, coro::poll_op op, std::chrono::milliseconds tim
 auto io_scheduler::shutdown() noexcept -> void
 {
     // Only allow shutdown to occur once.
-    if (m_shutdown_requested.exchange(true, std::memory_order::acq_rel) == false)
+    if (m_shutdown_requested.exchange(true, std::memory_order::seq_cst) == false)
     {
         if (m_thread_pool != nullptr)
         {
@@ -221,7 +221,7 @@ auto io_scheduler::process_events_dedicated_thread() -> void
 
     m_io_processing.exchange(true, std::memory_order::release);
     // Execute tasks until stopped or there are no more tasks to complete.
-    while (!m_shutdown_requested.load(std::memory_order::acquire) || size() > 0)
+    while (!m_shutdown_requested.load(std::memory_order::seq_cst) || size() > 0)
     {
         process_events_execute(m_default_timeout);
     }

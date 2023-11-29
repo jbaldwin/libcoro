@@ -58,7 +58,7 @@ auto thread_pool::resume(std::coroutine_handle<> handle) noexcept -> void
 auto thread_pool::shutdown() noexcept -> void
 {
     // Only allow shutdown to occur once.
-    if (m_shutdown_requested.exchange(true, std::memory_order::acq_rel) == false)
+    if (m_shutdown_requested.exchange(true, std::memory_order::seq_cst) == false)
     {
         {
             // There is a race condition if we are not holding the lock with the executors
