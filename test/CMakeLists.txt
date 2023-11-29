@@ -51,4 +51,4 @@ elseif(MSVC)
     target_compile_options(${PROJECT_NAME} PUBLIC /W4)
 endif()
 
-add_test(NAME libcoro_tests COMMAND ${PROJECT_NAME})
+add_test(NAME libcoro_tests COMMAND ${PROJECT_NAME} --reporter xml)
