@@ -84,8 +84,17 @@ auto thread_pool::executor(std::size_t idx) -> void
         m_opts.on_thread_start_functor(idx);
     }
 
-    auto drain_queue = [this](std::unique_lock<std::mutex>& lk) -> void
+    // Process until shutdown is requested and the total number of tasks reaches zero.
+    while (!m_shutdown_requested.load(std::memory_order::acquire) || m_size.load(std::memory_order::acquire) > 0)
     {
+        std::unique_lock<std::mutex> lk{m_wait_mutex};
+        m_wait_cv.wait(
+            lk,
+            [&] {
+                return m_size.load(std::memory_order::acquire) > 0 ||
+                       m_shutdown_requested.load(std::memory_order::acquire);
+            });
+
         // Process this batch until the queue is empty.
         while (!m_queue.empty())
         {
@@ -98,30 +107,6 @@ auto thread_pool::executor(std::size_t idx) -> void
             m_size.fetch_sub(1, std::memory_order::release);
             lk.lock();
         }
-    };
-
-    // Process until shutdown is requested and the total number of tasks reaches zero.
-    while (!m_shutdown_requested.load(std::memory_order::acquire))
-    {
-        std::unique_lock<std::mutex> lk{m_wait_mutex};
-        m_wait_cv.wait(
-            lk,
-            [&] {
-                return m_size.load(std::memory_order::acquire) > 0 ||
-                       m_shutdown_requested.load(std::memory_order::acquire);
-            });
-
-        drain_queue(lk);
-    }
-
-    // Shutdown has been requested, we need to drain until no more tasks remain.
-    while (m_size.load(std::memory_order::acquire) > 0)
-    {
-        std::unique_lock<std::mutex> lk{m_wait_mutex};
-        m_wait_cv.wait_for(
-            lk, std::chrono::milliseconds{10}, [&] { return m_size.load(std::memory_order::acquire) > 0; });
-
-        drain_queue(lk);
     }
 
     if (m_opts.on_thread_stop_functor != nullptr)

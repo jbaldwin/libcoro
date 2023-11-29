@@ -183,13 +183,11 @@ auto io_scheduler::poll(fd_t fd, coro::poll_op op, std::chrono::milliseconds tim
 auto io_scheduler::shutdown() noexcept -> void
 {
     // Only allow shutdown to occur once.
-    if (m_shutdown_requested.exchange(true, std::memory_order::seq_cst) == false)
+    if (m_shutdown_requested.exchange(true, std::memory_order::acq_rel) == false)
     {
-        // std::cerr << "io_scheduler.m_shutdown_requested = " << m_shutdown_requested << "\n";
         if (m_thread_pool != nullptr)
         {
             m_thread_pool->shutdown();
-            // std::cerr << "io_scheduler.m_thread_pool->shutdown() complete\n";
         }
 
         // Signal the event loop to stop asap, triggering the event fd is safe.
