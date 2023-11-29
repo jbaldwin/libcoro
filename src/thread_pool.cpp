@@ -37,7 +37,7 @@ auto thread_pool::schedule() -> operation
 {
     if (!m_shutdown_requested.load(std::memory_order::seq_cst))
     {
-        m_size.fetch_add(1, std::memory_order::release);
+        m_size.fetch_add(1, std::memory_order::seq_cst);
         return operation{*this};
     }
 
@@ -51,7 +51,7 @@ auto thread_pool::resume(std::coroutine_handle<> handle) noexcept -> void
         return;
     }
 
-    m_size.fetch_add(1, std::memory_order::release);
+    m_size.fetch_add(1, std::memory_order::seq_cst);
     schedule_impl(handle);
 }
 
@@ -98,7 +98,7 @@ auto thread_pool::executor(std::size_t idx) -> void
             lk.unlock(); // Not needed for processing the coroutine.
 
             handle.resume();
-            m_size.fetch_sub(1, std::memory_order::release);
+            m_size.fetch_sub(1, std::memory_order::seq_cst);
         }
     }
 
