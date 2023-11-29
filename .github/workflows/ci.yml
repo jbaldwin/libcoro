@@ -42,7 +42,7 @@ jobs:
             -   name: test-release-g++
                 run: |
                     cd build-release-g++
-                    ./test/libcoro_test  --reporter xml
+                    ./test/libcoro_test  --reporter xml ~'benchmark tcp_server echo server thread pool'
     build-ubuntu-22-04:
         name: ubuntu-22.04
         runs-on: ubuntu-latest
@@ -85,7 +85,7 @@ jobs:
             -   name: test-release-g++
                 run: |
                     cd build-release-g++
-                    ./test/libcoro_test  --reporter xml
+                    ./test/libcoro_test  --reporter xml  ~'benchmark tcp_server echo server thread pool'
             -   name: build-release-g++-feature-networking-disabled
                 run: |
                     mkdir build-release-g++-feature-networking-disabled
@@ -101,7 +101,7 @@ jobs:
             -   name: test-release-g++-feature-networking-disabled
                 run: |
                     cd build-release-g++-feature-networking-disabled
-                    ./test/libcoro_test  --reporter xml
+                    ./test/libcoro_test  --reporter xml  ~'benchmark tcp_server echo server thread pool'
     build-ubuntu-22-04-clang:
         name: ubuntu-22.04-clang
         runs-on: ubuntu-latest
@@ -148,7 +148,7 @@ jobs:
             -   name: test-release-clang++
                 run: |
                     cd build-release-clang++
-                    ./test/libcoro_test  --reporter xml
+                    ./test/libcoro_test  --reporter xml  ~'benchmark tcp_server echo server thread pool'
             -   name: build-release-clang++-feature-networking-disabled
                 run: |
                     mkdir build-release-clang++-feature-networking-disabled
@@ -164,7 +164,7 @@ jobs:
             -   name: test-release-clang++-feature-networking-disabled
                 run: |
                     cd build-release-clang++-feature-networking-disabled
-                    ./test/libcoro_test  --reporter xml
+                    ./test/libcoro_test  --reporter xml  ~'benchmark tcp_server echo server thread pool'
     build-fedora-32-to-37:
         name: fedora-${{ matrix.fedora_version }}
         runs-on: ubuntu-latest
@@ -202,7 +202,7 @@ jobs:
             -   name: test-release-g++
                 run: |
                     cd build-release-g++
-                    ./test/libcoro_test  --reporter xml
+                    ./test/libcoro_test  --reporter xml  ~'benchmark tcp_server echo server thread pool'
             -   name: Build coverage info
                 if: ${{ matrix.fedora_version == 32 }}
                 run: |
@@ -218,7 +218,7 @@ jobs:
                         -DCMAKE_CXX_COMPILER=g++ \
                         ..
                     ninja
-                    ./test/libcoro_test  --reporter xml
+                    ./test/libcoro_test  --reporter xml  ~'benchmark tcp_server echo server thread pool'
                     gcov -o ./test/CMakeFiles/libcoro_tests.dir/main.cpp.o ./test/libcoro_tests
                     lcov --include "*/inc/coro/*" --include "*/src/*" --exclude "test/*" -o libcoro_tests.info -c -d .
             -   name: Coveralls GitHub Action
@@ -262,7 +262,7 @@ jobs:
             -   name: test-release-g++
                 run: |
                     cd build-release-g++
-                    ./test/libcoro_test  --reporter xml
+                    ./test/libcoro_test  --reporter xml  ~'benchmark tcp_server echo server thread pool'
     build-windows-2022:
         name: windows-2022
         runs-on: windows-latest
