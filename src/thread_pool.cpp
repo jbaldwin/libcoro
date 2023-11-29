@@ -35,7 +35,7 @@ thread_pool::~thread_pool()
 
 auto thread_pool::schedule() -> operation
 {
-    if (!m_shutdown_requested.load(std::memory_order::relaxed))
+    if (!m_shutdown_requested.load(std::memory_order::seq_cst))
     {
         m_size.fetch_add(1, std::memory_order::release);
         return operation{*this};
