@@ -51,7 +51,7 @@ auto thread_pool::resume(std::coroutine_handle<> handle) noexcept -> void
         return;
     }
 
-    m_size.fetch_add(1, std::memory_order::release_cst);
+    m_size.fetch_add(1, std::memory_order::release);
     schedule_impl(handle);
 }
 
