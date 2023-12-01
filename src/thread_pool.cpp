@@ -94,7 +94,6 @@ auto thread_pool::executor(std::size_t idx) -> void
                 return m_size.load(std::memory_order::acquire) > 0 ||
                        m_shutdown_requested.load(std::memory_order::acquire);
             });
-
         // Process this batch until the queue is empty.
         while (!m_queue.empty())
         {
@@ -104,6 +103,7 @@ auto thread_pool::executor(std::size_t idx) -> void
             // Release the lock while executing the coroutine.
             lk.unlock();
             handle.resume();
+
             m_size.fetch_sub(1, std::memory_order::release);
             lk.lock();
         }

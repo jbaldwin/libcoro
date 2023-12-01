@@ -215,7 +215,6 @@ private:
     options m_opts;
     /// The background executor threads.
     std::vector<std::thread> m_threads;
-
     /// Mutex for executor threads to sleep on the condition variable.
     std::mutex m_wait_mutex;
     /// Condition variable for each executor thread to wait on when no tasks are available.
@@ -227,7 +226,6 @@ private:
      * @param idx The executor's idx for internal data structure accesses.
      */
     auto executor(std::size_t idx) -> void;
-
     /**
      * @param handle Schedules the given coroutine to be executed upon the first available thread.
      */
