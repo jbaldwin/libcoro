@@ -221,7 +221,7 @@ auto io_scheduler::process_events_dedicated_thread() -> void
 
     m_io_processing.exchange(true, std::memory_order::release);
     // Execute tasks until stopped or there are no more tasks to complete.
-    while (!m_shutdown_requested.load(std::memory_order::seq_cst) || size() > 0)
+    while (!m_shutdown_requested.load(std::memory_order::acquire) || size() > 0)
     {
         process_events_execute(m_default_timeout);
     }

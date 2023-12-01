@@ -37,7 +37,7 @@ auto thread_pool::schedule() -> operation
 {
     if (!m_shutdown_requested.load(std::memory_order::acquire))
     {
-        m_size.fetch_add(1, std::memory_order::seq_cst);
+        m_size.fetch_add(1, std::memory_order::release);
         return operation{*this};
     }
 
@@ -51,14 +51,14 @@ auto thread_pool::resume(std::coroutine_handle<> handle) noexcept -> void
         return;
     }
 
-    m_size.fetch_add(1, std::memory_order::seq_cst);
+    m_size.fetch_add(1, std::memory_order::release_cst);
     schedule_impl(handle);
 }
 
 auto thread_pool::shutdown() noexcept -> void
 {
     // Only allow shutdown to occur once.
-    if (m_shutdown_requested.exchange(true, std::memory_order::seq_cst) == false)
+    if (m_shutdown_requested.exchange(true, std::memory_order::acq_rel) == false)
     {
         {
             // There is a race condition if we are not holding the lock with the executors
