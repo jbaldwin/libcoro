@@ -66,7 +66,6 @@ auto thread_pool::shutdown() noexcept -> void
             std::unique_lock<std::mutex> lk{m_wait_mutex};
             m_wait_cv.notify_all();
         }
-        m_wait_cv.notify_all();
 
         for (auto& thread : m_threads)
         {

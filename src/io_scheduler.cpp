@@ -183,7 +183,7 @@ auto io_scheduler::poll(fd_t fd, coro::poll_op op, std::chrono::milliseconds tim
 auto io_scheduler::shutdown() noexcept -> void
 {
     // Only allow shutdown to occur once.
-    if (m_shutdown_requested.exchange(true, std::memory_order::seq_cst) == false)
+    if (m_shutdown_requested.exchange(true, std::memory_order::acq_rel) == false)
     {
         if (m_thread_pool != nullptr)
         {
