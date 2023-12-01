@@ -35,7 +35,7 @@ thread_pool::~thread_pool()
 
 auto thread_pool::schedule() -> operation
 {
-    if (!m_shutdown_requested.load(std::memory_order::seq_cst))
+    if (!m_shutdown_requested.load(std::memory_order::acquire))
     {
         m_size.fetch_add(1, std::memory_order::seq_cst);
         return operation{*this};
@@ -60,6 +60,12 @@ auto thread_pool::shutdown() noexcept -> void
     // Only allow shutdown to occur once.
     if (m_shutdown_requested.exchange(true, std::memory_order::seq_cst) == false)
     {
+        {
+            // There is a race condition if we are not holding the lock with the executors
+            // to always receive this.  std::jthread stop token works without this properly.
+            std::unique_lock<std::mutex> lk{m_wait_mutex};
+            m_wait_cv.notify_all();
+        }
         m_wait_cv.notify_all();
 
         for (auto& thread : m_threads)
@@ -79,26 +85,28 @@ auto thread_pool::executor(std::size_t idx) -> void
         m_opts.on_thread_start_functor(idx);
     }
 
-    while (!m_shutdown_requested.load(std::memory_order::seq_cst))
+    // Process until shutdown is requested and the total number of tasks reaches zero.
+    while (!m_shutdown_requested.load(std::memory_order::acquire) || m_size.load(std::memory_order::acquire) > 0)
     {
-        // Wait until the queue has operations to execute or shutdown has been requested.
-        while (true)
+        std::unique_lock<std::mutex> lk{m_wait_mutex};
+        m_wait_cv.wait(
+            lk,
+            [&] {
+                return m_size.load(std::memory_order::acquire) > 0 ||
+                       m_shutdown_requested.load(std::memory_order::acquire);
+            });
+        // Process this batch until the queue is empty.
+        while (!m_queue.empty())
         {
-            std::unique_lock<std::mutex> lk{m_wait_mutex};
-            m_wait_cv.wait(lk, [this] { return !m_queue.empty() || m_shutdown_requested.load(std::memory_order::seq_cst); });
-            if (m_queue.empty())
-            {
-                lk.unlock(); // would happen on scope destruction, but being explicit/faster(?)
-                break;
-            }
-
             auto handle = m_queue.front();
             m_queue.pop_front();
 
-            lk.unlock(); // Not needed for processing the coroutine.
-
+            // Release the lock while executing the coroutine.
+            lk.unlock();
             handle.resume();
-            m_size.fetch_sub(1, std::memory_order::seq_cst);
+
+            m_size.fetch_sub(1, std::memory_order::release);
+            lk.lock();
         }
     }
 

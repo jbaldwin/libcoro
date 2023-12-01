@@ -253,11 +253,10 @@ auto io_scheduler::process_events_execute(std::chrono::milliseconds timeout) -> 
                 // Process scheduled coroutines.
                 process_scheduled_execute_inline();
             }
-            else if (handle_ptr == m_shutdown_ptr)
-                [[unlikely]]
-                {
-                    // Nothing to do , just needed to wake-up and smell the flowers
-                }
+            else if (handle_ptr == m_shutdown_ptr) [[unlikely]]
+            {
+                // Nothing to do , just needed to wake-up and smell the flowers
+            }
             else
             {
                 // Individual poll task wake-up.
