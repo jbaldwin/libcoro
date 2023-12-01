@@ -24,7 +24,7 @@ thread_pool::thread_pool(options opts) : m_opts(std::move(opts))
 
     for (uint32_t i = 0; i < m_opts.thread_count; ++i)
     {
-        m_threads.emplace_back([this, i](std::stop_token st) { executor(std::move(st), i); });
+        m_threads.emplace_back([this, i]() { executor(i); });
     }
 }
 
@@ -35,7 +35,7 @@ thread_pool::~thread_pool()
 
 auto thread_pool::schedule() -> operation
 {
-    if (!m_shutdown_requested.load(std::memory_order::relaxed))
+    if (!m_shutdown_requested.load(std::memory_order::acquire))
     {
         m_size.fetch_add(1, std::memory_order::release);
         return operation{*this};
@@ -60,9 +60,11 @@ auto thread_pool::shutdown() noexcept -> void
     // Only allow shutdown to occur once.
     if (m_shutdown_requested.exchange(true, std::memory_order::acq_rel) == false)
     {
-        for (auto& thread : m_threads)
         {
-            thread.request_stop();
+            // There is a race condition if we are not holding the lock with the executors
+            // to always receive this.  std::jthread stop token works without this properly.
+            std::unique_lock<std::mutex> lk{m_wait_mutex};
+            m_wait_cv.notify_all();
         }
 
         for (auto& thread : m_threads)
@@ -75,33 +77,35 @@ auto thread_pool::shutdown() noexcept -> void
     }
 }
 
-auto thread_pool::executor(std::stop_token stop_token, std::size_t idx) -> void
+auto thread_pool::executor(std::size_t idx) -> void
 {
     if (m_opts.on_thread_start_functor != nullptr)
     {
         m_opts.on_thread_start_functor(idx);
     }
 
-    while (!stop_token.stop_requested())
+    // Process until shutdown is requested and the total number of tasks reaches zero.
+    while (!m_shutdown_requested.load(std::memory_order::acquire) || m_size.load(std::memory_order::acquire) > 0)
     {
-        // Wait until the queue has operations to execute or shutdown has been requested.
-        while (true)
-        {
-            std::unique_lock<std::mutex> lk{m_wait_mutex};
-            m_wait_cv.wait(lk, stop_token, [this] { return !m_queue.empty(); });
-            if (m_queue.empty())
-            {
-                lk.unlock(); // would happen on scope destruction, but being explicit/faster(?)
-                break;
-            }
+        std::unique_lock<std::mutex> lk{m_wait_mutex};
+        m_wait_cv.wait(
+            lk,
+            [&] {
+                return m_size.load(std::memory_order::acquire) > 0 ||
+                       m_shutdown_requested.load(std::memory_order::acquire);
+            });
 
+        // Process this batch until the queue is empty.
+        while (!m_queue.empty())
+        {
             auto handle = m_queue.front();
             m_queue.pop_front();
 
-            lk.unlock(); // Not needed for processing the coroutine.
-
+            // Release the lock while executing the coroutine.
+            lk.unlock();
             handle.resume();
             m_size.fetch_sub(1, std::memory_order::release);
+            lk.lock();
         }
     }
 
