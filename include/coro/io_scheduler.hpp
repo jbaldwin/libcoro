@@ -162,11 +162,7 @@ public:
      * @param task The task to execute on this io_scheduler.  It's lifetime ownership will be transferred
      *             to this io_scheduler.
      */
-    auto schedule(coro::task<void>&& task) -> void
-    {
-        auto* ptr = static_cast<coro::task_container<coro::io_scheduler>*>(m_owned_tasks);
-        ptr->start(std::move(task));
-    }
+    auto schedule(coro::task<void>&& task) -> void;
 
     /**
      * Schedules the current task to run after the given amount of time has elapsed.
@@ -290,11 +286,7 @@ public:
      * new tasks but this allows the user to cleanup resources manually.  One usage might be making sure fds
      * are cleaned up as soon as possible.
      */
-    auto garbage_collect() noexcept -> void
-    {
-        auto* ptr = static_cast<coro::task_container<coro::io_scheduler>*>(m_owned_tasks);
-        ptr->garbage_collect();
-    }
+    auto garbage_collect() noexcept -> void;
 
 private:
     /// The configuration options.

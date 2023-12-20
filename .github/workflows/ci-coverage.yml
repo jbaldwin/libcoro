@@ -44,11 +44,11 @@ jobs:
                         -DLIBCORO_FEATURE_TLS=ON \
                         -DLIBCORO_CODE_COVERAGE=ON \
                         ..
-                    ninja
+                    cmake --build . --config Debug
             -   name: Coverage
                 run: |
                     cd Debug
-                    ctest -VV
+                    ctest --build-config Debug -VV
                     gcov -o ./test/CMakeFiles/libcoro_test.dir/main.cpp.o ./test/libcoro_test
                     lcov --include "*/include/coro/*" --include "*/src/*" --exclude "test/*" -o libcoro_tests.lcov -c -d .
             -   name: Coveralls GitHub Action

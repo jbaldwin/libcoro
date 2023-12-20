@@ -35,33 +35,43 @@ endif()
 
 if(LIBCORO_FEATURE_PLATFORM)
     list(APPEND LIBCORO_TEST_SOURCE_FILES
-        bench.cpp # networking is ifdef'ed internally
+        bench.cpp # internally ifdef's LIBCORO_FEATURE_NETWORKING|TLS
         test_io_scheduler.cpp
     )
 endif()
 
 add_executable(${PROJECT_NAME} main.cpp ${LIBCORO_TEST_SOURCE_FILES})
-target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_20)
+target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_20)
 target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-
-set(LIBCORO_TEST_LINK_LIBRARIES libcoro)
+target_link_libraries(${PROJECT_NAME} PRIVATE libcoro)
 
 if(${CMAKE_CXX_COMPILER_ID} MATCHES "GNU")
-    set(LIBCORO_TEST_COMPILE_OPTIONS -fcoroutines -Wall -Wextra -pipe)
+    target_compile_options(${PROJECT_NAME} PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:-std=c++20>
+        $<$<COMPILE_LANGUAGE:CXX>:-fcoroutines>
+        $<$<COMPILE_LANGUAGE:CXX>:-fconcepts>
+        $<$<COMPILE_LANGUAGE:CXX>:-fexceptions>
+        $<$<COMPILE_LANGUAGE:CXX>:-Wall>
+        $<$<COMPILE_LANGUAGE:CXX>:-Wextra>
+        $<$<COMPILE_LANGUAGE:CXX>:-pipe>
+    )
 elseif(${CMAKE_CXX_COMPILER_ID} MATCHES "Clang")
-    set(LIBCORO_TEST_COMPILE_OPTIONS -Wall -Wextra -pipe)
+    target_compile_options(${PROJECT_NAME} PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:-std=c++20>
+        $<$<COMPILE_LANGUAGE:CXX>:-fexceptions>
+        $<$<COMPILE_LANGUAGE:CXX>:-Wall>
+        $<$<COMPILE_LANGUAGE:CXX>:-Wextra>
+        $<$<COMPILE_LANGUAGE:CXX>:-pipe>
+    )
 elseif(MSVC)
-    set(LIBCORO_TEST_COMPILE_OPTIONS /W4)
+    target_compile_options(${PROJECT_NAME} PRIVATE /W4)
 else()
     message(FATAL_ERROR "Unsupported compiler.")
 endif()
 
 if(LIBCORO_CODE_COVERAGE)
-    list(APPEND LIBCORO_TEST_LINK_LIBRARIES gcov)
-    list(APPEND LIBCORO_TEST_COMPILE_OPTIONS --coverage)
+    target_link_libraries(${PROJECT_NAME} PRIVATE gcov)
+    target_compile_options(${PROJECT_NAME} PRIVATE --coverage)
 endif()
-
-target_link_libraries(${PROJECT_NAME} PUBLIC ${LIBCORO_TEST_LINK_LIBRARIES})
-target_compile_options(${PROJECT_NAME} PUBLIC ${LIBCORO_TEST_COMPILE_OPTIONS})
 
 add_test(NAME libcoro_tests COMMAND ${PROJECT_NAME})

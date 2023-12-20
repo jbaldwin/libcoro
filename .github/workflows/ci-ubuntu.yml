@@ -146,8 +146,8 @@ jobs:
                         -DLIBCORO_FEATURE_TLS=${{ matrix.libcoro_feature_networking.tls }} \
                         -DLIBCORO_FEATURE_PLATFORM=${{ matrix.libcoro_feature_platform }} \
                         ..
-                    ninja
+                    cmake --build . --config Release
             -   name: Test
                 run: |
                     cd Release
-                    ctest -VV
+                    ctest --build-config Release -VV

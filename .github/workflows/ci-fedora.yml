@@ -9,8 +9,8 @@ jobs:
         strategy:
             fail-fast: false
             matrix:
-                fedora_version: [32, 33, 34, 35, 36, 37]
-                libcoro_feature_networking: [ {enabled: ON, tls: ON}]
+                fedora_version: [32, 33, 34, 35, 36, 37, 38, 39, 40]
+                libcoro_feature_networking: [ {enabled: ON, tls: ON} ]
                 libcoro_feature_platform: [ON]
         container:
             image: fedora:${{ matrix.fedora_version }}
@@ -41,8 +41,8 @@ jobs:
                         -DLIBCORO_FEATURE_TLS=${{ matrix.libcoro_feature_networking.tls }} \
                         -DLIBCORO_FEATURE_PLATFORM=${{ matrix.libcoro_feature_platform }} \
                         ..
-                    ninja
+                    cmake --build . --config Release
             -   name: Test
                 run: |
                     cd Release
-                    ctest -VV
+                    ctest --build-config Release -VV

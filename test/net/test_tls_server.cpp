@@ -7,7 +7,7 @@
 
         #include <iostream>
 
-TEST_CASE("tls_server hello world server", "[tcp_server]")
+TEST_CASE("tls_server hello world server", "[tls_server]")
 {
     auto scheduler = std::make_shared<coro::io_scheduler>(
         coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});

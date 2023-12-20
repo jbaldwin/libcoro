@@ -86,4 +86,88 @@ TEST_CASE("tcp_server ping server", "[tcp_server]")
     coro::sync_wait(coro::when_all(make_server_task(), make_client_task()));
 }
 
+TEST_CASE("tcp_server concurrent polling on the same socket", "[tcp_server]")
+{
+    // Issue 224: This test duplicates a client and issues two different poll operations per coroutine.
+
+    using namespace std::chrono_literals;
+    auto scheduler = std::make_shared<coro::io_scheduler>(coro::io_scheduler::options{
+        .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
+
+    auto make_read_task = [](coro::net::tcp::client client) -> coro::task<void>
+    {
+        co_await client.poll(coro::poll_op::read, 2s);
+        co_return;
+    };
+
+    auto make_server_task = [&]() -> coro::task<std::string>
+    {
+        co_await scheduler->schedule();
+        coro::net::tcp::server server{scheduler};
+
+        auto poll_status = co_await server.poll();
+        REQUIRE(poll_status == coro::poll_status::event);
+
+        auto read_client = server.accept();
+        REQUIRE(read_client.socket().is_valid());
+
+        // make a copy so we can poll twice at the same time in different coroutines
+        auto write_client = read_client;
+
+        scheduler->schedule(make_read_task(std::move(read_client)));
+
+        // Make sure the read op has completed.
+        co_await scheduler->yield_for(500ms);
+
+        std::string           data(8096, 'A');
+        std::span<const char> remaining{data};
+        do
+        {
+            auto poll_status = co_await write_client.poll(coro::poll_op::write);
+            REQUIRE(poll_status == coro::poll_status::event);
+            auto [send_status, r] = write_client.send(remaining);
+            REQUIRE(send_status == coro::net::send_status::ok);
+
+            if (r.empty())
+            {
+                break;
+            }
+
+            remaining = r;
+        } while (true);
+
+        co_return data;
+    };
+
+    auto make_client_task = [&]() -> coro::task<std::string>
+    {
+        co_await scheduler->schedule();
+        coro::net::tcp::client client{scheduler};
+
+        auto connect_status = co_await client.connect();
+        REQUIRE(connect_status == coro::net::connect_status::connected);
+
+        std::string     response(8096, '\0');
+        std::span<char> remaining{response};
+        do
+        {
+            auto poll_status = co_await client.poll(coro::poll_op::read);
+            REQUIRE(poll_status == coro::poll_status::event);
+
+            auto [recv_status, r] = client.recv(remaining);
+            remaining             = remaining.subspan(r.size_bytes());
+
+        } while (!remaining.empty());
+
+        co_return response;
+    };
+
+    auto result = coro::sync_wait(coro::when_all(make_server_task(), make_client_task()));
+
+    auto request  = std::move(std::get<0>(result).return_value());
+    auto response = std::move(std::get<1>(result).return_value());
+
+    REQUIRE(request == response);
+}
+
 #endif // LIBCORO_FEATURE_NETWORKING
