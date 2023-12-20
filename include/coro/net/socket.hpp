@@ -47,9 +47,9 @@ public:
     socket() = default;
     explicit socket(int fd) : m_fd(fd) {}
 
-    socket(const socket&) = delete;
+    socket(const socket& other) : m_fd(dup(other.m_fd)) {}
     socket(socket&& other) : m_fd(std::exchange(other.m_fd, -1)) {}
-    auto operator=(const socket&) -> socket& = delete;
+    auto operator=(const socket& other) noexcept -> socket&;
     auto operator=(socket&& other) noexcept -> socket&;
 
     ~socket() { close(); }
