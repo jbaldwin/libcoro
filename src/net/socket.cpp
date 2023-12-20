@@ -15,6 +15,13 @@ auto socket::type_to_os(type_t type) -> int
     }
 }
 
+auto socket::operator=(const socket& other) noexcept -> socket&
+{
+    this->close();
+    this->m_fd = dup(other.m_fd);
+    return *this;
+}
+
 auto socket::operator=(socket&& other) noexcept -> socket&
 {
     if (std::addressof(other) != this)

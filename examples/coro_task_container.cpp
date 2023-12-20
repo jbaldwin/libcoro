@@ -6,9 +6,11 @@ int main()
     auto scheduler = std::make_shared<coro::io_scheduler>(
         coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
 
-    auto make_server_task = [&]() -> coro::task<void> {
+    auto make_server_task = [&]() -> coro::task<void>
+    {
         // This is the task that will handle processing a client's requests.
-        auto serve_client = [](coro::net::tcp_client client) -> coro::task<void> {
+        auto serve_client = [](coro::net::tcp::client client) -> coro::task<void>
+        {
             size_t requests{1};
 
             while (true)
@@ -38,8 +40,8 @@ int main()
             co_return;
         };
 
-        // Spin up the tcp_server and schedule it onto the io_scheduler.
-        coro::net::tcp_server server{scheduler};
+        // Spin up the tcp::server and schedule it onto the io_scheduler.
+        coro::net::tcp::server server{scheduler};
         co_await scheduler->schedule();
 
         // All incoming connections will be stored into the task container until they are completed.
@@ -52,14 +54,15 @@ int main()
         // on the task container's thread pool, which is the same as the scheduler.
         tc.start(serve_client(std::move(client)));
 
-        // Wait for all clients to complete before shutting down the tcp_server.
+        // Wait for all clients to complete before shutting down the tcp::server.
         co_await tc.garbage_collect_and_yield_until_empty();
         co_return;
     };
 
-    auto make_client_task = [&](size_t request_count) -> coro::task<void> {
+    auto make_client_task = [&](size_t request_count) -> coro::task<void>
+    {
         co_await scheduler->schedule();
-        coro::net::tcp_client client{scheduler};
+        coro::net::tcp::client client{scheduler};
 
         co_await client.connect();
 
@@ -81,7 +84,7 @@ int main()
             std::cout << "client: " << response << "\n";
         }
 
-        co_return; // Upon exiting the tcp_client will close its connection to the server.
+        co_return; // Upon exiting the tcp::client will close its connection to the server.
     };
 
     coro::sync_wait(coro::when_all(make_server_task(), make_client_task(5)));

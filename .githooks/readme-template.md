@@ -32,13 +32,13 @@
         - Currently uses an epoll driver
     - [coro::task_container](#task_container) for dynamic task lifetimes
 * Coroutine Networking
-    - coro::net::dns_resolver for async dns
+    - coro::net::dns::resolver for async dns
         - Uses libc-ares
-    - [coro::net::tcp_client](#io_scheduler)
-        - Supports SSL/TLS via OpenSSL
-    - [coro::net::tcp_server](#io_scheduler)
-        - Supports SSL/TLS via OpenSSL
-    - coro::net::udp_peer
+    - [coro::net::tcp::client](#io_scheduler)
+    - [coro::net::tcp::server](#io_scheduler)
+    - coro::net::tls::client (OpenSSL)
+    - coro::net::tls::server (OpenSSL)
+    - coro::net::udp::peer
 * [Example TCP/HTTP Echo Server](#tcp_echo_server)
 
 ## Usage
@@ -254,7 +254,7 @@ The `coro::io_scheduler` can use a dedicated spawned thread for processing event
 
 Before getting to an example there are two methods of scheduling work onto an i/o scheduler, the first is by having the caller maintain the lifetime of the task being scheduled and the second is by moving or transfering owership of the task into the i/o scheduler.  The first can allow for return values but requires the caller to manage the lifetime of the coroutine while the second requires the return type of the task to be void but allows for variable or unknown task lifetimes.  Transferring task lifetime to the scheduler can be useful, e.g. for a network request.
 
-The example provided here shows an i/o scheduler that spins up a basic `coro::net::tcp_server` and a `coro::net::tcp_client` that will connect to each other and then send a request and a response.
+The example provided here shows an i/o scheduler that spins up a basic `coro::net::tcp::server` and a `coro::net::tcp::client` that will connect to each other and then send a request and a response.
 
 ```C++
 ${EXAMPLE_CORO_IO_SCHEDULER_CPP}
@@ -428,7 +428,7 @@ CMake Options:
 | LIBCORO_BUILD_EXAMPLES        | ON      | Should the examples be built?                                                                      |
 | LIBCORO_FEATURE_PLATFORM      | ON      | Include the features depending on the linux platform. MSVC not supported.                          |
 | LIBCORO_FEATURE_NETWORKING    | ON      | Include networking features. MSVC not supported.                                                   |
-| LIBCORO_FEATURE_SSL           | ON      | Include SSL features. Requires networking to be enabled. MSVC not supported.                       |
+| LIBCORO_FEATURE_TLS           | ON      | Include TLS features. Requires networking to be enabled. MSVC not supported.                       |
 
 #### Adding to your project
 
@@ -474,7 +474,7 @@ The tests will automatically be run by github actions on creating a pull request
     ctest -VV
 
     # Or invoke directly, can pass the name of tests to execute, the framework used is catch2.
-    # Tests are tagged with their group, below is howt o run all of the coro::net::tcp_server tests:
+    # Tests are tagged with their group, below is howt o run all of the coro::net::tcp::server tests:
     ./Debug/test/libcoro_test "[tcp_server]"
 
 ### Support

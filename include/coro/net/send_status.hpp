@@ -8,6 +8,7 @@ namespace coro::net
 enum class send_status : int64_t
 {
     ok                       = 0,
+    closed                   = -1,
     permission_denied        = EACCES,
     try_again                = EAGAIN,
     would_block              = EWOULDBLOCK,
@@ -25,10 +26,6 @@ enum class send_status : int64_t
     not_a_socket             = ENOTSOCK,
     operationg_not_supported = EOPNOTSUPP,
     pipe_closed              = EPIPE,
-
-#ifdef LIBCORO_FEATURE_SSL
-    ssl_error = -3
-#endif
 };
 
 } // namespace coro::net

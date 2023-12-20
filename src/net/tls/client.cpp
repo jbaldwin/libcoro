@@ -1,90 +1,99 @@
-#include "coro/net/tcp_client.hpp"
+#ifdef LIBCORO_FEATURE_TLS
 
-namespace coro::net
+    #include "coro/net/tls/client.hpp"
+
+namespace coro::net::tls
 {
 using namespace std::chrono_literals;
 
-tcp_client::tcp_client(std::shared_ptr<io_scheduler> scheduler, options opts)
+client::client(std::shared_ptr<io_scheduler> scheduler, std::shared_ptr<context> tls_ctx, options opts)
     : m_io_scheduler(std::move(scheduler)),
+      m_tls_ctx(std::move(tls_ctx)),
       m_options(std::move(opts)),
       m_socket(net::make_socket(
           net::socket::options{m_options.address.domain(), net::socket::type_t::tcp, net::socket::blocking_t::no}))
 {
     if (m_io_scheduler == nullptr)
     {
-        throw std::runtime_error{"tcp_client cannot have nullptr io_scheduler"};
+        throw std::runtime_error{"tls::client cannot have nullptr io_scheduler"};
+    }
+
+    if (m_tls_ctx == nullptr)
+    {
+        throw std::runtime_error{"tls::client cannot have nullptr tls_ctx"};
     }
 }
 
-tcp_client::tcp_client(std::shared_ptr<io_scheduler> scheduler, net::socket socket, options opts)
+client::client(
+    std::shared_ptr<io_scheduler> scheduler, std::shared_ptr<context> tls_ctx, net::socket socket, options opts)
     : m_io_scheduler(std::move(scheduler)),
+      m_tls_ctx(std::move(tls_ctx)),
       m_options(std::move(opts)),
       m_socket(std::move(socket)),
-      m_connect_status(connect_status::connected)
-#ifdef LIBCORO_FEATURE_SSL
-      ,
-      m_ssl_info(ssl_connection_type::accept)
-#endif
+      m_connect_status(connection_status::connected),
+      m_tls_info(tls_connection_type::accept)
 {
-    // io_scheduler is assumed good since it comes from a tcp_server.
+    // io_scheduler is assumed good since it comes from a tls::server.
+    // tls_ctx is assumed good since it comes from a tls::server.
 
     // Force the socket to be non-blocking.
     m_socket.blocking(coro::net::socket::blocking_t::no);
 }
 
-tcp_client::tcp_client(tcp_client&& other)
+client::client(client&& other)
     : m_io_scheduler(std::move(other.m_io_scheduler)),
+      m_tls_ctx(std::move(other.m_tls_ctx)),
       m_options(std::move(other.m_options)),
       m_socket(std::move(other.m_socket)),
-      m_connect_status(std::exchange(other.m_connect_status, std::nullopt))
-#ifdef LIBCORO_FEATURE_SSL
-      ,
-      m_ssl_info(std::move(other.m_ssl_info))
-#endif
+      m_connect_status(std::exchange(other.m_connect_status, std::nullopt)),
+      m_tls_info(std::move(other.m_tls_info))
 {
 }
 
-tcp_client::~tcp_client()
+client::~client()
 {
-#ifdef LIBCORO_FEATURE_SSL
     // If this tcp client is using SSL and the connection did not have an ssl error, schedule a task
     // to shutdown the connection cleanly.  This is done on a background scheduled task since the
     // tcp client's destructor cannot co_await the SSL_shutdown() read and write poll operations.
-    if (m_ssl_info.m_ssl_ptr != nullptr && !m_ssl_info.m_ssl_error)
+    if (m_tls_info.m_tls_ptr != nullptr && !m_tls_info.m_tls_error)
     {
         // Should the shutdown timeout be configurable?
-        m_io_scheduler->schedule(ssl_shutdown_and_free(
-            m_io_scheduler, std::move(m_socket), std::move(m_ssl_info.m_ssl_ptr), std::chrono::seconds{30}));
+        m_io_scheduler->schedule(tls_shutdown_and_free(
+            m_io_scheduler, std::move(m_socket), std::move(m_tls_info.m_tls_ptr), std::chrono::seconds{30}));
     }
-#endif
 }
 
-auto tcp_client::operator=(tcp_client&& other) noexcept -> tcp_client&
+auto client::operator=(client&& other) noexcept -> client&
 {
     if (std::addressof(other) != this)
     {
         m_io_scheduler   = std::move(other.m_io_scheduler);
+        m_tls_ctx        = std::move(other.m_tls_ctx);
         m_options        = std::move(other.m_options);
         m_socket         = std::move(other.m_socket);
         m_connect_status = std::exchange(other.m_connect_status, std::nullopt);
-#ifdef LIBCORO_FEATURE_SSL
-        m_ssl_info       = std::move(other.m_ssl_info);
-#endif
+        m_tls_info       = std::move(other.m_tls_info);
     }
     return *this;
 }
 
-auto tcp_client::connect(std::chrono::milliseconds timeout) -> coro::task<connect_status>
+auto client::connect(std::chrono::milliseconds timeout) -> coro::task<connection_status>
 {
     // Only allow the user to connect per tcp client once, if they need to re-connect they should
-    // make a new tcp_client.
+    // make a new tls::client.
     if (m_connect_status.has_value())
     {
         co_return m_connect_status.value();
     }
 
+    // tls context isn't setup and is required.
+    if (m_tls_ctx == nullptr)
+    {
+        co_return connection_status::context_required;
+    }
+
     // This enforces the connection status is aways set on the client object upon returning.
-    auto return_value = [this](connect_status s) -> connect_status
+    auto return_value = [this](connection_status s) -> connection_status
     {
         m_connect_status = s;
         return s;
@@ -98,7 +107,7 @@ auto tcp_client::connect(std::chrono::milliseconds timeout) -> coro::task<connec
     auto cret = ::connect(m_socket.native_handle(), (struct sockaddr*)&server, sizeof(server));
     if (cret == 0)
     {
-        co_return return_value(connect_status::connected);
+        co_return return_value(co_await handshake(timeout));
     }
     else if (cret == -1)
     {
@@ -118,73 +127,50 @@ auto tcp_client::connect(std::chrono::milliseconds timeout) -> coro::task<connec
 
                 if (result == 0)
                 {
-                    co_return return_value(connect_status::connected);
+                    // TODO: delta the already used time and remove from the handshake timeout.
+                    co_return return_value(co_await handshake(timeout));
                 }
             }
             else if (pstatus == poll_status::timeout)
             {
-                co_return return_value(connect_status::timeout);
+                co_return return_value(connection_status::timeout);
             }
         }
     }
 
-    co_return return_value(connect_status::error);
+    co_return return_value(connection_status::error);
 }
 
-#ifdef LIBCORO_FEATURE_SSL
-auto tcp_client::ssl_handshake(std::chrono::milliseconds timeout) -> coro::task<ssl_handshake_status>
+auto client::handshake(std::chrono::milliseconds timeout) -> coro::task<connection_status>
 {
-    if (!m_connect_status.has_value() || m_connect_status.value() != connect_status::connected)
+    m_tls_info.m_tls_ptr = tls_unique_ptr{SSL_new(m_tls_ctx->native_handle())};
+    if (m_tls_info.m_tls_ptr == nullptr)
     {
-        // Can't ssl handshake if the connection isn't established.
-        co_return ssl_handshake_status::not_connected;
+        co_return connection_status::resource_allocation_failed;
     }
 
-    if (m_options.ssl_ctx == nullptr)
+    auto* tls = m_tls_info.m_tls_ptr.get();
+
+    if (auto r = SSL_set_fd(tls, m_socket.native_handle()); r == 0)
     {
-        // ssl isn't setup
-        co_return ssl_handshake_status::ssl_context_required;
+        co_return connection_status::set_fd_failure;
     }
 
-    if (m_ssl_info.m_ssl_handshake_status.has_value())
+    if (m_tls_info.m_tls_connection_type == tls_connection_type::connect)
     {
-        // The user has already called this function.
-        co_return m_ssl_info.m_ssl_handshake_status.value();
-    }
-
-    // Enforce on any return past here to set the cached handshake status.
-    auto return_value = [this](ssl_handshake_status s) -> ssl_handshake_status
-    {
-        m_ssl_info.m_ssl_handshake_status = s;
-        return s;
-    };
-
-    m_ssl_info.m_ssl_ptr = ssl_unique_ptr{SSL_new(m_options.ssl_ctx->native_handle())};
-    if (m_ssl_info.m_ssl_ptr == nullptr)
-    {
-        co_return return_value(ssl_handshake_status::ssl_resource_allocation_failed);
-    }
-
-    if (auto r = SSL_set_fd(m_ssl_info.m_ssl_ptr.get(), m_socket.native_handle()); r == 0)
-    {
-        co_return return_value(ssl_handshake_status::ssl_set_fd_failure);
-    }
-
-    if (m_ssl_info.m_ssl_connection_type == ssl_connection_type::connect)
-    {
-        SSL_set_connect_state(m_ssl_info.m_ssl_ptr.get());
+        SSL_set_connect_state(tls);
     }
     else // ssl_connection_type::accept
     {
-        SSL_set_accept_state(m_ssl_info.m_ssl_ptr.get());
+        SSL_set_accept_state(tls);
     }
 
     int r{0};
     ERR_clear_error();
-    while ((r = SSL_do_handshake(m_ssl_info.m_ssl_ptr.get())) != 1)
+    while ((r = SSL_connect(tls)) != 1)
     {
         poll_op op{poll_op::read_write};
-        int     err = SSL_get_error(m_ssl_info.m_ssl_ptr.get(), r);
+        int     err = SSL_get_error(tls, r);
         if (err == SSL_ERROR_WANT_WRITE)
         {
             op = poll_op::write;
@@ -198,7 +184,7 @@ auto tcp_client::ssl_handshake(std::chrono::milliseconds timeout) -> coro::task<
             // char error_buffer[256];
             // ERR_error_string(err, error_buffer);
             // std::cerr << "ssl_handleshake error=[" << error_buffer << "]\n";
-            co_return return_value(ssl_handshake_status::handshake_failed);
+            co_return connection_status::handshake_failed;
         }
 
         // TODO: adjust timeout based on elapsed time so far.
@@ -206,29 +192,29 @@ auto tcp_client::ssl_handshake(std::chrono::milliseconds timeout) -> coro::task<
         switch (pstatus)
         {
             case poll_status::timeout:
-                co_return return_value(ssl_handshake_status::timeout);
+                co_return connection_status::timeout;
             case poll_status::error:
-                co_return return_value(ssl_handshake_status::poll_error);
+                co_return connection_status::poll_error;
             case poll_status::closed:
-                co_return return_value(ssl_handshake_status::unexpected_close);
+                co_return connection_status::unexpected_close;
             default:
                 // Event triggered, continue handshake.
                 break;
         }
     }
 
-    co_return return_value(ssl_handshake_status::ok);
+    co_return connection_status::connected;
 }
 
-auto tcp_client::ssl_shutdown_and_free(
+auto client::tls_shutdown_and_free(
     std::shared_ptr<io_scheduler> io_scheduler,
     net::socket                   s,
-    ssl_unique_ptr                ssl_ptr,
+    tls_unique_ptr                tls_ptr,
     std::chrono::milliseconds     timeout) -> coro::task<void>
 {
     while (true)
     {
-        auto r = SSL_shutdown(ssl_ptr.get());
+        auto r = SSL_shutdown(tls_ptr.get());
         if (r == 1) // shutdown complete
         {
             co_return;
@@ -236,7 +222,7 @@ auto tcp_client::ssl_shutdown_and_free(
         else if (r == 0) // shutdown in progress
         {
             coro::poll_op op{coro::poll_op::read_write};
-            auto          err = SSL_get_error(ssl_ptr.get(), r);
+            auto          err = SSL_get_error(tls_ptr.get(), r);
             if (err == SSL_ERROR_WANT_WRITE)
             {
                 op = coro::poll_op::write;
@@ -268,6 +254,7 @@ auto tcp_client::ssl_shutdown_and_free(
         }
     }
 }
-#endif
 
-} // namespace coro::net
+} // namespace coro::net::tls
+
+#endif // #ifdef LIBCORO_FEATURE_TLS

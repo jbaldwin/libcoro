@@ -18,28 +18,28 @@
 #include <unordered_set>
 #include <vector>
 
-namespace coro::net
+namespace coro::net::dns
 {
-class dns_resolver;
+class resolver;
 
-enum class dns_status
+enum class status
 {
     complete,
     error
 };
 
-class dns_result
+class result
 {
-    friend dns_resolver;
+    friend resolver;
 
 public:
-    dns_result(coro::io_scheduler& scheduler, coro::event& resume, uint64_t pending_dns_requests);
-    ~dns_result() = default;
+    result(coro::io_scheduler& scheduler, coro::event& resume, uint64_t pending_dns_requests);
+    ~result() = default;
 
     /**
      * @return The status of the dns lookup.
      */
-    auto status() const -> dns_status { return m_status; }
+    auto status() const -> dns::status { return m_status; }
 
     /**
      * @return If the result of the dns looked was successful then the list of ip addresses that
@@ -51,26 +51,26 @@ private:
     coro::io_scheduler&                m_io_scheduler;
     coro::event&                       m_resume;
     uint64_t                           m_pending_dns_requests{0};
-    dns_status                         m_status{dns_status::complete};
+    dns::status                        m_status{dns::status::complete};
     std::vector<coro::net::ip_address> m_ip_addresses{};
 
     friend auto ares_dns_callback(void* arg, int status, int timeouts, struct hostent* host) -> void;
 };
 
-class dns_resolver
+class resolver
 {
 public:
-    explicit dns_resolver(std::shared_ptr<io_scheduler> scheduler, std::chrono::milliseconds timeout);
-    dns_resolver(const dns_resolver&)                             = delete;
-    dns_resolver(dns_resolver&&)                                  = delete;
-    auto operator=(const dns_resolver&) noexcept -> dns_resolver& = delete;
-    auto operator=(dns_resolver&&) noexcept -> dns_resolver&      = delete;
-    ~dns_resolver();
+    explicit resolver(std::shared_ptr<io_scheduler> scheduler, std::chrono::milliseconds timeout);
+    resolver(const resolver&)                             = delete;
+    resolver(resolver&&)                                  = delete;
+    auto operator=(const resolver&) noexcept -> resolver& = delete;
+    auto operator=(resolver&&) noexcept -> resolver&      = delete;
+    ~resolver();
 
     /**
      * @param hn The hostname to resolve its ip addresses.
      */
-    auto host_by_name(const net::hostname& hn) -> coro::task<std::unique_ptr<dns_result>>;
+    auto host_by_name(const net::hostname& hn) -> coro::task<std::unique_ptr<result>>;
 
 private:
     /// The io scheduler to drive the events for dns lookups.
@@ -97,4 +97,4 @@ private:
     auto make_poll_task(fd_t fd, poll_op ops) -> coro::task<void>;
 };
 
-} // namespace coro::net
+} // namespace coro::net::dns

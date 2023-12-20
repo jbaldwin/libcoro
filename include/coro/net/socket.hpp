@@ -47,9 +47,9 @@ public:
     socket() = default;
     explicit socket(int fd) : m_fd(fd) {}
 
-    socket(const socket&) = delete;
+    socket(const socket& other) : m_fd(dup(other.m_fd)) {}
     socket(socket&& other) : m_fd(std::exchange(other.m_fd, -1)) {}
-    auto operator=(const socket&) -> socket& = delete;
+    auto operator=(const socket& other) noexcept -> socket&;
     auto operator=(socket&& other) noexcept -> socket&;
 
     ~socket() { close(); }
@@ -88,7 +88,7 @@ private:
 
 /**
  * Creates a socket with the given socket options, this typically is used for creating sockets to
- * use within client objects, e.g. tcp_client and udp_client.
+ * use within client objects, e.g. tcp::client and udp::client.
  * @param opts See socket::options for more details.
  */
 auto make_socket(const socket::options& opts) -> socket;
@@ -96,7 +96,7 @@ auto make_socket(const socket::options& opts) -> socket;
 /**
  * Creates a socket that can accept connections or packets with the given socket options, address,
  * port and backlog.  This is used for creating sockets to use within server objects, e.g.
- * tcp_server and udp_server.
+ * tcp::server and udp::server.
  * @param opts See socket::options for more details
  * @param address The ip address to bind to.  If the type of socket is tcp then it will also listen.
  * @param port The port to bind to.

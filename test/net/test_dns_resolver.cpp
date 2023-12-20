@@ -8,14 +8,14 @@ TEST_CASE("dns_resolver basic", "[dns]")
 {
     auto scheduler = std::make_shared<coro::io_scheduler>(
         coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
-    coro::net::dns_resolver dns_resolver{scheduler, std::chrono::milliseconds{5000}};
+    coro::net::dns::resolver dns_resolver{scheduler, std::chrono::milliseconds{5000}};
 
     auto make_host_by_name_task = [&](coro::net::hostname hn) -> coro::task<void>
     {
         co_await scheduler->schedule();
         auto result_ptr = co_await std::move(dns_resolver.host_by_name(hn));
 
-        if (result_ptr->status() == coro::net::dns_status::complete)
+        if (result_ptr->status() == coro::net::dns::status::complete)
         {
             for (const auto& ip_addr : result_ptr->ip_addresses())
             {

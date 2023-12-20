@@ -14,19 +14,22 @@
 #endif
 
 #ifdef LIBCORO_FEATURE_NETWORKING
+    #include "coro/net/dns/resolver.hpp"
+    #include "coro/net/tcp/client.hpp"
+    #include "coro/net/tcp/server.hpp"
+    #ifdef LIBCORO_FEATURE_TLS
+        #include "coro/net/tls/client.hpp"
+        #include "coro/net/tls/connection_status.hpp"
+        #include "coro/net/tls/context.hpp"
+        #include "coro/net/tls/server.hpp"
+    #endif
     #include "coro/net/connect.hpp"
-    #include "coro/net/dns_resolver.hpp"
     #include "coro/net/hostname.hpp"
     #include "coro/net/ip_address.hpp"
     #include "coro/net/recv_status.hpp"
     #include "coro/net/send_status.hpp"
     #include "coro/net/socket.hpp"
-    #ifdef LIBCORO_FEATURE_SSL
-        #include "coro/net/ssl_context.hpp"
-    #endif
-    #include "coro/net/tcp_client.hpp"
-    #include "coro/net/tcp_server.hpp"
-    #include "coro/net/udp_peer.hpp"
+    #include "coro/net/udp/peer.hpp"
 #endif
 
 #include "coro/event.hpp"

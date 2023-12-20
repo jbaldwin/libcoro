@@ -26,7 +26,7 @@ option(LIBCORO_BUILD_EXAMPLES        "Build the examples, Default=ON." ON)
 
 cmake_dependent_option(LIBCORO_FEATURE_PLATFORM "Include linux platform features, Default=ON." ON "NOT EMSCRIPTEN; NOT MSVC" OFF)
 cmake_dependent_option(LIBCORO_FEATURE_NETWORKING "Include networking features, Default=ON." ON "NOT EMSCRIPTEN; NOT MSVC" OFF)
-cmake_dependent_option(LIBCORO_FEATURE_SSL "Include SSL encryption features, Default=ON." ON "NOT EMSCRIPTEN; NOT MSVC" OFF)
+cmake_dependent_option(LIBCORO_FEATURE_TLS "Include TLS encryption features, Default=ON." ON "NOT EMSCRIPTEN; NOT MSVC" OFF)
 
 message("${PROJECT_NAME} LIBCORO_EXTERNAL_DEPENDENCIES = ${LIBCORO_EXTERNAL_DEPENDENCIES}")
 message("${PROJECT_NAME} LIBCORO_BUILD_TESTS           = ${LIBCORO_BUILD_TESTS}")
@@ -34,7 +34,7 @@ message("${PROJECT_NAME} LIBCORO_CODE_COVERAGE         = ${LIBCORO_CODE_COVERAGE
 message("${PROJECT_NAME} LIBCORO_BUILD_EXAMPLES        = ${LIBCORO_BUILD_EXAMPLES}")
 message("${PROJECT_NAME} LIBCORO_FEATURE_PLATFORM      = ${LIBCORO_FEATURE_PLATFORM}")
 message("${PROJECT_NAME} LIBCORO_FEATURE_NETWORKING    = ${LIBCORO_FEATURE_NETWORKING}")
-message("${PROJECT_NAME} LIBCORO_FEATURE_SSL           = ${LIBCORO_FEATURE_SSL}")
+message("${PROJECT_NAME} LIBCORO_FEATURE_TLS           = ${LIBCORO_FEATURE_TLS}")
 
 if(LIBCORO_EXTERNAL_DEPENDENCIES)
     if(LIBCORO_FEATURE_NETWORKING)
@@ -92,21 +92,25 @@ endif()
 if(LIBCORO_FEATURE_NETWORKING)
     list(APPEND LIBCORO_SOURCE_FILES
         include/coro/net/connect.hpp src/net/connect.cpp
-        include/coro/net/dns_resolver.hpp src/net/dns_resolver.cpp
+        include/coro/net/dns/resolver.hpp src/net/dns/resolver.cpp
         include/coro/net/hostname.hpp
         include/coro/net/ip_address.hpp src/net/ip_address.cpp
         include/coro/net/recv_status.hpp src/net/recv_status.cpp
         include/coro/net/send_status.hpp src/net/send_status.cpp
         include/coro/net/socket.hpp src/net/socket.cpp
-        include/coro/net/tcp_client.hpp src/net/tcp_client.cpp
-        include/coro/net/tcp_server.hpp src/net/tcp_server.cpp
-        include/coro/net/udp_peer.hpp src/net/udp_peer.cpp
+        include/coro/net/tcp/client.hpp src/net/tcp/client.cpp
+        include/coro/net/tcp/server.hpp src/net/tcp/server.cpp
+        include/coro/net/udp/peer.hpp src/net/udp/peer.cpp
     )
-    if(LIBCORO_FEATURE_SSL)
+    if(LIBCORO_FEATURE_TLS)
         find_package(OpenSSL REQUIRED)
         list(APPEND LIBCORO_SOURCE_FILES
-            include/coro/net/ssl_context.hpp src/net/ssl_context.cpp
-            include/coro/net/ssl_handshake_status.hpp
+            include/coro/net/tls/client.hpp src/net/tls/client.cpp
+            include/coro/net/tls/connection_status.hpp src/net/tls/connection_status.cpp
+            include/coro/net/tls/context.hpp src/net/tls/context.cpp
+            include/coro/net/tls/recv_status.hpp src/net/tls/recv_status.cpp
+            include/coro/net/tls/send_status.hpp src/net/tls/send_status.cpp
+            include/coro/net/tls/server.hpp src/net/tls/server.cpp
         )
     endif()
 endif()
@@ -136,9 +140,9 @@ if(LIBCORO_FEATURE_PLATFORM)
 if(LIBCORO_FEATURE_NETWORKING)
     target_link_libraries(${PROJECT_NAME} PUBLIC c-ares::cares)
     target_compile_definitions(${PROJECT_NAME} PUBLIC LIBCORO_FEATURE_NETWORKING)
-    if(LIBCORO_FEATURE_SSL)
+    if(LIBCORO_FEATURE_TLS)
         target_link_libraries(${PROJECT_NAME} PUBLIC OpenSSL::SSL OpenSSL::Crypto)
-        target_compile_definitions(${PROJECT_NAME} PUBLIC LIBCORO_FEATURE_SSL)
+        target_compile_definitions(${PROJECT_NAME} PUBLIC LIBCORO_FEATURE_TLS)
     endif()
 endif()
 

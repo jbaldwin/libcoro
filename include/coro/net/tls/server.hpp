@@ -1,58 +1,51 @@
-#pragma once
+#ifdef LIBCORO_FEATURE_TLS
 
-#include "coro/net/ip_address.hpp"
-#include "coro/net/socket.hpp"
-#include "coro/net/tcp_client.hpp"
-#include "coro/task.hpp"
+    #pragma once
 
-#include <fcntl.h>
-#include <sys/socket.h>
+    #include "coro/net/ip_address.hpp"
+    #include "coro/net/socket.hpp"
+    #include "coro/net/tls/client.hpp"
+    #include "coro/task.hpp"
+
+    #include <fcntl.h>
+    #include <sys/socket.h>
 
 namespace coro
 {
 class io_scheduler;
 } // namespace coro
 
-namespace coro::net
+namespace coro::net::tls
 {
-#ifdef LIBCORO_FEATURE_SSL
-class ssl_context;
-#endif
+class context;
 
-class tcp_server
+class server
 {
 public:
     struct options
     {
-        /// The ip address for the tcp server to bind and listen on.
+        /// The ip address for the tls server to bind and listen on.
         net::ip_address address{net::ip_address::from_string("0.0.0.0")};
-        /// The port for the tcp server to bind and listen on.
+        /// The port for the tls server to bind and listen on.
         uint16_t port{8080};
         /// The kernel backlog of connections to buffer.
         int32_t backlog{128};
-#ifdef LIBCORO_FEATURE_SSL
-        /// Should this tcp server use TLS/SSL?  If provided all accepted connections will use the
-        /// given SSL certificate and private key to secure the connections.
-        std::shared_ptr<ssl_context> ssl_ctx{nullptr};
-#endif
     };
 
-    tcp_server(
+    explicit server(
         std::shared_ptr<io_scheduler> scheduler,
+        std::shared_ptr<context>      tls_ctx,
         options                       opts = options{
                                   .address = net::ip_address::from_string("0.0.0.0"),
                                   .port    = 8080,
                                   .backlog = 128,
-#ifdef LIBCORO_FEATURE_SSL
-            .ssl_ctx = nullptr
-#endif
         });
 
-    tcp_server(const tcp_server&) = delete;
-    tcp_server(tcp_server&& other);
-    auto operator=(const tcp_server&) -> tcp_server& = delete;
-    auto operator=(tcp_server&& other) -> tcp_server&;
-    ~tcp_server() = default;
+    server(const server&) = delete;
+    server(server&& other);
+    auto operator=(const server&) -> server& = delete;
+    auto operator=(server&& other) -> server&;
+    ~server() = default;
 
     /**
      * Polls for new incoming tcp connections.
@@ -68,17 +61,22 @@ public:
     /**
      * Accepts an incoming tcp client connection.  On failure the tcp clients socket will be set to
      * and invalid state, use the socket.is_value() to verify the client was correctly accepted.
+     * @param timeout The timeout to complete the TLS handshake.
      * @return The newly connected tcp client connection.
      */
-    auto accept() -> coro::net::tcp_client;
+    auto accept(std::chrono::milliseconds timeout = std::chrono::seconds{30}) -> coro::task<coro::net::tls::client>;
 
 private:
     /// The io scheduler for awaiting new connections.
     std::shared_ptr<io_scheduler> m_io_scheduler{nullptr};
+    // The tls context.
+    std::shared_ptr<context> m_tls_ctx{nullptr};
     /// The bind and listen options for this server.
     options m_options;
     /// The socket for accepting new tcp connections on.
     net::socket m_accept_socket{-1};
 };
 
-} // namespace coro::net
+} // namespace coro::net::tls
+
+#endif // #ifdef LIBCORO_FEATURE_TLS
