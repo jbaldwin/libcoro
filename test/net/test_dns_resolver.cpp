@@ -1,8 +1,10 @@
 #include "catch_amalgamated.hpp"
 
-#include <coro/coro.hpp>
+#ifdef LIBCORO_FEATURE_NETWORKING
 
-#include <chrono>
+    #include <coro/coro.hpp>
+
+    #include <chrono>
 
 TEST_CASE("dns_resolver basic", "[dns]")
 {
@@ -33,3 +35,5 @@ TEST_CASE("dns_resolver basic", "[dns]")
     std::cerr << "io_scheduler.size() after shutdown = " << scheduler->size() << "\n";
     REQUIRE(scheduler->empty());
 }
+
+#endif // LIBCORO_FEATURE_NETWORKING

@@ -266,7 +266,6 @@ TEST_CASE("benchmark counter task scheduler{1} yield", "[benchmark]")
     REQUIRE(counter == iterations);
 }
 
-#ifdef LIBCORO_FEATURE_NETWORKING
 TEST_CASE("benchmark counter task scheduler{1} yield_for", "[benchmark]")
 {
     constexpr std::size_t iterations = default_iterations;
@@ -357,6 +356,7 @@ TEST_CASE("benchmark counter task scheduler await event from another coroutine",
     REQUIRE(s.empty());
 }
 
+#ifdef LIBCORO_FEATURE_NETWORKING
 TEST_CASE("benchmark tcp::server echo server thread pool", "[benchmark]")
 {
     const constexpr std::size_t connections             = 100;
@@ -716,6 +716,7 @@ TEST_CASE("benchmark tcp::server echo server inline", "[benchmark]")
     }
 }
 
+    #ifdef LIBCORO_FEATURE_TLS
 TEST_CASE("benchmark tls::server echo server thread pool", "[benchmark]")
 {
     // TODO: This test is currently not working, we'll commit it and skip it for now.
@@ -1016,4 +1017,5 @@ TEST_CASE("benchmark tls::server echo server thread pool", "[benchmark]")
         std::cerr << ms.count() << " : " << count << "\n";
     }
 }
-#endif
+    #endif // LIBCORO_FEATURE_TLS
+#endif     // LIBCORO_FEATURE_NETWORKING

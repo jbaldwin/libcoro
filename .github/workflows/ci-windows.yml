@@ -1,0 +1,23 @@
+name: ci-windows
+
+on: [pull_request, workflow_dispatch]
+
+jobs:
+    ci-windows-2022:
+        name: windows-2022
+        runs-on: windows-latest
+        steps:
+            -   name: Checkout
+                uses: actions/checkout@v4
+                with:
+                    submodules: recursive
+            -   name: Build
+                run: |
+                    mkdir Release
+                    cd Release
+                    cmake ..
+                    cmake --build . --config Release
+            -   name: Test
+                run: |
+                    cd Release
+                    ctest --build-config Release -VV

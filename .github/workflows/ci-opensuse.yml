@@ -1,0 +1,50 @@
+name: ci-opensuse
+
+on: [pull_request, workflow_dispatch]
+
+jobs:
+    build-opensuse-15:
+        name: opensuse-15-g++
+        runs-on: ubuntu-latest
+        strategy:
+            matrix:
+                gplusplus_version: [10]
+                libcoro_feature_networking: [ {enabled: ON, tls: ON} ]
+                libcoro_feature_platform: [ON]
+        container:
+            image: opensuse/leap:15.2
+        steps:
+            -   name: zypper
+                run: |
+                    zypper install -y \
+                        cmake \
+                        git \
+                        ninja \
+                        gcc${{ matrix.gplusplus_version }} \
+                        gcc${{ matrix.gplusplus_version }}-c++ \
+                        openssl \
+                        openssl-devel
+            # Cannot run higher version of checkout, node isn't backwards compatible
+            -   name: Checkout
+                uses: actions/checkout@v2
+                with:
+                    submodules: recursive
+            -   name: Build
+                run: |
+                    mkdir Release
+                    cd Release
+                    cmake \
+                        -GNinja \
+                        -DCMAKE_BUILD_TYPE=Release \
+                        -DCMAKE_C_COMPILER=gcc-${{ matrix.gplusplus_version }} \
+                        -DCMAKE_CXX_COMPILER=g++-${{ matrix.gplusplus_version }} \
+                        -DLIBCORO_FEATURE_NETWORKING=${{ matrix.libcoro_feature_networking.enabled }} \
+                        -DLIBCORO_FEATURE_TLS=${{ matrix.libcoro_feature_networking.tls }} \
+                        -DLIBCORO_FEATURE_PLATFORM=${{ matrix.libcoro_feature_platform }} \
+                        ..
+                    ninja
+            -   name: Test
+                run: |
+                    cd Release
+                    ctest -VV
+

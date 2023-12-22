@@ -1,6 +1,8 @@
 #include "catch_amalgamated.hpp"
 
-#include <coro/coro.hpp>
+#ifdef LIBCORO_FEATURE_NETWORKING
+
+    #include <coro/coro.hpp>
 
 TEST_CASE("udp one way")
 {
@@ -119,3 +121,5 @@ TEST_CASE("udp echo peers")
         make_peer_task(8081, 8080, false, peer2_msg, peer1_msg),
         make_peer_task(8080, 8081, true, peer1_msg, peer2_msg)));
 }
+
+#endif // LIBCORO_FEATURE_NETWORKING
