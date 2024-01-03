@@ -1,0 +1,153 @@
+name: ci-ubuntu
+
+on: [pull_request, workflow_dispatch]
+
+jobs:
+    ci-ubuntu-20-04-gplusplus:
+        name: ci-ubuntu-20.04-g++-${{ matrix.gplusplus_version }}-networking-${{ matrix.libcoro_feature_networking.enabled }}-tls-${{ matrix.libcoro_feature_networking.tls }}-platform-${{ matrix.libcoro_feature_platform }}
+        runs-on: ubuntu-latest
+        strategy:
+            matrix:
+                gplusplus_version: [10]
+                libcoro_feature_networking: [ {enabled: ON, tls: ON}, {enabled: ON, tls: OFF}, {enabled: OFF, tls: OFF} ]
+                libcoro_feature_platform: [ON, OFF]
+        container:
+            image: ubuntu:20.04
+            env:
+                TZ: America/New_York
+                DEBIAN_FRONTEND: noninteractive
+        steps:
+            -   name: Install Dependencies
+                run: |
+                    apt-get update
+                    apt-get -y upgrade
+                    apt install -y build-essential software-properties-common
+                    add-apt-repository ppa:ubuntu-toolchain-r/test
+                    apt-get install -y \
+                        cmake \
+                        git \
+                        ninja-build \
+                        g++-${{ matrix.gplusplus_version }} \
+                        libssl-dev
+            -   name: Checkout
+                uses: actions/checkout@v4
+                with:
+                    submodules: recursive
+            -   name: Build
+                run: |
+                    mkdir Release
+                    cd Release
+                    cmake \
+                        -GNinja \
+                        -DCMAKE_BUILD_TYPE=Release \
+                        -DCMAKE_C_COMPILER=gcc-${{ matrix.gplusplus_version }} \
+                        -DCMAKE_CXX_COMPILER=g++-${{ matrix.gplusplus_version }} \
+                        -DLIBCORO_FEATURE_NETWORKING=${{ matrix.libcoro_feature_networking.enabled }} \
+                        -DLIBCORO_FEATURE_TLS=${{ matrix.libcoro_feature_networking.tls }} \
+                        -DLIBCORO_FEATURE_PLATFORM=${{ matrix.libcoro_feature_platform }} \
+                        ..
+                    ninja
+            -   name: Test
+                run: |
+                    cd Release
+                    ctest -VV
+    ci-ubuntu-22-04-gplusplus:
+        name: ci-ubuntu-22.04-g++
+        runs-on: ubuntu-latest
+        strategy:
+            matrix:
+                gplusplus_version: [11, 12, 13]
+                libcoro_feature_networking: [ {enabled: ON, tls: ON}]
+                libcoro_feature_platform: [ON]
+        container:
+            image: ubuntu:22.04
+            env:
+                TZ: America/New_York
+                DEBIAN_FRONTEND: noninteractive
+        steps:
+            -   name: Install Dependencies
+                run: |
+                    apt-get update
+                    apt-get -y upgrade
+                    apt install -y build-essential software-properties-common
+                    add-apt-repository ppa:ubuntu-toolchain-r/test
+                    apt-get install -y \
+                        cmake \
+                        git \
+                        ninja-build \
+                        g++-${{ matrix.gplusplus_version }} \
+                        libssl-dev
+            -   name: Checkout
+                uses: actions/checkout@v4
+                with:
+                    submodules: recursive
+            -   name: Build
+                run: |
+                    mkdir Release
+                    cd Release
+                    cmake \
+                        -GNinja \
+                        -DCMAKE_BUILD_TYPE=Release \
+                        -DCMAKE_C_COMPILER=gcc-${{ matrix.gplusplus_version }} \
+                        -DCMAKE_CXX_COMPILER=g++-${{ matrix.gplusplus_version }} \
+                        -DLIBCORO_FEATURE_NETWORKING=${{ matrix.libcoro_feature_networking.enabled }} \
+                        -DLIBCORO_FEATURE_TLS=${{ matrix.libcoro_feature_networking.tls }} \
+                        -DLIBCORO_FEATURE_PLATFORM=${{ matrix.libcoro_feature_platform }} \
+                        ..
+                    ninja
+            -   name: Test
+                run: |
+                    cd Release
+                    ctest -VV
+    ci-ubuntu-22-04-clang:
+        name: ci-ubuntu-22.04-clang
+        runs-on: ubuntu-latest
+        strategy:
+            matrix:
+                clang_version: [16, 17]
+                libcoro_feature_networking: [ {enabled: ON, tls: ON}]
+                libcoro_feature_platform: [ON]
+        container:
+            image: ubuntu:22.04
+            env:
+                TZ: America/New_York
+                DEBIAN_FRONTEND: noninteractive
+        steps:
+            -   name: Install Dependencies
+                run: |
+                    apt-get update
+                    apt-get -y upgrade
+                    apt install -y build-essential software-properties-common
+                    apt-get install -y \
+                        wget \
+                        cmake \
+                        git \
+                        ninja-build \
+                        libssl-dev
+            -   name: install-clang
+                run: |
+                    wget https://apt.llvm.org/llvm.sh
+                    chmod +x llvm.sh
+                    ./llvm.sh ${{ matrix.clang_version }}
+            -   name: Checkout
+                uses: actions/checkout@v4
+                with:
+                    submodules: recursive
+            -   name: Build
+                run: |
+                    mkdir Release
+                    cd Release
+                    cmake \
+                        -GNinja \
+                        -DCMAKE_BUILD_TYPE=Release \
+                        -DCMAKE_C_COMPILER=clang-${{ matrix.clang_version }} \
+                        -DCMAKE_CXX_COMPILER=clang++-${{ matrix.clang_version }} \
+                        -DLIBCORO_FEATURE_NETWORKING=${{ matrix.libcoro_feature_networking.enabled }} \
+                        -DLIBCORO_FEATURE_TLS=${{ matrix.libcoro_feature_networking.tls }} \
+                        -DLIBCORO_FEATURE_PLATFORM=${{ matrix.libcoro_feature_platform }} \
+                        ..
+                    ninja
+            -   name: Test
+                run: |
+                    cd Release
+                    ctest -VV

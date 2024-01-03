@@ -1,0 +1,58 @@
+name: ci-coverage
+
+on: [pull_request, workflow_dispatch]
+
+jobs:
+    ci-coverage:
+        name: ci-coverage
+        runs-on: ubuntu-latest
+        container:
+            image: ubuntu:22.04
+            env:
+                TZ: America/New_York
+                DEBIAN_FRONTEND: noninteractive
+        steps:
+            -   name: Install Dependencies
+                run: |
+                    apt-get update
+                    apt-get -y upgrade
+                    apt install -y build-essential software-properties-common
+                    add-apt-repository ppa:ubuntu-toolchain-r/test
+                    apt-get install -y \
+                        cmake \
+                        curl \
+                        git \
+                        ninja-build \
+                        g++ \
+                        libssl-dev \
+                        lcov
+            -   name: Checkout
+                uses: actions/checkout@v4
+                with:
+                    submodules: recursive
+            -   name: Build
+                run: |
+                    mkdir Debug
+                    cd Debug
+                    cmake \
+                        -GNinja \
+                        -DCMAKE_BUILD_TYPE=Debug \
+                        -DCMAKE_C_COMPILER=gcc \
+                        -DCMAKE_CXX_COMPILER=g++ \
+                        -DLIBCORO_FEATURE_NETWORKING=ON \
+                        -DLIBCORO_FEATURE_PLATFORM=ON \
+                        -DLIBCORO_FEATURE_TLS=ON \
+                        -DLIBCORO_CODE_COVERAGE=ON \
+                        ..
+                    ninja
+            -   name: Coverage
+                run: |
+                    cd Debug
+                    ctest -VV
+                    gcov -o ./test/CMakeFiles/libcoro_test.dir/main.cpp.o ./test/libcoro_test
+                    lcov --include "*/include/coro/*" --include "*/src/*" --exclude "test/*" -o libcoro_tests.lcov -c -d .
+            -   name: Coveralls GitHub Action
+                uses: coverallsapp/github-action@v2
+                with:
+                    file: Debug/libcoro_tests.lcov
+                    format: lcov

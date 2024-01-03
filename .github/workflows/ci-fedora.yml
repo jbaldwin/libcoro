@@ -1,0 +1,48 @@
+name: ci-fedora
+
+on: [pull_request, workflow_dispatch]
+
+jobs:
+    ci-fedora-gplusplus:
+        name: fedora-${{ matrix.fedora_version }}
+        runs-on: ubuntu-latest
+        strategy:
+            fail-fast: false
+            matrix:
+                fedora_version: [32, 33, 34, 35, 36, 37]
+                libcoro_feature_networking: [ {enabled: ON, tls: ON}]
+                libcoro_feature_platform: [ON]
+        container:
+            image: fedora:${{ matrix.fedora_version }}
+        steps:
+            -   name: Install Dependencies
+                run: |
+                    sudo dnf install -y \
+                        cmake \
+                        git \
+                        ninja-build \
+                        gcc-c++ \
+                        openssl \
+                        openssl-devel
+            -   name: Checkout
+                uses: actions/checkout@v4
+                with:
+                    submodules: recursive
+            -   name: Release
+                run: |
+                    mkdir Release
+                    cd Release
+                    cmake \
+                        -GNinja \
+                        -DCMAKE_BUILD_TYPE=Release \
+                        -DCMAKE_C_COMPILER=gcc \
+                        -DCMAKE_CXX_COMPILER=g++ \
+                        -DLIBCORO_FEATURE_NETWORKING=${{ matrix.libcoro_feature_networking.enabled }} \
+                        -DLIBCORO_FEATURE_TLS=${{ matrix.libcoro_feature_networking.tls }} \
+                        -DLIBCORO_FEATURE_PLATFORM=${{ matrix.libcoro_feature_platform }} \
+                        ..
+                    ninja
+            -   name: Test
+                run: |
+                    cd Release
+                    ctest -VV

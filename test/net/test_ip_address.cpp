@@ -1,9 +1,11 @@
 #include "catch_amalgamated.hpp"
 
-#include <coro/coro.hpp>
+#ifdef LIBCORO_FEATURE_NETWORKING
 
-#include <chrono>
-#include <iomanip>
+    #include <coro/coro.hpp>
+
+    #include <chrono>
+    #include <iomanip>
 
 TEST_CASE("net::ip_address from_string() ipv4")
 {
@@ -71,3 +73,5 @@ TEST_CASE("net::ip_address from_string() ipv6")
         REQUIRE(std::equal(expected.begin(), expected.end(), ip_addr.data().begin()));
     }
 }
+
+#endif //# LIBCORO_FEATURE_NETWORKING
