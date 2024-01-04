@@ -331,6 +331,8 @@ private:
     /// Tasks that have their ownership passed into the scheduler.  This is a bit strange for now
     /// but the concept doesn't pass since io_scheduler isn't fully defined yet.
     /// The type is coro::task_container<coro::io_scheduler>*
+    /// Do not inline any functions that use this in the io_scheduler header, it can cause the linker
+    /// to complain about "defined in discarded section" because it gets defined multiple times
     void* m_owned_tasks{nullptr};
 
     static constexpr const int   m_shutdown_object{0};

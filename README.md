@@ -1,6 +1,6 @@
 # libcoro C++20 coroutine library
 
-[![CI](https://github.com/jbaldwin/libcoro/workflows/build/badge.svg)](https://github.com/jbaldwin/libcoro/workflows/build/badge.svg)
+[![CI](https://github.com/jbaldwin/libcoro/actions/workflows/ci-coverage.yml/badge.svg)](https://github.com/jbaldwin/libcoro/actions/workflows/ci-coverage.yml)
 [![Coverage Status](https://coveralls.io/repos/github/jbaldwin/libcoro/badge.svg?branch=main)](https://coveralls.io/github/jbaldwin/libcoro?branch=main)
 [![Codacy Badge](https://app.codacy.com/project/badge/Grade/c190d4920e6749d4b4d1a9d7d6687f4f)](https://www.codacy.com/gh/jbaldwin/libcoro/dashboard?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=jbaldwin/libcoro&amp;utm_campaign=Badge_Grade)
 [![language][badge.language]][language]
@@ -40,6 +40,11 @@
     - coro::net::tls::server (OpenSSL)
     - coro::net::udp::peer
 * [Example TCP/HTTP Echo Server](#tcp_echo_server)
+
+* [Requirements](#requirements)
+* [Build Instructions](#build-instructions)
+* [Testing](#tests)
+* [Support](#support)
 
 ## Usage
 
@@ -1099,13 +1104,15 @@ Transfer/sec:     18.33MB
     openssl
     gcov/lcov (For generating coverage only)
 
-### Instructions
+### Build Instructions
 
-#### Tested Distos
+#### Tested Operating Systems
 
  * ubuntu:20.04, 22.04
- * fedora:32-37
+ * fedora:32-40
  * openSUSE/leap:15.2
+ * Windows 2022
+ * Emscripten 3.1.45
 
 #### Cloning the project
 This project uses git submodules, to properly checkout this project use:
