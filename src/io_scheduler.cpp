@@ -84,6 +84,12 @@ auto io_scheduler::process_events(std::chrono::milliseconds timeout) -> std::siz
     return size();
 }
 
+auto io_scheduler::schedule(coro::task<void>&& task) -> void
+{
+    auto* ptr = static_cast<coro::task_container<coro::io_scheduler>*>(m_owned_tasks);
+    ptr->start(std::move(task));
+}
+
 auto io_scheduler::schedule_after(std::chrono::milliseconds amount) -> coro::task<void>
 {
     return yield_for(amount);
@@ -200,6 +206,12 @@ auto io_scheduler::shutdown() noexcept -> void
             m_io_thread.join();
         }
     }
+}
+
+auto io_scheduler::garbage_collect() noexcept -> void
+{
+    auto* ptr = static_cast<coro::task_container<coro::io_scheduler>*>(m_owned_tasks);
+    ptr->garbage_collect();
 }
 
 auto io_scheduler::process_events_manual(std::chrono::milliseconds timeout) -> void

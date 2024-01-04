@@ -44,7 +44,7 @@ jobs:
                         -GNinja \
                         -DCMAKE_BUILD_TYPE=Release \
                         ..
-                    ninja
+                    cmake --build . --config Release
             -   name: Test
                 run: |
                     cd emsdk
