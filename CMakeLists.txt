@@ -196,7 +196,11 @@ endif()
 
 
 # generate pc file for pkg-config
-string(REGEX REPLACE "^lib" "" target1 ${PROJECT_NAME})
+if(MSVC)
+    set(target1 ${PROJECT_NAME})
+else()
+    string(REGEX REPLACE "^lib" "" target1 ${PROJECT_NAME})
+endif()
 configure_file(libcoro.pc.in libcoro.pc @ONLY)
 
 install(TARGETS libcoro)
