@@ -85,7 +85,7 @@ if(LIBCORO_FEATURE_PLATFORM)
 
         include/coro/fd.hpp
         include/coro/io_scheduler.hpp src/io_scheduler.cpp
-        include/coro/poll.hpp
+        include/coro/poll.hpp src/poll.cpp
     )
 endif()
 

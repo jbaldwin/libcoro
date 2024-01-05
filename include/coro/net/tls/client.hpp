@@ -71,6 +71,193 @@ public:
     auto connect(std::chrono::milliseconds timeout = std::chrono::milliseconds{0}) -> coro::task<connection_status>;
 
     /**
+     * Receives incoming data into the given buffer. This function will automatically poll for readability.
+     * @param buffer Received bytes are written into this buffer up to the buffers size.
+     * @param timeout The amount of time to wait for data to arrive.
+     * @return The status of the recv call and a span of the bytes received (if any). The span of
+     *         bytes will be a subspan or full span of the given input buffer.
+     */
+    template<concepts::mutable_buffer buffer_type>
+    auto recv(buffer_type& buffer, std::optional<std::chrono::milliseconds> timeout = std::nullopt)
+        -> coro::task<std::pair<recv_status, std::span<char>>>
+    {
+        if (buffer.empty())
+        {
+            co_return {recv_status::buffer_is_empty, std::span<char>{}};
+        }
+
+        auto* tls = m_tls_info.m_tls_ptr.get();
+
+        auto op = poll_op::read;
+
+        auto                                  first = true;
+        std::chrono::steady_clock::time_point start;
+        std::chrono::steady_clock::time_point stop;
+
+        while (true)
+        {
+            if (timeout.has_value())
+            {
+                auto& t = timeout.value();
+                if (!first)
+                {
+                    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
+                    t -= duration;
+                    if (t <= std::chrono::microseconds{0})
+                    {
+                        co_return {recv_status::timeout, std::span<char>{}};
+                    }
+                }
+
+                first = false;
+                start = std::chrono::steady_clock::now();
+            }
+
+            auto pstatus = co_await poll(op, timeout.value_or(std::chrono::milliseconds{0}));
+            switch (pstatus)
+            {
+                case poll_status::event:
+                    break;
+                case poll_status::timeout:
+                    co_return {recv_status::timeout, std::span<char>{}};
+                case poll_status::error:
+                    co_return {recv_status::error, std::span<char>{}};
+                case poll_status::closed:
+                    co_return {recv_status::closed, std::span<char>{}};
+            }
+
+            size_t bytes_recv{0};
+            ERR_clear_error();
+            int r = SSL_read_ex(tls, buffer.data(), buffer.size(), &bytes_recv);
+            if (timeout.has_value())
+            {
+                stop = std::chrono::steady_clock::now();
+            }
+            if (r <= 0)
+            {
+                int err = SSL_get_error(tls, r);
+                if (err == SSL_ERROR_WANT_READ)
+                {
+                    op = poll_op::read;
+                    continue;
+                }
+                else if (err == SSL_ERROR_WANT_WRITE)
+                {
+                    op = poll_op::write;
+                    continue;
+                }
+                else
+                {
+                    co_return {static_cast<recv_status>(err), std::span<char>{}};
+                }
+            }
+            else
+            {
+                co_return {recv_status::ok, std::span<char>{buffer.data(), static_cast<size_t>(bytes_recv)}};
+            }
+        }
+    }
+
+    /**
+     * Sends outgoing data from the given buffer. If a partial write occurs then the returned span will
+     * contain a view into the unsent bytes. This function will automatically call for writeability on the socket.
+     * @param buffer The data to write on the tls socket.
+     * @param timeout The amount of time to send the data before timing out.
+     * @return The status of the send call and a span of any remaining bytes not sent. If all bytes
+     *         were successfully sent the status will be 'ok' and the remaining span will be empty.
+     */
+    template<concepts::const_buffer buffer_type>
+    auto send(const buffer_type& buffer, std::optional<std::chrono::milliseconds> timeout = std::nullopt)
+        -> coro::task<std::pair<send_status, std::span<const char>>>
+    {
+        // Make sure there is data to send.
+        if (buffer.empty())
+        {
+            co_return {send_status::buffer_is_empty, std::span<const char>{buffer.data(), buffer.size()}};
+        }
+
+        auto* tls = m_tls_info.m_tls_ptr.get();
+
+        auto op = poll_op::write;
+
+        auto                                  first = true;
+        std::chrono::steady_clock::time_point start;
+        std::chrono::steady_clock::time_point stop;
+
+        while (true)
+        {
+            if (timeout.has_value())
+            {
+                auto& t = timeout.value();
+                if (!first)
+                {
+                    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
+                    t -= duration;
+                    if (t <= std::chrono::microseconds{0})
+                    {
+                        co_return {send_status::timeout, std::span<char>{}};
+                    }
+                }
+
+                first = false;
+                start = std::chrono::steady_clock::now();
+            }
+
+            auto pstatus = co_await poll(op, timeout.value_or(std::chrono::milliseconds{0}));
+            switch (pstatus)
+            {
+                case poll_status::event:
+                    break;
+                case poll_status::timeout:
+                    co_return {send_status::timeout, std::span<char>{}};
+                case poll_status::error:
+                    co_return {send_status::error, std::span<char>{}};
+                case poll_status::closed:
+                    co_return {send_status::closed, std::span<char>{}};
+            }
+
+            size_t bytes_sent{0};
+            ERR_clear_error();
+            int r = SSL_write_ex(tls, buffer.data(), buffer.size(), &bytes_sent);
+            if (timeout.has_value())
+            {
+                stop = std::chrono::steady_clock::now();
+            }
+            if (r <= 0)
+            {
+                int err = SSL_get_error(tls, r);
+
+                if (err == SSL_ERROR_WANT_WRITE)
+                {
+                    op = poll_op::write;
+                    continue;
+                }
+                else if (err == SSL_ERROR_WANT_READ)
+                {
+                    op = poll_op::read;
+                    continue;
+                }
+                else
+                {
+                    co_return {static_cast<send_status>(err), std::span<char>{}};
+                }
+            }
+            else
+            {
+                co_return {
+                    send_status::ok, std::span<const char>{buffer.data() + bytes_sent, buffer.size() - bytes_sent}};
+            }
+        }
+    }
+
+private:
+    /**
+     * @param timeout How long to allow for the tls handshake to successfully complete?
+     * @return The result of the tls handshake.
+     */
+    auto handshake(std::chrono::milliseconds timeout = std::chrono::milliseconds{0}) -> coro::task<connection_status>;
+
+    /**
      * Polls for the given operation on this client's socket.  This should be done prior to
      * calling recv and after a send that doesn't send the entire buffer.
      * @param op The poll operation to perform, use read for incoming data and write for outgoing.
@@ -83,103 +270,6 @@ public:
     {
         return m_io_scheduler->poll(m_socket, op, timeout);
     }
-
-    /**
-     * Receives incoming data into the given buffer.  By default since all tcp client sockets are set
-     * to non-blocking use co_await poll() to determine when data is ready to be received.
-     * @param buffer Received bytes are written into this buffer up to the buffers size.
-     * @return The status of the recv call and a span of the bytes recevied (if any).  The span of
-     *         bytes will be a subspan or full span of the given input buffer.
-     */
-    template<concepts::mutable_buffer buffer_type>
-    auto recv(buffer_type&& buffer) -> std::pair<recv_status, std::span<char>>
-    {
-        // If the user requested zero bytes, just return.
-        if (buffer.empty())
-        {
-            return {recv_status::buffer_is_empty, std::span<char>{}};
-        }
-
-        auto* tls = m_tls_info.m_tls_ptr.get();
-
-        ERR_clear_error();
-        size_t bytes_recv{0};
-        int    r = SSL_read_ex(tls, buffer.data(), buffer.size(), &bytes_recv);
-        if (r == 0)
-        {
-            // https://www.openssl.org/docs/man1.1.1/man3/SSL_get_error.html
-            int err = SSL_get_error(tls, r);
-            switch (err)
-            {
-                case SSL_ERROR_NONE:
-                    if (bytes_recv > 0)
-                    {
-                        return {recv_status::ok, std::span<char>{buffer.data(), static_cast<size_t>(bytes_recv)}};
-                    }
-                    else
-                    {
-                        return {recv_status::want_read, std::span<char>{}};
-                    }
-                case SSL_ERROR_WANT_READ:
-                    if (bytes_recv > 0)
-                    {
-                        return {recv_status::ok, std::span<char>{buffer.data(), static_cast<size_t>(bytes_recv)}};
-                    }
-                    else
-                    {
-                        return {recv_status::want_read, std::span<char>{}};
-                    }
-                default:
-                    return {static_cast<recv_status>(err), std::span<char>{}};
-            }
-        }
-        else
-        {
-            return {recv_status::ok, std::span<char>{buffer.data(), static_cast<size_t>(bytes_recv)}};
-        }
-    }
-
-    /**
-     * Sends outgoing data from the given buffer.  If a partial write occurs then use co_await poll()
-     * to determine when the tcp client socket is ready to be written to again.  On partial writes
-     * the status will be 'ok' and the span returned will be non-empty, it will contain the buffer
-     * span data that was not written to the client's socket.
-     * @param buffer The data to write on the tcp socket.
-     * @return The status of the send call and a span of any remaining bytes not sent.  If all bytes
-     *         were successfully sent the status will be 'ok' and the remaining span will be empty.
-     */
-    template<concepts::const_buffer buffer_type>
-    auto send(const buffer_type& buffer) -> std::pair<send_status, std::span<const char>>
-    {
-        // If the user requested zero bytes, just return.
-        if (buffer.empty())
-        {
-            return {send_status::ok, std::span<const char>{buffer.data(), buffer.size()}};
-        }
-
-        auto* tls = m_tls_info.m_tls_ptr.get();
-
-        ERR_clear_error();
-        size_t bytes_sent{0};
-        int    r = SSL_write_ex(tls, buffer.data(), buffer.size(), &bytes_sent);
-        if (r == 0)
-        {
-            // https://www.openssl.org/docs/man1.1.1/man3/SSL_get_error.html
-            int err = SSL_get_error(tls, r);
-            return {static_cast<send_status>(err), std::span<char>{}};
-        }
-        else
-        {
-            return {send_status::ok, std::span<const char>{buffer.data() + bytes_sent, buffer.size() - bytes_sent}};
-        }
-    }
-
-private:
-    /**
-     * @param timeout How long to allow for the tls handshake to successfully complete?
-     * @return The result of the tls handshake.
-     */
-    auto handshake(std::chrono::milliseconds timeout = std::chrono::milliseconds{0}) -> coro::task<connection_status>;
 
     struct tls_deleter
     {

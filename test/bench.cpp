@@ -719,8 +719,6 @@ TEST_CASE("benchmark tcp::server echo server inline", "[benchmark]")
     #ifdef LIBCORO_FEATURE_TLS
 TEST_CASE("benchmark tls::server echo server thread pool", "[benchmark]")
 {
-    // TODO: This test is currently not working, we'll commit it and skip it for now.
-    SKIP();
     const constexpr std::size_t connections             = 100;
     const constexpr std::size_t messages_per_connection = 1'000;
     const constexpr std::size_t ops                     = connections * messages_per_connection;
@@ -739,72 +737,35 @@ TEST_CASE("benchmark tls::server echo server thread pool", "[benchmark]")
         // Echo the messages until the socket is closed.
         while (!closed)
         {
-            std::string_view data;
-            while (true)
+            auto [rstatus, rspan] = co_await client.recv(in);
+            // std::cerr << "SERVER CONNECTION: rstatus =" << coro::net::tls::to_string(rstatus) << "\n";
+            std::string_view data{};
+            switch (rstatus)
             {
-                auto [rstatus, rspan] = client.recv(in);
-                std::cerr << "SERVER: rstatus =" << coro::net::tls::to_string(rstatus) << "\n";
-                switch (rstatus)
-                {
-                    case coro::net::tls::recv_status::ok:
-                        REQUIRE(rstatus == coro::net::tls::recv_status::ok);
-                        data = std::string_view{data.begin(), data.end()};
-                        break;
-                    case coro::net::tls::recv_status::closed:
-                        REQUIRE(rspan.empty());
-                        closed = true;
-                        break;
-                    case coro::net::tls::recv_status::want_read:
-                    {
-                        auto pstatus = co_await client.poll(coro::poll_op::read);
-                        switch (pstatus)
-                        {
-                            case coro::poll_status::event:
-                                continue;
-                            case coro::poll_status::timeout:
-                                std::cerr << "SERVER: client.poll(read) timed out\n";
-                                break;
-                            case coro::poll_status::error:
-                                std::cerr << "SERVER: client.poll(read) error\n";
-                                closed = true;
-                                break;
-                            case coro::poll_status::closed:
-                                std::cerr << "SERVER: client.poll(read) closed\n";
-                                closed = true;
-                                break;
-                        }
-                    }
-                        continue;
-                    case coro::net::tls::recv_status::want_write:
-                    {
-                        auto pstatus = co_await client.poll(coro::poll_op::write);
-                        switch (pstatus)
-                        {
-                            case coro::poll_status::event:
-                                continue;
-                            case coro::poll_status::timeout:
-                                std::cerr << "SERVER: client.poll(write) timed out\n";
-                                break;
-                            case coro::poll_status::error:
-                                std::cerr << "SERVER: client.poll(write) error\n";
-                                closed = true;
-                                break;
-                            case coro::poll_status::closed:
-                                std::cerr << "SERVER: client.poll(write) closed\n";
-                                closed = true;
-                                break;
-                        }
-                    }
-                        continue;
-                    default:
-                        closed = true;
-                        break;
-                }
-
-                if (closed)
-                {
+                case coro::net::tls::recv_status::ok:
+                    REQUIRE(rstatus == coro::net::tls::recv_status::ok);
+                    data = std::string_view{rspan.begin(), rspan.end()};
+                    // std::cerr << "SERVER CONNECTION: recv() -> " << data << "\n";
                     break;
+                case coro::net::tls::recv_status::closed:
+                    // std::cerr << "SERVER CONNECTION: closed\n";
+                    REQUIRE(rspan.empty());
+                    closed = true;
+                    break;
+                case coro::net::tls::recv_status::want_read:
+                {
+                    // std::cerr << "SERVER CONNECTION: want_read\n";
                 }
+                    continue;
+                case coro::net::tls::recv_status::want_write:
+                {
+                    // std::cerr << "SERVER CONNECTION: want_write\n";
+                }
+                    continue;
+                default:
+                    // std::cerr << "SERVER CONNECTION: error (closing)\n";
+                    closed = true;
+                    break;
             }
 
             if (closed)
@@ -812,17 +773,15 @@ TEST_CASE("benchmark tls::server echo server thread pool", "[benchmark]")
                 break;
             }
 
-            std::cerr << "SERVER: client.poll(write)\n";
-            auto rstatus = co_await client.poll(coro::poll_op::write);
-            REQUIRE(rstatus == coro::poll_status::event);
-            std::cerr << "SERVER: client.send()\n";
-            auto [sstatus, remaining] = client.send(data);
+            // std::cerr << "SERVER CONNECTION: client.send()\n";
+            auto [sstatus, remaining] = co_await client.send(data);
             REQUIRE(sstatus == coro::net::tls::send_status::ok);
             REQUIRE(remaining.empty());
+            // std::cerr << "SERVER CONNECTION: send() -> " << data << "\n";
         }
 
         wait_for_clients.count_down();
-        std::cerr << "SERVER: wait_for_clients.count_down(1) -> " << wait_for_clients.remaining() << "\n";
+        // std::cerr << "SERVER CONNECTION: wait_for_clients.count_down(1) -> " << wait_for_clients.remaining() << "\n";
         co_return;
     };
 
@@ -855,9 +814,9 @@ TEST_CASE("benchmark tls::server echo server thread pool", "[benchmark]")
             }
         }
 
-        std::cerr << "SERVER: co_await wait_for_clients\n";
+        // std::cerr << "SERVER: co_await wait_for_clients\n";
         co_await wait_for_clients;
-        std::cerr << "SERVER: co_await wait_for_clients DONE\n";
+        // std::cerr << "SERVER: co_await wait_for_clients DONE\n";
         co_return;
     };
 
@@ -885,80 +844,48 @@ TEST_CASE("benchmark tls::server echo server thread pool", "[benchmark]")
             {
                 auto req_start = std::chrono::steady_clock::now();
 
-                auto pstatus = co_await client.poll(coro::poll_op::write);
-                REQUIRE(pstatus == coro::poll_status::event);
-                auto [sstatus, remaining] = client.send(msg);
+                auto [sstatus, remaining] = co_await client.send(msg);
+                // std::cerr << "CLIENT: send() -> " << msg << "\n";
                 REQUIRE(sstatus == coro::net::tls::send_status::ok);
                 REQUIRE(remaining.empty());
 
-                while (true)
+                // std::cerr << "CLIENT: recv()\n";
+                auto [rstatus, rspan] = co_await client.recv(in);
+                // std::cerr << "CLIENT: rstatus =" << coro::net::tls::to_string(rstatus) << "\n";
+                switch (rstatus)
                 {
-                    auto [rstatus, rspan] = client.recv(in);
-                    std::cerr << "SERVER: rstatus =" << coro::net::tls::to_string(rstatus) << "\n";
-                    switch (rstatus)
+                    case coro::net::tls::recv_status::ok:
                     {
-                        case coro::net::tls::recv_status::ok:
-                        {
-                            REQUIRE(rstatus == coro::net::tls::recv_status::ok);
-                            auto data = std::string_view{rspan.begin(), rspan.end()};
-                            REQUIRE(data.length() > 0);
-                        }
-                        break;
-                        case coro::net::tls::recv_status::closed:
-                            REQUIRE(rspan.empty());
-                            closed = true;
-                            break;
-                        case coro::net::tls::recv_status::want_read:
-                        {
-                            auto pstatus = co_await client.poll(coro::poll_op::read);
-                            switch (pstatus)
-                            {
-                                case coro::poll_status::event:
-                                    continue;
-                                case coro::poll_status::timeout:
-                                    std::cerr << "SERVER: client.poll(read) timed out\n";
-                                    break;
-                                case coro::poll_status::error:
-                                    std::cerr << "SERVER: client.poll(read) error\n";
-                                    closed = true;
-                                    break;
-                                case coro::poll_status::closed:
-                                    std::cerr << "SERVER: client.poll(read) closed\n";
-                                    closed = true;
-                                    break;
-                            }
-                        }
-                            continue;
-                        case coro::net::tls::recv_status::want_write:
-                        {
-                            auto pstatus = co_await client.poll(coro::poll_op::write);
-                            switch (pstatus)
-                            {
-                                case coro::poll_status::event:
-                                    continue;
-                                case coro::poll_status::timeout:
-                                    std::cerr << "SERVER: client.poll(write) timed out\n";
-                                    break;
-                                case coro::poll_status::error:
-                                    std::cerr << "SERVER: client.poll(write) error\n";
-                                    closed = true;
-                                    break;
-                                case coro::poll_status::closed:
-                                    std::cerr << "SERVER: client.poll(write) closed\n";
-                                    closed = true;
-                                    break;
-                            }
-                        }
-                            continue;
-                        default:
-                            closed = true;
-                            break;
+                        REQUIRE(rstatus == coro::net::tls::recv_status::ok);
+                        auto data = std::string_view{rspan.begin(), rspan.end()};
+                        REQUIRE(data.length() > 0);
+                        // std::cerr << "CLIENT: recv() -> " << data << "\n";
                     }
+                    break;
+                    case coro::net::tls::recv_status::closed:
+                        // std::cerr << "CLIENT: closed\n";
+                        REQUIRE(rspan.empty());
+                        closed = true;
+                        break;
+                    case coro::net::tls::recv_status::want_read:
+                    {
+                        // std::cerr << "CLIENT: want_read\n";
+                    }
+                        continue;
+                    case coro::net::tls::recv_status::want_write:
+                    {
+                        // std::cerr << "CLIENT: want_write\n";
+                    }
+                        continue;
+                    default:
+                        // std::cerr << "CLIENT: error (closing)\n";
+                        closed = true;
+                        break;
+                }
 
-                    if (closed)
-                    {
-                        break;
-                    }
+                if (closed)
+                {
+                    break;
                 }
 
                 auto req_stop = std::chrono::steady_clock::now();
@@ -966,7 +893,7 @@ TEST_CASE("benchmark tls::server echo server thread pool", "[benchmark]")
             }
 
             {
-                std::cerr << "CLIENT: writing histogram\n";
+                // std::cerr << "CLIENT: writing histogram\n";
                 auto lock = co_await histogram_mutex.lock();
                 for (auto [ms, count] : histogram)
                 {

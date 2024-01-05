@@ -1,5 +1,6 @@
 #pragma once
 
+#include <string>
 #include <sys/epoll.h>
 
 namespace coro
@@ -24,6 +25,8 @@ inline auto poll_op_writeable(poll_op op) -> bool
     return (static_cast<uint64_t>(op) & EPOLLOUT);
 }
 
+auto to_string(poll_op op) -> const std::string&;
+
 enum class poll_status
 {
     /// The poll operation was was successful.
@@ -35,5 +38,7 @@ enum class poll_status
     /// The file descriptor has been closed by the remote or an internal error/close.
     closed
 };
+
+auto to_string(poll_status status) -> const std::string&;
 
 } // namespace coro
