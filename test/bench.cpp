@@ -850,7 +850,7 @@ TEST_CASE("benchmark tls::server echo server thread pool", "[benchmark]")
                 REQUIRE(remaining.empty());
 
                 // std::cerr << "CLIENT: recv()\n";
-                auto [rstatus, rspan] = co_await client.recv(in);
+                auto [rstatus, rspan] = co_await client.recv(in, {std::chrono::seconds{30}});
                 // std::cerr << "CLIENT: rstatus =" << coro::net::tls::to_string(rstatus) << "\n";
                 switch (rstatus)
                 {
@@ -877,6 +877,10 @@ TEST_CASE("benchmark tls::server echo server thread pool", "[benchmark]")
                         // std::cerr << "CLIENT: want_write\n";
                     }
                         continue;
+                    case ::coro::net::tls::recv_status::timeout:
+                        std::cerr << "client.recv() timeout, closing\n";
+                        closed = true;
+                        break;
                     default:
                         // std::cerr << "CLIENT: error (closing)\n";
                         closed = true;

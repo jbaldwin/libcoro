@@ -49,6 +49,14 @@ add_executable(coro_shared_mutex coro_shared_mutex.cpp)
 target_link_libraries(coro_shared_mutex PUBLIC libcoro)
 target_compile_options(coro_shared_mutex PUBLIC ${LIBCORO_EXAMPLE_OPTIONS})
 
+add_executable(coro_sync_wait coro_sync_wait.cpp)
+target_link_libraries(coro_sync_wait PUBLIC libcoro)
+target_compile_options(coro_sync_wait PUBLIC ${LIBCORO_EXAMPLE_OPTIONS})
+
+add_executable(coro_when_all coro_when_all.cpp)
+target_link_libraries(coro_when_all PUBLIC libcoro)
+target_compile_options(coro_when_all PUBLIC ${LIBCORO_EXAMPLE_OPTIONS})
+
 if(LIBCORO_FEATURE_PLATFORM AND LIBCORO_FEATURE_NETWORKING)
     add_executable(coro_task_container coro_task_container.cpp)
     target_link_libraries(coro_task_container PUBLIC libcoro)
