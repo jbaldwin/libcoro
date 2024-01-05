@@ -214,6 +214,7 @@ auto client::tls_shutdown_and_free(
 {
     while (true)
     {
+        ERR_clear_error();
         auto r = SSL_shutdown(tls_ptr.get());
         if (r == 1) // shutdown complete
         {

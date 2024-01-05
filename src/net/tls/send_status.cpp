@@ -5,6 +5,7 @@ namespace coro::net::tls
 
 static std::string send_status_ok{"ok"};
 static std::string send_status_buffer_is_empty{"buffer_is_empty"};
+static std::string send_status_timeout{"timeout"};
 static std::string send_status_closed{"closed"};
 static std::string send_status_error{"error"};
 static std::string send_status_want_read{"want_read"};
@@ -23,6 +24,8 @@ auto to_string(send_status status) -> const std::string&
             return send_status_ok;
         case send_status::buffer_is_empty:
             return send_status_buffer_is_empty;
+        case send_status::timeout:
+            return send_status_timeout;
         case send_status::closed:
             return send_status_closed;
         case send_status::error:

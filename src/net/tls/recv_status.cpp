@@ -5,6 +5,7 @@ namespace coro::net::tls
 
 static std::string recv_status_ok{"ok"};
 static std::string recv_status_buffer_is_empty{"buffer_is_empty"};
+static std::string recv_status_timeout{"timeout"};
 static std::string recv_status_closed{"closed"};
 static std::string recv_status_error{"error"};
 static std::string recv_status_want_read{"want_read"};
@@ -23,6 +24,8 @@ auto to_string(recv_status status) -> const std::string&
             return recv_status_ok;
         case recv_status::buffer_is_empty:
             return recv_status_buffer_is_empty;
+        case recv_status::timeout:
+            return recv_status_timeout;
         case recv_status::closed:
             return recv_status_closed;
         case recv_status::error:

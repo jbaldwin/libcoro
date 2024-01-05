@@ -27,40 +27,19 @@ TEST_CASE("tls_server hello world server", "[tls_server]")
         REQUIRE(cstatus == coro::net::tls::connection_status::connected);
         std::cerr << "client.connected\n";
 
-        std::cerr << "client.poll(write)\n";
-        auto pstatus = co_await client.poll(coro::poll_op::write);
-        REQUIRE(pstatus == coro::poll_status::event);
-
         std::cerr << "client.send()\n";
-        auto [sstatus, remaining] = client.send(client_msg);
+        auto [sstatus, remaining] = co_await client.send(client_msg);
         REQUIRE(sstatus == coro::net::tls::send_status::ok);
         REQUIRE(remaining.empty());
 
         std::string response;
         response.resize(256, '\0');
 
-        while (true)
-        {
-            std::cerr << "client.poll(read)\n";
-            pstatus = co_await client.poll(coro::poll_op::read);
-            REQUIRE(pstatus == coro::poll_status::event);
-
-            std::cerr << "client.recv()\n";
-            auto [rstatus, rspan] = client.recv(response);
-            if (rstatus == coro::net::tls::recv_status::want_read)
-            {
-                std::cerr << coro::net::tls::to_string(rstatus) << "\n";
-                continue;
-            }
-            else
-            {
-                std::cerr << coro::net::tls::to_string(rstatus) << "\n";
-                REQUIRE(rstatus == coro::net::tls::recv_status::ok);
-                REQUIRE(rspan.size() == server_msg.size());
-                response.resize(rspan.size());
-                break;
-            }
-        }
+        std::cerr << "client.recv()\n";
+        auto [rstatus, rspan] = co_await client.recv(response);
+        REQUIRE(rstatus == coro::net::tls::recv_status::ok);
+        REQUIRE(rspan.size() == server_msg.size());
+        response.resize(rspan.size());
 
         REQUIRE(response == server_msg);
         std::cerr << "client received message: " << response << "\n";
@@ -86,26 +65,18 @@ TEST_CASE("tls_server hello world server", "[tls_server]")
         auto client = co_await server.accept();
         REQUIRE(client.socket().is_valid());
 
-        std::cerr << "server client.poll(read)\n";
-        pstatus = co_await client.poll(coro::poll_op::read);
-        REQUIRE(pstatus == coro::poll_status::event);
-
         std::string buffer;
         buffer.resize(256, '\0');
         std::cerr << "server client.recv()\n";
-        auto [rstatus, rspan] = client.recv(buffer);
+        auto [rstatus, rspan] = co_await client.recv(buffer);
         REQUIRE(rstatus == coro::net::tls::recv_status::ok);
         REQUIRE(rspan.size() == client_msg.size());
         buffer.resize(rspan.size());
         REQUIRE(buffer == client_msg);
         std::cerr << "server received message: " << buffer << "\n";
 
-        std::cerr << "server client.poll(write)\n";
-        pstatus = co_await client.poll(coro::poll_op::write);
-        REQUIRE(pstatus == coro::poll_status::event);
-
         std::cerr << "server client.send()\n";
-        auto [sstatus, remaining] = client.send(server_msg);
+        auto [sstatus, remaining] = co_await client.send(server_msg);
         REQUIRE(sstatus == coro::net::tls::send_status::ok);
         REQUIRE(remaining.empty());
 
