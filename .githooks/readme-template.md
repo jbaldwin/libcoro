@@ -14,6 +14,8 @@
 * C++20 coroutines!
 * Modern Safe C++20 API
 * Higher level coroutine constructs
+    - [coro::sync_wait(awaitable)](#sync_wait)
+    - [coro::when_all(awaitable...) -> awaitable](#when_all)
     - [coro::task<T>](#task)
     - [coro::generator<T>](#generator)
     - [coro::event](#event)
@@ -22,37 +24,67 @@
     - [coro::shared_mutex](#shared_mutex)
     - [coro::semaphore](#semaphore)
     - [coro::ring_buffer<element, num_elements>](#ring_buffer)
-    - coro::sync_wait(awaitable)
-    - coro::when_all(awaitable...) -> awaitable
 * Schedulers
     - [coro::thread_pool](#thread_pool) for coroutine cooperative multitasking
     - [coro::io_scheduler](#io_scheduler) for driving i/o events
-        - Can use coro::thread_pool for latency sensitive or long lived tasks.
+        - Can use `coro::thread_pool` for latency sensitive or long lived tasks.
         - Can use inline task processing for thread per core or short lived tasks.
-        - Currently uses an epoll driver
+        - Currently uses an epoll driver, only supported on linux.
     - [coro::task_container](#task_container) for dynamic task lifetimes
 * Coroutine Networking
     - coro::net::dns::resolver for async dns
         - Uses libc-ares
     - [coro::net::tcp::client](#io_scheduler)
     - [coro::net::tcp::server](#io_scheduler)
+      * [Example TCP/HTTP Echo Server](#tcp_echo_server)
     - coro::net::tls::client (OpenSSL)
     - coro::net::tls::server (OpenSSL)
     - coro::net::udp::peer
-* [Example TCP/HTTP Echo Server](#tcp_echo_server)
-
+* 
 * [Requirements](#requirements)
 * [Build Instructions](#build-instructions)
-* [Testing](#tests)
+* [Contributing](#contributing)
 * [Support](#support)
 
 ## Usage
 
-### A note on co_await
-Its important to note with coroutines that depending on the construct used _any_ `co_await` has the potential to switch the thread that is executing the currently running coroutine.  In general this shouldn't affect the way any user of the library would write code except for `thread_local`.  Usage of `thread_local` should be extremely careful and _never_ used across any `co_await` boundary do to thread switching and work stealing on thread pools.
+### A note on co_await and threads
+Its important to note with coroutines that _any_ `co_await` has the potential to switch the underyling thread that is executing the currently executing coroutine if the scheduler used has more than 1 thread. In general this shouldn't affect the way any user of the library would write code except for `thread_local`. Usage of `thread_local` should be extremely careful and _never_ used across any `co_await` boundary do to thread switching and work stealing on libcoro's schedulers. The only way this is safe is by using a `coro::thread_pool` with 1 thread or an inline `io_scheduler` which also only has 1 thread.
+
+### sync_wait
+The `sync_wait` construct is meant to be used outside of a coroutine context to block the calling thread until the coroutine has completed. The coroutine can be executed on the calling thread or scheduled on one of libcoro's schedulers.
+
+```C++
+${EXAMPLE_CORO_SYNC_WAIT}
+```
+
+Expected output:
+```bash
+$ ./examples/coro_sync_wait 
+Inline Result = 10
+Offload Result = 20
+```
+
+### when_all
+The `when_all` construct can be used within coroutines to await a set of tasks, or it can be used outside coroutinne context in conjunction with `sync_wait` to await multiple tasks. Each task passed into `when_all` will initially be executed serially by the calling thread so it is recommended to offload the tasks onto a scheduler like `coro::thread_pool` or `coro::io_scheduler` so they can execute in parallel.
+
+```C++
+${EXAMPLE_CORO_WHEN_ALL}
+```
+
+Expected output:
+```bash
+$ ./examples/coro_when_all 
+2
+4
+6
+8
+10
+first: 1.21 second: 20
+```
 
 ### task
-The `coro::task<T>` is the main coroutine building block within `libcoro`.  Use task to create your coroutines and `co_await` or `co_yield` tasks within tasks to perform asynchronous operations, lazily evaluation or even spreading work out across a `coro::thread_pool`.  Tasks are lightweight and only begin execution upon awaiting them.  If their return type is not `void` then the value can be returned by const reference or by moving (r-value reference).
+The `coro::task<T>` is the main coroutine building block within `libcoro`.  Use task to create your coroutines and `co_await` or `co_yield` tasks within tasks to perform asynchronous operations, lazily evaluation or even spreading work out across a `coro::thread_pool`.  Tasks are lightweight and only begin execution upon awaiting them.
 
 
 ```C++
@@ -474,21 +506,27 @@ target_link_libraries(${PROJECT_NAME} PUBLIC libcoro)
 ##### Package managers
 libcoro is available via package managers [Conan](https://conan.io/center/libcoro) and [vcpkg](https://vcpkg.io/).
 
+### Contributing
+
+Contributing is welcome, if you have ideas or bugs please open an issue. If you want to open a PR they are also welcome, if you are adding a bugfix or a feature please include tests to verify the feature or bugfix is working properly. If it isn't included I will be asking for you to add some!
+
 #### Tests
-The tests will automatically be run by github actions on creating a pull request.  They can also be ran locally:
+The tests will automatically be run by github actions on creating a pull request. They can also be ran locally after building from the build directory:
 
     # Invoke via cmake with all output from the tests displayed to console:
     ctest -VV
 
     # Or invoke directly, can pass the name of tests to execute, the framework used is catch2.
-    # Tests are tagged with their group, below is howt o run all of the coro::net::tcp::server tests:
-    ./Debug/test/libcoro_test "[tcp_server]"
+    # Tests are tagged with their group, below is how to run all of the coro::net::tcp::server tests:
+    ./test/libcoro_test "[tcp_server]"
+
+If you open a PR for a bugfix or new feature please include tests to verify that the change is working as intended. If your PR doesn't include tests I will ask you to add them and won't merge until they are added and working properly. Tests are found in the `/test` directory and are organized by object type.
 
 ### Support
 
 File bug reports, feature requests and questions using [GitHub libcoro Issues](https://github.com/jbaldwin/libcoro/issues)
 
-Copyright © 2020-2023 Josh Baldwin
+Copyright © 2020-2024 Josh Baldwin
 
 [badge.language]: https://img.shields.io/badge/language-C%2B%2B20-yellow.svg
 [badge.license]: https://img.shields.io/badge/license-Apache--2.0-blue

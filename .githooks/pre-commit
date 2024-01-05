@@ -78,4 +78,12 @@ template_contents=$(cat 'README.md')
 example_contents=$(cat 'examples/coro_shared_mutex.cpp')
 echo "${template_contents/\$\{EXAMPLE_CORO_SHARED_MUTEX_CPP\}/$example_contents}" > README.md
 
+template_contents=$(cat 'README.md')
+example_contents=$(cat 'examples/coro_sync_wait.cpp')
+echo "${template_contents/\$\{EXAMPLE_CORO_SYNC_WAIT\}/$example_contents}" > README.md
+
+template_contents=$(cat 'README.md')
+example_contents=$(cat 'examples/coro_when_all.cpp')
+echo "${template_contents/\$\{EXAMPLE_CORO_WHEN_ALL\}/$example_contents}" > README.md
+
 git add README.md

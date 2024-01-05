@@ -14,6 +14,8 @@
 * C++20 coroutines!
 * Modern Safe C++20 API
 * Higher level coroutine constructs
+    - [coro::sync_wait(awaitable)](#sync_wait)
+    - [coro::when_all(awaitable...) -> awaitable](#when_all)
     - [coro::task<T>](#task)
     - [coro::generator<T>](#generator)
     - [coro::event](#event)
@@ -22,37 +24,148 @@
     - [coro::shared_mutex](#shared_mutex)
     - [coro::semaphore](#semaphore)
     - [coro::ring_buffer<element, num_elements>](#ring_buffer)
-    - coro::sync_wait(awaitable)
-    - coro::when_all(awaitable...) -> awaitable
 * Schedulers
     - [coro::thread_pool](#thread_pool) for coroutine cooperative multitasking
     - [coro::io_scheduler](#io_scheduler) for driving i/o events
-        - Can use coro::thread_pool for latency sensitive or long lived tasks.
+        - Can use `coro::thread_pool` for latency sensitive or long lived tasks.
         - Can use inline task processing for thread per core or short lived tasks.
-        - Currently uses an epoll driver
+        - Currently uses an epoll driver, only supported on linux.
     - [coro::task_container](#task_container) for dynamic task lifetimes
 * Coroutine Networking
     - coro::net::dns::resolver for async dns
         - Uses libc-ares
     - [coro::net::tcp::client](#io_scheduler)
     - [coro::net::tcp::server](#io_scheduler)
+      * [Example TCP/HTTP Echo Server](#tcp_echo_server)
     - coro::net::tls::client (OpenSSL)
     - coro::net::tls::server (OpenSSL)
     - coro::net::udp::peer
-* [Example TCP/HTTP Echo Server](#tcp_echo_server)
-
+* 
 * [Requirements](#requirements)
 * [Build Instructions](#build-instructions)
-* [Testing](#tests)
+* [Contributing](#contributing)
 * [Support](#support)
 
 ## Usage
 
-### A note on co_await
-Its important to note with coroutines that depending on the construct used _any_ `co_await` has the potential to switch the thread that is executing the currently running coroutine.  In general this shouldn't affect the way any user of the library would write code except for `thread_local`.  Usage of `thread_local` should be extremely careful and _never_ used across any `co_await` boundary do to thread switching and work stealing on thread pools.
+### A note on co_await and threads
+Its important to note with coroutines that _any_ `co_await` has the potential to switch the underyling thread that is executing the currently executing coroutine if the scheduler used has more than 1 thread. In general this shouldn't affect the way any user of the library would write code except for `thread_local`. Usage of `thread_local` should be extremely careful and _never_ used across any `co_await` boundary do to thread switching and work stealing on libcoro's schedulers. The only way this is safe is by using a `coro::thread_pool` with 1 thread or an inline `io_scheduler` which also only has 1 thread.
+
+### sync_wait
+The `sync_wait` construct is meant to be used outside of a coroutine context to block the calling thread until the coroutine has completed. The coroutine can be executed on the calling thread or scheduled on one of libcoro's schedulers.
+
+```C++
+#include <coro/coro.hpp>
+#include <iostream>
+
+int main()
+{
+    // This lambda will create a coro::task that returns a unit64_t.
+    // It can be invoked many times with different arguments.
+    auto make_task_inline = [](uint64_t x) -> coro::task<uint64_t> { co_return x + x; };
+
+    // This will block the calling thread until the created task completes.
+    // Since this task isn't scheduled on any coro::thread_pool or coro::io_scheduler
+    // it will execute directly on the calling thread.
+    auto result = coro::sync_wait(make_task_inline(5));
+    std::cout << "Inline Result = " << result << "\n";
+
+    // We'll make a 1 thread coro::thread_pool to demonstrate offloading the task's
+    // execution to another thread.  We'll capture the thread pool in the lambda,
+    // note that you will need to guarantee the thread pool outlives the coroutine.
+    coro::thread_pool tp{coro::thread_pool::options{.thread_count = 1}};
+
+    auto make_task_offload = [&tp](uint64_t x) -> coro::task<uint64_t>
+    {
+        co_await tp.schedule(); // Schedules execution on the thread pool.
+        co_return x + x;        // This will execute on the thread pool.
+    };
+
+    // This will still block the calling thread, but it will now offload to the
+    // coro::thread_pool since the coroutine task is immediately scheduled.
+    result = coro::sync_wait(make_task_offload(10));
+    std::cout << "Offload Result = " << result << "\n";
+}
+```
+
+Expected output:
+```bash
+$ ./examples/coro_sync_wait 
+Inline Result = 10
+Offload Result = 20
+```
+
+### when_all
+The `when_all` construct can be used within coroutines to await a set of tasks, or it can be used outside coroutinne context in conjunction with `sync_wait` to await multiple tasks. Each task passed into `when_all` will initially be executed serially by the calling thread so it is recommended to offload the tasks onto a scheduler like `coro::thread_pool` or `coro::io_scheduler` so they can execute in parallel.
+
+```C++
+#include <coro/coro.hpp>
+#include <iostream>
+
+int main()
+{
+    // Create a thread pool to execute all the tasks in parallel.
+    coro::thread_pool tp{coro::thread_pool::options{.thread_count = 4}};
+    // Create the task we want to invoke multiple times and execute in parallel on the thread pool.
+    auto twice = [&](uint64_t x) -> coro::task<uint64_t>
+    {
+        co_await tp.schedule(); // Schedule onto the thread pool.
+        co_return x + x;        // Executed on the thread pool.
+    };
+
+    // Make our tasks to execute, tasks can be passed in via a std::ranges::range type or var args.
+    std::vector<coro::task<uint64_t>> tasks{};
+    for (std::size_t i = 0; i < 5; ++i)
+    {
+        tasks.emplace_back(twice(i + 1));
+    }
+
+    // Synchronously wait on this thread for the thread pool to finish executing all the tasks in parallel.
+    auto results = coro::sync_wait(coro::when_all(std::move(tasks)));
+    for (auto& result : results)
+    {
+        // If your task can throw calling return_value() will either return the result or re-throw the exception.
+        try
+        {
+            std::cout << result.return_value() << "\n";
+        }
+        catch (const std::exception& e)
+        {
+            std::cerr << e.what() << '\n';
+        }
+    }
+
+    // Use var args instead of a container as input to coro::when_all.
+    auto square = [&](double x) -> coro::task<double>
+    {
+        co_await tp.schedule();
+        co_return x* x;
+    };
+
+    // Var args allows you to pass in tasks with different return types and returns
+    // the result as a std::tuple.
+    auto tuple_results = coro::sync_wait(coro::when_all(square(1.1), twice(10)));
+
+    auto first  = std::get<0>(tuple_results).return_value();
+    auto second = std::get<1>(tuple_results).return_value();
+
+    std::cout << "first: " << first << " second: " << second << "\n";
+}
+```
+
+Expected output:
+```bash
+$ ./examples/coro_when_all 
+2
+4
+6
+8
+10
+first: 1.21 second: 20
+```
 
 ### task
-The `coro::task<T>` is the main coroutine building block within `libcoro`.  Use task to create your coroutines and `co_await` or `co_yield` tasks within tasks to perform asynchronous operations, lazily evaluation or even spreading work out across a `coro::thread_pool`.  Tasks are lightweight and only begin execution upon awaiting them.  If their return type is not `void` then the value can be returned by const reference or by moving (r-value reference).
+The `coro::task<T>` is the main coroutine building block within `libcoro`.  Use task to create your coroutines and `co_await` or `co_yield` tasks within tasks to perform asynchronous operations, lazily evaluation or even spreading work out across a `coro::thread_pool`.  Tasks are lightweight and only begin execution upon awaiting them.
 
 
 ```C++
@@ -62,11 +175,12 @@ The `coro::task<T>` is the main coroutine building block within `libcoro`.  Use 
 int main()
 {
     // Task that takes a value and doubles it.
-    auto double_task = [](uint64_t x) -> coro::task<uint64_t> { co_return x* x; };
+    auto double_task = [](uint64_t x) -> coro::task<uint64_t> { co_return x * 2; };
 
     // Create a task that awaits the doubling of its given value and
     // then returns the result after adding 5.
-    auto double_and_add_5_task = [&](uint64_t input) -> coro::task<uint64_t> {
+    auto double_and_add_5_task = [&](uint64_t input) -> coro::task<uint64_t>
+    {
         auto doubled = co_await double_task(input);
         co_return doubled + 5;
     };
@@ -86,7 +200,7 @@ int main()
         // While the default move constructors will work for this struct the example
         // inserts explicit print statements to show the task is moving the value
         // out correctly.
-        expensive_struct(const expensive_struct&) = delete;
+        expensive_struct(const expensive_struct&)                    = delete;
         auto operator=(const expensive_struct&) -> expensive_struct& = delete;
 
         expensive_struct(expensive_struct&& other) : id(std::move(other.id)), records(std::move(other.records))
@@ -107,7 +221,8 @@ int main()
 
     // Create a very large object and return it by moving the value so the
     // contents do not have to be copied out.
-    auto move_output_task = []() -> coro::task<expensive_struct> {
+    auto move_output_task = []() -> coro::task<expensive_struct>
+    {
         expensive_struct data{};
         data.id = "12345678-1234-5678-9012-123456781234";
         for (size_t i = 10'000; i < 100'000; ++i)
@@ -1177,21 +1292,27 @@ target_link_libraries(${PROJECT_NAME} PUBLIC libcoro)
 ##### Package managers
 libcoro is available via package managers [Conan](https://conan.io/center/libcoro) and [vcpkg](https://vcpkg.io/).
 
+### Contributing
+
+Contributing is welcome, if you have ideas or bugs please open an issue. If you want to open a PR they are also welcome, if you are adding a bugfix or a feature please include tests to verify the feature or bugfix is working properly. If it isn't included I will be asking for you to add some!
+
 #### Tests
-The tests will automatically be run by github actions on creating a pull request.  They can also be ran locally:
+The tests will automatically be run by github actions on creating a pull request. They can also be ran locally after building from the build directory:
 
     # Invoke via cmake with all output from the tests displayed to console:
     ctest -VV
 
     # Or invoke directly, can pass the name of tests to execute, the framework used is catch2.
-    # Tests are tagged with their group, below is howt o run all of the coro::net::tcp::server tests:
-    ./Debug/test/libcoro_test "[tcp_server]"
+    # Tests are tagged with their group, below is how to run all of the coro::net::tcp::server tests:
+    ./test/libcoro_test "[tcp_server]"
+
+If you open a PR for a bugfix or new feature please include tests to verify that the change is working as intended. If your PR doesn't include tests I will ask you to add them and won't merge until they are added and working properly. Tests are found in the `/test` directory and are organized by object type.
 
 ### Support
 
 File bug reports, feature requests and questions using [GitHub libcoro Issues](https://github.com/jbaldwin/libcoro/issues)
 
-Copyright © 2020-2023 Josh Baldwin
+Copyright © 2020-2024 Josh Baldwin
 
 [badge.language]: https://img.shields.io/badge/language-C%2B%2B20-yellow.svg
 [badge.license]: https://img.shields.io/badge/license-Apache--2.0-blue
