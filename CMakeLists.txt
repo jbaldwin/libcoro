@@ -12,17 +12,20 @@ if (NOT "$ENV{version}" STREQUAL "")
     set(PROJECT_VERSION "$ENV{version}" CACHE INTERNAL "Copied from environment variable")
 endif()
 
-# Set the githooks directory to auto format and update the readme.
-message("${PROJECT_NAME} ${CMAKE_CURRENT_SOURCE_DIR} -> git config --local core.hooksPath .githooks")
-execute_process(
-    COMMAND git config --local core.hooksPath .githooks
-    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-)
-
 option(LIBCORO_EXTERNAL_DEPENDENCIES "Use Cmake find_package to resolve dependencies instead of embedded libraries, Default=OFF." OFF)
 option(LIBCORO_BUILD_TESTS           "Build the tests, Default=ON." ON)
 option(LIBCORO_CODE_COVERAGE         "Enable code coverage, tests must also be enabled, Default=OFF" OFF)
 option(LIBCORO_BUILD_EXAMPLES        "Build the examples, Default=ON." ON)
+option(LIBCORO_RUN_GITCONFIG         "Set the githooks directory to auto format and update the readme, Default=ON." ON)
+
+# Set the githooks directory to auto format and update the readme.
+if (LIBCORO_RUN_GITCONFIG)
+    message("${PROJECT_NAME} ${CMAKE_CURRENT_SOURCE_DIR} -> git config --local core.hooksPath .githooks")
+    execute_process(
+        COMMAND git config --local core.hooksPath .githooks
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+endif()
 
 cmake_dependent_option(LIBCORO_FEATURE_PLATFORM "Include linux platform features, Default=ON." ON "NOT EMSCRIPTEN; NOT MSVC" OFF)
 cmake_dependent_option(LIBCORO_FEATURE_NETWORKING "Include networking features, Default=ON." ON "NOT EMSCRIPTEN; NOT MSVC" OFF)
@@ -175,7 +178,7 @@ elseif(${CMAKE_CXX_COMPILER_ID} MATCHES "Clang")
         $<$<COMPILE_LANGUAGE:CXX>:-pipe>
     )
 elseif(MSVC)
-    target_compile_options(${PROJECT_NAME} PUBLIC 
+    target_compile_options(${PROJECT_NAME} PUBLIC
         /W4
     )
 endif()
