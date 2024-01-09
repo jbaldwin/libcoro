@@ -16,7 +16,7 @@ option(LIBCORO_EXTERNAL_DEPENDENCIES "Use Cmake find_package to resolve dependen
 option(LIBCORO_BUILD_TESTS           "Build the tests, Default=ON." ON)
 option(LIBCORO_CODE_COVERAGE         "Enable code coverage, tests must also be enabled, Default=OFF" OFF)
 option(LIBCORO_BUILD_EXAMPLES        "Build the examples, Default=ON." ON)
-option(LIBCORO_RUN_GITCONFIG         "Set the githooks directory to auto format and update the readme, Default=ON." ON)
+option(LIBCORO_RUN_GITCONFIG         "Set the githooks directory to auto format and update the readme, Default=OFF." OFF)
 
 # Set the githooks directory to auto format and update the readme.
 if (LIBCORO_RUN_GITCONFIG)
