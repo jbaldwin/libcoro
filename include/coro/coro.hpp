@@ -8,15 +8,12 @@
 
 #include "coro/expected.hpp"
 
-#ifdef LIBCORO_FEATURE_PLATFORM
-    #include "coro/io_scheduler.hpp"
-    #include "coro/poll.hpp"
-#endif
-
 #ifdef LIBCORO_FEATURE_NETWORKING
+    #include "coro/io_scheduler.hpp"
     #include "coro/net/dns/resolver.hpp"
     #include "coro/net/tcp/client.hpp"
     #include "coro/net/tcp/server.hpp"
+    #include "coro/poll.hpp"
     #ifdef LIBCORO_FEATURE_TLS
         #include "coro/net/tls/client.hpp"
         #include "coro/net/tls/connection_status.hpp"

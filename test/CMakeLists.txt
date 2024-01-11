@@ -23,19 +23,17 @@ if(LIBCORO_FEATURE_NETWORKING)
     )
 
     # These tests require coro::io_scheduler
-    if(LIBCORO_FEATURE_PLATFORM)
-        list(APPEND LIBCORO_TEST_SOURCE_FILES
-            net/test_dns_resolver.cpp
-            net/test_tcp_server.cpp
-            net/test_tls_server.cpp
-            net/test_udp_peers.cpp
-        )
-    endif()
+    list(APPEND LIBCORO_TEST_SOURCE_FILES
+        net/test_dns_resolver.cpp
+        net/test_tcp_server.cpp
+        net/test_tls_server.cpp
+        net/test_udp_peers.cpp
+    )
 endif()
 
-if(LIBCORO_FEATURE_PLATFORM)
+if(LIBCORO_FEATURE_NETWORKING)
     list(APPEND LIBCORO_TEST_SOURCE_FILES
-        bench.cpp # internally ifdef's LIBCORO_FEATURE_NETWORKING|TLS
+        bench.cpp
         test_io_scheduler.cpp
     )
 endif()

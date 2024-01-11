@@ -2,8 +2,11 @@
 
 #include "coro/concepts/awaitable.hpp"
 #include "coro/fd.hpp"
-#include "coro/poll.hpp"
-#include "coro/task.hpp"
+
+#ifdef LIBCORO_FEATURE_NETWORKING
+    #include "coro/poll.hpp"
+    #include "coro/task.hpp"
+#endif // #ifdef LIBCORO_FEATURE_NETWORKING
 
 #include <chrono>
 #include <concepts>
@@ -21,11 +24,14 @@ concept executor = requires(type t, std::coroutine_handle<> c)
     { t.resume(c) } -> std::same_as<void>;
 };
 
+#ifdef LIBCORO_FEATURE_NETWORKING
 template<typename type>
 concept io_exceutor = executor<type> and requires(type t, std::coroutine_handle<> c, fd_t fd, coro::poll_op op, std::chrono::milliseconds timeout)
 {
     { t.poll(fd, op, timeout) } -> std::same_as<coro::task<poll_status>>;
 };
+#endif // #ifdef LIBCORO_FEATURE_NETWORKING
+
 // clang-format on
 
 } // namespace coro::concepts

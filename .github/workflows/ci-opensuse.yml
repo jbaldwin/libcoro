@@ -10,7 +10,6 @@ jobs:
             matrix:
                 gplusplus_version: [10]
                 libcoro_feature_networking: [ {enabled: ON, tls: ON} ]
-                libcoro_feature_platform: [ON]
         container:
             image: opensuse/leap:15.2
         steps:
@@ -40,7 +39,6 @@ jobs:
                         -DCMAKE_CXX_COMPILER=g++-${{ matrix.gplusplus_version }} \
                         -DLIBCORO_FEATURE_NETWORKING=${{ matrix.libcoro_feature_networking.enabled }} \
                         -DLIBCORO_FEATURE_TLS=${{ matrix.libcoro_feature_networking.tls }} \
-                        -DLIBCORO_FEATURE_PLATFORM=${{ matrix.libcoro_feature_platform }} \
                         ..
                     cmake --build . --config Release
             -   name: Test

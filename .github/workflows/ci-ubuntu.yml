@@ -4,13 +4,12 @@ on: [pull_request, workflow_dispatch]
 
 jobs:
     ci-ubuntu-20-04-gplusplus:
-        name: ci-ubuntu-20.04-g++-${{ matrix.gplusplus_version }}-networking-${{ matrix.libcoro_feature_networking.enabled }}-tls-${{ matrix.libcoro_feature_networking.tls }}-platform-${{ matrix.libcoro_feature_platform }}
+        name: ci-ubuntu-20.04-g++-${{ matrix.gplusplus_version }}-networking-${{ matrix.libcoro_feature_networking.enabled }}-tls-${{ matrix.libcoro_feature_networking.tls }}
         runs-on: ubuntu-latest
         strategy:
             matrix:
                 gplusplus_version: [10]
                 libcoro_feature_networking: [ {enabled: ON, tls: ON}, {enabled: ON, tls: OFF}, {enabled: OFF, tls: OFF} ]
-                libcoro_feature_platform: [ON, OFF]
         container:
             image: ubuntu:20.04
             env:
@@ -44,7 +43,6 @@ jobs:
                         -DCMAKE_CXX_COMPILER=g++-${{ matrix.gplusplus_version }} \
                         -DLIBCORO_FEATURE_NETWORKING=${{ matrix.libcoro_feature_networking.enabled }} \
                         -DLIBCORO_FEATURE_TLS=${{ matrix.libcoro_feature_networking.tls }} \
-                        -DLIBCORO_FEATURE_PLATFORM=${{ matrix.libcoro_feature_platform }} \
                         ..
                     ninja
             -   name: Test
@@ -58,7 +56,6 @@ jobs:
             matrix:
                 gplusplus_version: [11, 12, 13]
                 libcoro_feature_networking: [ {enabled: ON, tls: ON}]
-                libcoro_feature_platform: [ON]
         container:
             image: ubuntu:22.04
             env:
@@ -92,7 +89,6 @@ jobs:
                         -DCMAKE_CXX_COMPILER=g++-${{ matrix.gplusplus_version }} \
                         -DLIBCORO_FEATURE_NETWORKING=${{ matrix.libcoro_feature_networking.enabled }} \
                         -DLIBCORO_FEATURE_TLS=${{ matrix.libcoro_feature_networking.tls }} \
-                        -DLIBCORO_FEATURE_PLATFORM=${{ matrix.libcoro_feature_platform }} \
                         ..
                     ninja
             -   name: Test
@@ -106,7 +102,6 @@ jobs:
             matrix:
                 clang_version: [16, 17]
                 libcoro_feature_networking: [ {enabled: ON, tls: ON}]
-                libcoro_feature_platform: [ON]
         container:
             image: ubuntu:22.04
             env:
@@ -144,7 +139,6 @@ jobs:
                         -DCMAKE_CXX_COMPILER=clang++-${{ matrix.clang_version }} \
                         -DLIBCORO_FEATURE_NETWORKING=${{ matrix.libcoro_feature_networking.enabled }} \
                         -DLIBCORO_FEATURE_TLS=${{ matrix.libcoro_feature_networking.tls }} \
-                        -DLIBCORO_FEATURE_PLATFORM=${{ matrix.libcoro_feature_platform }} \
                         ..
                     cmake --build . --config Release
             -   name: Test
