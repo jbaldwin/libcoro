@@ -40,7 +40,6 @@ jobs:
                         -DCMAKE_C_COMPILER=gcc \
                         -DCMAKE_CXX_COMPILER=g++ \
                         -DLIBCORO_FEATURE_NETWORKING=ON \
-                        -DLIBCORO_FEATURE_PLATFORM=ON \
                         -DLIBCORO_FEATURE_TLS=ON \
                         -DLIBCORO_CODE_COVERAGE=ON \
                         ..

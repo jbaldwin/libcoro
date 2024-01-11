@@ -27,7 +27,6 @@ if (LIBCORO_RUN_GITCONFIG)
     )
 endif()
 
-cmake_dependent_option(LIBCORO_FEATURE_PLATFORM "Include linux platform features, Default=ON." ON "NOT EMSCRIPTEN; NOT MSVC" OFF)
 cmake_dependent_option(LIBCORO_FEATURE_NETWORKING "Include networking features, Default=ON." ON "NOT EMSCRIPTEN; NOT MSVC" OFF)
 cmake_dependent_option(LIBCORO_FEATURE_TLS "Include TLS encryption features, Default=ON." ON "NOT EMSCRIPTEN; NOT MSVC" OFF)
 
@@ -35,7 +34,6 @@ message("${PROJECT_NAME} LIBCORO_EXTERNAL_DEPENDENCIES = ${LIBCORO_EXTERNAL_DEPE
 message("${PROJECT_NAME} LIBCORO_BUILD_TESTS           = ${LIBCORO_BUILD_TESTS}")
 message("${PROJECT_NAME} LIBCORO_CODE_COVERAGE         = ${LIBCORO_CODE_COVERAGE}")
 message("${PROJECT_NAME} LIBCORO_BUILD_EXAMPLES        = ${LIBCORO_BUILD_EXAMPLES}")
-message("${PROJECT_NAME} LIBCORO_FEATURE_PLATFORM      = ${LIBCORO_FEATURE_PLATFORM}")
 message("${PROJECT_NAME} LIBCORO_FEATURE_NETWORKING    = ${LIBCORO_FEATURE_NETWORKING}")
 message("${PROJECT_NAME} LIBCORO_FEATURE_TLS           = ${LIBCORO_FEATURE_TLS}")
 
@@ -82,7 +80,7 @@ set(LIBCORO_SOURCE_FILES
     include/coro/when_all.hpp
 )
 
-if(LIBCORO_FEATURE_PLATFORM)
+if(LIBCORO_FEATURE_NETWORKING)
     list(APPEND LIBCORO_SOURCE_FILES
         include/coro/detail/poll_info.hpp
 
@@ -90,12 +88,10 @@ if(LIBCORO_FEATURE_PLATFORM)
         include/coro/io_scheduler.hpp src/io_scheduler.cpp
         include/coro/poll.hpp src/poll.cpp
     )
-endif()
 
-if(LIBCORO_FEATURE_NETWORKING)
     list(APPEND LIBCORO_SOURCE_FILES
-        include/coro/net/connect.hpp src/net/connect.cpp
         include/coro/net/dns/resolver.hpp src/net/dns/resolver.cpp
+        include/coro/net/connect.hpp src/net/connect.cpp
         include/coro/net/hostname.hpp
         include/coro/net/ip_address.hpp src/net/ip_address.cpp
         include/coro/net/recv_status.hpp src/net/recv_status.cpp
@@ -105,6 +101,7 @@ if(LIBCORO_FEATURE_NETWORKING)
         include/coro/net/tcp/server.hpp src/net/tcp/server.cpp
         include/coro/net/udp/peer.hpp src/net/udp/peer.cpp
     )
+
     if(LIBCORO_FEATURE_TLS)
         find_package(OpenSSL REQUIRED)
         list(APPEND LIBCORO_SOURCE_FILES
@@ -135,10 +132,7 @@ set_target_properties(${PROJECT_NAME} PROPERTIES LINKER_LANGUAGE CXX PREFIX "")
 target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_20)
 target_include_directories(${PROJECT_NAME} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
-if(LIBCORO_FEATURE_PLATFORM)
-    target_link_libraries(${PROJECT_NAME} PUBLIC pthread)
-    target_compile_definitions(${PROJECT_NAME} PUBLIC LIBCORO_FEATURE_PLATFORM)
-elseif(UNIX)
+if(UNIX)
     target_link_libraries(${PROJECT_NAME} PUBLIC pthread)
 endif()
 

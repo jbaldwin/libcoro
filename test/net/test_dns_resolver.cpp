@@ -10,7 +10,7 @@ TEST_CASE("dns_resolver basic", "[dns]")
 {
     auto scheduler = std::make_shared<coro::io_scheduler>(
         coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
-    coro::net::dns::resolver dns_resolver{scheduler, std::chrono::milliseconds{5000}};
+    coro::net::dns::resolver<coro::io_scheduler> dns_resolver{scheduler, std::chrono::milliseconds{5000}};
 
     auto make_host_by_name_task = [&](coro::net::hostname hn) -> coro::task<void>
     {
