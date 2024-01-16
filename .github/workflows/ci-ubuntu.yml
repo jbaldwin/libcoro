@@ -10,7 +10,7 @@ jobs:
             matrix:
                 gplusplus_version: [10]
                 libcoro_feature_networking: [ {enabled: ON, tls: ON}, {enabled: ON, tls: OFF}, {enabled: OFF, tls: OFF} ]
-                libcoro_build_shared_libs: [ON, OFF]
+                libcoro_build_shared_libs: [OFF, ON]
         container:
             image: ubuntu:20.04
             env:
