@@ -9,6 +9,8 @@ jobs:
         strategy:
             matrix:
                 libcoro_build_shared_libs: [OFF, ON]
+        env:
+            VERBOSE: 1
         steps:
             -   name: Checkout
                 uses: actions/checkout@v4
