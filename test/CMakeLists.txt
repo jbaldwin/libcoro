@@ -73,3 +73,4 @@ if(LIBCORO_CODE_COVERAGE)
 endif()
 
 add_test(NAME libcoro_tests COMMAND ${PROJECT_NAME})
+set_tests_properties(libcoro_tests PROPERTIES ENVIRONMENT "PATH=$<SHELL_PATH:$<TARGET_FILE_DIR:libcoro>>$<SEMICOLON>$ENV{PATH}")
