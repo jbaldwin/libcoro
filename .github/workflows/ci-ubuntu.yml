@@ -40,6 +40,7 @@ jobs:
                     cmake \
                         -GNinja \
                         -DCMAKE_BUILD_TYPE=Release \
+                        -DCMAKE_INSTALL_PREFIX=${TEMP}/install
                         -DCMAKE_C_COMPILER=gcc-${{ matrix.gplusplus_version }} \
                         -DCMAKE_CXX_COMPILER=g++-${{ matrix.gplusplus_version }} \
                         -DLIBCORO_FEATURE_NETWORKING=${{ matrix.libcoro_feature_networking.enabled }} \
@@ -51,6 +52,9 @@ jobs:
                 run: |
                     cd Release
                     ctest -VV
+            -   name: Install
+                run: |
+                    cmake --build Release --target install
     ci-ubuntu-22-04-gplusplus:
         name: ci-ubuntu-22.04-g++
         runs-on: ubuntu-latest
