@@ -7,6 +7,7 @@ project(libcoro
 )
 
 include(GNUInstallDirs)
+include(GenerateExportHeader)
 
 if (NOT "$ENV{version}" STREQUAL "")
     set(PROJECT_VERSION "$ENV{version}" CACHE INTERNAL "Copied from environment variable")
@@ -136,7 +137,8 @@ endif()
 add_library(${PROJECT_NAME} ${LIBCORO_SOURCE_FILES})
 set_target_properties(${PROJECT_NAME} PROPERTIES LINKER_LANGUAGE CXX PREFIX "" VERSION ${PROJECT_VERSION} SOVERSION ${PROJECT_VERSION_MAJOR})
 target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_20)
-target_include_directories(${PROJECT_NAME} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_include_directories(${PROJECT_NAME} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include PUBLIC ${CMAKE_CURRENT_BINARY_DIR})
+generate_export_header(${PROJECT_NAME} BASE_NAME CORO EXPORT_FILE_NAME coro/export.hpp)
 
 if(UNIX)
     target_link_libraries(${PROJECT_NAME} PUBLIC pthread)
