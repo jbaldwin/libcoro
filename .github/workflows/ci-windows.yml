@@ -20,12 +20,9 @@ jobs:
                 run: |
                     mkdir Release
                     cd Release
-                    cmake .. -DCMAKE_INSTALL_PREFIX=install -DLIBCORO_BUILD_SHARED_LIBS=${{ matrix.libcoro_build_shared_libs }}
+                    cmake .. -DLIBCORO_BUILD_SHARED_LIBS=${{ matrix.libcoro_build_shared_libs }}
                     cmake --build . --config Release
             -   name: Test
                 run: |
                     cd Release
                     ctest --build-config Release -VV
-            -   name: Install
-                run: |
-                    cmake --build Release --config Release --target install
