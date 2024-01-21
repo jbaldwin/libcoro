@@ -1,6 +1,7 @@
 #pragma once
 
 #include <coro/expected.hpp>
+#include <coro/export.hpp>
 
 #include <atomic>
 #include <coroutine>
@@ -18,9 +19,9 @@ public:
         semaphore_stopped
     };
 
-    static std::string acquire_result_acquired;
-    static std::string acquire_result_semaphore_stopped;
-    static std::string acquire_result_unknown;
+    static CORO_EXPORT std::string acquire_result_acquired;
+    static CORO_EXPORT std::string acquire_result_semaphore_stopped;
+    static CORO_EXPORT std::string acquire_result_unknown;
 
     static auto to_string(acquire_result ar) -> const std::string&
     {

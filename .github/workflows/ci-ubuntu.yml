@@ -10,6 +10,7 @@ jobs:
             matrix:
                 gplusplus_version: [10]
                 libcoro_feature_networking: [ {enabled: ON, tls: ON}, {enabled: ON, tls: OFF}, {enabled: OFF, tls: OFF} ]
+                libcoro_build_shared_libs: [OFF, ON]
         container:
             image: ubuntu:20.04
             env:
@@ -43,6 +44,7 @@ jobs:
                         -DCMAKE_CXX_COMPILER=g++-${{ matrix.gplusplus_version }} \
                         -DLIBCORO_FEATURE_NETWORKING=${{ matrix.libcoro_feature_networking.enabled }} \
                         -DLIBCORO_FEATURE_TLS=${{ matrix.libcoro_feature_networking.tls }} \
+                        -DLIBCORO_BUILD_SHARED_LIBS=${{ matrix.libcoro_build_shared_libs }} \
                         ..
                     ninja
             -   name: Test
