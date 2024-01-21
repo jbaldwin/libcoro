@@ -9,6 +9,7 @@
 #include <list>
 #include <memory>
 #include <mutex>
+#include <queue>
 #include <vector>
 
 namespace coro
@@ -19,8 +20,6 @@ template<concepts::executor executor_type>
 class task_container
 {
 public:
-    using task_position = std::list<std::size_t>::iterator;
-
     struct options
     {
         /// The number of task spots to reserve space for upon creating the container.
@@ -87,17 +86,17 @@ public:
         }
 
         // Only grow if completely full and attempting to add more.
-        if (m_free_pos == m_task_indexes.end())
+        if (m_free_task_indices.empty())
         {
-            m_free_pos = grow();
+            grow();
         }
 
-        // Store the task inside a cleanup task for self deletion.
-        auto index     = *m_free_pos;
-        m_tasks[index] = make_cleanup_task(std::move(user_task), m_free_pos);
+        // Reserve a free task index
+        std::size_t index = m_free_task_indices.front();
+        m_free_task_indices.pop();
 
-        // Mark the current used slot as used.
-        std::advance(m_free_pos, 1);
+        // Store the task inside a cleanup task for self deletion.
+        m_tasks[index] = make_cleanup_task(std::move(user_task), index);
 
         // Start executing from the cleanup task to schedule the user's task onto the thread pool.
         m_tasks[index].resume();
@@ -112,24 +111,6 @@ public:
     {
         std::scoped_lock lk{m_mutex};
         return gc_internal();
-    }
-
-    /**
-     * @return The number of tasks that are awaiting deletion.
-     */
-    auto delete_task_size() const -> std::size_t
-    {
-        std::atomic_thread_fence(std::memory_order::acquire);
-        return m_tasks_to_delete.size();
-    }
-
-    /**
-     * @return True if there are no tasks awaiting deletion.
-     */
-    auto delete_tasks_empty() const -> bool
-    {
-        std::atomic_thread_fence(std::memory_order::acquire);
-        return m_tasks_to_delete.empty();
     }
 
     /**
@@ -172,38 +153,42 @@ private:
      * Grows each task container by the growth factor.
      * @return The position of the free index after growing.
      */
-    auto grow() -> task_position
+    auto grow() -> void
     {
         // Save an index at the current last item.
-        auto        last_pos = std::prev(m_task_indexes.end());
         std::size_t new_size = m_tasks.size() * m_growth_factor;
         for (std::size_t i = m_tasks.size(); i < new_size; ++i)
         {
-            m_task_indexes.emplace_back(i);
+            m_free_task_indices.emplace(i);
         }
         m_tasks.resize(new_size);
-        // Set the free pos to the item just after the previous last item.
-        return std::next(last_pos);
     }
 
     /**
-     * Interal GC call, expects the public function to lock.
+     * Internal GC call, expects the public function to lock.
      */
     auto gc_internal() -> std::size_t
     {
         std::size_t deleted{0};
-        if (!m_tasks_to_delete.empty())
+        auto   pos = std::begin(m_tasks_to_delete);
+        while (pos != std::end(m_tasks_to_delete))
         {
-            for (const auto& pos : m_tasks_to_delete)
+            // Skip tasks that are still running or have yet to start.
+            if (!m_tasks[*pos].is_ready())
             {
-                // Put the deleted position at the end of the free indexes list.
-                m_task_indexes.splice(m_task_indexes.end(), m_task_indexes, pos);
-                // Destroy the cleanup task and the user task.
-                m_tasks[*pos].destroy();
+                pos++;
+                continue;
             }
-            deleted = m_tasks_to_delete.size();
-            m_tasks_to_delete.clear();
+            // Destroy the cleanup task and the user task.
+            m_tasks[*pos].destroy();
+            // Put the deleted position at the end of the free indexes list.
+            m_free_task_indices.emplace(*pos);
+            // Remove index from tasks to delete
+            m_tasks_to_delete.erase(pos++);
+            // Indicate a task was deleted.
+            ++deleted;
         }
+        m_size.fetch_sub(deleted, std::memory_order::relaxed);
         return deleted;
     }
 
@@ -216,10 +201,10 @@ private:
      * This function will also unconditionally catch all unhandled exceptions by the user's
      * task to prevent the scheduler from throwing exceptions.
      * @param user_task The user's task.
-     * @param pos The position where the task data will be stored in the task manager.
+     * @param index The index where the task data will be stored in the task manager.
      * @return The user's task wrapped in a self cleanup task.
      */
-    auto make_cleanup_task(task<void> user_task, task_position pos) -> coro::task<void>
+    auto make_cleanup_task(task<void> user_task, std::size_t index) -> coro::task<void>
     {
         // Immediately move the task onto the executor.
         co_await m_executor_ptr->schedule();
@@ -244,10 +229,7 @@ private:
         }
 
         std::scoped_lock lk{m_mutex};
-        m_tasks_to_delete.push_back(pos);
-        // This has to be done within scope lock to make sure this coroutine task completes before the
-        // task container object destructs -- if it was waiting on .empty() to become true.
-        m_size.fetch_sub(1, std::memory_order::relaxed);
+        m_tasks_to_delete.emplace_back(index);
         co_return;
     }
 
@@ -258,13 +240,10 @@ private:
     std::atomic<std::size_t> m_size{};
     /// Maintains the lifetime of the tasks until they are completed.
     std::vector<task<void>> m_tasks{};
-    /// The full set of indexes into `m_tasks`.
-    std::list<std::size_t> m_task_indexes{};
+    /// The full set of free indicies into `m_tasks`.
+    std::queue<std::size_t> m_free_task_indices{};
     /// The set of tasks that have completed and need to be deleted.
-    std::vector<task_position> m_tasks_to_delete{};
-    /// The current free position within the task indexes list.  Anything before
-    /// this point is used, itself and anything after is free.
-    task_position m_free_pos{};
+    std::list<std::size_t> m_tasks_to_delete{};
     /// The amount to grow the containers by when all spaces are taken.
     double m_growth_factor{};
     /// The executor to schedule tasks that have just started.
@@ -289,9 +268,8 @@ private:
         m_tasks.resize(reserve_size);
         for (std::size_t i = 0; i < reserve_size; ++i)
         {
-            m_task_indexes.emplace_back(i);
+            m_free_task_indices.emplace(i);
         }
-        m_free_pos = m_task_indexes.begin();
     }
 };
 
