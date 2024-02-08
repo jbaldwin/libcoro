@@ -170,7 +170,6 @@ if(${CMAKE_CXX_COMPILER_ID} MATCHES "GNU")
     endif()
 
     target_compile_options(${PROJECT_NAME} PUBLIC
-        $<$<COMPILE_LANGUAGE:CXX>:-std=c++20>
         $<$<COMPILE_LANGUAGE:CXX>:-fcoroutines>
         $<$<COMPILE_LANGUAGE:CXX>:-fconcepts>
         $<$<COMPILE_LANGUAGE:CXX>:-fexceptions>
@@ -184,7 +183,6 @@ elseif(${CMAKE_CXX_COMPILER_ID} MATCHES "Clang")
     endif()
 
     target_compile_options(${PROJECT_NAME} PUBLIC
-        $<$<COMPILE_LANGUAGE:CXX>:-std=c++20>
         $<$<COMPILE_LANGUAGE:CXX>:-fexceptions>
         $<$<COMPILE_LANGUAGE:CXX>:-Wall>
         $<$<COMPILE_LANGUAGE:CXX>:-Wextra>
