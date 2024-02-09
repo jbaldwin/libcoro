@@ -1,0 +1,37 @@
+name: ci-macos
+
+on: [pull_request, workflow_dispatch]
+
+jobs:
+    macos:
+        name: macos-latest
+        runs-on: macos-latest
+        strategy:
+            fail-fast: false
+        steps:
+            -   name: Install Dependencies
+                run: |
+                    brew update
+                    brew install llvm@17
+                    brew install ninja
+            -   name: Checkout
+                uses: actions/checkout@v4
+                with:
+                    submodules: recursive
+            -   name: Release
+                run: |
+                    mkdir Release
+                    cd Release
+                    cmake \
+                        -GNinja \
+                        -DCMAKE_BUILD_TYPE=Release \
+                        -DCMAKE_C_COMPILER=/usr/local/opt/llvm/bin//clang-17 \
+                        -DCMAKE_CXX_COMPILER=/usr/local/opt/llvm/bin//clang-17 \
+                        -DLIBCORO_FEATURE_NETWORKING=OFF \
+                        -DLIBCORO_FEATURE_TLS=ON \
+                        ..
+                    cmake --build . --config Release
+            -   name: Test
+                run: |
+                    cd Release
+                    ctest --build-config Release -VV
