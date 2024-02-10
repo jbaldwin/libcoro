@@ -4,6 +4,7 @@
 #include "coro/concepts/awaitable.hpp"
 
 #include <condition_variable>
+#include <exception>
 #include <mutex>
 
 namespace coro
