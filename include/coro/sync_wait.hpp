@@ -6,11 +6,22 @@
 #include <condition_variable>
 #include <exception>
 #include <mutex>
+#include <variant>
 
 namespace coro
 {
 namespace detail
 {
+
+struct unset_return_value
+{
+    unset_return_value() {}
+    unset_return_value(unset_return_value&&)      = delete;
+    unset_return_value(const unset_return_value&) = delete;
+    auto operator=(unset_return_value&&)          = delete;
+    auto operator=(const unset_return_value&)     = delete;
+};
+
 class sync_wait_event
 {
 public:
@@ -28,7 +39,7 @@ public:
 private:
     std::mutex              m_mutex;
     std::condition_variable m_cv;
-    bool                    m_set{false};
+    std::atomic<bool>       m_set{false};
 };
 
 class sync_wait_task_promise_base
@@ -53,8 +64,19 @@ class sync_wait_task_promise : public sync_wait_task_promise_base
 public:
     using coroutine_type = std::coroutine_handle<sync_wait_task_promise<return_type>>;
 
-    sync_wait_task_promise() noexcept = default;
-    ~sync_wait_task_promise()         = default;
+    static constexpr bool return_type_is_reference = std::is_reference_v<return_type>;
+    using stored_type                              = std::conditional_t<
+        return_type_is_reference,
+        std::remove_reference_t<return_type>*,
+        std::remove_const_t<return_type>>;
+    using variant_type = std::variant<unset_return_value, stored_type, std::exception_ptr>;
+
+    sync_wait_task_promise() noexcept                                        = default;
+    sync_wait_task_promise(const sync_wait_task_promise&)                    = delete;
+    sync_wait_task_promise(sync_wait_task_promise&&)                         = delete;
+    auto operator=(const sync_wait_task_promise&) -> sync_wait_task_promise& = delete;
+    auto operator=(sync_wait_task_promise&&) -> sync_wait_task_promise&      = delete;
+    ~sync_wait_task_promise()                                                = default;
 
     auto start(sync_wait_event& event)
     {
@@ -64,10 +86,32 @@ public:
 
     auto get_return_object() noexcept { return coroutine_type::from_promise(*this); }
 
-    auto yield_value(return_type&& value) noexcept
+    template<typename value_type>
+    requires(return_type_is_reference and std::is_constructible_v<return_type, value_type&&>) or
+        (not return_type_is_reference and
+         std::is_constructible_v<stored_type, value_type&&>) auto return_value(value_type&& value) -> void
     {
-        m_return_value = std::addressof(value);
-        return final_suspend();
+        if constexpr (return_type_is_reference)
+        {
+            return_type ref = static_cast<value_type&&>(value);
+            m_storage.template emplace<stored_type>(std::addressof(ref));
+        }
+        else
+        {
+            m_storage.template emplace<stored_type>(std::forward<value_type>(value));
+        }
+    }
+
+    auto return_value(stored_type value) -> void requires(not return_type_is_reference)
+    {
+        if constexpr (std::is_move_constructible_v<stored_type>)
+        {
+            m_storage.template emplace<stored_type>(std::move(value));
+        }
+        else
+        {
+            m_storage.template emplace<stored_type>(value);
+        }
     }
 
     auto final_suspend() noexcept
@@ -82,19 +126,81 @@ public:
         return completion_notifier{};
     }
 
-    auto result() -> return_type&&
+    auto result() & -> decltype(auto)
     {
-        if (m_exception)
+        if (std::holds_alternative<stored_type>(m_storage))
         {
-            std::rethrow_exception(m_exception);
+            if constexpr (return_type_is_reference)
+            {
+                return static_cast<return_type>(*std::get<stored_type>(m_storage));
+            }
+            else
+            {
+                return static_cast<const return_type&>(std::get<stored_type>(m_storage));
+            }
         }
-
-        return static_cast<return_type&&>(*m_return_value);
+        else if (std::holds_alternative<std::exception_ptr>(m_storage))
+        {
+            std::rethrow_exception(std::get<std::exception_ptr>(m_storage));
+        }
+        else
+        {
+            throw std::runtime_error{"The return value was never set, did you execute the coroutine?"};
+        }
     }
-    void return_void() noexcept {}
+
+    auto result() const& -> decltype(auto)
+    {
+        if (std::holds_alternative<stored_type>(m_storage))
+        {
+            if constexpr (return_type_is_reference)
+            {
+                return static_cast<std::add_const_t<return_type>>(*std::get<stored_type>(m_storage));
+            }
+            else
+            {
+                return static_cast<const return_type&>(std::get<stored_type>(m_storage));
+            }
+        }
+        else if (std::holds_alternative<std::exception_ptr>(m_storage))
+        {
+            std::rethrow_exception(std::get<std::exception_ptr>(m_storage));
+        }
+        else
+        {
+            throw std::runtime_error{"The return value was never set, did you execute the coroutine?"};
+        }
+    }
+
+    auto result() && -> decltype(auto)
+    {
+        if (std::holds_alternative<stored_type>(m_storage))
+        {
+            if constexpr (return_type_is_reference)
+            {
+                return static_cast<return_type>(*std::get<stored_type>(m_storage));
+            }
+            else if constexpr (std::is_assignable_v<return_type, stored_type>)
+            {
+                return static_cast<return_type&&>(std::get<stored_type>(m_storage));
+            }
+            else
+            {
+                return static_cast<const return_type&&>(std::get<stored_type>(m_storage));
+            }
+        }
+        else if (std::holds_alternative<std::exception_ptr>(m_storage))
+        {
+            std::rethrow_exception(std::get<std::exception_ptr>(m_storage));
+        }
+        else
+        {
+            throw std::runtime_error{"The return value was never set, did you execute the coroutine?"};
+        }
+    }
 
 private:
-    std::remove_reference_t<return_type>* m_return_value;
+    variant_type m_storage{};
 };
 
 template<>
@@ -167,21 +273,9 @@ public:
         }
     }
 
-    auto start(sync_wait_event& event) noexcept { m_coroutine.promise().start(event); }
-
-    auto return_value() -> decltype(auto)
-    {
-        if constexpr (std::is_same_v<void, return_type>)
-        {
-            // Propagate exceptions.
-            m_coroutine.promise().result();
-            return;
-        }
-        else
-        {
-            return m_coroutine.promise().result();
-        }
-    }
+    auto promise() & -> promise_type& { return m_coroutine.promise(); }
+    auto promise() const& -> const promise_type& { return m_coroutine.promise(); }
+    auto promise() && -> promise_type&& { return std::move(m_coroutine.promise()); }
 
 private:
     coroutine_type m_coroutine;
@@ -202,21 +296,50 @@ static auto make_sync_wait_task(awaitable_type&& a) -> sync_wait_task<return_typ
     }
     else
     {
-        co_yield co_await std::forward<awaitable_type>(a);
+        co_return co_await std::forward<awaitable_type>(a);
     }
 }
 
 } // namespace detail
 
-template<concepts::awaitable awaitable_type>
+template<
+    concepts::awaitable awaitable_type,
+    typename return_type = typename concepts::awaitable_traits<awaitable_type>::awaiter_return_type>
 auto sync_wait(awaitable_type&& a) -> decltype(auto)
 {
     detail::sync_wait_event e{};
     auto                    task = detail::make_sync_wait_task(std::forward<awaitable_type>(a));
-    task.start(e);
+    task.promise().start(e);
     e.wait();
 
-    return task.return_value();
+    if constexpr (std::is_void_v<return_type>)
+    {
+        task.promise().result();
+        return;
+    }
+    else if constexpr (std::is_reference_v<return_type>)
+    {
+        return task.promise().result();
+    }
+    else if constexpr (std::is_move_assignable_v<return_type>)
+    {
+        // issue-242
+        // For non-trivial types (or possibly types that don't fit in a register)
+        // the compiler will end up calling the ~return_type() when the promise
+        // is destructed at the end of sync_wait(). This causes the return_type
+        // object to also be destructed causingn the final return/move from
+        // sync_wait() to be a 'use after free' bug. To work around this the result
+        // must be moved off the promise object before the promise is destructed.
+        // Other solutions could be heap allocating the return_type but that has
+        // other downsides, for now it is determined that a double move is an
+        // acceptable solution to work around this bug.
+        auto result = std::move(task).promise().result();
+        return result;
+    }
+    else
+    {
+        return task.promise().result();
+    }
 }
 
 } // namespace coro

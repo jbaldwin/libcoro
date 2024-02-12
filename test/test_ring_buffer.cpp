@@ -173,3 +173,194 @@ TEST_CASE("ring_buffer producer consumer separate threads", "[ring_buffer]")
 
     REQUIRE(rb.empty());
 }
+
+TEST_CASE("ring_buffer issue-242 default constructed complex objects on consume", "[ring_buffer]")
+{
+    struct message
+    {
+        message(uint32_t i, std::string t) : id(i), text(std::move(t)) {}
+        message(const message&) = delete;
+        message(message&& other) : id(other.id), text(std::move(other.text)) {}
+        auto operator=(const message&) -> message& = delete;
+        auto operator=(message&& other) -> message&
+        {
+            if (std::addressof(other) != this)
+            {
+                this->id   = std::exchange(other.id, 0);
+                this->text = std::move(other.text);
+            }
+
+            return *this;
+        }
+
+        ~message() { id = 0; }
+
+        uint32_t    id;
+        std::string text;
+    };
+
+    struct example
+    {
+        example() { std::cerr << "I'm being created\n"; }
+        example(const example&) = delete;
+        example(example&& other) : msg(std::move(other.msg))
+        {
+            std::cerr << "i'm being moved constructed with msg = ";
+            if (msg.has_value())
+            {
+                std::cerr << "id = " << msg.value().id << ", msg = " << msg.value().text << "\n";
+            }
+            else
+            {
+                std::cerr << "nullopt\n";
+            }
+        }
+
+        ~example()
+        {
+            std::cerr << "I'm being deleted with msg = ";
+            if (msg.has_value())
+            {
+                std::cerr << "id = " << msg.value().id << ", msg = " << msg.value().text << "\n";
+            }
+            else
+            {
+                std::cerr << "nullopt\n";
+            }
+        }
+
+        auto operator=(const example&) -> example& = delete;
+        auto operator=(example&& other) -> example&
+        {
+            if (std::addressof(other) != this)
+            {
+                this->msg = std::move(other.msg);
+
+                std::cerr << "i'm being moved assigned with msg = ";
+                if (msg.has_value())
+                {
+                    std::cerr << msg.value().id << ", " << msg.value().text << "\n";
+                }
+                else
+                {
+                    std::cerr << "nullopt\n";
+                }
+            }
+
+            return *this;
+        }
+
+        std::optional<message> msg{std::nullopt};
+    };
+
+    coro::ring_buffer<example, 1> buffer;
+
+    const auto produce = [&buffer]() -> coro::task<void>
+    {
+        std::cerr << "enter produce coroutine\n";
+        example data{};
+        data.msg = {message{1, "Hello World!"}};
+        std::cerr << "ID: " << data.msg.value().id << "\n";
+        std::cerr << "Text: " << data.msg.value().text << "\n";
+        std::cerr << "buffer.produce(move(data)) start\n";
+        auto result = co_await buffer.produce(std::move(data));
+        std::cerr << "buffer.produce(move(data)) done\n";
+        REQUIRE(result == coro::rb::produce_result::produced);
+        std::cerr << "exit produce coroutine\n";
+        co_return;
+    };
+
+    coro::sync_wait(produce());
+    std::cerr << "enter sync_wait\n";
+    auto result = coro::sync_wait(buffer.consume());
+    std::cerr << "exit sync_wait\n";
+    REQUIRE(result);
+
+    auto& data = result.value();
+    REQUIRE(data.msg.has_value());
+    REQUIRE(data.msg.value().id == 1);
+    REQUIRE(data.msg.value().text == "Hello World!");
+    std::cerr << "Outside the coroutine\n";
+    std::cerr << "ID: " << data.msg.value().id << "\n";
+    std::cerr << "Text: " << data.msg.value().text << "\n";
+}
+
+TEST_CASE("ring_buffer issue-242 default constructed complex objects on consume in coroutines", "[ring_buffer]")
+{
+    struct message
+    {
+        uint32_t    id;
+        std::string text;
+    };
+
+    struct example
+    {
+        example() {}
+        example(const example&) = delete;
+        example(example&& other) : msg(std::move(other.msg)) {}
+
+        auto operator=(const example&) -> example& = delete;
+        auto operator=(example&& other) -> example&
+        {
+            if (std::addressof(other) != this)
+            {
+                this->msg = std::move(other.msg);
+            }
+
+            return *this;
+        }
+
+        std::optional<message> msg{std::nullopt};
+    };
+
+    coro::ring_buffer<example, 1> buffer;
+
+    const auto produce = [&buffer]() -> coro::task<void>
+    {
+        example data{};
+        data.msg = {message{.id = 1, .text = "Hello World!"}};
+        std::cout << "Inside the coroutine\n";
+        std::cout << "ID: " << data.msg.value().id << "\n";
+        std::cout << "Text: " << data.msg.value().text << "\n";
+        auto result = co_await buffer.produce(std::move(data));
+        REQUIRE(result == coro::rb::produce_result::produced);
+        co_return;
+    };
+
+    const auto consume = [&buffer]() -> coro::task<example>
+    {
+        auto result = co_await buffer.consume();
+        REQUIRE(result.has_value());
+        REQUIRE(result.value().msg.has_value());
+        auto data = std::move(*result);
+        co_return std::move(data);
+    };
+
+    coro::sync_wait(produce());
+    auto data = coro::sync_wait(consume());
+
+    REQUIRE(data.msg.has_value());
+    REQUIRE(data.msg.value().id == 1);
+    REQUIRE(data.msg.value().text == "Hello World!");
+    std::cout << "Outside the coroutine\n";
+    std::cout << "ID: " << data.msg.value().id << "\n";
+    std::cout << "Text: " << data.msg.value().text << "\n";
+}
+
+TEST_CASE("ring_buffer issue-242 basic type", "[ring_buffer]")
+{
+    coro::ring_buffer<uint32_t, 1> buffer;
+
+    const auto foo = [&buffer]() -> coro::task<void>
+    {
+        co_await buffer.produce(1);
+        co_return;
+    };
+
+    coro::sync_wait(foo());
+    auto result = coro::sync_wait(buffer.consume());
+    REQUIRE(result);
+
+    auto data = std::move(*result);
+    REQUIRE(data == 1);
+}
