@@ -416,17 +416,11 @@ Transfer/sec:     18.33MB
 
 ### Requirements
     C++20 Compiler with coroutine support
-        g++10.2.1
-        g++10.3.1
-        g++11
-        g++12
-        g++13
-        clang++16
-        clang++17
+        g++ [10.2.1, 10.3.1, 11, 12, 13]
+        clang++ [16, 17]
+            No networking/TLS support on MacOS.
         MSVC Windows 2022 CL
-            No io_scheduler support
-            No networking support
-            No SSL support
+            No networking/TLS support.
     CMake
     make or ninja
     pthreads
@@ -442,6 +436,7 @@ Transfer/sec:     18.33MB
  * openSUSE/leap:15.2
  * Windows 2022
  * Emscripten 3.1.45
+ * MacOS 12
 
 #### Cloning the project
 This project uses git submodules, to properly checkout this project use:
@@ -462,11 +457,11 @@ CMake Options:
 | Name                          | Default | Description                                                                                        |
 |:------------------------------|:--------|:---------------------------------------------------------------------------------------------------|
 | LIBCORO_EXTERNAL_DEPENDENCIES | OFF     | Use CMake find_package to resolve dependencies instead of embedded libraries.                      |
-| LIBCORO_BUILD_TESTS           | ON      | Should the tests be built?                                                                         |
+| LIBCORO_BUILD_TESTS           | ON      | Should the tests be built? Note this is only default ON if libcoro is the root CMakeLists.txt      |
 | LIBCORO_CODE_COVERAGE         | OFF     | Should code coverage be enabled? Requires tests to be enabled.                                     |
-| LIBCORO_BUILD_EXAMPLES        | ON      | Should the examples be built?                                                                      |
-| LIBCORO_FEATURE_NETWORKING    | ON      | Include networking features. Requires Linux platform. MSVC not supported.                          |
-| LIBCORO_FEATURE_TLS           | ON      | Include TLS features. Requires networking to be enabled. MSVC not supported.                       |
+| LIBCORO_BUILD_EXAMPLES        | ON      | Should the examples be built? Note this is only default ON if libcoro is the root CMakeLists.txt   |
+| LIBCORO_FEATURE_NETWORKING    | ON      | Include networking features. Requires Linux platform. MSVC/MacOS not supported.                    |
+| LIBCORO_FEATURE_TLS           | ON      | Include TLS features. Requires networking to be enabled. MSVC/MacOS not supported.                 |
 
 #### Adding to your project
 
