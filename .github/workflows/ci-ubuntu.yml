@@ -9,6 +9,7 @@ jobs:
         strategy:
             matrix:
                 gplusplus_version: [10]
+                cxx_standard: [20]
                 libcoro_feature_networking: [ {enabled: ON, tls: ON}, {enabled: ON, tls: OFF}, {enabled: OFF, tls: OFF} ]
                 libcoro_build_shared_libs: [OFF, ON]
         container:
@@ -42,6 +43,7 @@ jobs:
                         -DCMAKE_BUILD_TYPE=Release \
                         -DCMAKE_C_COMPILER=gcc-${{ matrix.gplusplus_version }} \
                         -DCMAKE_CXX_COMPILER=g++-${{ matrix.gplusplus_version }} \
+                        -DCMAKE_CXX_STANDARD=${{ matrix.cxx_standard }} \
                         -DLIBCORO_FEATURE_NETWORKING=${{ matrix.libcoro_feature_networking.enabled }} \
                         -DLIBCORO_FEATURE_TLS=${{ matrix.libcoro_feature_networking.tls }} \
                         -DLIBCORO_BUILD_SHARED_LIBS=${{ matrix.libcoro_build_shared_libs }} \
@@ -57,6 +59,7 @@ jobs:
         strategy:
             matrix:
                 gplusplus_version: [11, 12, 13]
+                cxx_standard: [20, 23]
                 libcoro_feature_networking: [ {enabled: ON, tls: ON}]
         container:
             image: ubuntu:22.04
@@ -89,6 +92,7 @@ jobs:
                         -DCMAKE_BUILD_TYPE=Release \
                         -DCMAKE_C_COMPILER=gcc-${{ matrix.gplusplus_version }} \
                         -DCMAKE_CXX_COMPILER=g++-${{ matrix.gplusplus_version }} \
+                        -DCMAKE_CXX_STANDARD=${{ matrix.cxx_standard }} \
                         -DLIBCORO_FEATURE_NETWORKING=${{ matrix.libcoro_feature_networking.enabled }} \
                         -DLIBCORO_FEATURE_TLS=${{ matrix.libcoro_feature_networking.tls }} \
                         ..
@@ -103,6 +107,7 @@ jobs:
         strategy:
             matrix:
                 clang_version: [16, 17]
+                cxx_standard: [20, 23]
                 libcoro_feature_networking: [ {enabled: ON, tls: ON}]
         container:
             image: ubuntu:22.04
@@ -139,6 +144,7 @@ jobs:
                         -DCMAKE_BUILD_TYPE=Release \
                         -DCMAKE_C_COMPILER=clang-${{ matrix.clang_version }} \
                         -DCMAKE_CXX_COMPILER=clang++-${{ matrix.clang_version }} \
+                        -DCMAKE_CXX_STANDARD=${{ matrix.cxx_standard }} \
                         -DLIBCORO_FEATURE_NETWORKING=${{ matrix.libcoro_feature_networking.enabled }} \
                         -DLIBCORO_FEATURE_TLS=${{ matrix.libcoro_feature_networking.tls }} \
                         ..

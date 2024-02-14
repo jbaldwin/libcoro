@@ -8,11 +8,16 @@ jobs:
         runs-on: macos-latest
         strategy:
             fail-fast: false
+            matrix:
+                clang_version: [17]
+                cxx_standard: [20, 23]
+                libcoro_feature_networking: [ {enabled: OFF, tls: OFF} ]
+                libcoro_build_shared_libs: [OFF, ON]
         steps:
             -   name: Install Dependencies
                 run: |
                     brew update
-                    brew install llvm@17
+                    brew install llvm@${{ matrix.clang_version }}
                     brew install ninja
             -   name: Checkout
                 uses: actions/checkout@v4
@@ -25,10 +30,12 @@ jobs:
                     cmake \
                         -GNinja \
                         -DCMAKE_BUILD_TYPE=Release \
-                        -DCMAKE_C_COMPILER=/usr/local/opt/llvm/bin//clang-17 \
-                        -DCMAKE_CXX_COMPILER=/usr/local/opt/llvm/bin//clang-17 \
-                        -DLIBCORO_FEATURE_NETWORKING=OFF \
-                        -DLIBCORO_FEATURE_TLS=ON \
+                        -DCMAKE_C_COMPILER=/usr/local/opt/llvm/bin//clang-${{ matrix.clang_version }} \
+                        -DCMAKE_CXX_COMPILER=/usr/local/opt/llvm/bin//clang-${{ matrix.clang_version }} \
+                        -DCMAKE_CXX_STANDARD=${{ matrix.cxx_standard }} \
+                        -DLIBCORO_FEATURE_NETWORKING=${{ matrix.libcoro_feature_networking.enabled }} \
+                        -DLIBCORO_FEATURE_TLS=${{ matrix.libcoro_feature_networking.tls }} \
+                        -DLIBCORO_BUILD_SHARED_LIBS=${{ matrix.libcoro_build_shared_libs }} \
                         ..
                     cmake --build . --config Release
             -   name: Test

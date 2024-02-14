@@ -9,8 +9,10 @@ jobs:
         strategy:
             fail-fast: false
             matrix:
-                fedora_version: [32, 33, 34, 35, 36, 37, 38, 39, 40]
+                fedora_version: [37, 38, 39, 40]
+                cxx_standard: [20, 23]
                 libcoro_feature_networking: [ {enabled: ON, tls: ON} ]
+                libcoro_build_shared_libs: [OFF]
         container:
             image: fedora:${{ matrix.fedora_version }}
         steps:
@@ -36,8 +38,10 @@ jobs:
                         -DCMAKE_BUILD_TYPE=Release \
                         -DCMAKE_C_COMPILER=gcc \
                         -DCMAKE_CXX_COMPILER=g++ \
+                        -DCMAKE_CXX_STANDARD=${{ matrix.cxx_standard }} \
                         -DLIBCORO_FEATURE_NETWORKING=${{ matrix.libcoro_feature_networking.enabled }} \
                         -DLIBCORO_FEATURE_TLS=${{ matrix.libcoro_feature_networking.tls }} \
+                        -DLIBCORO_BUILD_SHARED_LIBS=${{ matrix.libcoro_build_shared_libs }} \
                         ..
                     cmake --build . --config Release
             -   name: Test
