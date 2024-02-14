@@ -16,13 +16,14 @@ jobs:
             -   name: zypper
                 run: |
                     zypper install -y \
-                        cmake \
                         git \
                         ninja \
                         gcc${{ matrix.gplusplus_version }} \
                         gcc${{ matrix.gplusplus_version }}-c++ \
                         openssl \
                         openssl-devel
+            -   name: Get latest CMake
+                uses: lukka/get-cmake@latest
             # Cannot run higher version of checkout, node isn't backwards compatible
             -   name: Checkout
                 uses: actions/checkout@v2
@@ -45,4 +46,3 @@ jobs:
                 run: |
                     cd Release
                     ctest --build-config Release -VV
-

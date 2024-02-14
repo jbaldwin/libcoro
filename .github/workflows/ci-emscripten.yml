@@ -19,9 +19,10 @@ jobs:
                     apt install -y build-essential software-properties-common
                     add-apt-repository ppa:ubuntu-toolchain-r/test
                     apt-get install -y \
-                        cmake \
                         git \
                         ninja-build
+            -   name: Get latest CMake
+                uses: lukka/get-cmake@latest
             -   name: Checkout
                 uses: actions/checkout@v4
                 with:

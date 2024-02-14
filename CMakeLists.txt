@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.25)
+cmake_minimum_required(VERSION 3.15)
 include(CMakeDependentOption)
 project(libcoro
     VERSION 0.11.0

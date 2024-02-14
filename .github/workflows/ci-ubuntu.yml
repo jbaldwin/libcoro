@@ -117,10 +117,11 @@ jobs:
                     apt install -y build-essential software-properties-common
                     apt-get install -y \
                         wget \
-                        cmake \
                         git \
                         ninja-build \
                         libssl-dev
+            -   name: Get latest CMake
+                uses: lukka/get-cmake@latest
             -   name: install-clang
                 run: |
                     wget https://apt.llvm.org/llvm.sh

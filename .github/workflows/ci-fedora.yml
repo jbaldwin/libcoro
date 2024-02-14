@@ -14,10 +14,11 @@ jobs:
         container:
             image: fedora:${{ matrix.fedora_version }}
         steps:
+            -   name: Get latest CMake
+                uses: lukka/get-cmake@latest
             -   name: Install Dependencies
                 run: |
                     sudo dnf install -y \
-                        cmake \
                         git \
                         ninja-build \
                         gcc-c++ \
