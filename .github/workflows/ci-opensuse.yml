@@ -9,6 +9,7 @@ jobs:
         strategy:
             matrix:
                 gplusplus_version: [10]
+                cxx_standard: [20]
                 libcoro_feature_networking: [ {enabled: ON, tls: ON} ]
         container:
             image: opensuse/leap:15.2
@@ -37,6 +38,7 @@ jobs:
                         -DCMAKE_BUILD_TYPE=Release \
                         -DCMAKE_C_COMPILER=gcc-${{ matrix.gplusplus_version }} \
                         -DCMAKE_CXX_COMPILER=g++-${{ matrix.gplusplus_version }} \
+                        -DCMAKE_CXX_STANDARD=${{ matrix.cxx_standard }} \
                         -DLIBCORO_FEATURE_NETWORKING=${{ matrix.libcoro_feature_networking.enabled }} \
                         -DLIBCORO_FEATURE_TLS=${{ matrix.libcoro_feature_networking.tls }} \
                         ..
