@@ -1,0 +1,70 @@
+name: ci-conan
+
+on: [pull_request, workflow_dispatch]
+
+jobs:
+    ci-conan-gcc10:
+        name: ci-conan-g++-11-shared-${{ matrix.shared }}-build-type-${{ matrix.build_type }}
+        runs-on: ubuntu-latest
+        strategy:
+            matrix:
+                shared: ["False", "True"]
+                build_type: ["Release", "Debug"]
+        container:
+            image: ubuntu:20.04
+            env:
+                TZ: America/New_York
+                DEBIAN_FRONTEND: noninteractive
+        steps:
+            -   name: Install System Dependencies
+                run: |
+                    apt-get update
+                    apt-get -y upgrade
+                    apt install -y build-essential software-properties-common
+                    add-apt-repository ppa:ubuntu-toolchain-r/test
+                    apt-get install -y \
+                        cmake \
+                        git \
+                        ninja-build \
+                        g++-11 \
+                        wget
+                    wget -q -O /tmp/conan.tar.gz https://github.com/conan-io/conan/releases/download/2.0.17/conan-linux-64.tar.gz
+                    tar -xvf /tmp/conan.tar.gz -C /usr/bin
+            -   name: Detect Conan profile
+                run: |
+                    update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-11 100
+                    update-alternatives --install /usr/bin/c++ c++ /usr/bin/g++-11 100
+                    update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-11 100
+                    update-alternatives --install /usr/bin/cc cc /usr/bin/gcc-11 100
+                    conan profile detect
+            -   name: Checkout
+                uses: actions/checkout@v4
+            -   name: Install Conan Dependencies
+                run: |
+                    conan install -r conancenter \
+                        --requires=openssl/3.2.0 \
+                        --requires=c-ares/1.22.1 \
+                        --requires=tl-expected/1.1.0 \
+                        -g CMakeToolchain \
+                        -g CMakeDeps \
+                        -of "${GITHUB_WORKSPACE}/build/conan" \
+                        --build=missing \
+                        -s build_type=${{ matrix.build_type }} \
+                        -s compiler.cppstd=20 \
+                        -o "*/*:shared=${{ matrix.shared }}"
+            -   name: Build
+                run: |
+                    cmake -S . -B "${GITHUB_WORKSPACE}/build" \
+                        -GNinja \
+                        -DCMAKE_CXX_STANDARD=20 \
+                        -DCMAKE_TOOLCHAIN_FILE=build/conan/conan_toolchain.cmake \
+                        -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+                        -DLIBCORO_EXTERNAL_DEPENDENCIES=ON \
+                        -DLIBCORO_FEATURE_NETWORKING=ON \
+                        -DLIBCORO_FEATURE_TLS=ON \
+                        -DLIBCORO_BUILD_SHARED_LIBS=${{ matrix.shared }}
+                    cmake --build "${GITHUB_WORKSPACE}/build"
+            -   name: Test
+                run: |
+                    cd build
+                    ctest -VVqw
