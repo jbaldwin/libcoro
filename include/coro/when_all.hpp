@@ -9,6 +9,7 @@
 #include <ranges>
 #include <tuple>
 #include <vector>
+#include <cassert>
 
 namespace coro
 {
@@ -288,7 +289,7 @@ public:
         coroutine_handle_type::from_promise(*this).resume();
     }
 
-    auto return_value() & -> return_type&
+    auto result() & -> return_type&
     {
         if (m_exception_ptr)
         {
@@ -297,13 +298,21 @@ public:
         return *m_return_value;
     }
 
-    auto return_value() && -> return_type&&
+    auto result() && -> return_type&&
     {
         if (m_exception_ptr)
         {
             std::rethrow_exception(m_exception_ptr);
         }
         return std::forward(*m_return_value);
+    }
+
+    auto return_void() noexcept -> void
+    {
+        // We should have either suspended at co_yield point or
+        // an exception was thrown before running off the end of
+        // the coroutine.
+        assert(false);
     }
 
 private:
@@ -401,7 +410,7 @@ public:
         }
         else
         {
-            return m_coroutine.promise().return_value();
+            return m_coroutine.promise().result();
         }
     }
 
@@ -414,7 +423,7 @@ public:
         }
         else
         {
-            return m_coroutine.promise().return_value();
+            return m_coroutine.promise().result();
         }
     }
 
@@ -427,7 +436,7 @@ public:
         }
         else
         {
-            return m_coroutine.promise().return_value();
+            return m_coroutine.promise().result();
         }
     }
 
