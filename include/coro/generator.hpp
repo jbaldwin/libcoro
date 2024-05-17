@@ -118,7 +118,7 @@ private:
 } // namespace detail
 
 template<typename T>
-class generator
+class generator : public std::ranges::view_base
 {
 public:
     using promise_type = detail::generator_promise<T>;
@@ -131,7 +131,7 @@ public:
     generator(generator&& other) noexcept : m_coroutine(other.m_coroutine) { other.m_coroutine = nullptr; }
 
     auto operator=(const generator&) = delete;
-    auto operator=(generator&& other) noexcept -> generator&
+    auto operator                    =(generator&& other) noexcept -> generator&
     {
         m_coroutine       = other.m_coroutine;
         other.m_coroutine = nullptr;
