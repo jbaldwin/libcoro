@@ -8,9 +8,6 @@ project(libcoro
 
 if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
     set(MACOSX TRUE)
-    # We need to build with clang >= 17, assuming its installed by
-    # brew. We also need to force linking to libc++.a
-    add_link_options(-L/usr/local/opt/llvm/lib)
     link_libraries(-lc++)
 endif()
 
