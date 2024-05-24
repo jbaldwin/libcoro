@@ -229,8 +229,18 @@ public:
      * Resumes execution of a direct coroutine handle on this io scheduler.
      * @param handle The coroutine handle to resume execution.
      */
-    auto resume(std::coroutine_handle<> handle) -> void
+    auto resume(std::coroutine_handle<> handle) -> bool
     {
+        if (handle == nullptr)
+        {
+            return false;
+        }
+
+        if (m_shutdown_requested.load(std::memory_order::acquire))
+        {
+            return false;
+        }
+
         if (m_opts.execution_strategy == execution_strategy_t::process_tasks_inline)
         {
             {
@@ -245,10 +255,12 @@ public:
                 eventfd_t value{1};
                 eventfd_write(m_schedule_fd, value);
             }
+
+            return true;
         }
         else
         {
-            m_thread_pool->resume(handle);
+            return m_thread_pool->resume(handle);
         }
     }
 

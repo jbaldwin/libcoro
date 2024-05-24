@@ -78,7 +78,7 @@ public:
     {
         m_size.fetch_add(1, std::memory_order::relaxed);
 
-        std::scoped_lock lk{m_mutex};
+        std::unique_lock lk{m_mutex};
 
         if (cleanup == garbage_collect_t::yes)
         {
@@ -94,6 +94,9 @@ public:
         // Reserve a free task index
         std::size_t index = m_free_task_indices.front();
         m_free_task_indices.pop();
+
+        // We've reserved the slot, we can release the lock.
+        lk.unlock();
 
         // Store the task inside a cleanup task for self deletion.
         m_tasks[index] = make_cleanup_task(std::move(user_task), index);
@@ -170,7 +173,7 @@ private:
     auto gc_internal() -> std::size_t
     {
         std::size_t deleted{0};
-        auto   pos = std::begin(m_tasks_to_delete);
+        auto        pos = std::begin(m_tasks_to_delete);
         while (pos != std::end(m_tasks_to_delete))
         {
             // Skip tasks that are still running or have yet to start.
@@ -228,8 +231,13 @@ private:
             std::cerr << "coro::task_container user_task had unhandle exception, not derived from std::exception.\n";
         }
 
-        std::scoped_lock lk{m_mutex};
-        m_tasks_to_delete.emplace_back(index);
+        {
+            // This scope is required around this lock otherwise if this task on destruction schedules a new task it
+            // can cause a deadlock, notably tls::client schedules a task to cleanup tls resources.
+            std::scoped_lock lk{m_mutex};
+            m_tasks_to_delete.emplace_back(index);
+        }
+
         co_return;
     }
 
