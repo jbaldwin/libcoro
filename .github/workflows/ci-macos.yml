@@ -4,8 +4,8 @@ on: [pull_request, workflow_dispatch]
 
 jobs:
     macos:
-        name: macos-latest
-        runs-on: macos-latest
+        name: macos-12
+        runs-on: macos-12
         strategy:
             fail-fast: false
             matrix:
@@ -25,13 +25,14 @@ jobs:
                     submodules: recursive
             -   name: Release
                 run: |
+                    brew --prefix llvm@17
                     mkdir Release
                     cd Release
                     cmake \
                         -GNinja \
                         -DCMAKE_BUILD_TYPE=Release \
-                        -DCMAKE_C_COMPILER=/usr/local/opt/llvm/bin//clang-${{ matrix.clang_version }} \
-                        -DCMAKE_CXX_COMPILER=/usr/local/opt/llvm/bin//clang-${{ matrix.clang_version }} \
+                        -DCMAKE_C_COMPILER=$(brew --prefix llvm@${{ matrix.clang_version }})/bin/clang-${{ matrix.clang_version }} \
+                        -DCMAKE_CXX_COMPILER=$(brew --prefix llvm@${{ matrix.clang_version }})/bin/clang-${{ matrix.clang_version }} \
                         -DCMAKE_CXX_STANDARD=${{ matrix.cxx_standard }} \
                         -DLIBCORO_FEATURE_NETWORKING=${{ matrix.libcoro_feature_networking.enabled }} \
                         -DLIBCORO_FEATURE_TLS=${{ matrix.libcoro_feature_networking.tls }} \
