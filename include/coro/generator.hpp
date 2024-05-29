@@ -127,10 +127,10 @@ public:
 
     generator() noexcept : m_coroutine(nullptr) {}
 
-    generator(const generator&) = delete;
+    generator(const generator&) { static_assert(false, "copying is not supported"); }
     generator(generator&& other) noexcept : m_coroutine(other.m_coroutine) { other.m_coroutine = nullptr; }
 
-    auto operator=(const generator&) = delete;
+    auto operator=(const generator&) { static_assert(false, "copying is not supported"); }
     auto operator=(generator&& other) noexcept -> generator&
     {
         m_coroutine       = other.m_coroutine;
