@@ -118,7 +118,7 @@ private:
 } // namespace detail
 
 template<typename T>
-class generator
+class generator : public std::ranges::view_base
 {
 public:
     using promise_type = detail::generator_promise<T>;

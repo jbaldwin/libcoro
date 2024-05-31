@@ -39,3 +39,37 @@ TEST_CASE("generator infinite incrementing integer yield", "[generator]")
         }
     }
 }
+
+TEST_CASE("generator satisfies view concept for compatibility with std::views::take")
+{
+    auto counter = size_t{0};
+    auto natural = [n = counter]() mutable -> coro::generator<size_t> {
+        while (true)
+            co_yield ++n;
+    };
+    auto nat = natural();
+    static_assert(std::ranges::view<decltype(nat)>, "does not satisfy view concept");
+    SECTION("Count the items")
+    {
+        for (auto&& n : natural() | std::views::take(5))
+        {
+            ++counter;
+            REQUIRE(n == counter);
+        }
+        REQUIRE(counter == 5);
+    }
+    SECTION("Not supported when std::ranges::view is satisfied, see issue 261")
+    {
+        /// the following may fail to compile to prevent loss of items in the std::views:take:
+        /*
+        for (auto&& n : nat | std::views::take(3)) {
+            ++counter;
+            REQUIRE(n == counter); // expect 1, 2, 3
+        }
+        for (auto&& n : nat | std::views::take(3)) {
+            ++counter;
+            REQUIRE(n == counter); // expect 4, 5, 6 (4 may get lost if view is not enabled)
+        }
+        */
+    }
+}
