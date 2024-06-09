@@ -200,3 +200,35 @@ TEST_CASE("thread_pool event jump threads", "[thread_pool]")
 
     coro::sync_wait(coro::when_all(make_tp1_task(), make_tp2_task()));
 }
+
+TEST_CASE("thread_pool high cpu usage when threadcount is greater than the number of tasks", "[thread_pool]")
+{
+    // https://github.com/jbaldwin/libcoro/issues/262
+    // This test doesn't really trigger any error conditions but was reported via
+    // an issue that the thread_pool threads not doing work would spin on the CPU
+    // if there were less tasks running than threads in the pool.
+    // This was due to using m_size instead of m_queue.size() causing the threads
+    // that had no work to go into a spin trying to acquire work.
+
+    auto sleep_for_task = [](std::chrono::seconds duration) -> coro::task<int>
+    {
+        std::this_thread::sleep_for(duration);
+        co_return duration.count();
+    };
+
+    auto wait_for_task = [&](coro::thread_pool& pool, std::chrono::seconds delay) -> coro::task<>
+    {
+        co_await pool.schedule();
+        for (int i = 0; i < 5; ++i)
+        {
+            co_await sleep_for_task(delay);
+            std::cout << std::chrono::system_clock::now().time_since_epoch().count() << " wait for " << delay.count()
+                      << "seconds\n";
+        }
+        co_return;
+    };
+
+    coro::thread_pool pool{coro::thread_pool::options{.thread_count = 3}};
+    coro::sync_wait(
+        coro::when_all(wait_for_task(pool, std::chrono::seconds{1}), wait_for_task(pool, std::chrono::seconds{3})));
+}

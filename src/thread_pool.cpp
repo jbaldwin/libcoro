@@ -44,15 +44,21 @@ auto thread_pool::schedule() -> operation
     throw std::runtime_error("coro::thread_pool is shutting down, unable to schedule new tasks.");
 }
 
-auto thread_pool::resume(std::coroutine_handle<> handle) noexcept -> void
+auto thread_pool::resume(std::coroutine_handle<> handle) noexcept -> bool
 {
     if (handle == nullptr)
     {
-        return;
+        return false;
+    }
+
+    if (m_shutdown_requested.load(std::memory_order::acquire))
+    {
+        return false;
     }
 
     m_size.fetch_add(1, std::memory_order::release);
     schedule_impl(handle);
+    return true;
 }
 
 auto thread_pool::shutdown() noexcept -> void
@@ -84,29 +90,44 @@ auto thread_pool::executor(std::size_t idx) -> void
         m_opts.on_thread_start_functor(idx);
     }
 
-    // Process until shutdown is requested and the total number of tasks reaches zero.
-    while (!m_shutdown_requested.load(std::memory_order::acquire) || m_size.load(std::memory_order::acquire) > 0)
+    // Process until shutdown is requested.
+    while (!m_shutdown_requested.load(std::memory_order::acquire))
     {
         std::unique_lock<std::mutex> lk{m_wait_mutex};
-        m_wait_cv.wait(
-            lk,
-            [&] {
-                return m_size.load(std::memory_order::acquire) > 0 ||
-                       m_shutdown_requested.load(std::memory_order::acquire);
-            });
-        // Process this batch until the queue is empty.
-        while (!m_queue.empty())
+        m_wait_cv.wait(lk, [&]() { return !m_queue.empty() || m_shutdown_requested.load(std::memory_order::acquire); });
+
+        if (m_queue.empty())
         {
-            auto handle = m_queue.front();
-            m_queue.pop_front();
-
-            // Release the lock while executing the coroutine.
-            lk.unlock();
-            handle.resume();
-
-            m_size.fetch_sub(1, std::memory_order::release);
-            lk.lock();
+            continue;
         }
+
+        auto handle = m_queue.front();
+        m_queue.pop_front();
+        lk.unlock();
+
+        // Release the lock while executing the coroutine.
+        handle.resume();
+        m_size.fetch_sub(1, std::memory_order::release);
+    }
+
+    // Process until there are no ready tasks left.
+    while (m_size.load(std::memory_order::acquire) > 0)
+    {
+        std::unique_lock<std::mutex> lk{m_wait_mutex};
+        // m_size will only drop to zero once all executing coroutines are finished
+        // but the queue could be empty for threads that finished early.
+        if (m_queue.empty())
+        {
+            break;
+        }
+
+        auto handle = m_queue.front();
+        m_queue.pop_front();
+        lk.unlock();
+
+        // Release the lock while executing the coroutine.
+        handle.resume();
+        m_size.fetch_sub(1, std::memory_order::release);
     }
 
     if (m_opts.on_thread_stop_functor != nullptr)
@@ -125,9 +146,8 @@ auto thread_pool::schedule_impl(std::coroutine_handle<> handle) noexcept -> void
     {
         std::scoped_lock lk{m_wait_mutex};
         m_queue.emplace_back(handle);
+        m_wait_cv.notify_one();
     }
-
-    m_wait_cv.notify_one();
 }
 
 } // namespace coro
