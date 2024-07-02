@@ -3,7 +3,7 @@
 
 int main()
 {
-    auto scheduler = std::make_shared<coro::io_scheduler>(
+    auto scheduler = coro::io_scheduler::make_shared(
         coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
 
     auto make_server_task = [&]() -> coro::task<void>

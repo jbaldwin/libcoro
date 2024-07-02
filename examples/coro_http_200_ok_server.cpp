@@ -67,7 +67,7 @@ Connection: keep-alive
     std::vector<coro::task<void>> workers{};
     for (size_t i = 0; i < std::thread::hardware_concurrency(); ++i)
     {
-        auto scheduler = std::make_shared<coro::io_scheduler>(coro::io_scheduler::options{
+        auto scheduler = coro::io_scheduler::make_shared(coro::io_scheduler::options{
             .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
 
         workers.push_back(make_http_200_ok_server(scheduler));

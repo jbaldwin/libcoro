@@ -11,7 +11,7 @@ TEST_CASE("tcp_server ping server", "[tcp_server]")
     const std::string client_msg{"Hello from client"};
     const std::string server_msg{"Reply from server!"};
 
-    auto scheduler = std::make_shared<coro::io_scheduler>(
+    auto scheduler = coro::io_scheduler::make_shared(
         coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
 
     auto make_client_task = [&]() -> coro::task<void>
@@ -91,7 +91,7 @@ TEST_CASE("tcp_server concurrent polling on the same socket", "[tcp_server]")
     // Issue 224: This test duplicates a client and issues two different poll operations per coroutine.
 
     using namespace std::chrono_literals;
-    auto scheduler = std::make_shared<coro::io_scheduler>(coro::io_scheduler::options{
+    auto scheduler = coro::io_scheduler::make_shared(coro::io_scheduler::options{
         .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
 
     auto make_read_task = [](coro::net::tcp::client client) -> coro::task<void>

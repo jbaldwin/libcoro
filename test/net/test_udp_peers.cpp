@@ -8,7 +8,7 @@ TEST_CASE("udp one way")
 {
     const std::string msg{"aaaaaaaaaaaaaaaaaaaaabbbbbbbbbbbbbbbbbcccccccccccccccccc"};
 
-    auto scheduler = std::make_shared<coro::io_scheduler>(
+    auto scheduler = coro::io_scheduler::make_shared(
         coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
 
     auto make_send_task = [&]() -> coro::task<void>
@@ -54,7 +54,7 @@ TEST_CASE("udp echo peers")
     const std::string peer1_msg{"Hello from peer1!"};
     const std::string peer2_msg{"Hello from peer2!!"};
 
-    auto scheduler = std::make_shared<coro::io_scheduler>(
+    auto scheduler = coro::io_scheduler::make_shared(
         coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
 
     auto make_peer_task = [&scheduler](

@@ -83,7 +83,7 @@ TEST_CASE("mutex single waiter not locked shared", "[shared_mutex]")
 #ifdef LIBCORO_FEATURE_NETWORKING
 TEST_CASE("mutex many shared and exclusive waiters interleaved", "[shared_mutex]")
 {
-    auto tp = std::make_shared<coro::io_scheduler>(
+    auto tp = coro::io_scheduler::make_shared(
         coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 8}});
     coro::shared_mutex<coro::io_scheduler> m{tp};
 
