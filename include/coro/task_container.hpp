@@ -10,6 +10,7 @@
 #include <memory>
 #include <mutex>
 #include <queue>
+#include <thread>
 #include <vector>
 
 namespace coro
@@ -78,25 +79,25 @@ public:
     {
         m_size.fetch_add(1, std::memory_order::relaxed);
 
-        std::unique_lock lk{m_mutex};
-
-        if (cleanup == garbage_collect_t::yes)
+        std::size_t index{};
         {
-            gc_internal();
+            std::unique_lock lk{m_mutex};
+
+            if (cleanup == garbage_collect_t::yes)
+            {
+                gc_internal();
+            }
+
+            // Only grow if completely full and attempting to add more.
+            if (m_free_task_indices.empty())
+            {
+                grow();
+            }
+
+            // Reserve a free task index
+            index = m_free_task_indices.front();
+            m_free_task_indices.pop();
         }
-
-        // Only grow if completely full and attempting to add more.
-        if (m_free_task_indices.empty())
-        {
-            grow();
-        }
-
-        // Reserve a free task index
-        std::size_t index = m_free_task_indices.front();
-        m_free_task_indices.pop();
-
-        // We've reserved the slot, we can release the lock.
-        lk.unlock();
 
         // Store the task inside a cleanup task for self deletion.
         m_tasks[index] = make_cleanup_task(std::move(user_task), index);
@@ -106,7 +107,7 @@ public:
     }
 
     /**
-     * Garbage collects any tasks that are marked as deleted.  This frees up space to be re-used by
+     * Garbage collects any tasks that are marked as deleted. This frees up space to be re-used by
      * the task container for newly stored tasks.
      * @return The number of tasks that were deleted.
      */
@@ -182,7 +183,7 @@ private:
                 pos++;
                 continue;
             }
-            // Destroy the cleanup task and the user task.
+            // Destroy the cleanup task.
             m_tasks[*pos].destroy();
             // Put the deleted position at the end of the free indexes list.
             m_free_task_indices.emplace(*pos);
@@ -231,9 +232,12 @@ private:
             std::cerr << "coro::task_container user_task had unhandle exception, not derived from std::exception.\n";
         }
 
+        // Destroy the user task since it is complete. This is important to do so outside the lock
+        // since the user could schedule a new task from the destructor (tls::client does this interanlly)
+        // causing a deadlock.
+        user_task.destroy();
+
         {
-            // This scope is required around this lock otherwise if this task on destruction schedules a new task it
-            // can cause a deadlock, notably tls::client schedules a task to cleanup tls resources.
             std::scoped_lock lk{m_mutex};
             m_tasks_to_delete.emplace_back(index);
         }

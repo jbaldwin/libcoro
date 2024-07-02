@@ -22,6 +22,9 @@ concept executor = requires(type t, std::coroutine_handle<> c)
     { t.schedule() } -> coro::concepts::awaiter;
     { t.yield() } -> coro::concepts::awaiter;
     { t.resume(c) } -> std::same_as<bool>;
+    { t.size() } -> std::same_as<std::size_t>;
+    { t.empty() } -> std::same_as<bool>;
+    { t.shutdown() } -> std::same_as<void>;
 };
 
 #ifdef LIBCORO_FEATURE_NETWORKING
