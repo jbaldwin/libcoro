@@ -21,9 +21,14 @@
 
 namespace coro
 {
-class io_scheduler
+class io_scheduler : public std::enable_shared_from_this<io_scheduler>
 {
     using timed_events = detail::poll_info::timed_events;
+
+    struct private_constructor
+    {
+        private_constructor() = default;
+    };
 
 public:
     class schedule_operation;
@@ -69,7 +74,18 @@ public:
         const execution_strategy_t execution_strategy{execution_strategy_t::process_tasks_on_thread_pool};
     };
 
-    explicit io_scheduler(
+    /**
+     * @see io_scheduler::make_shared
+     */
+    explicit io_scheduler(options&& opts, private_constructor);
+
+    /**
+     * @brief Creates an io_scheduler.
+     *
+     * @param opts
+     * @return std::shared_ptr<io_scheduler>
+     */
+    static auto make_shared(
         options opts = options{
             .thread_strategy            = thread_strategy_t::spawn,
             .on_io_thread_start_functor = nullptr,
@@ -79,7 +95,7 @@ public:
                      ((std::thread::hardware_concurrency() > 1) ? (std::thread::hardware_concurrency() - 1) : 1),
                  .on_thread_start_functor = nullptr,
                  .on_thread_stop_functor  = nullptr},
-            .execution_strategy = execution_strategy_t::process_tasks_on_thread_pool});
+            .execution_strategy = execution_strategy_t::process_tasks_on_thread_pool}) -> std::shared_ptr<io_scheduler>;
 
     io_scheduler(const io_scheduler&)                    = delete;
     io_scheduler(io_scheduler&&)                         = delete;
@@ -229,8 +245,18 @@ public:
      * Resumes execution of a direct coroutine handle on this io scheduler.
      * @param handle The coroutine handle to resume execution.
      */
-    auto resume(std::coroutine_handle<> handle) -> void
+    auto resume(std::coroutine_handle<> handle) -> bool
     {
+        if (handle == nullptr)
+        {
+            return false;
+        }
+
+        if (m_shutdown_requested.load(std::memory_order::acquire))
+        {
+            return false;
+        }
+
         if (m_opts.execution_strategy == execution_strategy_t::process_tasks_inline)
         {
             {
@@ -245,10 +271,12 @@ public:
                 eventfd_t value{1};
                 eventfd_write(m_schedule_fd, value);
             }
+
+            return true;
         }
         else
         {
-            m_thread_pool->resume(handle);
+            return m_thread_pool->resume(handle);
         }
     }
 

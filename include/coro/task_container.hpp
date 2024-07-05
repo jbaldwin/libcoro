@@ -36,8 +36,7 @@ public:
     task_container(
         std::shared_ptr<executor_type> e, const options opts = options{.reserve_size = 8, .growth_factor = 2})
         : m_growth_factor(opts.growth_factor),
-          m_executor(std::move(e)),
-          m_executor_ptr(m_executor.get())
+          m_executor(std::move(e))
     {
         if (m_executor == nullptr)
         {
@@ -78,22 +77,25 @@ public:
     {
         m_size.fetch_add(1, std::memory_order::relaxed);
 
-        std::scoped_lock lk{m_mutex};
-
-        if (cleanup == garbage_collect_t::yes)
+        std::size_t index{};
         {
-            gc_internal();
-        }
+            std::unique_lock lk{m_mutex};
 
-        // Only grow if completely full and attempting to add more.
-        if (m_free_task_indices.empty())
-        {
-            grow();
-        }
+            if (cleanup == garbage_collect_t::yes)
+            {
+                gc_internal();
+            }
 
-        // Reserve a free task index
-        std::size_t index = m_free_task_indices.front();
-        m_free_task_indices.pop();
+            // Only grow if completely full and attempting to add more.
+            if (m_free_task_indices.empty())
+            {
+                grow();
+            }
+
+            // Reserve a free task index
+            index = m_free_task_indices.front();
+            m_free_task_indices.pop();
+        }
 
         // Store the task inside a cleanup task for self deletion.
         m_tasks[index] = make_cleanup_task(std::move(user_task), index);
@@ -103,7 +105,7 @@ public:
     }
 
     /**
-     * Garbage collects any tasks that are marked as deleted.  This frees up space to be re-used by
+     * Garbage collects any tasks that are marked as deleted. This frees up space to be re-used by
      * the task container for newly stored tasks.
      * @return The number of tasks that were deleted.
      */
@@ -144,7 +146,7 @@ public:
         while (!empty())
         {
             garbage_collect();
-            co_await m_executor_ptr->yield();
+            co_await m_executor->yield();
         }
     }
 
@@ -170,7 +172,7 @@ private:
     auto gc_internal() -> std::size_t
     {
         std::size_t deleted{0};
-        auto   pos = std::begin(m_tasks_to_delete);
+        auto        pos = std::begin(m_tasks_to_delete);
         while (pos != std::end(m_tasks_to_delete))
         {
             // Skip tasks that are still running or have yet to start.
@@ -179,7 +181,7 @@ private:
                 pos++;
                 continue;
             }
-            // Destroy the cleanup task and the user task.
+            // Destroy the cleanup task.
             m_tasks[*pos].destroy();
             // Put the deleted position at the end of the free indexes list.
             m_free_task_indices.emplace(*pos);
@@ -207,7 +209,7 @@ private:
     auto make_cleanup_task(task<void> user_task, std::size_t index) -> coro::task<void>
     {
         // Immediately move the task onto the executor.
-        co_await m_executor_ptr->schedule();
+        co_await m_executor->schedule();
 
         try
         {
@@ -228,8 +230,16 @@ private:
             std::cerr << "coro::task_container user_task had unhandle exception, not derived from std::exception.\n";
         }
 
-        std::scoped_lock lk{m_mutex};
-        m_tasks_to_delete.emplace_back(index);
+        // Destroy the user task since it is complete. This is important to do so outside the lock
+        // since the user could schedule a new task from the destructor (tls::client does this interanlly)
+        // causing a deadlock.
+        user_task.destroy();
+
+        {
+            std::scoped_lock lk{m_mutex};
+            m_tasks_to_delete.emplace_back(index);
+        }
+
         co_return;
     }
 
@@ -248,20 +258,6 @@ private:
     double m_growth_factor{};
     /// The executor to schedule tasks that have just started.
     std::shared_ptr<executor_type> m_executor{nullptr};
-    /// This is used internally since io_scheduler cannot pass itself in as a shared_ptr.
-    executor_type* m_executor_ptr{nullptr};
-
-    /**
-     * Special constructor for internal types to create their embeded task containers.
-     */
-
-    friend io_scheduler;
-    task_container(executor_type& e, const options opts = options{.reserve_size = 8, .growth_factor = 2})
-        : m_growth_factor(opts.growth_factor),
-          m_executor_ptr(&e)
-    {
-        init(opts.reserve_size);
-    }
 
     auto init(std::size_t reserve_size) -> void
     {

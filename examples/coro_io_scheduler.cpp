@@ -3,7 +3,7 @@
 
 int main()
 {
-    auto scheduler = std::make_shared<coro::io_scheduler>(coro::io_scheduler::options{
+    auto scheduler = coro::io_scheduler::make_shared(coro::io_scheduler::options{
         // The scheduler will spawn a dedicated event processing thread.  This is the default, but
         // it is possible to use 'manual' and call 'process_events()' to drive the scheduler yourself.
         .thread_strategy = coro::io_scheduler::thread_strategy_t::spawn,
