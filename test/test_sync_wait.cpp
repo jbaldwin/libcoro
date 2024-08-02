@@ -4,7 +4,7 @@
 
 #include <iostream>
 #include <random>
-#include <set>
+#include <unordered_set>
 
 TEST_CASE("sync_wait simple integer return", "[sync_wait]")
 {
