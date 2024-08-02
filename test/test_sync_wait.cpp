@@ -69,7 +69,6 @@ TEST_CASE("sync_wait very rarely hangs issue-270", "[sync_wait]")
 {
     coro::thread_pool tp{};
 
-    // const int ITERATIONS = 1'000'000;
     const int ITERATIONS = 100;
 
     std::unordered_set<int> data{};
