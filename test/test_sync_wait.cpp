@@ -3,6 +3,8 @@
 #include <coro/coro.hpp>
 
 #include <iostream>
+#include <random>
+#include <unordered_set>
 
 TEST_CASE("sync_wait simple integer return", "[sync_wait]")
 {
@@ -61,4 +63,48 @@ TEST_CASE("sync_wait task that throws", "[sync_wait]")
     };
 
     REQUIRE_THROWS(coro::sync_wait(f()));
+}
+
+TEST_CASE("sync_wait very rarely hangs issue-270", "[sync_wait]")
+{
+    coro::thread_pool tp{};
+
+    const int ITERATIONS = 100;
+
+    std::unordered_set<int> data{};
+    data.reserve(ITERATIONS);
+
+    std::random_device                                       dev;
+    std::mt19937                                             rng(dev());
+    std::uniform_int_distribution<std::mt19937::result_type> dist(0, ITERATIONS);
+
+    for (int i = 0; i < ITERATIONS; ++i)
+    {
+        data.insert(dist(rng));
+    }
+
+    std::atomic<int> count{0};
+
+    auto make_task = [&](int i) -> coro::task<void>
+    {
+        co_await tp.schedule();
+
+        if (data.find(i) != data.end())
+        {
+            count.fetch_add(1);
+        }
+
+        co_return;
+    };
+
+    std::vector<coro::task<void>> tasks{};
+    tasks.reserve(ITERATIONS);
+    for (int i = 0; i < ITERATIONS; ++i)
+    {
+        tasks.emplace_back(make_task(i));
+    }
+
+    coro::sync_wait(coro::when_all(std::move(tasks)));
+
+    REQUIRE(count > 0);
 }

@@ -328,7 +328,7 @@ auto sync_wait(awaitable_type&& a) -> decltype(auto)
         // For non-trivial types (or possibly types that don't fit in a register)
         // the compiler will end up calling the ~return_type() when the promise
         // is destructed at the end of sync_wait(). This causes the return_type
-        // object to also be destructed causingn the final return/move from
+        // object to also be destructed causing the final return/move from
         // sync_wait() to be a 'use after free' bug. To work around this the result
         // must be moved off the promise object before the promise is destructed.
         // Other solutions could be heap allocating the return_type but that has
