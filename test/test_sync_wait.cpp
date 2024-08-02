@@ -108,3 +108,27 @@ TEST_CASE("sync_wait very rarely hangs issue-270", "[sync_wait]")
 
     REQUIRE(count > 0);
 }
+
+TEST_CASE("sync_wait with loop", "[sync_wait]")
+{
+    const int        ITERATIONS = 100000;
+    std::vector<int> vec{};
+
+    auto push_to_vector_task = [](std::vector<int>& data, int d) -> coro::task<void>
+    {
+        data.push_back(d);
+        co_return;
+    };
+
+    auto loop_task = [&](std::vector<int>& data) -> coro::task<void>
+    {
+        for (int i = 0; i < ITERATIONS; ++i)
+        {
+            co_await push_to_vector_task(data, i);
+        }
+        co_return;
+    };
+
+    coro::sync_wait(loop_task(vec));
+    REQUIRE(vec.size() == ITERATIONS);
+}
