@@ -26,9 +26,9 @@ struct test_setup_networking
 
     ~test_setup_networking()
     {
-        // // Cleanup the temporary key.pem and cert.pem files.
-        // auto unused = system("rm key.pem cert.pem");
-        // (void)unused;
+        // Cleanup the temporary key.pem and cert.pem files.
+        auto unused = system("rm key.pem cert.pem");
+        (void)unused;
     }
 };
 
