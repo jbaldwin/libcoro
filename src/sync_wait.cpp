@@ -8,7 +8,7 @@ sync_wait_event::sync_wait_event(bool initially_set) : m_set(initially_set)
 
 auto sync_wait_event::set() noexcept -> void
 {
-    // issue-270 100~ task's on a thread_pool within sync_wait(when_all) can cause a deadlock/hang if using
+    // issue-270 100~ task's on a thread_pool within sync_wait(when_all(tasks)) can cause a deadlock/hang if using
     // release/acquire or even seq_cst.
     m_set.exchange(true, std::memory_order::seq_cst);
     std::unique_lock<std::mutex> lk{m_mutex};
