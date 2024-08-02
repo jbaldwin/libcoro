@@ -433,7 +433,7 @@ Transfer/sec:     18.33MB
 
  * ubuntu:20.04, 22.04
  * fedora:32-40
- * openSUSE/leap:15.2
+ * openSUSE/leap:15.6
  * Windows 2022
  * Emscripten 3.1.45
  * MacOS 12

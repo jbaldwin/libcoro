@@ -12,7 +12,7 @@ jobs:
                 cxx_standard: [20]
                 libcoro_feature_networking: [ {enabled: ON, tls: ON} ]
         container:
-            image: opensuse/leap:15.2
+            image: opensuse/leap:15.6
         steps:
             -   name: zypper
                 run: |
