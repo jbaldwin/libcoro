@@ -26,6 +26,7 @@ jobs:
             -   name: Release
                 run: |
                     brew --prefix llvm@17
+                    ls $(brew --prefix llvm@17)/bin
                     mkdir Release
                     cd Release
                     cmake \
