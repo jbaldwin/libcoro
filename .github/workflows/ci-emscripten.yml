@@ -21,7 +21,8 @@ jobs:
                     apt-get install -y \
                         cmake \
                         git \
-                        ninja-build
+                        ninja-build \
+                        nodejs
             -   name: Checkout
                 uses: actions/checkout@v4
                 with:
@@ -50,4 +51,4 @@ jobs:
                     cd emsdk
                     . ./emsdk_env.sh
                     cd ../Release
-                    node --experimental-wasm-eh ./test/libcoro_test.js
+                    node --experimental-wasm-threads --experimental-wasm-bulk-memory ./test/libcoro_test.js
