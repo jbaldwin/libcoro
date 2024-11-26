@@ -41,3 +41,4 @@
 #include "coro/thread_pool.hpp"
 #include "coro/time.hpp"
 #include "coro/when_all.hpp"
+#include "coro/when_any.hpp"

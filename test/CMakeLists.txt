@@ -17,6 +17,12 @@ set(LIBCORO_TEST_SOURCE_FILES
     catch_amalgamated.cpp
 )
 
+if(NOT EMSCRIPTEN)
+    list(APPEND LIBCORO_TEST_SOURCE_FILES
+        test_when_any.cpp
+    )
+endif()
+
 if(LIBCORO_FEATURE_NETWORKING)
     list(APPEND LIBCORO_TEST_SOURCE_FILES
         net/test_ip_address.cpp
