@@ -1,7 +1,5 @@
 #include "coro/thread_pool.hpp"
 
-#include <iostream>
-
 namespace coro
 {
 thread_pool::operation::operation(thread_pool& tp) noexcept : m_thread_pool(tp)
@@ -35,28 +33,32 @@ thread_pool::~thread_pool()
 
 auto thread_pool::schedule() -> operation
 {
+    m_size.fetch_add(1, std::memory_order::release);
     if (!m_shutdown_requested.load(std::memory_order::acquire))
     {
-        m_size.fetch_add(1, std::memory_order::release);
         return operation{*this};
     }
-
-    throw std::runtime_error("coro::thread_pool is shutting down, unable to schedule new tasks.");
+    else
+    {
+        m_size.fetch_sub(1, std::memory_order::release);
+        throw std::runtime_error("coro::thread_pool is shutting down, unable to schedule new tasks.");
+    }
 }
 
 auto thread_pool::resume(std::coroutine_handle<> handle) noexcept -> bool
 {
-    if (handle == nullptr)
-    {
-        return false;
-    }
-
-    if (m_shutdown_requested.load(std::memory_order::acquire))
+    if (handle == nullptr || handle.done())
     {
         return false;
     }
 
     m_size.fetch_add(1, std::memory_order::release);
+    if (m_shutdown_requested.load(std::memory_order::acquire))
+    {
+        m_size.fetch_sub(1, std::memory_order::release);
+        return false;
+    }
+
     schedule_impl(handle);
     return true;
 }
@@ -138,7 +140,7 @@ auto thread_pool::executor(std::size_t idx) -> void
 
 auto thread_pool::schedule_impl(std::coroutine_handle<> handle) noexcept -> void
 {
-    if (handle == nullptr)
+    if (handle == nullptr || handle.done())
     {
         return;
     }

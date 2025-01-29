@@ -753,3 +753,27 @@ TEST_CASE("io_scheduler task throws after resume", "[io_scheduler]")
 
     REQUIRE_THROWS(coro::sync_wait(make_thrower()));
 }
+
+TEST_CASE("issue-287", "[io_scheduler]")
+{
+    const int ITERATIONS = 200000;
+
+    std::atomic<uint32_t> g_count = 0;
+    auto scheduler = coro::io_scheduler::make_shared(
+      coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
+
+    auto task = [](std::atomic<uint32_t>& count) -> coro::task<void> {
+        count++;
+        co_return;
+    };
+
+    for (int i = 0; i < ITERATIONS; ++i)
+    {
+        REQUIRE(scheduler->schedule(task(g_count)));
+    }
+
+    scheduler->shutdown();
+
+    std::cerr << "g_count = \t" << g_count.load() << std::endl;
+    REQUIRE(g_count.load() == ITERATIONS);
+}

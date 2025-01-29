@@ -232,3 +232,29 @@ TEST_CASE("thread_pool high cpu usage when threadcount is greater than the numbe
     coro::sync_wait(
         coro::when_all(wait_for_task(pool, std::chrono::seconds{1}), wait_for_task(pool, std::chrono::seconds{3})));
 }
+
+TEST_CASE("issue-287", "[thread_pool]")
+{
+    const int ITERATIONS = 200000;
+
+    std::atomic<uint32_t> g_count = 0;
+    auto thread_pool = std::make_shared<coro::thread_pool>(
+        coro::thread_pool::options{.thread_count = 1}
+    );
+    auto task_container = coro::task_container<coro::thread_pool>{thread_pool};
+
+    auto task = [](std::atomic<uint32_t>& count) -> coro::task<void> {
+        count++;
+        co_return;
+    };
+
+    for (int i = 0; i < ITERATIONS; ++i)
+    {
+        REQUIRE(task_container.start(task(g_count)));
+    }
+
+    thread_pool->shutdown();
+
+    std::cerr << "g_count = \t" << g_count.load() << std::endl;
+    REQUIRE(g_count.load() == ITERATIONS);
+}

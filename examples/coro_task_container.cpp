@@ -55,7 +55,7 @@ int main()
         tc.start(serve_client(std::move(client)));
 
         // Wait for all clients to complete before shutting down the tcp::server.
-        co_await tc.garbage_collect_and_yield_until_empty();
+        co_await tc.yield_until_empty();
         co_return;
     };
 
