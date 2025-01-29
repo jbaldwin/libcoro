@@ -177,6 +177,8 @@ public:
      * longer have control over the scheduled task.
      * @param task The task to execute on this io_scheduler.  It's lifetime ownership will be transferred
      *             to this io_scheduler.
+     * @return True if the task was succesfully scheduled onto the io_scheduler. This can fail if the task
+     *         is already completed or does not contain a valid coroutine anymore.
      */
     auto schedule(coro::task<void>&& task) -> bool;
 

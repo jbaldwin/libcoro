@@ -2,7 +2,7 @@
 
 #include "coro/attribute.hpp"
 #include "coro/concepts/executor.hpp"
-#include "coro/detail/task_self_destroying.hpp"
+#include "coro/detail/task_self_deleting.hpp"
 #include "coro/task.hpp"
 
 #include <atomic>
@@ -54,12 +54,14 @@ public:
     /**
      * Stores a user task and starts its execution on the container's thread pool.
      * @param user_task The scheduled user's task to store in this task container and start its execution.
+     * @return True if the task was succesfully started into the task container. This can fail if the task
+     *         is already completed or does not contain a valid coroutine anymore.
      */
     auto start(coro::task<void>&& user_task) -> bool
     {
         m_size.fetch_add(1, std::memory_order::relaxed);
 
-        auto task = make_self_destroying_task(std::move(user_task));
+        auto task = make_self_deleting_task(std::move(user_task));
         // Hook the promise to decrement the size upon its self deletion of the coroutine frame.
         task.promise().task_container_size(m_size);
         return m_executor->resume(task.handle());
@@ -91,7 +93,7 @@ public:
     }
 
 private:
-    auto make_self_destroying_task(task<void> user_task) -> detail::task_self_destroying
+    auto make_self_deleting_task(task<void> user_task) -> detail::task_self_deleting
     {
         co_await user_task;
         co_return;
