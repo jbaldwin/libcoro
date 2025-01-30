@@ -430,6 +430,7 @@ TEST_CASE("benchmark tcp::server echo server thread pool", "[benchmark]")
 
         std::cerr << "server co_await wait_for_clients\n";
         co_await wait_for_clients;
+        std::cerr << "server co_return\n";
         co_return;
     };
 
@@ -580,8 +581,10 @@ TEST_CASE("benchmark tcp::server echo server inline", "[benchmark]")
         }
 
         s.live_clients--;
+        std::cerr << "s.live_clients=" << s.live_clients << std::endl;
         if (s.live_clients == 0)
         {
+            std::cerr << "s.wait_for_clients.set()" << std::endl;
             s.wait_for_clients.set();
         }
         co_return;
@@ -611,7 +614,9 @@ TEST_CASE("benchmark tcp::server echo server inline", "[benchmark]")
             }
         }
 
+        std::cerr << "co_await s.wait_for_clients\n";
         co_await s.wait_for_clients;
+        std::cerr << "make_server_task co_return\n";
         co_return;
     };
 
@@ -671,8 +676,11 @@ TEST_CASE("benchmark tcp::server echo server inline", "[benchmark]")
                                                 {
                                                     server s{};
                                                     s.id = server_id++;
+                                                    std::cerr << "coro::sync_wait(make_server_task(s));\n";
                                                     coro::sync_wait(make_server_task(s));
+                                                    std::cerr << "server.scheduler->shutdown()\n";
                                                     s.scheduler->shutdown();
+                                                    std::cerr << "server thread exiting\n";
                                                 }});
     }
 
@@ -695,8 +703,11 @@ TEST_CASE("benchmark tcp::server echo server inline", "[benchmark]")
                                                     {
                                                         c.tasks.emplace_back(make_client_task(c));
                                                     }
+                                                    std::cerr << "coro::sync_wait(coro::when_all(std::move(c.tasks)));\n";
                                                     coro::sync_wait(coro::when_all(std::move(c.tasks)));
+                                                    std::cerr << "client.scheduler->shutdown()\n";
                                                     c.scheduler->shutdown();
+                                                    std::cerr << "client thread exiting\n";
                                                 }});
     }
 

@@ -134,7 +134,7 @@ public:
     /**
      * Schedules any coroutine handle that is ready to be resumed.
      * @param handle The coroutine handle to schedule.
-     * @return True if the coroutine is resumed, false if its a nullptr.
+     * @return True if the coroutine is resumed, false if its a nullptr or the coroutine is already done.
      */
     auto resume(std::coroutine_handle<> handle) noexcept -> bool;
 

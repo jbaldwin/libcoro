@@ -177,8 +177,10 @@ public:
      * longer have control over the scheduled task.
      * @param task The task to execute on this io_scheduler.  It's lifetime ownership will be transferred
      *             to this io_scheduler.
+     * @return True if the task was succesfully scheduled onto the io_scheduler. This can fail if the task
+     *         is already completed or does not contain a valid coroutine anymore.
      */
-    auto schedule(coro::task<void>&& task) -> void;
+    auto schedule(coro::task<void>&& task) -> bool;
 
     /**
      * Schedules the current task to run after the given amount of time has elapsed.
@@ -247,7 +249,7 @@ public:
      */
     auto resume(std::coroutine_handle<> handle) -> bool
     {
-        if (handle == nullptr)
+        if (handle == nullptr || handle.done())
         {
             return false;
         }
@@ -259,6 +261,7 @@ public:
 
         if (m_opts.execution_strategy == execution_strategy_t::process_tasks_inline)
         {
+            m_size.fetch_add(1, std::memory_order::release);
             {
                 std::scoped_lock lk{m_scheduled_tasks_mutex};
                 m_scheduled_tasks.emplace_back(handle);
@@ -308,13 +311,6 @@ public:
      * prior to shutting down.  This call is blocking and will not return until all tasks complete.
      */
     auto shutdown() noexcept -> void;
-
-    /**
-     * Scans for completed coroutines and destroys them freeing up resources.  This is also done on starting
-     * new tasks but this allows the user to cleanup resources manually.  One usage might be making sure fds
-     * are cleaned up as soon as possible.
-     */
-    auto garbage_collect() noexcept -> void;
 
 private:
     /// The configuration options.
