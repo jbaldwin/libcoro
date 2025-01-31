@@ -12,7 +12,8 @@ TEST_CASE("mutex single waiter not locked exclusive", "[shared_mutex]")
 
     coro::shared_mutex<coro::thread_pool> m{tp};
 
-    auto make_emplace_task = [](coro::shared_mutex<coro::thread_pool>& m, std::vector<uint64_t>& output) -> coro::task<void>
+    auto make_emplace_task = [](coro::shared_mutex<coro::thread_pool>& m,
+                                std::vector<uint64_t>&                 output) -> coro::task<void>
     {
         std::cerr << "Acquiring lock exclusive\n";
         {
@@ -47,7 +48,8 @@ TEST_CASE("mutex single waiter not locked shared", "[shared_mutex]")
 
     coro::shared_mutex<coro::thread_pool> m{tp};
 
-    auto make_emplace_task = [](coro::shared_mutex<coro::thread_pool>& m, std::vector<uint64_t>& values) -> coro::task<void>
+    auto make_emplace_task = [](coro::shared_mutex<coro::thread_pool>& m,
+                                std::vector<uint64_t>&                 values) -> coro::task<void>
     {
         std::cerr << "Acquiring lock shared\n";
         {
@@ -89,7 +91,9 @@ TEST_CASE("mutex many shared and exclusive waiters interleaved", "[shared_mutex]
 
     std::atomic<bool> read_value{false};
 
-    auto make_exclusive_task = [](std::shared_ptr<coro::io_scheduler>& s, coro::shared_mutex<coro::io_scheduler>& m, std::atomic<bool>& read_value) -> coro::task<void>
+    auto make_exclusive_task = [](std::shared_ptr<coro::io_scheduler>&    s,
+                                  coro::shared_mutex<coro::io_scheduler>& m,
+                                  std::atomic<bool>&                      read_value) -> coro::task<void>
     {
         // Let some readers get through.
         co_await s->yield_for(std::chrono::milliseconds{50});
@@ -107,9 +111,13 @@ TEST_CASE("mutex many shared and exclusive waiters interleaved", "[shared_mutex]
         co_return;
     };
 
-    auto make_shared_tasks_task = [](std::shared_ptr<coro::io_scheduler>& s, coro::shared_mutex<coro::io_scheduler>& m, std::atomic<bool>& read_value) -> coro::task<void>
+    auto make_shared_tasks_task = [](std::shared_ptr<coro::io_scheduler>&    s,
+                                     coro::shared_mutex<coro::io_scheduler>& m,
+                                     std::atomic<bool>&                      read_value) -> coro::task<void>
     {
-        auto make_shared_task = [](std::shared_ptr<coro::io_scheduler>& s, coro::shared_mutex<coro::io_scheduler>& m, std::atomic<bool>& read_value) -> coro::task<bool>
+        auto make_shared_task = [](std::shared_ptr<coro::io_scheduler>&    s,
+                                   coro::shared_mutex<coro::io_scheduler>& m,
+                                   std::atomic<bool>&                      read_value) -> coro::task<bool>
         {
             co_await s->schedule();
             std::cerr << "make_shared_task shared lock acquiring\n";

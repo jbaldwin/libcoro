@@ -238,12 +238,11 @@ TEST_CASE("issue-287", "[thread_pool]")
     const int ITERATIONS = 200000;
 
     std::atomic<uint32_t> g_count = 0;
-    auto thread_pool = std::make_shared<coro::thread_pool>(
-        coro::thread_pool::options{.thread_count = 1}
-    );
-    auto task_container = coro::task_container<coro::thread_pool>{thread_pool};
+    auto thread_pool              = std::make_shared<coro::thread_pool>(coro::thread_pool::options{.thread_count = 1});
+    auto task_container           = coro::task_container<coro::thread_pool>{thread_pool};
 
-    auto task = [](std::atomic<uint32_t>& count) -> coro::task<void> {
+    auto task = [](std::atomic<uint32_t>& count) -> coro::task<void>
+    {
         count++;
         co_return;
     };

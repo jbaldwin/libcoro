@@ -7,7 +7,8 @@ int main()
     coro::thread_pool tp{coro::thread_pool::options{.thread_count = 8}};
     coro::semaphore   semaphore{2};
 
-    auto make_rate_limited_task = [](coro::thread_pool& tp, coro::semaphore& semaphore, uint64_t task_num) -> coro::task<void>
+    auto make_rate_limited_task =
+        [](coro::thread_pool& tp, coro::semaphore& semaphore, uint64_t task_num) -> coro::task<void>
     {
         co_await tp.schedule();
 

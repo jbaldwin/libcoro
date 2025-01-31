@@ -11,7 +11,8 @@ int main()
 
     std::vector<coro::task<void>> tasks{};
 
-    auto make_producer_task = [](coro::thread_pool& tp, coro::ring_buffer<uint64_t, 16>& rb, coro::mutex& m) -> coro::task<void>
+    auto make_producer_task =
+        [](coro::thread_pool& tp, coro::ring_buffer<uint64_t, 16>& rb, coro::mutex& m) -> coro::task<void>
     {
         co_await tp.schedule();
 
@@ -36,7 +37,8 @@ int main()
         co_return;
     };
 
-    auto make_consumer_task = [](coro::thread_pool& tp, coro::ring_buffer<uint64_t, 16>& rb, coro::mutex& m, size_t id) -> coro::task<void>
+    auto make_consumer_task =
+        [](coro::thread_pool& tp, coro::ring_buffer<uint64_t, 16>& rb, coro::mutex& m, size_t id) -> coro::task<void>
     {
         co_await tp.schedule();
 

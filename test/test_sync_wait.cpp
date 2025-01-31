@@ -84,7 +84,8 @@ TEST_CASE("sync_wait very rarely hangs issue-270", "[sync_wait]")
 
     std::atomic<int> count{0};
 
-    auto make_task = [](coro::thread_pool& tp, std::unordered_set<int>& data, std::atomic<int>& count, int i) -> coro::task<void>
+    auto make_task =
+        [](coro::thread_pool& tp, std::unordered_set<int>& data, std::atomic<int>& count, int i) -> coro::task<void>
     {
         co_await tp.schedule();
 

@@ -3,8 +3,8 @@
 #include <coro/coro.hpp>
 
 #include <chrono>
-#include <thread>
 #include <iostream>
+#include <thread>
 #include <vector>
 
 TEST_CASE("semaphore binary", "[semaphore]")
@@ -113,7 +113,8 @@ TEST_CASE("semaphore ringbuffer", "[semaphore]")
 
     coro::semaphore s{2, 2};
 
-    auto make_consumer_task = [](coro::thread_pool& tp, coro::semaphore& s, std::atomic<uint64_t>& value, uint64_t id) -> coro::task<void>
+    auto make_consumer_task =
+        [](coro::thread_pool& tp, coro::semaphore& s, std::atomic<uint64_t>& value, uint64_t id) -> coro::task<void>
     {
         co_await tp.schedule();
 
@@ -178,7 +179,8 @@ TEST_CASE("semaphore ringbuffer many producers and consumers", "[semaphore]")
 
     coro::thread_pool tp{}; // let er rip
 
-    auto make_consumer_task = [](coro::thread_pool& tp, coro::semaphore& s, std::atomic<uint64_t>& value, uint64_t id) -> coro::task<void>
+    auto make_consumer_task =
+        [](coro::thread_pool& tp, coro::semaphore& s, std::atomic<uint64_t>& value, uint64_t id) -> coro::task<void>
     {
         co_await tp.schedule();
 
@@ -199,7 +201,8 @@ TEST_CASE("semaphore ringbuffer many producers and consumers", "[semaphore]")
         co_return;
     };
 
-    auto make_producer_task = [](coro::thread_pool& tp, coro::semaphore& s, std::atomic<uint64_t>& value, uint64_t id) -> coro::task<void>
+    auto make_producer_task =
+        [](coro::thread_pool& tp, coro::semaphore& s, std::atomic<uint64_t>& value, uint64_t id) -> coro::task<void>
     {
         co_await tp.schedule();
 

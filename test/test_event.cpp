@@ -105,7 +105,8 @@ TEST_CASE("event fifo", "[event]")
 
     std::atomic<uint64_t> counter{0};
 
-    auto make_waiter = [](coro::thread_pool& tp, coro::event& e, std::atomic<uint64_t>& counter, uint64_t value) -> coro::task<void>
+    auto make_waiter =
+        [](coro::thread_pool& tp, coro::event& e, std::atomic<uint64_t>& counter, uint64_t value) -> coro::task<void>
     {
         co_await tp.schedule();
         co_await e;
@@ -124,8 +125,13 @@ TEST_CASE("event fifo", "[event]")
         co_return;
     };
 
-    coro::sync_wait(
-        coro::when_all(make_waiter(tp, e, counter, 1), make_waiter(tp, e, counter, 2), make_waiter(tp, e, counter, 3), make_waiter(tp, e, counter, 4), make_waiter(tp, e, counter, 5), make_setter(tp, e, counter)));
+    coro::sync_wait(coro::when_all(
+        make_waiter(tp, e, counter, 1),
+        make_waiter(tp, e, counter, 2),
+        make_waiter(tp, e, counter, 3),
+        make_waiter(tp, e, counter, 4),
+        make_waiter(tp, e, counter, 5),
+        make_setter(tp, e, counter)));
 
     REQUIRE(counter == 5);
 }
@@ -161,7 +167,8 @@ TEST_CASE("event fifo single", "[event]")
 
     std::atomic<uint64_t> counter{0};
 
-    auto make_waiter = [](coro::thread_pool& tp, coro::event& e, std::atomic<uint64_t>& counter, uint64_t value) -> coro::task<void>
+    auto make_waiter =
+        [](coro::thread_pool& tp, coro::event& e, std::atomic<uint64_t>& counter, uint64_t value) -> coro::task<void>
     {
         co_await tp.schedule();
         co_await e;
@@ -194,7 +201,8 @@ TEST_CASE("event fifo executor", "[event]")
 
     std::atomic<uint64_t> counter{0};
 
-    auto make_waiter = [](coro::thread_pool& tp, coro::event& e, std::atomic<uint64_t>& counter, uint64_t value) -> coro::task<void>
+    auto make_waiter =
+        [](coro::thread_pool& tp, coro::event& e, std::atomic<uint64_t>& counter, uint64_t value) -> coro::task<void>
     {
         co_await tp.schedule();
         co_await e;
@@ -213,8 +221,13 @@ TEST_CASE("event fifo executor", "[event]")
         co_return;
     };
 
-    coro::sync_wait(
-        coro::when_all(make_waiter(tp, e, counter, 1), make_waiter(tp, e, counter, 2), make_waiter(tp, e, counter, 3), make_waiter(tp, e, counter, 4), make_waiter(tp, e, counter, 5), make_setter(tp, e, counter)));
+    coro::sync_wait(coro::when_all(
+        make_waiter(tp, e, counter, 1),
+        make_waiter(tp, e, counter, 2),
+        make_waiter(tp, e, counter, 3),
+        make_waiter(tp, e, counter, 4),
+        make_waiter(tp, e, counter, 5),
+        make_setter(tp, e, counter)));
 
     REQUIRE(counter == 5);
 }
@@ -250,7 +263,8 @@ TEST_CASE("event fifo single executor", "[event]")
 
     std::atomic<uint64_t> counter{0};
 
-    auto make_waiter = [](coro::thread_pool& tp, coro::event& e, std::atomic<uint64_t>& counter, uint64_t value) -> coro::task<void>
+    auto make_waiter =
+        [](coro::thread_pool& tp, coro::event& e, std::atomic<uint64_t>& counter, uint64_t value) -> coro::task<void>
     {
         co_await tp.schedule();
         co_await e;

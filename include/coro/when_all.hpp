@@ -5,11 +5,11 @@
 #include "coro/detail/void_value.hpp"
 
 #include <atomic>
+#include <cassert>
 #include <coroutine>
 #include <ranges>
 #include <tuple>
 #include <vector>
-#include <cassert>
 
 namespace coro
 {

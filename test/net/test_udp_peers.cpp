@@ -57,13 +57,12 @@ TEST_CASE("udp echo peers")
     auto scheduler = coro::io_scheduler::make_shared(
         coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
 
-    auto make_peer_task = [](
-                              std::shared_ptr<coro::io_scheduler> scheduler,
-                              uint16_t          my_port,
-                              uint16_t          peer_port,
-                              bool              send_first,
-                              const std::string my_msg,
-                              const std::string peer_msg) -> coro::task<void>
+    auto make_peer_task = [](std::shared_ptr<coro::io_scheduler> scheduler,
+                             uint16_t                            my_port,
+                             uint16_t                            peer_port,
+                             bool                                send_first,
+                             const std::string                   my_msg,
+                             const std::string                   peer_msg) -> coro::task<void>
     {
         co_await scheduler->schedule();
         coro::net::udp::peer::info my_info{.address = coro::net::ip_address::from_string("0.0.0.0"), .port = my_port};

@@ -324,7 +324,8 @@ int main()
     coro::event e;
 
     // These tasks will wait until the given event has been set before advancing.
-    auto make_wait_task = [](const coro::event& e, uint64_t i) -> coro::task<void> {
+    auto make_wait_task = [](const coro::event& e, uint64_t i) -> coro::task<void>
+    {
         std::cout << "task " << i << " is waiting on the event...\n";
         co_await e;
         std::cout << "task " << i << " event triggered, now resuming.\n";
@@ -332,7 +333,8 @@ int main()
     };
 
     // This task will trigger the event allowing all waiting tasks to proceed.
-    auto make_set_task = [](coro::event& e) -> coro::task<void> {
+    auto make_set_task = [](coro::event& e) -> coro::task<void>
+    {
         std::cout << "set task is triggering the event\n";
         e.set();
         co_return;
@@ -453,7 +455,9 @@ int main()
     std::vector<uint64_t> output{};
     coro::mutex           mutex;
 
-    auto make_critical_section_task = [](coro::thread_pool& tp, coro::mutex& mutex, std::vector<uint64_t>& output, uint64_t i) -> coro::task<void> {
+    auto make_critical_section_task =
+        [](coro::thread_pool& tp, coro::mutex& mutex, std::vector<uint64_t>& output, uint64_t i) -> coro::task<void>
+    {
         co_await tp.schedule();
         // To acquire a mutex lock co_await its lock() function.  Upon acquiring the lock the
         // lock() function returns a coro::scoped_lock that holds the mutex and automatically
@@ -510,10 +514,13 @@ int main()
     // to also show the interleaving of coroutines acquiring the shared lock in shared and
     // exclusive mode as they resume and suspend in a linear manner.  Ideally the thread pool
     // executor would have more than 1 thread to resume all shared waiters in parallel.
-    auto               tp = std::make_shared<coro::thread_pool>(coro::thread_pool::options{.thread_count = 1});
+    auto tp = std::make_shared<coro::thread_pool>(coro::thread_pool::options{.thread_count = 1});
     coro::shared_mutex<coro::thread_pool> mutex{tp};
 
-    auto make_shared_task = [](std::shared_ptr<coro::thread_pool> tp, coro::shared_mutex<coro::thread_pool>& mutex, uint64_t i) -> coro::task<void> {
+    auto make_shared_task = [](std::shared_ptr<coro::thread_pool>     tp,
+                               coro::shared_mutex<coro::thread_pool>& mutex,
+                               uint64_t                               i) -> coro::task<void>
+    {
         co_await tp->schedule();
         {
             std::cerr << "shared task " << i << " lock_shared()\n";
@@ -527,7 +534,9 @@ int main()
         co_return;
     };
 
-    auto make_exclusive_task = [](std::shared_ptr<coro::thread_pool> tp, coro::shared_mutex<coro::thread_pool>& mutex) -> coro::task<void> {
+    auto make_exclusive_task = [](std::shared_ptr<coro::thread_pool>     tp,
+                                  coro::shared_mutex<coro::thread_pool>& mutex) -> coro::task<void>
+    {
         co_await tp->schedule();
 
         std::cerr << "exclusive task lock()\n";
@@ -597,7 +606,8 @@ int main()
     coro::thread_pool tp{coro::thread_pool::options{.thread_count = 8}};
     coro::semaphore   semaphore{2};
 
-    auto make_rate_limited_task = [](coro::thread_pool& tp, coro::semaphore& semaphore, uint64_t task_num) -> coro::task<void>
+    auto make_rate_limited_task =
+        [](coro::thread_pool& tp, coro::semaphore& semaphore, uint64_t task_num) -> coro::task<void>
     {
         co_await tp.schedule();
 
@@ -650,7 +660,8 @@ int main()
 
     std::vector<coro::task<void>> tasks{};
 
-    auto make_producer_task = [](coro::thread_pool& tp, coro::ring_buffer<uint64_t, 16>& rb, coro::mutex& m) -> coro::task<void>
+    auto make_producer_task =
+        [](coro::thread_pool& tp, coro::ring_buffer<uint64_t, 16>& rb, coro::mutex& m) -> coro::task<void>
     {
         co_await tp.schedule();
 
@@ -675,7 +686,8 @@ int main()
         co_return;
     };
 
-    auto make_consumer_task = [](coro::thread_pool& tp, coro::ring_buffer<uint64_t, 16>& rb, coro::mutex& m, size_t id) -> coro::task<void>
+    auto make_consumer_task =
+        [](coro::thread_pool& tp, coro::ring_buffer<uint64_t, 16>& rb, coro::mutex& m, size_t id) -> coro::task<void>
     {
         co_await tp.schedule();
 
@@ -743,17 +755,17 @@ int main()
         // Upon starting each worker thread an optional lambda callback with the worker's
         // index can be called to make thread changes, perhaps priority or change the thread's
         // name.
-        .on_thread_start_functor = [](std::size_t worker_idx) -> void {
-            std::cout << "thread pool worker " << worker_idx << " is starting up.\n";
-        },
+        .on_thread_start_functor = [](std::size_t worker_idx) -> void
+        { std::cout << "thread pool worker " << worker_idx << " is starting up.\n"; },
         // Upon stopping each worker thread an optional lambda callback with the worker's
         // index can b called.
-        .on_thread_stop_functor = [](std::size_t worker_idx) -> void {
-            std::cout << "thread pool worker " << worker_idx << " is shutting down.\n";
-        }}};
+        .on_thread_stop_functor = [](std::size_t worker_idx) -> void
+        { std::cout << "thread pool worker " << worker_idx << " is shutting down.\n"; }}};
 
-    auto primary_task = [](coro::thread_pool& tp) -> coro::task<uint64_t> {
-        auto offload_task = [](coro::thread_pool& tp, uint64_t child_idx) -> coro::task<uint64_t> {
+    auto primary_task = [](coro::thread_pool& tp) -> coro::task<uint64_t>
+    {
+        auto offload_task = [](coro::thread_pool& tp, uint64_t child_idx) -> coro::task<uint64_t>
+        {
             // Start by scheduling this offload worker task onto the thread pool.
             co_await tp.schedule();
             // Now any code below this schedule() line will be executed on one of the thread pools

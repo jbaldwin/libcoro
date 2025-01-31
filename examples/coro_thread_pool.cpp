@@ -12,17 +12,17 @@ int main()
         // Upon starting each worker thread an optional lambda callback with the worker's
         // index can be called to make thread changes, perhaps priority or change the thread's
         // name.
-        .on_thread_start_functor = [](std::size_t worker_idx) -> void {
-            std::cout << "thread pool worker " << worker_idx << " is starting up.\n";
-        },
+        .on_thread_start_functor = [](std::size_t worker_idx) -> void
+        { std::cout << "thread pool worker " << worker_idx << " is starting up.\n"; },
         // Upon stopping each worker thread an optional lambda callback with the worker's
         // index can b called.
-        .on_thread_stop_functor = [](std::size_t worker_idx) -> void {
-            std::cout << "thread pool worker " << worker_idx << " is shutting down.\n";
-        }}};
+        .on_thread_stop_functor = [](std::size_t worker_idx) -> void
+        { std::cout << "thread pool worker " << worker_idx << " is shutting down.\n"; }}};
 
-    auto primary_task = [](coro::thread_pool& tp) -> coro::task<uint64_t> {
-        auto offload_task = [](coro::thread_pool& tp, uint64_t child_idx) -> coro::task<uint64_t> {
+    auto primary_task = [](coro::thread_pool& tp) -> coro::task<uint64_t>
+    {
+        auto offload_task = [](coro::thread_pool& tp, uint64_t child_idx) -> coro::task<uint64_t>
+        {
             // Start by scheduling this offload worker task onto the thread pool.
             co_await tp.schedule();
             // Now any code below this schedule() line will be executed on one of the thread pools

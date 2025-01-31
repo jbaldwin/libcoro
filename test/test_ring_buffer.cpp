@@ -22,7 +22,8 @@ TEST_CASE("ring_buffer single element", "[ring_buffer]")
         co_return;
     };
 
-    auto make_consumer_task = [](coro::ring_buffer<uint64_t, 1>& rb, size_t iterations, std::vector<uint64_t>& output) -> coro::task<void>
+    auto make_consumer_task =
+        [](coro::ring_buffer<uint64_t, 1>& rb, size_t iterations, std::vector<uint64_t>& output) -> coro::task<void>
     {
         for (size_t i = 1; i <= iterations; ++i)
         {

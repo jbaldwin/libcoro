@@ -14,7 +14,9 @@ TEST_CASE("tcp_server ping server", "[tcp_server]")
     auto scheduler = coro::io_scheduler::make_shared(
         coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
 
-    auto make_client_task = [](std::shared_ptr<coro::io_scheduler>& scheduler, const std::string& client_msg, const std::string& server_msg) -> coro::task<void>
+    auto make_client_task = [](std::shared_ptr<coro::io_scheduler>& scheduler,
+                               const std::string&                   client_msg,
+                               const std::string&                   server_msg) -> coro::task<void>
     {
         co_await scheduler->schedule();
         coro::net::tcp::client client{scheduler};
@@ -47,7 +49,9 @@ TEST_CASE("tcp_server ping server", "[tcp_server]")
         co_return;
     };
 
-    auto make_server_task = [](std::shared_ptr<coro::io_scheduler>& scheduler, const std::string& client_msg, const std::string& server_msg) -> coro::task<void>
+    auto make_server_task = [](std::shared_ptr<coro::io_scheduler>& scheduler,
+                               const std::string&                   client_msg,
+                               const std::string&                   server_msg) -> coro::task<void>
     {
         co_await scheduler->schedule();
         coro::net::tcp::server server{scheduler};
@@ -83,7 +87,8 @@ TEST_CASE("tcp_server ping server", "[tcp_server]")
         co_return;
     };
 
-    coro::sync_wait(coro::when_all(make_server_task(scheduler, client_msg, server_msg), make_client_task(scheduler, client_msg, server_msg)));
+    coro::sync_wait(coro::when_all(
+        make_server_task(scheduler, client_msg, server_msg), make_client_task(scheduler, client_msg, server_msg)));
 }
 
 TEST_CASE("tcp_server concurrent polling on the same socket", "[tcp_server]")

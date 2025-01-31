@@ -5,7 +5,7 @@
 TEST_CASE("generator single yield", "[generator]")
 {
     const std::string msg{"Hello World Generator!"};
-    auto        func = [](const std::string& msg) -> coro::generator<std::string> { co_yield std::string{msg}; };
+    auto              func = [](const std::string& msg) -> coro::generator<std::string> { co_yield std::string{msg}; };
 
     for (const auto& v : func(msg))
     {
@@ -43,7 +43,8 @@ TEST_CASE("generator infinite incrementing integer yield", "[generator]")
 TEST_CASE("generator satisfies view concept for compatibility with std::views::take")
 {
     auto counter = size_t{0};
-    auto natural = [](size_t n) mutable -> coro::generator<size_t> {
+    auto natural = [](size_t n) mutable -> coro::generator<size_t>
+    {
         while (true)
             co_yield ++n;
     };

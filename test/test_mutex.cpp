@@ -50,7 +50,8 @@ TEST_CASE("mutex many waiters until event", "[mutex]")
     coro::mutex m; // acquires and holds the lock until the event is triggered
     coro::event e; // triggers the blocking thread to release the lock
 
-    auto make_task = [](coro::thread_pool& tp, coro::mutex& m, std::atomic<uint64_t>& value, uint64_t id) -> coro::task<void>
+    auto make_task =
+        [](coro::thread_pool& tp, coro::mutex& m, std::atomic<uint64_t>& value, uint64_t id) -> coro::task<void>
     {
         co_await tp.schedule();
         std::cerr << "id = " << id << " waiting to acquire the lock\n";

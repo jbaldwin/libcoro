@@ -27,6 +27,7 @@ public:
     auto unhandled_exception() -> void;
 
     auto task_container_size(std::atomic<std::size_t>& task_container_size) -> void;
+
 private:
     /**
      * The coro::task_container<executor_t> m_size member to decrement upon the coroutine completing.
@@ -58,7 +59,11 @@ public:
     auto operator=(task_self_deleting&&) -> task_self_deleting&;
 
     auto promise() -> promise_self_deleting& { return *m_promise; }
-    auto handle() -> std::coroutine_handle<promise_self_deleting> { return std::coroutine_handle<promise_self_deleting>::from_promise(*m_promise); }
+    auto handle() -> std::coroutine_handle<promise_self_deleting>
+    {
+        return std::coroutine_handle<promise_self_deleting>::from_promise(*m_promise);
+    }
+
 private:
     promise_self_deleting* m_promise{nullptr};
 };
