@@ -175,7 +175,7 @@ TEST_CASE("thread_pool event jump threads", "[thread_pool]")
 
     coro::event e{};
 
-    auto make_tp1_task = [&]() -> coro::task<void>
+    auto make_tp1_task = [](coro::thread_pool& tp1, coro::event& e) -> coro::task<void>
     {
         co_await tp1.schedule();
         auto before_thread_id = std::this_thread::get_id();
@@ -189,7 +189,7 @@ TEST_CASE("thread_pool event jump threads", "[thread_pool]")
         co_return;
     };
 
-    auto make_tp2_task = [&]() -> coro::task<void>
+    auto make_tp2_task = [](coro::thread_pool& tp2, coro::event& e) -> coro::task<void>
     {
         co_await tp2.schedule();
         std::this_thread::sleep_for(std::chrono::milliseconds{10});
@@ -198,7 +198,7 @@ TEST_CASE("thread_pool event jump threads", "[thread_pool]")
         co_return;
     };
 
-    coro::sync_wait(coro::when_all(make_tp1_task(), make_tp2_task()));
+    coro::sync_wait(coro::when_all(make_tp1_task(tp1, e), make_tp2_task(tp2, e)));
 }
 
 TEST_CASE("thread_pool high cpu usage when threadcount is greater than the number of tasks", "[thread_pool]")
@@ -210,14 +210,14 @@ TEST_CASE("thread_pool high cpu usage when threadcount is greater than the numbe
     // This was due to using m_size instead of m_queue.size() causing the threads
     // that had no work to go into a spin trying to acquire work.
 
-    auto sleep_for_task = [](std::chrono::seconds duration) -> coro::task<int>
+    auto wait_for_task = [](coro::thread_pool& pool, std::chrono::seconds delay) -> coro::task<>
     {
-        std::this_thread::sleep_for(duration);
-        co_return duration.count();
-    };
+        auto sleep_for_task = [](std::chrono::seconds duration) -> coro::task<int>
+        {
+            std::this_thread::sleep_for(duration);
+            co_return duration.count();
+        };
 
-    auto wait_for_task = [&](coro::thread_pool& pool, std::chrono::seconds delay) -> coro::task<>
-    {
         co_await pool.schedule();
         for (int i = 0; i < 5; ++i)
         {
@@ -238,12 +238,11 @@ TEST_CASE("issue-287", "[thread_pool]")
     const int ITERATIONS = 200000;
 
     std::atomic<uint32_t> g_count = 0;
-    auto thread_pool = std::make_shared<coro::thread_pool>(
-        coro::thread_pool::options{.thread_count = 1}
-    );
-    auto task_container = coro::task_container<coro::thread_pool>{thread_pool};
+    auto thread_pool              = std::make_shared<coro::thread_pool>(coro::thread_pool::options{.thread_count = 1});
+    auto task_container           = coro::task_container<coro::thread_pool>{thread_pool};
 
-    auto task = [](std::atomic<uint32_t>& count) -> coro::task<void> {
+    auto task = [](std::atomic<uint32_t>& count) -> coro::task<void>
+    {
         count++;
         co_return;
     };

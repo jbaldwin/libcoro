@@ -12,53 +12,53 @@ int main()
         // Upon starting each worker thread an optional lambda callback with the worker's
         // index can be called to make thread changes, perhaps priority or change the thread's
         // name.
-        .on_thread_start_functor = [](std::size_t worker_idx) -> void {
-            std::cout << "thread pool worker " << worker_idx << " is starting up.\n";
-        },
+        .on_thread_start_functor = [](std::size_t worker_idx) -> void
+        { std::cout << "thread pool worker " << worker_idx << " is starting up.\n"; },
         // Upon stopping each worker thread an optional lambda callback with the worker's
         // index can b called.
-        .on_thread_stop_functor = [](std::size_t worker_idx) -> void {
-            std::cout << "thread pool worker " << worker_idx << " is shutting down.\n";
-        }}};
+        .on_thread_stop_functor = [](std::size_t worker_idx) -> void
+        { std::cout << "thread pool worker " << worker_idx << " is shutting down.\n"; }}};
 
-    auto offload_task = [&](uint64_t child_idx) -> coro::task<uint64_t> {
-        // Start by scheduling this offload worker task onto the thread pool.
-        co_await tp.schedule();
-        // Now any code below this schedule() line will be executed on one of the thread pools
-        // worker threads.
-
-        // Mimic some expensive task that should be run on a background thread...
-        std::random_device              rd;
-        std::mt19937                    gen{rd()};
-        std::uniform_int_distribution<> d{0, 1};
-
-        size_t calculation{0};
-        for (size_t i = 0; i < 1'000'000; ++i)
+    auto primary_task = [](coro::thread_pool& tp) -> coro::task<uint64_t>
+    {
+        auto offload_task = [](coro::thread_pool& tp, uint64_t child_idx) -> coro::task<uint64_t>
         {
-            calculation += d(gen);
+            // Start by scheduling this offload worker task onto the thread pool.
+            co_await tp.schedule();
+            // Now any code below this schedule() line will be executed on one of the thread pools
+            // worker threads.
 
-            // Lets be nice and yield() to let other coroutines on the thread pool have some cpu
-            // time.  This isn't necessary but is illustrated to show how tasks can cooperatively
-            // yield control at certain points of execution.  Its important to never call the
-            // std::this_thread::sleep_for() within the context of a coroutine, that will block
-            // and other coroutines which are ready for execution from starting, always use yield()
-            // or within the context of a coro::io_scheduler you can use yield_for(amount).
-            if (i == 500'000)
+            // Mimic some expensive task that should be run on a background thread...
+            std::random_device              rd;
+            std::mt19937                    gen{rd()};
+            std::uniform_int_distribution<> d{0, 1};
+
+            size_t calculation{0};
+            for (size_t i = 0; i < 1'000'000; ++i)
             {
-                std::cout << "Task " << child_idx << " is yielding()\n";
-                co_await tp.yield();
-            }
-        }
-        co_return calculation;
-    };
+                calculation += d(gen);
 
-    auto primary_task = [&]() -> coro::task<uint64_t> {
+                // Lets be nice and yield() to let other coroutines on the thread pool have some cpu
+                // time.  This isn't necessary but is illustrated to show how tasks can cooperatively
+                // yield control at certain points of execution.  Its important to never call the
+                // std::this_thread::sleep_for() within the context of a coroutine, that will block
+                // and other coroutines which are ready for execution from starting, always use yield()
+                // or within the context of a coro::io_scheduler you can use yield_for(amount).
+                if (i == 500'000)
+                {
+                    std::cout << "Task " << child_idx << " is yielding()\n";
+                    co_await tp.yield();
+                }
+            }
+            co_return calculation;
+        };
+
         const size_t                      num_children{10};
         std::vector<coro::task<uint64_t>> child_tasks{};
         child_tasks.reserve(num_children);
         for (size_t i = 0; i < num_children; ++i)
         {
-            child_tasks.emplace_back(offload_task(i));
+            child_tasks.emplace_back(offload_task(tp, i));
         }
 
         // Wait for the thread pool workers to process all child tasks.
@@ -73,6 +73,6 @@ int main()
         co_return calculation;
     };
 
-    auto result = coro::sync_wait(primary_task());
+    auto result = coro::sync_wait(primary_task(tp));
     std::cout << "calculated thread pool result = " << result << "\n";
 }

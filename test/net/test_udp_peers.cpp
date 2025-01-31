@@ -11,7 +11,7 @@ TEST_CASE("udp one way")
     auto scheduler = coro::io_scheduler::make_shared(
         coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
 
-    auto make_send_task = [&]() -> coro::task<void>
+    auto make_send_task = [](std::shared_ptr<coro::io_scheduler> scheduler, const std::string& msg) -> coro::task<void>
     {
         co_await scheduler->schedule();
         coro::net::udp::peer       peer{scheduler};
@@ -24,7 +24,7 @@ TEST_CASE("udp one way")
         co_return;
     };
 
-    auto make_recv_task = [&]() -> coro::task<void>
+    auto make_recv_task = [](std::shared_ptr<coro::io_scheduler> scheduler, const std::string& msg) -> coro::task<void>
     {
         co_await scheduler->schedule();
         coro::net::udp::peer::info self_info{.address = coro::net::ip_address::from_string("0.0.0.0")};
@@ -46,7 +46,7 @@ TEST_CASE("udp one way")
         co_return;
     };
 
-    coro::sync_wait(coro::when_all(make_recv_task(), make_send_task()));
+    coro::sync_wait(coro::when_all(make_recv_task(scheduler, msg), make_send_task(scheduler, msg)));
 }
 
 TEST_CASE("udp echo peers")
@@ -57,12 +57,12 @@ TEST_CASE("udp echo peers")
     auto scheduler = coro::io_scheduler::make_shared(
         coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
 
-    auto make_peer_task = [&scheduler](
-                              uint16_t          my_port,
-                              uint16_t          peer_port,
-                              bool              send_first,
-                              const std::string my_msg,
-                              const std::string peer_msg) -> coro::task<void>
+    auto make_peer_task = [](std::shared_ptr<coro::io_scheduler> scheduler,
+                             uint16_t                            my_port,
+                             uint16_t                            peer_port,
+                             bool                                send_first,
+                             const std::string                   my_msg,
+                             const std::string                   peer_msg) -> coro::task<void>
     {
         co_await scheduler->schedule();
         coro::net::udp::peer::info my_info{.address = coro::net::ip_address::from_string("0.0.0.0"), .port = my_port};
@@ -118,8 +118,8 @@ TEST_CASE("udp echo peers")
     };
 
     coro::sync_wait(coro::when_all(
-        make_peer_task(8081, 8080, false, peer2_msg, peer1_msg),
-        make_peer_task(8080, 8081, true, peer1_msg, peer2_msg)));
+        make_peer_task(scheduler, 8081, 8080, false, peer2_msg, peer1_msg),
+        make_peer_task(scheduler, 8080, 8081, true, peer1_msg, peer2_msg)));
 }
 
 #endif // LIBCORO_FEATURE_NETWORKING

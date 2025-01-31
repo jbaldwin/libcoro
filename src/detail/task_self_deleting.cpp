@@ -12,13 +12,11 @@ promise_self_deleting::promise_self_deleting()
 
 promise_self_deleting::~promise_self_deleting()
 {
-
 }
 
 promise_self_deleting::promise_self_deleting(promise_self_deleting&& other)
     : m_task_container_size(std::exchange(other.m_task_container_size, nullptr))
 {
-
 }
 
 auto promise_self_deleting::operator=(promise_self_deleting&& other) -> promise_self_deleting&
@@ -68,21 +66,16 @@ auto promise_self_deleting::task_container_size(std::atomic<std::size_t>& task_c
     m_task_container_size = &task_container_size;
 }
 
-task_self_deleting::task_self_deleting(promise_self_deleting& promise)
-    : m_promise(&promise)
+task_self_deleting::task_self_deleting(promise_self_deleting& promise) : m_promise(&promise)
 {
-
 }
 
 task_self_deleting::~task_self_deleting()
 {
-
 }
 
-task_self_deleting::task_self_deleting(task_self_deleting&& other)
-    : m_promise(other.m_promise)
+task_self_deleting::task_self_deleting(task_self_deleting&& other) : m_promise(other.m_promise)
 {
-
 }
 
 auto task_self_deleting::operator=(task_self_deleting&& other) -> task_self_deleting&

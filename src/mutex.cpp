@@ -34,7 +34,7 @@ auto mutex::lock_operation::await_ready() const noexcept -> bool
 auto mutex::lock_operation::await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept -> bool
 {
     m_awaiting_coroutine = awaiting_coroutine;
-    void* current = m_mutex.m_state.load(std::memory_order::acquire);
+    void* current        = m_mutex.m_state.load(std::memory_order::acquire);
     void* new_value;
 
     const void* unlocked_value = m_mutex.unlocked_value();

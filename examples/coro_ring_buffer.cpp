@@ -11,7 +11,8 @@ int main()
 
     std::vector<coro::task<void>> tasks{};
 
-    auto make_producer_task = [&]() -> coro::task<void>
+    auto make_producer_task =
+        [](coro::thread_pool& tp, coro::ring_buffer<uint64_t, 16>& rb, coro::mutex& m) -> coro::task<void>
     {
         co_await tp.schedule();
 
@@ -36,7 +37,8 @@ int main()
         co_return;
     };
 
-    auto make_consumer_task = [&](size_t id) -> coro::task<void>
+    auto make_consumer_task =
+        [](coro::thread_pool& tp, coro::ring_buffer<uint64_t, 16>& rb, coro::mutex& m, size_t id) -> coro::task<void>
     {
         co_await tp.schedule();
 
@@ -65,10 +67,10 @@ int main()
     // Create N consumers
     for (size_t i = 0; i < consumers; ++i)
     {
-        tasks.emplace_back(make_consumer_task(i));
+        tasks.emplace_back(make_consumer_task(tp, rb, m, i));
     }
     // Create 1 producer.
-    tasks.emplace_back(make_producer_task());
+    tasks.emplace_back(make_producer_task(tp, rb, m));
 
     // Wait for all the values to be produced and consumed through the ring buffer.
     coro::sync_wait(coro::when_all(std::move(tasks)));

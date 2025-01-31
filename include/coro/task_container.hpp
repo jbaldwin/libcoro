@@ -10,14 +10,13 @@
 #include <list>
 #include <memory>
 #include <mutex>
-#include <thread>
 #include <queue>
+#include <thread>
 #include <vector>
 
 namespace coro
 {
 class io_scheduler;
-
 
 template<concepts::executor executor_type>
 class task_container
@@ -28,9 +27,7 @@ public:
      *           from a coro::io_scheduler, this would usually be that coro::io_scheduler instance.
      * @param opts Task container options.
      */
-    task_container(
-        std::shared_ptr<executor_type> e)
-        : m_executor(std::move(e))
+    task_container(std::shared_ptr<executor_type> e) : m_executor(std::move(e))
     {
         if (m_executor == nullptr)
         {

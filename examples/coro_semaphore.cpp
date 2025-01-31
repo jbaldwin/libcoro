@@ -7,7 +7,8 @@ int main()
     coro::thread_pool tp{coro::thread_pool::options{.thread_count = 8}};
     coro::semaphore   semaphore{2};
 
-    auto make_rate_limited_task = [&](uint64_t task_num) -> coro::task<void>
+    auto make_rate_limited_task =
+        [](coro::thread_pool& tp, coro::semaphore& semaphore, uint64_t task_num) -> coro::task<void>
     {
         co_await tp.schedule();
 
@@ -30,7 +31,7 @@ int main()
     std::vector<coro::task<void>> tasks{};
     for (size_t i = 1; i <= num_tasks; ++i)
     {
-        tasks.emplace_back(make_rate_limited_task(i));
+        tasks.emplace_back(make_rate_limited_task(tp, semaphore, i));
     }
 
     coro::sync_wait(coro::when_all(std::move(tasks)));

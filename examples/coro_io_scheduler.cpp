@@ -26,7 +26,7 @@ int main()
             },
         .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_on_thread_pool});
 
-    auto make_server_task = [&]() -> coro::task<void>
+    auto make_server_task = [](std::shared_ptr<coro::io_scheduler> scheduler) -> coro::task<void>
     {
         // Start by creating a tcp server, we'll do this before putting it into the scheduler so
         // it is immediately available for the client to connect since this will create a socket,
@@ -114,7 +114,7 @@ int main()
         co_return;
     };
 
-    auto make_client_task = [&]() -> coro::task<void>
+    auto make_client_task = [](std::shared_ptr<coro::io_scheduler> scheduler) -> coro::task<void>
     {
         // Immediately schedule onto the scheduler.
         co_await scheduler->schedule();
@@ -146,5 +146,5 @@ int main()
     };
 
     // Create and wait for the server and client tasks to complete.
-    coro::sync_wait(coro::when_all(make_server_task(), make_client_task()));
+    coro::sync_wait(coro::when_all(make_server_task(scheduler), make_client_task(scheduler)));
 }

@@ -18,26 +18,25 @@ TEST_CASE("sync_wait void", "[sync_wait]")
 {
     std::string output;
 
-    auto func = [&]() -> coro::task<void>
+    auto func = [](std::string& output) -> coro::task<void>
     {
         output = "hello from sync_wait<void>\n";
         co_return;
     };
 
-    coro::sync_wait(func());
+    coro::sync_wait(func(output));
     REQUIRE(output == "hello from sync_wait<void>\n");
 }
 
 TEST_CASE("sync_wait task co_await single", "[sync_wait]")
 {
-    auto answer = []() -> coro::task<int>
+    auto await_answer = []() -> coro::task<int>
     {
-        std::cerr << "\tThinking deep thoughts...\n";
-        co_return 42;
-    };
-
-    auto await_answer = [&]() -> coro::task<int>
-    {
+        auto answer = []() -> coro::task<int>
+        {
+            std::cerr << "\tThinking deep thoughts...\n";
+            co_return 42;
+        };
         std::cerr << "\tStarting to wait for answer.\n";
         auto a = answer();
         std::cerr << "\tGot the coroutine, getting the value.\n";
@@ -85,7 +84,8 @@ TEST_CASE("sync_wait very rarely hangs issue-270", "[sync_wait]")
 
     std::atomic<int> count{0};
 
-    auto make_task = [&](int i) -> coro::task<void>
+    auto make_task =
+        [](coro::thread_pool& tp, std::unordered_set<int>& data, std::atomic<int>& count, int i) -> coro::task<void>
     {
         co_await tp.schedule();
 
@@ -101,7 +101,7 @@ TEST_CASE("sync_wait very rarely hangs issue-270", "[sync_wait]")
     tasks.reserve(ITERATIONS);
     for (int i = 0; i < ITERATIONS; ++i)
     {
-        tasks.emplace_back(make_task(i));
+        tasks.emplace_back(make_task(tp, data, count, i));
     }
 
     coro::sync_wait(coro::when_all(std::move(tasks)));
