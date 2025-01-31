@@ -12,10 +12,10 @@ TEST_CASE("tls_server hello world server", "[tls_server]")
     auto scheduler = coro::io_scheduler::make_shared(
         coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
 
-    std::string client_msg = "Hello world from TLS client!";
-    std::string server_msg = "Hello world from TLS server!!";
+    const std::string client_msg = "Hello world from TLS client!";
+    const std::string server_msg = "Hello world from TLS server!!";
 
-    auto make_client_task = [&]() -> coro::task<void>
+    auto make_client_task = [](std::shared_ptr<coro::io_scheduler> scheduler, const std::string& client_msg, const std::string& server_msg) -> coro::task<void>
     {
         co_await scheduler->schedule();
 
@@ -48,7 +48,7 @@ TEST_CASE("tls_server hello world server", "[tls_server]")
         co_return;
     };
 
-    auto make_server_task = [&]() -> coro::task<void>
+    auto make_server_task = [](std::shared_ptr<coro::io_scheduler> scheduler, const std::string& client_msg, const std::string& server_msg) -> coro::task<void>
     {
         co_await scheduler->schedule();
 
@@ -84,7 +84,7 @@ TEST_CASE("tls_server hello world server", "[tls_server]")
         co_return;
     };
 
-    coro::sync_wait(coro::when_all(make_server_task(), make_client_task()));
+    coro::sync_wait(coro::when_all(make_server_task(scheduler, client_msg, server_msg), make_client_task(scheduler, client_msg, server_msg)));
 }
 
     #endif // LIBCORO_FEATURE_TLS

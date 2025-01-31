@@ -13,7 +13,7 @@ TEST_CASE("semaphore binary", "[semaphore]")
 
     coro::semaphore s{1};
 
-    auto make_emplace_task = [&](coro::semaphore& s) -> coro::task<void>
+    auto make_emplace_task = [](coro::semaphore& s, std::vector<uint64_t>& output) -> coro::task<void>
     {
         std::cerr << "Acquiring semaphore\n";
         co_await s.acquire();
@@ -32,7 +32,7 @@ TEST_CASE("semaphore binary", "[semaphore]")
         co_return;
     };
 
-    coro::sync_wait(make_emplace_task(s));
+    coro::sync_wait(make_emplace_task(s, output));
 
     REQUIRE(s.value() == 1);
     REQUIRE(s.try_acquire());
@@ -52,7 +52,7 @@ TEST_CASE("semaphore binary many waiters until event", "[semaphore]")
     coro::semaphore s{1}; // acquires and holds the semaphore until the event is triggered
     coro::event     e;    // triggers the blocking thread to release the semaphore
 
-    auto make_task = [&](uint64_t id) -> coro::task<void>
+    auto make_task = [](coro::semaphore& s, std::atomic<uint64_t>& value, uint64_t id) -> coro::task<void>
     {
         std::cerr << "id = " << id << " waiting to acquire the semaphore\n";
         co_await s.acquire();
@@ -67,7 +67,7 @@ TEST_CASE("semaphore binary many waiters until event", "[semaphore]")
         co_return;
     };
 
-    auto make_block_task = [&]() -> coro::task<void>
+    auto make_block_task = [](coro::semaphore& s, coro::event& e) -> coro::task<void>
     {
         std::cerr << "block task acquiring lock\n";
         co_await s.acquire();
@@ -79,22 +79,22 @@ TEST_CASE("semaphore binary many waiters until event", "[semaphore]")
         co_return;
     };
 
-    auto make_set_task = [&]() -> coro::task<void>
+    auto make_set_task = [](coro::event& e) -> coro::task<void>
     {
         std::cerr << "set task setting event\n";
         e.set();
         co_return;
     };
 
-    tasks.emplace_back(make_block_task());
+    tasks.emplace_back(make_block_task(s, e));
 
     // Create N tasks that attempt to acquire the semaphore.
     for (uint64_t i = 1; i <= 4; ++i)
     {
-        tasks.emplace_back(make_task(i));
+        tasks.emplace_back(make_task(s, value, i));
     }
 
-    tasks.emplace_back(make_set_task());
+    tasks.emplace_back(make_set_task(e));
 
     coro::sync_wait(coro::when_all(std::move(tasks)));
 
@@ -113,7 +113,7 @@ TEST_CASE("semaphore ringbuffer", "[semaphore]")
 
     coro::semaphore s{2, 2};
 
-    auto make_consumer_task = [&](uint64_t id) -> coro::task<void>
+    auto make_consumer_task = [](coro::thread_pool& tp, coro::semaphore& s, std::atomic<uint64_t>& value, uint64_t id) -> coro::task<void>
     {
         co_await tp.schedule();
 
@@ -138,7 +138,7 @@ TEST_CASE("semaphore ringbuffer", "[semaphore]")
         co_return;
     };
 
-    auto make_producer_task = [&]() -> coro::task<void>
+    auto make_producer_task = [](coro::thread_pool& tp, coro::semaphore& s) -> coro::task<void>
     {
         co_await tp.schedule();
 
@@ -158,8 +158,8 @@ TEST_CASE("semaphore ringbuffer", "[semaphore]")
         co_return;
     };
 
-    tasks.emplace_back(make_producer_task());
-    tasks.emplace_back(make_consumer_task(1));
+    tasks.emplace_back(make_producer_task(tp, s));
+    tasks.emplace_back(make_consumer_task(tp, s, value, 1));
 
     coro::sync_wait(coro::when_all(std::move(tasks)));
 
@@ -178,7 +178,7 @@ TEST_CASE("semaphore ringbuffer many producers and consumers", "[semaphore]")
 
     coro::thread_pool tp{}; // let er rip
 
-    auto make_consumer_task = [&](uint64_t id) -> coro::task<void>
+    auto make_consumer_task = [](coro::thread_pool& tp, coro::semaphore& s, std::atomic<uint64_t>& value, uint64_t id) -> coro::task<void>
     {
         co_await tp.schedule();
 
@@ -199,7 +199,7 @@ TEST_CASE("semaphore ringbuffer many producers and consumers", "[semaphore]")
         co_return;
     };
 
-    auto make_producer_task = [&](uint64_t id) -> coro::task<void>
+    auto make_producer_task = [](coro::thread_pool& tp, coro::semaphore& s, std::atomic<uint64_t>& value, uint64_t id) -> coro::task<void>
     {
         co_await tp.schedule();
 
@@ -223,11 +223,11 @@ TEST_CASE("semaphore ringbuffer many producers and consumers", "[semaphore]")
     std::vector<coro::task<void>> tasks{};
     for (size_t i = 0; i < consumers; ++i)
     {
-        tasks.emplace_back(make_consumer_task(i));
+        tasks.emplace_back(make_consumer_task(tp, s, value, i));
     }
     for (size_t i = 0; i < producers; ++i)
     {
-        tasks.emplace_back(make_producer_task(i));
+        tasks.emplace_back(make_producer_task(tp, s, value, i));
     }
 
     coro::sync_wait(coro::when_all(std::move(tasks)));

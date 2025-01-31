@@ -12,7 +12,7 @@ TEST_CASE("ring_buffer single element", "[ring_buffer]")
 
     std::vector<uint64_t> output{};
 
-    auto make_producer_task = [&]() -> coro::task<void>
+    auto make_producer_task = [](coro::ring_buffer<uint64_t, 1>& rb, size_t iterations) -> coro::task<void>
     {
         for (size_t i = 1; i <= iterations; ++i)
         {
@@ -22,7 +22,7 @@ TEST_CASE("ring_buffer single element", "[ring_buffer]")
         co_return;
     };
 
-    auto make_consumer_task = [&]() -> coro::task<void>
+    auto make_consumer_task = [](coro::ring_buffer<uint64_t, 1>& rb, size_t iterations, std::vector<uint64_t>& output) -> coro::task<void>
     {
         for (size_t i = 1; i <= iterations; ++i)
         {
@@ -35,7 +35,7 @@ TEST_CASE("ring_buffer single element", "[ring_buffer]")
         co_return;
     };
 
-    coro::sync_wait(coro::when_all(make_producer_task(), make_consumer_task()));
+    coro::sync_wait(coro::when_all(make_producer_task(rb, iterations), make_consumer_task(rb, iterations, output)));
 
     for (size_t i = 1; i <= iterations; ++i)
     {
@@ -54,7 +54,7 @@ TEST_CASE("ring_buffer many elements many producers many consumers", "[ring_buff
     coro::thread_pool               tp{coro::thread_pool::options{.thread_count = 4}};
     coro::ring_buffer<uint64_t, 64> rb{};
 
-    auto make_producer_task = [&]() -> coro::task<void>
+    auto make_producer_task = [](coro::thread_pool& tp, coro::ring_buffer<uint64_t, 64>& rb) -> coro::task<void>
     {
         co_await tp.schedule();
         auto to_produce = iterations / producers;
@@ -75,7 +75,7 @@ TEST_CASE("ring_buffer many elements many producers many consumers", "[ring_buff
         co_return;
     };
 
-    auto make_consumer_task = [&]() -> coro::task<void>
+    auto make_consumer_task = [](coro::thread_pool& tp, coro::ring_buffer<uint64_t, 64>& rb) -> coro::task<void>
     {
         co_await tp.schedule();
 
@@ -101,11 +101,11 @@ TEST_CASE("ring_buffer many elements many producers many consumers", "[ring_buff
 
     for (size_t i = 0; i < consumers; ++i)
     {
-        tasks.emplace_back(make_consumer_task());
+        tasks.emplace_back(make_consumer_task(tp, rb));
     }
     for (size_t i = 0; i < producers; ++i)
     {
-        tasks.emplace_back(make_producer_task());
+        tasks.emplace_back(make_producer_task(tp, rb));
     }
 
     coro::sync_wait(coro::when_all(std::move(tasks)));
@@ -125,7 +125,7 @@ TEST_CASE("ring_buffer producer consumer separate threads", "[ring_buffer]")
     coro::thread_pool producer_tp{coro::thread_pool::options{.thread_count = 1}};
     coro::thread_pool consumer_tp{coro::thread_pool::options{.thread_count = 1}};
 
-    auto make_producer_task = [&]() -> coro::task<void>
+    auto make_producer_task = [](coro::thread_pool& producer_tp, coro::ring_buffer<uint64_t, 2>& rb) -> coro::task<void>
     {
         for (size_t i = 0; i < iterations; ++i)
         {
@@ -145,7 +145,7 @@ TEST_CASE("ring_buffer producer consumer separate threads", "[ring_buffer]")
         co_return;
     };
 
-    auto make_consumer_task = [&]() -> coro::task<void>
+    auto make_consumer_task = [](coro::thread_pool& consumer_tp, coro::ring_buffer<uint64_t, 2>& rb) -> coro::task<void>
     {
         while (true)
         {
@@ -166,8 +166,8 @@ TEST_CASE("ring_buffer producer consumer separate threads", "[ring_buffer]")
     };
 
     std::vector<coro::task<void>> tasks{};
-    tasks.emplace_back(make_producer_task());
-    tasks.emplace_back(make_consumer_task());
+    tasks.emplace_back(make_producer_task(producer_tp, rb));
+    tasks.emplace_back(make_consumer_task(consumer_tp, rb));
 
     coro::sync_wait(coro::when_all(std::move(tasks)));
 
@@ -255,7 +255,7 @@ TEST_CASE("ring_buffer issue-242 default constructed complex objects on consume"
 
     coro::ring_buffer<example, 1> buffer;
 
-    const auto produce = [&buffer]() -> coro::task<void>
+    const auto produce = [](coro::ring_buffer<example, 1>& buffer) -> coro::task<void>
     {
         std::cerr << "enter produce coroutine\n";
         example data{};
@@ -270,7 +270,7 @@ TEST_CASE("ring_buffer issue-242 default constructed complex objects on consume"
         co_return;
     };
 
-    coro::sync_wait(produce());
+    coro::sync_wait(produce(buffer));
     std::cerr << "enter sync_wait\n";
     auto result = coro::sync_wait(buffer.consume());
     std::cerr << "exit sync_wait\n";
@@ -315,7 +315,7 @@ TEST_CASE("ring_buffer issue-242 default constructed complex objects on consume 
 
     coro::ring_buffer<example, 1> buffer;
 
-    const auto produce = [&buffer]() -> coro::task<void>
+    const auto produce = [](coro::ring_buffer<example, 1>& buffer) -> coro::task<void>
     {
         example data{};
         data.msg = {message{.id = 1, .text = "Hello World!"}};
@@ -327,7 +327,7 @@ TEST_CASE("ring_buffer issue-242 default constructed complex objects on consume 
         co_return;
     };
 
-    const auto consume = [&buffer]() -> coro::task<example>
+    const auto consume = [](coro::ring_buffer<example, 1>& buffer) -> coro::task<example>
     {
         auto result = co_await buffer.consume();
         REQUIRE(result.has_value());
@@ -336,8 +336,8 @@ TEST_CASE("ring_buffer issue-242 default constructed complex objects on consume 
         co_return std::move(data);
     };
 
-    coro::sync_wait(produce());
-    auto data = coro::sync_wait(consume());
+    coro::sync_wait(produce(buffer));
+    auto data = coro::sync_wait(consume(buffer));
 
     REQUIRE(data.msg.has_value());
     REQUIRE(data.msg.value().id == 1);
@@ -351,13 +351,13 @@ TEST_CASE("ring_buffer issue-242 basic type", "[ring_buffer]")
 {
     coro::ring_buffer<uint32_t, 1> buffer;
 
-    const auto foo = [&buffer]() -> coro::task<void>
+    const auto foo = [](coro::ring_buffer<uint32_t, 1>& buffer) -> coro::task<void>
     {
         co_await buffer.produce(1);
         co_return;
     };
 
-    coro::sync_wait(foo());
+    coro::sync_wait(foo(buffer));
     auto result = coro::sync_wait(buffer.consume());
     REQUIRE(result);
 

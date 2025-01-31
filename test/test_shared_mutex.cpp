@@ -12,7 +12,7 @@ TEST_CASE("mutex single waiter not locked exclusive", "[shared_mutex]")
 
     coro::shared_mutex<coro::thread_pool> m{tp};
 
-    auto make_emplace_task = [&](coro::shared_mutex<coro::thread_pool>& m) -> coro::task<void>
+    auto make_emplace_task = [](coro::shared_mutex<coro::thread_pool>& m, std::vector<uint64_t>& output) -> coro::task<void>
     {
         std::cerr << "Acquiring lock exclusive\n";
         {
@@ -31,7 +31,7 @@ TEST_CASE("mutex single waiter not locked exclusive", "[shared_mutex]")
         co_return;
     };
 
-    coro::sync_wait(make_emplace_task(m));
+    coro::sync_wait(make_emplace_task(m, output));
 
     REQUIRE(m.try_lock());
     m.unlock();
@@ -47,7 +47,7 @@ TEST_CASE("mutex single waiter not locked shared", "[shared_mutex]")
 
     coro::shared_mutex<coro::thread_pool> m{tp};
 
-    auto make_emplace_task = [&](coro::shared_mutex<coro::thread_pool>& m) -> coro::task<void>
+    auto make_emplace_task = [](coro::shared_mutex<coro::thread_pool>& m, std::vector<uint64_t>& values) -> coro::task<void>
     {
         std::cerr << "Acquiring lock shared\n";
         {
@@ -71,7 +71,7 @@ TEST_CASE("mutex single waiter not locked shared", "[shared_mutex]")
         co_return;
     };
 
-    coro::sync_wait(make_emplace_task(m));
+    coro::sync_wait(make_emplace_task(m, values));
 
     REQUIRE(m.try_lock_shared());
     m.unlock_shared();
@@ -83,34 +83,23 @@ TEST_CASE("mutex single waiter not locked shared", "[shared_mutex]")
 #ifdef LIBCORO_FEATURE_NETWORKING
 TEST_CASE("mutex many shared and exclusive waiters interleaved", "[shared_mutex]")
 {
-    auto tp = coro::io_scheduler::make_shared(
+    auto s = coro::io_scheduler::make_shared(
         coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 8}});
-    coro::shared_mutex<coro::io_scheduler> m{tp};
+    coro::shared_mutex<coro::io_scheduler> m{s};
 
     std::atomic<bool> read_value{false};
 
-    auto make_shared_task = [&]() -> coro::task<bool>
-    {
-        co_await tp->schedule();
-        std::cerr << "make_shared_task shared lock acquiring\n";
-        auto scoped_lock = co_await m.lock_shared();
-        std::cerr << "make_shared_task shared lock acquired\n";
-        bool value = read_value.load(std::memory_order::acquire);
-        std::cerr << "make_shared_task shared lock releasing on thread_id = " << std::this_thread::get_id() << "\n";
-        co_return value;
-    };
-
-    auto make_exclusive_task = [&]() -> coro::task<void>
+    auto make_exclusive_task = [](std::shared_ptr<coro::io_scheduler>& s, coro::shared_mutex<coro::io_scheduler>& m, std::atomic<bool>& read_value) -> coro::task<void>
     {
         // Let some readers get through.
-        co_await tp->yield_for(std::chrono::milliseconds{50});
+        co_await s->yield_for(std::chrono::milliseconds{50});
 
         {
             std::cerr << "make_shared_task exclusive lock acquiring\n";
             auto scoped_lock = co_await m.lock();
             std::cerr << "make_shared_task exclusive lock acquired\n";
             // Stack readers on the mutex
-            co_await tp->yield_for(std::chrono::milliseconds{50});
+            co_await s->yield_for(std::chrono::milliseconds{50});
             read_value.exchange(true, std::memory_order::release);
             std::cerr << "make_shared_task exclusive lock releasing\n";
         }
@@ -118,19 +107,30 @@ TEST_CASE("mutex many shared and exclusive waiters interleaved", "[shared_mutex]
         co_return;
     };
 
-    auto make_shared_tasks_task = [&]() -> coro::task<void>
+    auto make_shared_tasks_task = [](std::shared_ptr<coro::io_scheduler>& s, coro::shared_mutex<coro::io_scheduler>& m, std::atomic<bool>& read_value) -> coro::task<void>
     {
-        co_await tp->schedule();
+        auto make_shared_task = [](std::shared_ptr<coro::io_scheduler>& s, coro::shared_mutex<coro::io_scheduler>& m, std::atomic<bool>& read_value) -> coro::task<bool>
+        {
+            co_await s->schedule();
+            std::cerr << "make_shared_task shared lock acquiring\n";
+            auto scoped_lock = co_await m.lock_shared();
+            std::cerr << "make_shared_task shared lock acquired\n";
+            bool value = read_value.load(std::memory_order::acquire);
+            std::cerr << "make_shared_task shared lock releasing on thread_id = " << std::this_thread::get_id() << "\n";
+            co_return value;
+        };
+
+        co_await s->schedule();
 
         std::vector<coro::task<bool>> shared_tasks{};
 
         bool stop{false};
         while (!stop)
         {
-            shared_tasks.emplace_back(make_shared_task());
+            shared_tasks.emplace_back(make_shared_task(s, m, read_value));
             shared_tasks.back().resume();
 
-            co_await tp->yield_for(std::chrono::milliseconds{1});
+            co_await s->yield_for(std::chrono::milliseconds{1});
 
             for (const auto& st : shared_tasks)
             {
@@ -162,6 +162,6 @@ TEST_CASE("mutex many shared and exclusive waiters interleaved", "[shared_mutex]
         co_return;
     };
 
-    coro::sync_wait(coro::when_all(make_shared_tasks_task(), make_exclusive_task()));
+    coro::sync_wait(coro::when_all(make_shared_tasks_task(s, m, read_value), make_exclusive_task(s, m, read_value)));
 }
 #endif // #ifdef LIBCORO_FEATURE_NETWORKING

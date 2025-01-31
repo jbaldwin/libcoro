@@ -6,7 +6,7 @@ int main()
     auto scheduler = coro::io_scheduler::make_shared(
         coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
 
-    auto make_server_task = [&]() -> coro::task<void>
+    auto make_server_task = [](std::shared_ptr<coro::io_scheduler> scheduler) -> coro::task<void>
     {
         // This is the task that will handle processing a client's requests.
         auto serve_client = [](coro::net::tcp::client client) -> coro::task<void>
@@ -59,7 +59,7 @@ int main()
         co_return;
     };
 
-    auto make_client_task = [&](size_t request_count) -> coro::task<void>
+    auto make_client_task = [](std::shared_ptr<coro::io_scheduler> scheduler, size_t request_count) -> coro::task<void>
     {
         co_await scheduler->schedule();
         coro::net::tcp::client client{scheduler};
@@ -87,5 +87,5 @@ int main()
         co_return; // Upon exiting the tcp::client will close its connection to the server.
     };
 
-    coro::sync_wait(coro::when_all(make_server_task(), make_client_task(5)));
+    coro::sync_wait(coro::when_all(make_server_task(scheduler), make_client_task(scheduler, 5)));
 }

@@ -4,10 +4,10 @@
 
 TEST_CASE("generator single yield", "[generator]")
 {
-    std::string msg{"Hello World Generator!"};
-    auto        func = [&]() -> coro::generator<std::string> { co_yield msg; };
+    const std::string msg{"Hello World Generator!"};
+    auto        func = [](const std::string& msg) -> coro::generator<std::string> { co_yield std::string{msg}; };
 
-    for (const auto& v : func())
+    for (const auto& v : func(msg))
     {
         REQUIRE(v == msg);
     }
@@ -43,15 +43,15 @@ TEST_CASE("generator infinite incrementing integer yield", "[generator]")
 TEST_CASE("generator satisfies view concept for compatibility with std::views::take")
 {
     auto counter = size_t{0};
-    auto natural = [n = counter]() mutable -> coro::generator<size_t> {
+    auto natural = [](size_t n) mutable -> coro::generator<size_t> {
         while (true)
             co_yield ++n;
     };
-    auto nat = natural();
+    auto nat = natural(counter);
     static_assert(std::ranges::view<decltype(nat)>, "does not satisfy view concept");
     SECTION("Count the items")
     {
-        for (auto&& n : natural() | std::views::take(5))
+        for (auto&& n : natural(counter) | std::views::take(5))
         {
             ++counter;
             REQUIRE(n == counter);

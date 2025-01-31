@@ -3,13 +3,13 @@
 
 int main()
 {
-    // Task that takes a value and doubles it.
-    auto double_task = [](uint64_t x) -> coro::task<uint64_t> { co_return x * 2; };
-
     // Create a task that awaits the doubling of its given value and
     // then returns the result after adding 5.
-    auto double_and_add_5_task = [&](uint64_t input) -> coro::task<uint64_t>
+    auto double_and_add_5_task = [](uint64_t input) -> coro::task<uint64_t>
     {
+        // Task that takes a value and doubles it.
+        auto double_task = [](uint64_t x) -> coro::task<uint64_t> { co_return x * 2; };
+
         auto doubled = co_await double_task(input);
         co_return doubled + 5;
     };

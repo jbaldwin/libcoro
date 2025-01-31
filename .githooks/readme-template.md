@@ -40,7 +40,7 @@
     - coro::net::tls::client (OpenSSL)
     - coro::net::tls::server (OpenSSL)
     - coro::net::udp::peer
-* 
+*
 * [Requirements](#requirements)
 * [Build Instructions](#build-instructions)
 * [Contributing](#contributing)
@@ -51,6 +51,12 @@
 ### A note on co_await and threads
 Its important to note with coroutines that _any_ `co_await` has the potential to switch the underyling thread that is executing the currently executing coroutine if the scheduler used has more than 1 thread. In general this shouldn't affect the way any user of the library would write code except for `thread_local`. Usage of `thread_local` should be extremely careful and _never_ used across any `co_await` boundary do to thread switching and work stealing on libcoro's schedulers. The only way this is safe is by using a `coro::thread_pool` with 1 thread or an inline `io_scheduler` which also only has 1 thread.
 
+### A note on lambda captures (do not use them!)
+[C++ Core Guidelines - CP.51: Do no use capturing lambdas that are coroutines](https://isocpp.github.io/CppCoreGuidelines/CppCoreGuidelines#Rcoro-capture)
+
+The recommendation is to not use lambda captures and instead pass any data into the coroutine via its function arguments to guarantee the argument lifetimes. Lambda captures will be destroyed at the coroutines first suspension point so if they are used past that point it will result in a use after free bug.
+
+
 ### sync_wait
 The `sync_wait` construct is meant to be used outside of a coroutine context to block the calling thread until the coroutine has completed. The coroutine can be executed on the calling thread or scheduled on one of libcoro's schedulers.
 
@@ -60,7 +66,7 @@ ${EXAMPLE_CORO_SYNC_WAIT}
 
 Expected output:
 ```bash
-$ ./examples/coro_sync_wait 
+$ ./examples/coro_sync_wait
 Inline Result = 10
 Offload Result = 20
 ```
@@ -74,7 +80,7 @@ ${EXAMPLE_CORO_WHEN_ALL}
 
 Expected output:
 ```bash
-$ ./examples/coro_when_all 
+$ ./examples/coro_when_all
 2
 4
 6
@@ -520,7 +526,7 @@ If you open a PR for a bugfix or new feature please include tests to verify that
 
 File bug reports, feature requests and questions using [GitHub libcoro Issues](https://github.com/jbaldwin/libcoro/issues)
 
-Copyright © 2020-2024 Josh Baldwin
+Copyright © 2020-2025 Josh Baldwin
 
 [badge.language]: https://img.shields.io/badge/language-C%2B%2B20-yellow.svg
 [badge.license]: https://img.shields.io/badge/license-Apache--2.0-blue

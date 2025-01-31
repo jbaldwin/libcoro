@@ -179,13 +179,13 @@ TEST_CASE("task multiple suspends return integer", "[task]")
 
 TEST_CASE("task resume from promise to coroutine handles of different types", "[task]")
 {
-    auto task1 = [&]() -> coro::task<int>
+    auto task1 = []() -> coro::task<int>
     {
         std::cerr << "Task ran\n";
         co_return 42;
     }();
 
-    auto task2 = [&]() -> coro::task<void>
+    auto task2 = []() -> coro::task<void>
     {
         std::cerr << "Task 2 ran\n";
         co_return;
@@ -323,8 +323,8 @@ TEST_CASE("task supports instantiation with rvalue reference", "[task]")
     // reference is supported.
 
     int  i         = 42;
-    auto make_task = [&i]() -> coro::task<int&&> { co_return std::move(i); };
-    int  ret       = coro::sync_wait(make_task());
+    auto make_task = [](int& i) -> coro::task<int&&> { co_return std::move(i); };
+    int  ret       = coro::sync_wait(make_task(i));
     REQUIRE(ret == 42);
 }
 
@@ -416,10 +416,10 @@ TEST_CASE("task supports instantiation with non assignable type", "[task]")
     REQUIRE(move_copy_construct_only::move_count == 2);
     REQUIRE(move_copy_construct_only::copy_count == 1);
 
-    auto make_tuple_task = [&i]() -> coro::task<std::tuple<int, int>> {
+    auto make_tuple_task = [](int i) -> coro::task<std::tuple<int, int>> {
         co_return {i, i * 2};
     };
-    auto tuple_ret = coro::sync_wait(make_tuple_task());
+    auto tuple_ret = coro::sync_wait(make_tuple_task(i));
     REQUIRE(std::get<0>(tuple_ret) == 42);
     REQUIRE(std::get<1>(tuple_ret) == 84);
 
