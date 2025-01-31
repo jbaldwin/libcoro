@@ -43,7 +43,7 @@ auto main() -> int
                     auto client = server.accept();
                     if (client.socket().is_valid())
                     {
-                        scheduler->schedule(make_on_connection_task(std::move(client)));
+                        scheduler->spawn(make_on_connection_task(std::move(client)));
                     } // else report error or something if the socket was invalid or could not be accepted.
                 }
                 break;

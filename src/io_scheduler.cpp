@@ -28,9 +28,6 @@ auto io_scheduler::make_shared(options opts) -> std::shared_ptr<io_scheduler>
 {
     auto s = std::make_shared<io_scheduler>(std::move(opts), private_constructor{});
 
-    // std::enable_shared_from_this cannot be used until the object is fully created.
-    s->m_owned_tasks = new coro::task_container<coro::io_scheduler>(s->shared_from_this());
-
     if (opts.execution_strategy == execution_strategy_t::process_tasks_on_thread_pool)
     {
         s->m_thread_pool = std::make_unique<thread_pool>(std::move(s->m_opts.pool));
@@ -81,12 +78,6 @@ io_scheduler::~io_scheduler()
         close(m_schedule_fd);
         m_schedule_fd = -1;
     }
-
-    if (m_owned_tasks != nullptr)
-    {
-        delete static_cast<coro::task_container<coro::io_scheduler>*>(m_owned_tasks);
-        m_owned_tasks = nullptr;
-    }
 }
 
 auto io_scheduler::process_events(std::chrono::milliseconds timeout) -> std::size_t
@@ -95,10 +86,12 @@ auto io_scheduler::process_events(std::chrono::milliseconds timeout) -> std::siz
     return size();
 }
 
-auto io_scheduler::schedule(coro::task<void>&& task) -> bool
+auto io_scheduler::spawn(coro::task<void>&& task) -> bool
 {
-    auto* ptr = static_cast<coro::task_container<coro::io_scheduler>*>(m_owned_tasks);
-    return ptr->start(std::move(task));
+    m_size.fetch_add(1, std::memory_order::release);
+    auto owned_task = detail::make_task_self_deleting(std::move(task));
+    owned_task.promise().executor_size(m_size);
+    return resume(owned_task.handle());
 }
 
 auto io_scheduler::schedule_after(std::chrono::milliseconds amount) -> coro::task<void>

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "coro/task.hpp"
+
 #include <atomic>
 #include <coroutine>
 #include <cstdint>
@@ -26,13 +28,13 @@ public:
     auto return_void() noexcept -> void;
     auto unhandled_exception() -> void;
 
-    auto task_container_size(std::atomic<std::size_t>& task_container_size) -> void;
+    auto executor_size(std::atomic<std::size_t>& task_container_size) -> void;
 
 private:
     /**
-     * The coro::task_container<executor_t> m_size member to decrement upon the coroutine completing.
+     * The executor m_size member to decrement upon the coroutine completing.
      */
-    std::atomic<std::size_t>* m_task_container_size{nullptr};
+    std::atomic<std::size_t>* m_executor_size{nullptr};
 };
 
 /**
@@ -67,5 +69,10 @@ public:
 private:
     promise_self_deleting* m_promise{nullptr};
 };
+
+/**
+ * Turns a coro::task<void> into a self deleting task (detached).
+ */
+auto make_task_self_deleting(coro::task<void> user_task) -> task_self_deleting;
 
 } // namespace coro::detail

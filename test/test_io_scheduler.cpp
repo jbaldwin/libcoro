@@ -778,8 +778,10 @@ TEST_CASE("io_scheduler task throws after resume", "[io_scheduler]")
     REQUIRE_THROWS(coro::sync_wait(make_thrower(s)));
 }
 
-TEST_CASE("issue-287", "[io_scheduler]")
+TEST_CASE("coro::io_scheduler::spawn", "[io_scheduler]")
 {
+    // issue-287
+
     const int ITERATIONS = 200000;
 
     std::atomic<uint32_t> g_count   = 0;
@@ -794,11 +796,32 @@ TEST_CASE("issue-287", "[io_scheduler]")
 
     for (int i = 0; i < ITERATIONS; ++i)
     {
-        REQUIRE(scheduler->schedule(task(g_count)));
+        REQUIRE(scheduler->spawn(task(g_count)));
     }
 
     scheduler->shutdown();
 
     std::cerr << "g_count = \t" << g_count.load() << std::endl;
     REQUIRE(g_count.load() == ITERATIONS);
+}
+
+TEST_CASE("io_scheduler::schedule(task)", "[thread_pool]")
+{
+    auto scheduler = coro::io_scheduler::make_shared(
+        coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
+    uint64_t        counter{0};
+    std::thread::id coroutine_tid;
+
+    auto make_task = [](uint64_t value, std::thread::id& coroutine_id) -> coro::task<uint64_t>
+    {
+        coroutine_id = std::this_thread::get_id();
+        co_return value;
+    };
+
+    auto main_tid = std::this_thread::get_id();
+
+    counter += coro::sync_wait(scheduler->schedule(make_task(53, coroutine_tid)));
+
+    REQUIRE(counter == 53);
+    REQUIRE(main_tid != coroutine_tid);
 }

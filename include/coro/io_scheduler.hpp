@@ -1,9 +1,9 @@
 #pragma once
 
 #include "coro/detail/poll_info.hpp"
+#include "coro/detail/task_self_deleting.hpp"
 #include "coro/fd.hpp"
 #include "coro/poll.hpp"
-#include "coro/task_container.hpp"
 #include "coro/thread_pool.hpp"
 
 #ifdef LIBCORO_FEATURE_NETWORKING
@@ -172,15 +172,29 @@ public:
     auto schedule() -> schedule_operation { return schedule_operation{*this}; }
 
     /**
-     * Schedules a task onto the io_scheduler and moves ownership of the task to the io_scheduler.
-     * Only void return type tasks can be scheduled in this manner since the task submitter will no
-     * longer have control over the scheduled task.
+     * Spawns a task into the io_scheduler and moves ownership of the task to the io_scheduler.
+     * Only void return type tasks can be spawned in this manner since the task submitter will no
+     * longer have control over the spawned task, it is effectively detached.
      * @param task The task to execute on this io_scheduler.  It's lifetime ownership will be transferred
      *             to this io_scheduler.
-     * @return True if the task was succesfully scheduled onto the io_scheduler. This can fail if the task
+     * @return True if the task was succesfully spawned onto the io_scheduler. This can fail if the task
      *         is already completed or does not contain a valid coroutine anymore.
      */
-    auto schedule(coro::task<void>&& task) -> bool;
+    auto spawn(coro::task<void>&& task) -> bool;
+
+    /**
+     * Schedules a task on the io_scheduler and returns another task that must be awaited on for completion.
+     * This can be done via co_await in a coroutine context or coro::sync_wait() outside of coroutine context.
+     * @tparam return_type The return value of the task.
+     * @param task The task to schedule on the io_scheduler.
+     * @return The task to await for the input task to complete.
+     */
+    template<typename return_type>
+    [[nodiscard]] auto schedule(coro::task<return_type> task) -> coro::task<return_type>
+    {
+        co_await schedule();
+        co_return co_await task;
+    }
 
     /**
      * Schedules the current task to run after the given amount of time has elapsed.
@@ -351,13 +365,6 @@ private:
     auto                                 process_scheduled_execute_inline() -> void;
     std::mutex                           m_scheduled_tasks_mutex{};
     std::vector<std::coroutine_handle<>> m_scheduled_tasks{};
-
-    /// Tasks that have their ownership passed into the scheduler.  This is a bit strange for now
-    /// but the concept doesn't pass since io_scheduler isn't fully defined yet.
-    /// The type is coro::task_container<coro::io_scheduler>*
-    /// Do not inline any functions that use this in the io_scheduler header, it can cause the linker
-    /// to complain about "defined in discarded section" because it gets defined multiple times
-    void* m_owned_tasks{nullptr};
 
     static constexpr const int   m_shutdown_object{0};
     static constexpr const void* m_shutdown_ptr = &m_shutdown_object;

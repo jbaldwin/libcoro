@@ -58,10 +58,6 @@ target_link_libraries(coro_when_all PUBLIC libcoro)
 target_compile_options(coro_when_all PUBLIC ${LIBCORO_EXAMPLE_OPTIONS})
 
 if(LIBCORO_FEATURE_NETWORKING)
-    add_executable(coro_task_container coro_task_container.cpp)
-    target_link_libraries(coro_task_container PUBLIC libcoro)
-    target_compile_options(coro_task_container PUBLIC ${LIBCORO_EXAMPLE_OPTIONS})
-
     add_executable(coro_io_scheduler coro_io_scheduler.cpp)
     target_link_libraries(coro_io_scheduler PUBLIC libcoro)
     target_compile_options(coro_io_scheduler PUBLIC ${LIBCORO_EXAMPLE_OPTIONS})

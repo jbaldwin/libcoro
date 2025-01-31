@@ -431,7 +431,7 @@ TEST_CASE("benchmark tcp::server echo server thread pool", "[benchmark]")
                 if (c.socket().is_valid())
                 {
                     accepted.fetch_add(1, std::memory_order::release);
-                    server_scheduler->schedule(make_on_connection_task(std::move(c), wait_for_clients));
+                    server_scheduler->spawn(make_on_connection_task(std::move(c), wait_for_clients));
                 }
             }
         }
@@ -625,7 +625,7 @@ TEST_CASE("benchmark tcp::server echo server inline", "[benchmark]")
                     accepted.fetch_add(1, std::memory_order::release);
 
                     s.live_clients++;
-                    s.scheduler->schedule(make_on_connection_task(s, std::move(c)));
+                    s.scheduler->spawn(make_on_connection_task(s, std::move(c)));
                 }
             }
         }
@@ -847,7 +847,7 @@ TEST_CASE("benchmark tls::server echo server thread pool", "[benchmark]")
                 if (c.socket().is_valid())
                 {
                     accepted.fetch_add(1, std::memory_order::release);
-                    server_scheduler->schedule(make_on_connection_task(std::move(c), wait_for_clients));
+                    server_scheduler->spawn(make_on_connection_task(std::move(c), wait_for_clients));
                 }
             }
         }
