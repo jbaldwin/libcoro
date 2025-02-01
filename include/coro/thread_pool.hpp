@@ -1,7 +1,6 @@
 #pragma once
 
 #include "coro/concepts/range_of.hpp"
-#include "coro/detail/task_self_deleting.hpp"
 #include "coro/task.hpp"
 
 #include <atomic>

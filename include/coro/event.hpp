@@ -1,8 +1,6 @@
 #pragma once
 
 #include "coro/concepts/executor.hpp"
-#include "coro/task.hpp"
-#include "coro/thread_pool.hpp"
 
 #include <atomic>
 #include <coroutine>

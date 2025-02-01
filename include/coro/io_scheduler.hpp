@@ -1,7 +1,6 @@
 #pragma once
 
 #include "coro/detail/poll_info.hpp"
-#include "coro/detail/task_self_deleting.hpp"
 #include "coro/fd.hpp"
 #include "coro/poll.hpp"
 #include "coro/thread_pool.hpp"

@@ -1,4 +1,5 @@
 #include "coro/thread_pool.hpp"
+#include "coro/detail/task_self_deleting.hpp"
 
 namespace coro
 {

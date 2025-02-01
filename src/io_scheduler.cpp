@@ -1,4 +1,5 @@
 #include "coro/io_scheduler.hpp"
+#include "coro/detail/task_self_deleting.hpp"
 
 #include <atomic>
 #include <cstring>
