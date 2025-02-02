@@ -1,4 +1,5 @@
 #include "coro/thread_pool.hpp"
+#include "coro/detail/task_self_deleting.hpp"
 
 namespace coro
 {
@@ -43,6 +44,14 @@ auto thread_pool::schedule() -> operation
         m_size.fetch_sub(1, std::memory_order::release);
         throw std::runtime_error("coro::thread_pool is shutting down, unable to schedule new tasks.");
     }
+}
+
+auto thread_pool::spawn(coro::task<void>&& task) noexcept -> bool
+{
+    m_size.fetch_add(1, std::memory_order::release);
+    auto wrapper_task = detail::make_task_self_deleting(std::move(task));
+    wrapper_task.promise().executor_size(m_size);
+    return resume(wrapper_task.handle());
 }
 
 auto thread_pool::resume(std::coroutine_handle<> handle) noexcept -> bool

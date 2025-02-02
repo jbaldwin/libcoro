@@ -7,7 +7,6 @@
 #include "coro/net/ip_address.hpp"
 #include "coro/poll.hpp"
 #include "coro/task.hpp"
-#include "coro/task_container.hpp"
 
 #include <ares.h>
 #include <arpa/inet.h>
@@ -82,8 +81,7 @@ class resolver
 public:
     explicit resolver(std::shared_ptr<executor_type> executor, std::chrono::milliseconds timeout)
         : m_executor(std::move(executor)),
-          m_timeout(timeout),
-          m_task_container(m_executor)
+          m_timeout(timeout)
     {
         if (m_executor == nullptr)
         {
@@ -166,8 +164,6 @@ private:
     /// are not setup when ares_poll() is called.
     std::unordered_set<fd_t> m_active_sockets{};
 
-    task_container<executor_type> m_task_container;
-
     auto ares_poll() -> void
     {
         std::array<ares_socket_t, ARES_GETSOCK_MAXNUM> ares_sockets{};
@@ -211,7 +207,7 @@ private:
             // If this socket is not currently actively polling, start polling!
             if (m_active_sockets.emplace(fd).second)
             {
-                m_task_container.start(make_poll_task(fd, poll_ops[i]));
+                m_executor->spawn(make_poll_task(fd, poll_ops[i]));
             }
         }
     }

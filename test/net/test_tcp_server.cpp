@@ -119,7 +119,7 @@ TEST_CASE("tcp_server concurrent polling on the same socket", "[tcp_server]")
         // make a copy so we can poll twice at the same time in different coroutines
         auto write_client = read_client;
 
-        scheduler->schedule(make_read_task(std::move(read_client)));
+        scheduler->spawn(make_read_task(std::move(read_client)));
 
         // Make sure the read op has completed.
         co_await scheduler->yield_for(500ms);

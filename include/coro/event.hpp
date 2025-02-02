@@ -86,7 +86,7 @@ public:
     /**
      * @return True if this event is currently in the set state.
      */
-    auto is_set() const noexcept -> bool { return m_state.load(std::memory_order_acquire) == this; }
+    auto is_set() const noexcept -> bool { return m_state.load(std::memory_order::acquire) == this; }
 
     /**
      * Sets this event and resumes all awaiters.  Note that all waiters will be resumed onto this

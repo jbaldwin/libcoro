@@ -2,36 +2,38 @@
 
 #include "coro/concepts/awaitable.hpp"
 #include "coro/fd.hpp"
+#include "coro/task.hpp"
 
 #ifdef LIBCORO_FEATURE_NETWORKING
     #include "coro/poll.hpp"
-    #include "coro/task.hpp"
 #endif // #ifdef LIBCORO_FEATURE_NETWORKING
 
 #include <chrono>
 #include <concepts>
 #include <coroutine>
+#include <utility>
 
 namespace coro::concepts
 {
 
 // clang-format off
-template<typename type>
-concept executor = requires(type t, std::coroutine_handle<> c)
+template<typename executor_type>
+concept executor = requires(executor_type e, std::coroutine_handle<> c)
 {
-    { t.schedule() } -> coro::concepts::awaiter;
-    { t.yield() } -> coro::concepts::awaiter;
-    { t.resume(c) } -> std::same_as<bool>;
-    { t.size() } -> std::same_as<std::size_t>;
-    { t.empty() } -> std::same_as<bool>;
-    { t.shutdown() } -> std::same_as<void>;
+    { e.schedule() } -> coro::concepts::awaiter;
+    { e.spawn(std::declval<coro::task<void>>()) } -> std::same_as<bool>;
+    { e.yield() } -> coro::concepts::awaiter;
+    { e.resume(c) } -> std::same_as<bool>;
+    { e.size() } -> std::same_as<std::size_t>;
+    { e.empty() } -> std::same_as<bool>;
+    { e.shutdown() } -> std::same_as<void>;
 };
 
 #ifdef LIBCORO_FEATURE_NETWORKING
-template<typename type>
-concept io_exceutor = executor<type> and requires(type t, std::coroutine_handle<> c, fd_t fd, coro::poll_op op, std::chrono::milliseconds timeout)
+template<typename executor_type>
+concept io_exceutor = executor<executor_type> and requires(executor_type e, std::coroutine_handle<> c, fd_t fd, coro::poll_op op, std::chrono::milliseconds timeout)
 {
-    { t.poll(fd, op, timeout) } -> std::same_as<coro::task<poll_status>>;
+    { e.poll(fd, op, timeout) } -> std::same_as<coro::task<poll_status>>;
 };
 #endif // #ifdef LIBCORO_FEATURE_NETWORKING
 

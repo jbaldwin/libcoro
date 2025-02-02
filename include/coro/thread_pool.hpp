@@ -1,7 +1,6 @@
 #pragma once
 
 #include "coro/concepts/range_of.hpp"
-#include "coro/event.hpp"
 #include "coro/task.hpp"
 
 #include <atomic>
@@ -110,25 +109,24 @@ public:
     [[nodiscard]] auto schedule() -> operation;
 
     /**
-     * @throw std::runtime_error If the thread pool is `shutdown()` scheduling new tasks is not permitted.
-     * @param f The function to execute on the thread pool.
-     * @param args The arguments to call the functor with.
-     * @return A task that wraps the given functor to be executed on the thread pool.
+     * Spawns the given task to be run on this thread pool, the task is detached from the user.
+     * @param task The task to spawn onto the thread pool.
+     * @return True if the task has been spawned onto this thread pool.
      */
-    template<typename functor, typename... arguments>
-    [[nodiscard]] auto schedule(functor&& f, arguments... args) -> task<decltype(f(std::forward<arguments>(args)...))>
+    auto spawn(coro::task<void>&& task) noexcept -> bool;
+
+    /**
+     * Schedules a task on the thread pool and returns another task that must be awaited on for completion.
+     * This can be done via co_await in a coroutine context or coro::sync_wait() outside of coroutine context.
+     * @tparam return_type The return value of the task.
+     * @param task The task to schedule on the thread pool.
+     * @return The task to await for the input task to complete.
+     */
+    template<typename return_type>
+    [[nodiscard]] auto schedule(coro::task<return_type> task) -> coro::task<return_type>
     {
         co_await schedule();
-
-        if constexpr (std::is_same_v<void, decltype(f(std::forward<arguments>(args)...))>)
-        {
-            f(std::forward<arguments>(args)...);
-            co_return;
-        }
-        else
-        {
-            co_return f(std::forward<arguments>(args)...);
-        }
+        co_return co_await task;
     }
 
     /**
@@ -236,6 +234,7 @@ private:
     std::condition_variable_any m_wait_cv;
     /// FIFO queue of tasks waiting to be executed.
     std::deque<std::coroutine_handle<>> m_queue;
+
     /**
      * Each background thread runs from this function.
      * @param idx The executor's idx for internal data structure accesses.

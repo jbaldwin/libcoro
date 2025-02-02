@@ -63,10 +63,6 @@ example_contents=$(cat 'examples/coro_io_scheduler.cpp')
 echo "${template_contents/\$\{EXAMPLE_CORO_IO_SCHEDULER_CPP\}/$example_contents}" > README.md
 
 template_contents=$(cat 'README.md')
-example_contents=$(cat 'examples/coro_task_container.cpp')
-echo "${template_contents/\$\{EXAMPLE_CORO_TASK_CONTAINER_CPP\}/$example_contents}" > README.md
-
-template_contents=$(cat 'README.md')
 example_contents=$(cat 'examples/coro_semaphore.cpp')
 echo "${template_contents/\$\{EXAMPLE_CORO_SEMAPHORE_CPP\}/$example_contents}" > README.md
 

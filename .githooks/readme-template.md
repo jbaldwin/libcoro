@@ -30,7 +30,6 @@
         - Can use `coro::thread_pool` for latency sensitive or long lived tasks.
         - Can use inline task processing for thread per core or short lived tasks.
         - Currently uses an epoll driver, only supported on linux.
-    - [coro::task_container](#task_container) for dynamic task lifetimes
 * Coroutine Networking
     - coro::net::dns::resolver for async dns
         - Uses libc-ares
@@ -252,7 +251,12 @@ consumer 3 shutting down, stop signal received
 ```
 
 ### thread_pool
-`coro::thread_pool` is a statically sized pool of worker threads to execute scheduled coroutines from a FIFO queue.  To schedule a coroutine on a thread pool the pool's `schedule()` function should be `co_awaited` to transfer the execution from the current thread to a thread pool worker thread.  Its important to note that scheduling will first place the coroutine into the FIFO queue and will be picked up by the first available thread in the pool, e.g. there could be a delay if there is a lot of work queued up.
+`coro::thread_pool` is a statically sized pool of worker threads to execute scheduled coroutines from a FIFO queue.  One way to schedule a coroutine on a thread pool is to use the pool's `schedule()` function which should be `co_awaited` inside the coroutine to transfer the execution from the current thread to a thread pool worker thread.  Its important to note that scheduling will first place the coroutine into the FIFO queue and will be picked up by the first available thread in the pool, e.g. there could be a delay if there is a lot of work queued up.
+
+#### Ways to schedule tasks onto a `coro::thread_pool`
+* `coro::thread_pool::schedule()` Use `co_await` on this method inside a coroutine to transfer the tasks execution to the `coro::thread_pool`.
+* `coro::thread_pool::spawn(coro::task<void&& task>)` Spawns the task to be detached and owned by the `coro::thread_pool`, use this if you want to fire and forget the task, the `coro::thread_pool` will maintain the task's lifetime.
+* `coro::thread_pool::schedule(coro::task<T> task) -> coro::task<T>` schedules the task on the `coro::thread_pool` and then returns the result in a task that must be awaited. This is useful if you want to schedule work on the `coro::thread_pool` and want to wait for the result.
 
 ```C++
 ${EXAMPLE_CORO_THREAD_POOL_CPP}
@@ -283,7 +287,7 @@ thread pool worker 0 is shutting down.
 ```
 
 ### io_scheduler
-`coro::io_scheduler` is a i/o event scheduler that can use two methods of task processing:
+`coro::io_scheduler` is a i/o event scheduler execution context that can use two methods of task processing:
 
 * A background `coro::thread_pool`
 * Inline task processing on the `coro::io_scheduler`'s event loop
@@ -294,7 +298,15 @@ Using the inline processing strategy will have the event loop i/o thread process
 
 The `coro::io_scheduler` can use a dedicated spawned thread for processing events that are ready or it can be maually driven via its `process_events()` function for integration into existing event loops.  By default i/o schedulers will spawn a dedicated event thread and use a thread pool to process tasks.
 
-Before getting to an example there are two methods of scheduling work onto an i/o scheduler, the first is by having the caller maintain the lifetime of the task being scheduled and the second is by moving or transfering owership of the task into the i/o scheduler.  The first can allow for return values but requires the caller to manage the lifetime of the coroutine while the second requires the return type of the task to be void but allows for variable or unknown task lifetimes.  Transferring task lifetime to the scheduler can be useful, e.g. for a network request.
+#### Ways to schedule tasks onto a `coro::io_scheduler`
+* `coro::io_scheduler::schedule()` Use `co_await` on this method inside a coroutine to transfer the tasks execution to the `coro::io_scheduler`.
+* `coro::io_scheduler::spawn(coro::task<void&& task>)` Spawns the task to be detached and owned by the `coro::io_scheduler`, use this if you want to fire and forget the task, the `coro::io_scheduler` will maintain the task's lifetime.
+* `coro::io_scheduler::schedule(coro::task<T> task) -> coro::task<T>` schedules the task on the `coro::io_scheduler` and then returns the result in a task that must be awaited. This is useful if you want to schedule work on the `coro::io_scheduler` and want to wait for the result.
+* `coro::io_scheduler::scheduler_after(std::chrono::milliseconds amount)` schedules the current task to be rescheduled after a specified amount of time has passed.
+* `coro::io_scheduler::schedule_at(std::chrono::steady_clock::time_point time)` schedules the current task to be rescheduled at the specified timepoint.
+* `coro::io_scheduler::yield()` will yield execution of the current task and resume after other tasks have had a chance to execute. This effectively places the task at the back of the queue of waiting tasks.
+* `coro::io_scheduler::yield_for(std::chrono::milliseconds amount)` will yield for the given amount of time and then reschedule the task. This is a yield for at least this much time since its placed in the waiting execution queue and might take additional time to start executing again.
+* `coro::io_scheduler::yield_until(std::chrono::steady_clock::time_point time)` will yield execution until the time point.
 
 The example provided here shows an i/o scheduler that spins up a basic `coro::net::tcp::server` and a `coro::net::tcp::client` that will connect to each other and then send a request and a response.
 
@@ -313,29 +325,6 @@ client: Hello from server.
 io_scheduler::thread_pool worker 0 stopping
 io_scheduler::thread_pool worker 1 stopping
 io_scheduler::process event thread stop
-```
-
-### task_container
-`coro::task_container` is a special container type that will maintain the lifetime of tasks that do not have a known lifetime.  This is extremely useful for tasks that hold open connections to clients and possibly process multiple requests from that client before shutting down.  The task doesn't know how long it will be alive but at some point in the future it will complete and need to have its resources cleaned up.  The `coro::task_container` does this by wrapping the users task into anothe coroutine task that will mark itself for deletion upon completing within the parent task container.  The task container should then run garbage collection periodically, or by default when a new task is added, to prune completed tasks from the container.
-
-All tasks that are stored within a `coro::task_container` must have a `void` return type since their result cannot be accessed due to the task's lifetime being indeterminate.
-
-```C++
-${EXAMPLE_CORO_TASK_CONTAINER_CPP}
-```
-
-```bash
-$ ./examples/coro_task_container
-server: Hello from client 1
-client: Hello from server 1
-server: Hello from client 2
-client: Hello from server 2
-server: Hello from client 3
-client: Hello from server 3
-server: Hello from client 4
-client: Hello from server 4
-server: Hello from client 5
-client: Hello from server 5
 ```
 
 ### tcp_echo_server
