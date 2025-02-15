@@ -103,6 +103,7 @@ if(LIBCORO_FEATURE_NETWORKING)
         include/coro/fd.hpp
         include/coro/io_scheduler.hpp src/io_scheduler.cpp
         include/coro/poll.hpp src/poll.cpp
+        include/coro/condition_variable.hpp src/condition_variable.cpp
     )
 
     list(APPEND LIBCORO_SOURCE_FILES
