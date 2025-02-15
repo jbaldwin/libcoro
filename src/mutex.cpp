@@ -20,6 +20,11 @@ auto scoped_lock::unlock() -> void
     }
 }
 
+class mutex* scoped_lock::mutex() const noexcept
+{
+    return m_mutex;
+}
+
 auto mutex::lock_operation::await_ready() const noexcept -> bool
 {
     if (m_mutex.try_lock())
