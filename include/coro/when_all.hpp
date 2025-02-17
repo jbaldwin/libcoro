@@ -180,12 +180,12 @@ public:
     when_all_ready_awaitable(when_all_ready_awaitable&& other) noexcept(
         std::is_nothrow_move_constructible_v<task_container_type>)
         : m_latch(std::move(other.m_latch)),
-          m_tasks(std::move(m_tasks))
+          m_tasks(std::move(other.m_tasks))
     {
     }
 
     auto operator=(const when_all_ready_awaitable&) -> when_all_ready_awaitable& = delete;
-    auto operator=(when_all_ready_awaitable&) -> when_all_ready_awaitable&       = delete;
+    auto operator=(when_all_ready_awaitable&&) -> when_all_ready_awaitable&       = delete;
 
     auto operator co_await() & noexcept
     {

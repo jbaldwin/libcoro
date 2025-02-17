@@ -93,6 +93,7 @@ set(LIBCORO_SOURCE_FILES
     include/coro/thread_pool.hpp src/thread_pool.cpp
     include/coro/time.hpp
     include/coro/when_all.hpp
+    include/coro/when_any.hpp
 )
 
 if(LIBCORO_FEATURE_NETWORKING)

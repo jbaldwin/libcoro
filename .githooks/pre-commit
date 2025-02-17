@@ -82,4 +82,8 @@ template_contents=$(cat 'README.md')
 example_contents=$(cat 'examples/coro_when_all.cpp')
 echo "${template_contents/\$\{EXAMPLE_CORO_WHEN_ALL\}/$example_contents}" > README.md
 
+template_contents=$(cat 'README.md')
+example_contents=$(cat 'examples/coro_when_any.cpp')
+echo "${template_contents/\$\{EXAMPLE_CORO_WHEN_ANY\}/$example_contents}" > README.md
+
 git add README.md

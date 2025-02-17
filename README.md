@@ -16,6 +16,7 @@
 * Higher level coroutine constructs
     - [coro::sync_wait(awaitable)](#sync_wait)
     - [coro::when_all(awaitable...) -> awaitable](#when_all)
+    - [coro::when_any(awaitable...) -> awaitable](#when_any)
     - [coro::task<T>](#task)
     - [coro::generator<T>](#generator)
     - [coro::event](#event)
@@ -101,7 +102,7 @@ Offload Result = 20
 ```
 
 ### when_all
-The `when_all` construct can be used within coroutines to await a set of tasks, or it can be used outside coroutinne context in conjunction with `sync_wait` to await multiple tasks. Each task passed into `when_all` will initially be executed serially by the calling thread so it is recommended to offload the tasks onto a scheduler like `coro::thread_pool` or `coro::io_scheduler` so they can execute in parallel.
+The `when_all` construct can be used within coroutines to await a set of tasks, or it can be used outside coroutine context in conjunction with `sync_wait` to await multiple tasks. Each task passed into `when_all` will initially be executed serially by the calling thread so it is recommended to offload the tasks onto an executor like `coro::thread_pool` or `coro::io_scheduler` so they can execute in parallel.
 
 ```C++
 #include <coro/coro.hpp>
@@ -168,6 +169,68 @@ $ ./examples/coro_when_all
 10
 first: 1.21 second: 20
 ```
+
+### when_any
+The `when_any` construct can be used within coroutines to await a set of tasks and only return the result of the first task that completes. This can also be used outside of a coroutine context in conjunction with `sync_wait` to await the first result. Each task passed into `when_any` will initially be executed serially by the calling thread so it is recommended to offload the tasks onto an executor like `coro::thread_pool` or `coro::io_scheduler` so they can execute in parallel.
+
+```C++
+#include <coro/coro.hpp>
+#include <iostream>
+
+int main()
+{
+    // Create a scheduler to execute all tasks in parallel and also so we can
+    // suspend a task to act like a timeout event.
+    auto scheduler = coro::io_scheduler::make_shared();
+
+    // This task will behave like a long running task and will produce a valid result.
+    auto make_long_running_task = [](std::shared_ptr<coro::io_scheduler> scheduler,
+                                     std::chrono::milliseconds           execution_time) -> coro::task<int64_t>
+    {
+        // Schedule the task to execute in parallel.
+        co_await scheduler->schedule();
+        // Fake doing some work...
+        co_await scheduler->yield_for(execution_time);
+        // Return the result.
+        co_return 1;
+    };
+
+    auto make_timeout_task = [](std::shared_ptr<coro::io_scheduler> scheduler) -> coro::task<int64_t>
+    {
+        // Schedule a timer to be fired so we know the task timed out.
+        co_await scheduler->schedule_after(std::chrono::milliseconds{100});
+        co_return -1;
+    };
+
+    // Example showing the long running task completing first.
+    {
+        std::vector<coro::task<int64_t>> tasks{};
+        tasks.emplace_back(make_long_running_task(scheduler, std::chrono::milliseconds{50}));
+        tasks.emplace_back(make_timeout_task(scheduler));
+
+        auto result = coro::sync_wait(coro::when_any(std::move(tasks)));
+        std::cout << "result = " << result << "\n";
+    }
+
+    // Example showing the long running task timing out.
+    {
+        std::vector<coro::task<int64_t>> tasks{};
+        tasks.emplace_back(make_long_running_task(scheduler, std::chrono::milliseconds{500}));
+        tasks.emplace_back(make_timeout_task(scheduler));
+
+        auto result = coro::sync_wait(coro::when_any(std::move(tasks)));
+        std::cout << "result = " << result << "\n";
+    }
+}
+```
+
+Expected output:
+```bash
+$ ./examples/coro_when_any
+result = 1
+result = -1
+```
+
 
 ### task
 The `coro::task<T>` is the main coroutine building block within `libcoro`.  Use task to create your coroutines and `co_await` or `co_yield` tasks within tasks to perform asynchronous operations, lazily evaluation or even spreading work out across a `coro::thread_pool`.  Tasks are lightweight and only begin execution upon awaiting them.

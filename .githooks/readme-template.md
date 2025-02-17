@@ -16,6 +16,7 @@
 * Higher level coroutine constructs
     - [coro::sync_wait(awaitable)](#sync_wait)
     - [coro::when_all(awaitable...) -> awaitable](#when_all)
+    - [coro::when_any(awaitable...) -> awaitable](#when_any)
     - [coro::task<T>](#task)
     - [coro::generator<T>](#generator)
     - [coro::event](#event)
@@ -70,7 +71,7 @@ Offload Result = 20
 ```
 
 ### when_all
-The `when_all` construct can be used within coroutines to await a set of tasks, or it can be used outside coroutinne context in conjunction with `sync_wait` to await multiple tasks. Each task passed into `when_all` will initially be executed serially by the calling thread so it is recommended to offload the tasks onto a scheduler like `coro::thread_pool` or `coro::io_scheduler` so they can execute in parallel.
+The `when_all` construct can be used within coroutines to await a set of tasks, or it can be used outside coroutine context in conjunction with `sync_wait` to await multiple tasks. Each task passed into `when_all` will initially be executed serially by the calling thread so it is recommended to offload the tasks onto an executor like `coro::thread_pool` or `coro::io_scheduler` so they can execute in parallel.
 
 ```C++
 ${EXAMPLE_CORO_WHEN_ALL}
@@ -86,6 +87,21 @@ $ ./examples/coro_when_all
 10
 first: 1.21 second: 20
 ```
+
+### when_any
+The `when_any` construct can be used within coroutines to await a set of tasks and only return the result of the first task that completes. This can also be used outside of a coroutine context in conjunction with `sync_wait` to await the first result. Each task passed into `when_any` will initially be executed serially by the calling thread so it is recommended to offload the tasks onto an executor like `coro::thread_pool` or `coro::io_scheduler` so they can execute in parallel.
+
+```C++
+${EXAMPLE_CORO_WHEN_ANY}
+```
+
+Expected output:
+```bash
+$ ./examples/coro_when_any
+result = 1
+result = -1
+```
+
 
 ### task
 The `coro::task<T>` is the main coroutine building block within `libcoro`.  Use task to create your coroutines and `co_await` or `co_yield` tasks within tasks to perform asynchronous operations, lazily evaluation or even spreading work out across a `coro::thread_pool`.  Tasks are lightweight and only begin execution upon awaiting them.
