@@ -1,6 +1,7 @@
 #pragma once
 
 #include "coro/detail/poll_info.hpp"
+#include "coro/expected.hpp"
 #include "coro/fd.hpp"
 #include "coro/poll.hpp"
 #include "coro/thread_pool.hpp"
@@ -20,6 +21,12 @@
 
 namespace coro
 {
+enum timeout_status
+{
+    no_timeout,
+    timeout,
+};
+
 class io_scheduler : public std::enable_shared_from_this<io_scheduler>
 {
     using timed_events = detail::poll_info::timed_events;
@@ -196,6 +203,77 @@ public:
     }
 
     /**
+     * Schedules a task on the io_scheduler that must complete within the given timeout.
+     * NOTE: This version of schedule does *NOT* cancel the given task, it will continue executing even if it times out.
+     *       It is absolutely recommended to use the version of this schedule() function that takes an std::stop_token
+     * and have the scheduled task check to see if its been cancelled due to timeout to not waste resources.
+     * @tparam return_type The return value of the task.
+     * @param task The task to schedule on the io_scheduler with the given timeout.
+     * @param timeout How long should this task be given to complete before it times out?
+     * @return The task to await for the input task to complete.
+     */
+    template<typename return_type, typename rep, typename period>
+    [[nodiscard]] auto schedule(coro::task<return_type> task, std::chrono::duration<rep, period> timeout)
+        -> coro::task<coro::expected<return_type, timeout_status>>
+    {
+        using namespace std::chrono_literals;
+
+        // If negative or 0 timeout, just schedule the task as normal.
+        auto timeout_ms = std::max(std::chrono::duration_cast<std::chrono::milliseconds>(timeout), 0ms);
+        if (timeout_ms == 0ms)
+        {
+            co_return coro::expected<return_type, timeout_status>(co_await schedule(std::move(task)));
+        }
+
+        auto result = co_await when_any(std::move(task), make_timeout_task(timeout_ms));
+        if (!std::holds_alternative<timeout_status>(result))
+        {
+            co_return coro::expected<return_type, timeout_status>(std::move(std::get<0>(result)));
+        }
+        else
+        {
+            co_return coro::unexpected<timeout_status>(std::move(std::get<1>(result)));
+        }
+    }
+
+#ifndef EMSCRIPTEN
+    /**
+     * Schedules a task on the io_scheduler that must complete within the given timeout.
+     * NOTE: This version of the task will have the stop_source.request_stop() be called if the timeout triggers.
+     *       It is up to you to check in the scheduled task if the stop has been requested to actually stop executing
+     *       the task.
+     * @tparam return_type The return value of the task.
+     * @param task The task to schedule on the io_scheduler with the given timeout.
+     * @param timeout How long should this task be given to complete before it times out?
+     * @return The task to await for the input task to complete.
+     */
+    template<typename return_type, typename rep, typename period>
+    [[nodiscard]] auto
+        schedule(std::stop_source stop_source, coro::task<return_type> task, std::chrono::duration<rep, period> timeout)
+            -> coro::task<coro::expected<return_type, timeout_status>>
+    {
+        using namespace std::chrono_literals;
+
+        // If negative or 0 timeout, just schedule the task as normal.
+        auto timeout_ms = std::max(std::chrono::duration_cast<std::chrono::milliseconds>(timeout), 0ms);
+        if (timeout_ms == 0ms)
+        {
+            co_return coro::expected<return_type, timeout_status>(co_await schedule(std::move(task)));
+        }
+
+        auto result = co_await when_any(std::move(stop_source), std::move(task), make_timeout_task(timeout_ms));
+        if (!std::holds_alternative<timeout_status>(result))
+        {
+            co_return coro::expected<return_type, timeout_status>(std::move(std::get<0>(result)));
+        }
+        else
+        {
+            co_return coro::unexpected<timeout_status>(std::move(std::get<1>(result)));
+        }
+    }
+#endif
+
+    /**
      * Schedules the current task to run after the given amount of time has elapsed.
      * @param amount The amount of time to wait before resuming execution of this task.
      *               Given zero or negative amount of time this behaves identical to schedule().
@@ -212,7 +290,10 @@ public:
     /**
      * Yields the current task to the end of the queue of waiting tasks.
      */
-    [[nodiscard]] auto yield() -> schedule_operation { return schedule_operation{*this}; };
+    [[nodiscard]] auto yield() -> schedule_operation
+    {
+        return schedule_operation{*this};
+    };
 
     /**
      * Yields the current task for the given amount of time.
@@ -386,6 +467,12 @@ private:
     auto add_timer_token(time_point tp, detail::poll_info& pi) -> timed_events::iterator;
     auto remove_timer_token(timed_events::iterator pos) -> void;
     auto update_timeout(time_point now) -> void;
+
+    auto make_timeout_task(std::chrono::milliseconds timeout) -> coro::task<timeout_status>
+    {
+        co_await schedule_after(timeout);
+        co_return timeout_status::timeout;
+    }
 };
 
 } // namespace coro

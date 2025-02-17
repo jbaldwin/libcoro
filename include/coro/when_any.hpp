@@ -6,6 +6,7 @@
     #include "coro/concepts/awaitable.hpp"
     #include "coro/detail/task_self_deleting.hpp"
     #include "coro/event.hpp"
+    #include "coro/expected.hpp"
     #include "coro/mutex.hpp"
     #include "coro/task.hpp"
 
@@ -21,6 +22,38 @@ namespace coro
 
 namespace detail
 {
+
+template<typename return_type, concepts::awaitable awaitable>
+auto make_when_any_tuple_task(
+    coro::mutex&                m,
+    std::atomic<bool>&          return_value_set,
+    coro::event&                notify,
+    std::optional<return_type>& return_value,
+    awaitable                   a) -> coro::task<void>
+{
+    auto result      = co_await static_cast<awaitable&&>(a);
+    auto scoped_lock = co_await m.lock();
+    if (return_value_set.load(std::memory_order::acquire) == false)
+    {
+        return_value_set.store(true, std::memory_order::release);
+        return_value = std::move(result);
+        notify.set();
+    }
+
+    co_return;
+}
+
+template<typename return_type, concepts::awaitable... awaitable_type>
+[[nodiscard]] auto make_when_any_tuple_controller_task(
+    coro::event& notify, std::optional<return_type>& return_value, awaitable_type... awaitables)
+    -> coro::detail::task_self_deleting
+{
+    coro::mutex       m{};
+    std::atomic<bool> return_value_set{false};
+
+    co_await when_all(make_when_any_tuple_task(m, return_value_set, notify, return_value, std::move(awaitables))...);
+    co_return;
+}
 
 template<concepts::awaitable awaitable, typename return_type>
 static auto make_when_any_task(
@@ -78,6 +111,43 @@ static auto make_when_any_controller_task(
 }
 
 } // namespace detail
+
+template<concepts::awaitable... awaitable_type>
+[[nodiscard]] auto when_any(std::stop_source stop_source, awaitable_type... awaitables) -> coro::task<
+    std::variant<std::remove_reference_t<typename concepts::awaitable_traits<awaitable_type>::awaiter_return_type>...>>
+{
+    using return_type = std::variant<
+        std::remove_reference_t<typename concepts::awaitable_traits<awaitable_type>::awaiter_return_type>...>;
+
+    std::optional<return_type> return_value{std::nullopt};
+    coro::event                notify{};
+
+    auto controller_task =
+        detail::make_when_any_tuple_controller_task(notify, return_value, std::forward<awaitable_type>(awaitables)...);
+    controller_task.handle().resume();
+
+    co_await notify;
+    stop_source.request_stop();
+    co_return std::move(return_value.value());
+}
+
+template<concepts::awaitable... awaitable_type>
+[[nodiscard]] auto when_any(awaitable_type... awaitables) -> coro::task<
+    std::variant<std::remove_reference_t<typename concepts::awaitable_traits<awaitable_type>::awaiter_return_type>...>>
+{
+    using return_type = std::variant<
+        std::remove_reference_t<typename concepts::awaitable_traits<awaitable_type>::awaiter_return_type>...>;
+
+    std::optional<return_type> return_value{std::nullopt};
+    coro::event                notify{};
+
+    auto controller_task =
+        detail::make_when_any_tuple_controller_task(notify, return_value, std::forward<awaitable_type>(awaitables)...);
+    controller_task.handle().resume();
+
+    co_await notify;
+    co_return std::move(return_value.value());
+}
 
 template<
     std::ranges::range  range_type,
