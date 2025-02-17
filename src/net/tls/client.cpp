@@ -58,7 +58,7 @@ client::~client()
     if (m_tls_info.m_tls_ptr != nullptr && !m_tls_info.m_tls_error)
     {
         // Should the shutdown timeout be configurable?
-        m_io_scheduler->schedule(tls_shutdown_and_free(
+        m_io_scheduler->spawn(tls_shutdown_and_free(
             m_io_scheduler, std::move(m_socket), std::move(m_tls_info.m_tls_ptr), std::chrono::seconds{30}));
     }
 }
