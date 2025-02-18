@@ -183,7 +183,7 @@ TEST_CASE("thread_pool high cpu usage when threadcount is greater than the numbe
 
     auto wait_for_task = [](coro::thread_pool& pool, std::chrono::seconds delay) -> coro::task<>
     {
-        auto sleep_for_task = [](std::chrono::seconds duration) -> coro::task<int>
+        auto sleep_for_task = [](std::chrono::seconds duration) -> coro::task<int64_t>
         {
             std::this_thread::sleep_for(duration);
             co_return duration.count();

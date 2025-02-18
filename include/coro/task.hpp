@@ -102,7 +102,7 @@ public:
         }
     }
 
-    auto return_value(stored_type value) -> void requires(not return_type_is_reference)
+    auto return_value(stored_type&& value) -> void requires(not return_type_is_reference)
     {
         if constexpr (std::is_move_constructible_v<stored_type>)
         {
