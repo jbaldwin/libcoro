@@ -114,21 +114,21 @@ struct Foo
     static std::atomic<uint64_t> m_copies;
     static std::atomic<uint64_t> m_moves;
     int                          v;
-    Foo() { std::cerr << __PRETTY_FUNCTION__ << std::endl; }
+    Foo() { std::cerr << "Foo::Foo()" << std::endl; }
     Foo(const Foo& other) : v(other.v)
     {
-        std::cerr << __PRETTY_FUNCTION__ << std::endl;
+        std::cerr << "Foo::Foo(const Foo&)" << std::endl;
         m_copies.fetch_add(1);
     }
     Foo(Foo&& other) : v(std::exchange(other.v, 0))
     {
-        std::cerr << __PRETTY_FUNCTION__ << std::endl;
+        std::cerr << "Foo::Foo(Foo&&)" << std::endl;
         m_moves.fetch_add(1);
     }
 
     auto operator=(const Foo& other) -> Foo&
     {
-        std::cerr << __PRETTY_FUNCTION__ << std::endl;
+        std::cerr << "Foo::operator=(const Foo&) -> Foo&" << std::endl;
         m_copies.fetch_add(1);
         if (std::addressof(other) != this)
         {
@@ -138,7 +138,7 @@ struct Foo
     }
     auto operator=(Foo&& other) -> Foo&
     {
-        std::cerr << __PRETTY_FUNCTION__ << std::endl;
+        std::cerr << "Foo::operator=(Foo&&) -> Foo&" << std::endl;
         m_moves.fetch_add(1);
         if (std::addressof(other) != this)
         {
@@ -147,7 +147,11 @@ struct Foo
         return *this;
     }
 
-    ~Foo() { std::cerr << __PRETTY_FUNCTION__ << "v=" << this->v << std::endl; }
+    ~Foo()
+    {
+        std::cerr << "Foo::~Foo()"
+                  << "v=" << this->v << std::endl;
+    }
 };
 
 std::atomic<uint64_t> Foo::m_copies = std::atomic<uint64_t>{0};
