@@ -108,3 +108,80 @@ TEST_CASE("sync_wait very rarely hangs issue-270", "[sync_wait]")
 
     REQUIRE(count > 0);
 }
+
+struct Foo
+{
+    static std::atomic<uint64_t> m_copies;
+    static std::atomic<uint64_t> m_moves;
+    int                          v;
+    Foo() { std::cerr << __PRETTY_FUNCTION__ << std::endl; }
+    Foo(const Foo& other) : v(other.v)
+    {
+        std::cerr << __PRETTY_FUNCTION__ << std::endl;
+        m_copies.fetch_add(1);
+    }
+    Foo(Foo&& other) : v(std::exchange(other.v, 0))
+    {
+        std::cerr << __PRETTY_FUNCTION__ << std::endl;
+        m_moves.fetch_add(1);
+    }
+
+    auto operator=(const Foo& other) -> Foo&
+    {
+        std::cerr << __PRETTY_FUNCTION__ << std::endl;
+        m_copies.fetch_add(1);
+        if (std::addressof(other) != this)
+        {
+            this->v = other.v;
+        }
+        return *this;
+    }
+    auto operator=(Foo&& other) -> Foo&
+    {
+        std::cerr << __PRETTY_FUNCTION__ << std::endl;
+        m_moves.fetch_add(1);
+        if (std::addressof(other) != this)
+        {
+            this->v = std::exchange(other.v, 0);
+        }
+        return *this;
+    }
+
+    ~Foo() { std::cerr << __PRETTY_FUNCTION__ << "v=" << this->v << std::endl; }
+};
+
+std::atomic<uint64_t> Foo::m_copies = std::atomic<uint64_t>{0};
+std::atomic<uint64_t> Foo::m_moves  = std::atomic<uint64_t>{0};
+
+TEST_CASE("issue-286", "[sync_wait]")
+{
+    /**
+     * The expected output from this should be the follow as of writing this test.
+     * https://github.com/jbaldwin/libcoro/issues/286 user @baderouaich reported
+     * that libcoro compared to other coroutine libraries sync_wait equivalent had
+     * and extra move.
+     *
+     *  Foo::Foo()
+     *  co_return foo;
+     *  Foo::Foo(Foo &&)
+     *  Foo::~Foo()v=0
+     *  Foo::Foo(Foo &&)
+     *  Foo::~Foo()v=0
+     *  1337
+     *  Foo::~Foo()v=1337
+     */
+
+    auto getFoo = []() -> coro::task<Foo>
+    {
+        Foo foo{};
+        foo.v = 1337;
+        std::cerr << "co_return foo;" << std::endl;
+        co_return foo;
+    };
+
+    auto foo = coro::sync_wait(getFoo());
+    std::cerr << foo.v << std::endl;
+    REQUIRE(foo.v == 1337);
+    REQUIRE(foo.m_copies == 0);
+    REQUIRE(foo.m_moves == 2);
+}
