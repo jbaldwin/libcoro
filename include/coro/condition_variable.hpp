@@ -64,31 +64,42 @@ private:
     std::atomic<wait_operation*>  m_internal_waiters{nullptr};
     std::atomic<void*>            m_lock{nullptr};
 
-    auto wait_for_ms(scoped_lock& lock, const std::chrono::milliseconds duration = {}) -> task<std::cv_status>;
+    auto wait_for_ms(scoped_lock& lock, const std::chrono::milliseconds duration) -> task<std::cv_status>;
 
     [[nodiscard]] auto wait_for_notify() -> wait_operation { return wait_operation{*this}; };
 
     [[nodiscard]] auto wait_task(condition_variable* cv) -> task<bool>;
 
-    void lock(void* ptr);
-    void unlock();
-    void insert_waiter(wait_operation* waiter);
-    bool extract_waiter(wait_operation* waiter);
+    void lock(void* ptr) noexcept;
+    void unlock() noexcept;
+    void insert_waiter(wait_operation* waiter) noexcept;
+    bool extract_waiter(wait_operation* waiter) noexcept;
 
-    struct wait_operation_guard
+    class cv_lock_guard
     {
-        condition_variable* cv{};
-        wait_operation*     value{};
+    public:
+        explicit cv_lock_guard(condition_variable* cv) noexcept;
+        cv_lock_guard(cv_lock_guard&&) noexcept            = default;
+        cv_lock_guard& operator=(cv_lock_guard&&) noexcept = default;
+        ~cv_lock_guard() noexcept;
 
-        explicit wait_operation_guard(condition_variable* cv, wait_operation* value = nullptr);
-        wait_operation_guard(wait_operation_guard&&)            = default;
-        wait_operation_guard& operator=(wait_operation_guard&&) = default;
-        ~wait_operation_guard();
+    private:
+        condition_variable* m_cv{};
 
-        wait_operation_guard(const wait_operation_guard&)            = delete;
-        wait_operation_guard& operator=(const wait_operation_guard&) = delete;
+        cv_lock_guard(const cv_lock_guard&)            = delete;
+        cv_lock_guard& operator=(const cv_lock_guard&) = delete;
+    };
 
-        operator bool() const;
+    class wait_operation_guard : public cv_lock_guard
+    {
+    public:
+        explicit wait_operation_guard(condition_variable* cv, wait_operation* value = nullptr) noexcept;
+        operator bool() const noexcept;
+        wait_operation* value() const noexcept;
+        void            set_value(wait_operation* value) noexcept;
+
+    private:
+        wait_operation* m_value{};
     };
 
     wait_operation_guard extract_one();
@@ -139,8 +150,15 @@ inline auto condition_variable::wait_for(scoped_lock& lock, const std::chrono::d
 {
     using namespace std::chrono;
 
-    auto msec = std::max(duration_cast<milliseconds>(duration), 0ms);
-    co_return co_await wait_for_ms(lock, msec);
+    auto msec = duration_cast<milliseconds>(duration);
+    if (msec.count() <= 0)
+    {
+        // infinity wait
+        co_await wait(lock);
+        co_return std::cv_status::no_timeout;
+    }
+    else
+        co_return co_await wait_for_ms(lock, msec);
 }
 
 template<class Predicate>
