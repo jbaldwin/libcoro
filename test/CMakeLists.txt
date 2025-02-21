@@ -2,7 +2,6 @@ cmake_minimum_required(VERSION 3.12)
 project(libcoro_test)
 
 set(LIBCORO_TEST_SOURCE_FILES
-    test_condition_variable.cpp
     test_event.cpp
     test_generator.cpp
     test_latch.cpp
@@ -42,6 +41,7 @@ if(LIBCORO_FEATURE_NETWORKING)
     list(APPEND LIBCORO_TEST_SOURCE_FILES
         bench.cpp
         test_io_scheduler.cpp
+        test_condition_variable.cpp
     )
 endif()
 

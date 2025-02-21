@@ -1,4 +1,5 @@
 #include "coro/condition_variable.hpp"
+#include "coro/when_all.hpp"
 #include "coro/when_any.hpp"
 
 #include <cassert>
@@ -38,7 +39,7 @@ auto condition_variable::wait(scoped_lock& lock) -> task<void>
 {
     using namespace std::chrono_literals;
 
-    auto mtx = lock.mutex();
+    auto mtx = lock.get_mutex();
     lock.unlock();
 
     co_await wait_for_notify();
@@ -61,7 +62,7 @@ void condition_variable::set_scheduler(std::shared_ptr<io_scheduler> scheduler)
 auto condition_variable::wait_for_ms(scoped_lock& lock, const std::chrono::milliseconds duration)
     -> task<std::cv_status>
 {
-    auto mtx = lock.mutex();
+    auto mtx = lock.get_mutex();
     lock.unlock();
 
     auto result = co_await m_scheduler->schedule(wait_task(this), duration);
