@@ -2,7 +2,6 @@
 #include "coro/when_any.hpp"
 
 #include <cassert>
-#include <sys/eventfd.h>
 
 namespace coro
 {
@@ -16,7 +15,7 @@ void condition_variable::notify_one() noexcept
     assert(m_scheduler);
 
     if (auto waiter_guard = extract_one())
-        m_scheduler->resume(waiter_guard.value->m_awaiting_coroutine);
+        m_scheduler->resume(waiter_guard.value()->m_awaiting_coroutine);
 }
 
 void condition_variable::notify_all() noexcept
@@ -25,10 +24,10 @@ void condition_variable::notify_all() noexcept
 
     if (auto waiter_guard = extract_all())
     {
-        auto* waiter = waiter_guard.value;
+        auto* waiter = waiter_guard.value();
         do
         {
-            auto* next = waiter->m_next.load();
+            auto* next = waiter->m_next.load(std::memory_order::acquire);
             m_scheduler->resume(waiter->m_awaiting_coroutine);
             waiter = next;
         } while (waiter);
@@ -78,73 +77,72 @@ auto condition_variable::wait_task(condition_variable* cv) -> task<bool>
     co_return true;
 }
 
-void condition_variable::lock(void* ptr)
+void condition_variable::lock(void* ptr) noexcept
 {
     assert(ptr);
-    void* unlocked{};
 
     while (true)
     {
-        unlocked = nullptr;
-        if (m_lock.compare_exchange_strong(unlocked, ptr))
+        void* unlocked{};
+        if (m_lock.compare_exchange_weak(unlocked, ptr, std::memory_order::acq_rel))
             break;
     }
 }
 
-void condition_variable::unlock()
+void condition_variable::unlock() noexcept
 {
-    m_lock.store(nullptr);
+    m_lock.store(nullptr, std::memory_order::release);
 }
 
-void condition_variable::insert_waiter(wait_operation* waiter)
+void condition_variable::insert_waiter(wait_operation* waiter) noexcept
 {
     while (true)
     {
-        wait_operation* current = m_internal_waiters.load();
-        waiter->m_next.store(current);
+        wait_operation* current = m_internal_waiters.load(std::memory_order::acquire);
+        waiter->m_next.store(current, std::memory_order::release);
 
-        if (!m_internal_waiters.compare_exchange_weak(current, waiter))
+        if (!m_internal_waiters.compare_exchange_weak(current, waiter, std::memory_order::acq_rel))
             continue;
 
         break;
     }
 }
 
-bool condition_variable::extract_waiter(wait_operation* waiter)
+bool condition_variable::extract_waiter(wait_operation* waiter) noexcept
 {
-    wait_operation_guard guard{this, waiter};
-    bool                 result{};
+    cv_lock_guard guard{this};
+    bool          result{};
 
     while (true)
     {
-        wait_operation* current = m_internal_waiters.load();
+        wait_operation* current = m_internal_waiters.load(std::memory_order::acquire);
 
         if (!current)
             break;
 
-        wait_operation* next = current->m_next.load();
+        wait_operation* next = current->m_next.load(std::memory_order::acquire);
 
         if (current == waiter)
         {
-            if (!m_internal_waiters.compare_exchange_weak(current, next))
+            if (!m_internal_waiters.compare_exchange_weak(current, next, std::memory_order::acq_rel))
                 continue;
         }
 
         while (next && next != waiter)
         {
             current = next;
-            next    = current->m_next.load();
+            next    = current->m_next.load(std::memory_order::acquire);
         }
 
         if (!next)
             break;
 
-        wait_operation* new_next = waiter->m_next.load();
+        wait_operation* new_next = waiter->m_next.load(std::memory_order::acquire);
 
-        if (!current->m_next.compare_exchange_strong(next, new_next))
+        if (!current->m_next.compare_exchange_strong(next, new_next, std::memory_order::acq_rel))
             continue;
 
-        waiter->m_next.store(nullptr);
+        waiter->m_next.store(nullptr, std::memory_order::release);
         result = true;
         break;
     }
@@ -158,14 +156,14 @@ condition_variable::wait_operation_guard condition_variable::extract_all()
 
     while (true)
     {
-        auto* current = m_internal_waiters.load();
+        auto* current = m_internal_waiters.load(std::memory_order::acquire);
         if (!current)
             break;
 
-        if (!m_internal_waiters.compare_exchange_weak(current, nullptr))
+        if (!m_internal_waiters.compare_exchange_weak(current, nullptr, std::memory_order::acq_rel))
             continue;
 
-        result.value = current;
+        result.set_value(current);
         break;
     }
 
@@ -178,16 +176,16 @@ condition_variable::wait_operation_guard condition_variable::extract_one()
 
     while (true)
     {
-        auto* current = m_internal_waiters.load();
+        auto* current = m_internal_waiters.load(std::memory_order::acquire);
         if (!current)
             break;
 
-        auto* next = current->m_next.load();
-        if (!m_internal_waiters.compare_exchange_weak(current, next))
+        auto* next = current->m_next.load(std::memory_order::acquire);
+        if (!m_internal_waiters.compare_exchange_weak(current, next, std::memory_order::acq_rel))
             continue;
 
-        current->m_next.store(nullptr);
-        result.value = current;
+        current->m_next.store(nullptr, std::memory_order::release);
+        result.set_value(current);
         break;
     }
 
@@ -214,21 +212,35 @@ void condition_variable::wait_operation::await_resume() noexcept
 {
 }
 
-condition_variable::wait_operation_guard::wait_operation_guard(condition_variable* cv, wait_operation* value)
-    : cv(cv),
-      value(value)
+condition_variable::cv_lock_guard::cv_lock_guard(condition_variable* cv) noexcept : m_cv(cv)
 {
-    cv->lock(cv);
+    m_cv->lock(m_cv);
 }
 
-coro::condition_variable::wait_operation_guard::~wait_operation_guard()
+coro::condition_variable::cv_lock_guard::~cv_lock_guard() noexcept
 {
-    cv->unlock();
+    m_cv->unlock();
 }
 
-condition_variable::wait_operation_guard::operator bool() const
+condition_variable::wait_operation_guard::wait_operation_guard(condition_variable* cv, wait_operation* value) noexcept
+    : cv_lock_guard(cv),
+      m_value(value)
 {
-    return value;
+}
+
+condition_variable::wait_operation_guard::operator bool() const noexcept
+{
+    return m_value;
+}
+
+void condition_variable::wait_operation_guard::set_value(wait_operation* value) noexcept
+{
+    m_value = value;
+}
+
+condition_variable::wait_operation* condition_variable::wait_operation_guard::value() const noexcept
+{
+    return m_value;
 }
 
 } // namespace coro
