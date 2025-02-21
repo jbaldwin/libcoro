@@ -69,10 +69,10 @@ int main()
     auto scheduler = coro::io_scheduler::make_shared(coro::io_scheduler::options{.pool = {.thread_count = 6}});
     std::vector<coro::task<void>> tasks{};
     auto                          params = std::make_shared<Params>();
-    params->max_value                    = 10000;
+    params->max_value                    = 20;
     params->queue.set_scheduler(scheduler);
 
-    // These tasks will wait until the given event has been set before advancing.
+    // These tasks will produce values ​​and put them into a queue
     auto make_producer_task = [](std::shared_ptr<coro::io_scheduler> scheduler,
                                  std::shared_ptr<Params>             p) -> coro::task<void>
     {
@@ -91,7 +91,7 @@ int main()
         co_return;
     };
 
-    // This task will trigger the event allowing all waiting tasks to proceed.
+    // These tasks will consume values ​​from the queue, and wait for new data if the queue is empty
     auto make_consumer_task = [](std::shared_ptr<coro::io_scheduler> scheduler,
                                  std::shared_ptr<Params>             p) -> coro::task<void>
     {
