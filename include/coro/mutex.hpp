@@ -55,6 +55,8 @@ public:
      */
     auto unlock() -> void;
 
+    auto get_mutex() const noexcept -> mutex*;
+
 private:
     mutex* m_mutex{nullptr};
 };
