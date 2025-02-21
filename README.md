@@ -713,7 +713,7 @@ The `coro::condition_variable` is a thread safe async tool used with a `coro::mu
 #include <coro/coro.hpp>
 #include <iostream>
 #include <queue>
-#include <syncstream>
+#include <vector>
 
 using namespace std::chrono_literals;
 
@@ -774,6 +774,7 @@ struct Params
     int             max_value{};
     std::atomic_int next_value{};
     TSQueue<int>    queue{};
+    std::vector<int> output;
 };
 
 int main()
@@ -817,7 +818,7 @@ int main()
             if (!v.has_value())
                 co_return;
 
-            std::osyncstream(std::cout) << v.value() << std::endl;
+            p->output.push_back(v.value());
 
             co_await scheduler->yield();
         }
@@ -837,7 +838,9 @@ int main()
 
     // Wait for all tasks to complete.
     coro::sync_wait(coro::when_all(std::move(tasks)));
-    std::osyncstream(std::cout) << "finished" << std::endl;
+    for(auto &v: params->output)
+        std::cout << v << std::endl;
+    std::cout << "finished" << std::endl;
     return 0;
 }
 ```

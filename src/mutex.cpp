@@ -20,7 +20,7 @@ auto scoped_lock::unlock() -> void
     }
 }
 
-class mutex* scoped_lock::mutex() const noexcept
+mutex* scoped_lock::get_mutex() const noexcept
 {
     return m_mutex;
 }
