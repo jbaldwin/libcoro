@@ -598,10 +598,10 @@ TEST_CASE("io_scheduler self generating coroutine (stack overflow check)", "[io_
     std::vector<coro::task<void>> tasks;
     tasks.reserve(total);
 
-    auto func = [](std::shared_ptr<coro::io_scheduler>& s,
-                   uint64_t&                            counter,
-                   auto                                 f,
-                   std::vector<coro::task<void>>&       tasks) -> coro::task<void>
+    auto func = [](std::shared_ptr<coro::io_scheduler> s,
+                   uint64_t&                           counter,
+                   auto                                f,
+                   std::vector<coro::task<void>>&      tasks) -> coro::task<void>
     {
         co_await s->schedule();
         ++counter;
