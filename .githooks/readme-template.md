@@ -259,6 +259,27 @@ ${EXAMPLE_CORO_CONDITION_VARIABLE_CPP}
 Expected output:
 ```bash
 $ ./examples/coro_condition_variable
+1
+3
+0
+6
+5
+7
+8
+2
+4
+9
+12
+14
+11
+15
+13
+16
+17
+18
+19
+10
+finished
 ```
 
 ### ring_buffer
