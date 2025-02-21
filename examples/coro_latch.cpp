@@ -27,7 +27,7 @@ int main()
 
     // This task does 'work' and counts down on the latch when completed.  The final child task to
     // complete will end up resuming the latch task when the latch's count reaches zero.
-    auto make_worker_task = [](std::shared_ptr<coro::io_scheduler>& tp, coro::latch& l, int64_t i) -> coro::task<void>
+    auto make_worker_task = [](std::shared_ptr<coro::io_scheduler> tp, coro::latch& l, int64_t i) -> coro::task<void>
     {
         // Schedule the worker task onto the thread pool.
         co_await tp->schedule();

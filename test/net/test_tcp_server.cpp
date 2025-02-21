@@ -14,9 +14,9 @@ TEST_CASE("tcp_server ping server", "[tcp_server]")
     auto scheduler = coro::io_scheduler::make_shared(
         coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
 
-    auto make_client_task = [](std::shared_ptr<coro::io_scheduler>& scheduler,
-                               const std::string&                   client_msg,
-                               const std::string&                   server_msg) -> coro::task<void>
+    auto make_client_task = [](std::shared_ptr<coro::io_scheduler> scheduler,
+                               const std::string&                  client_msg,
+                               const std::string&                  server_msg) -> coro::task<void>
     {
         co_await scheduler->schedule();
         coro::net::tcp::client client{scheduler};
@@ -49,7 +49,7 @@ TEST_CASE("tcp_server ping server", "[tcp_server]")
         co_return;
     };
 
-    auto make_server_task = [](std::shared_ptr<coro::io_scheduler>& scheduler,
+    auto make_server_task = [](std::shared_ptr<coro::io_scheduler> scheduler,
                                const std::string&                   client_msg,
                                const std::string&                   server_msg) -> coro::task<void>
     {
@@ -99,7 +99,7 @@ TEST_CASE("tcp_server concurrent polling on the same socket", "[tcp_server]")
     auto scheduler = coro::io_scheduler::make_shared(coro::io_scheduler::options{
         .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
 
-    auto make_server_task = [](std::shared_ptr<coro::io_scheduler>& scheduler) -> coro::task<std::string>
+    auto make_server_task = [](std::shared_ptr<coro::io_scheduler> scheduler) -> coro::task<std::string>
     {
         auto make_read_task = [](coro::net::tcp::client client) -> coro::task<void>
         {
@@ -144,7 +144,7 @@ TEST_CASE("tcp_server concurrent polling on the same socket", "[tcp_server]")
         co_return data;
     };
 
-    auto make_client_task = [](std::shared_ptr<coro::io_scheduler>& scheduler) -> coro::task<std::string>
+    auto make_client_task = [](std::shared_ptr<coro::io_scheduler> scheduler) -> coro::task<std::string>
     {
         co_await scheduler->schedule();
         coro::net::tcp::client client{scheduler};
