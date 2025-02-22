@@ -1,6 +1,4 @@
 #include "coro/condition_variable.hpp"
-#include "coro/when_all.hpp"
-#include "coro/when_any.hpp"
 
 #include <cassert>
 

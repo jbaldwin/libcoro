@@ -5,6 +5,7 @@
 #include "coro/fd.hpp"
 #include "coro/poll.hpp"
 #include "coro/thread_pool.hpp"
+#include "coro/when_any.hpp"
 
 #ifdef LIBCORO_FEATURE_NETWORKING
     #include "coro/net/socket.hpp"
