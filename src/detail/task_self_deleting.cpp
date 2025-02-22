@@ -20,7 +20,7 @@ promise_self_deleting::promise_self_deleting(promise_self_deleting&& other)
 
 auto promise_self_deleting::operator=(promise_self_deleting&& other) -> promise_self_deleting&
 {
-    if (std::addressof(other) != nullptr)
+    if (std::addressof(other) != this)
     {
         m_executor_size = std::exchange(other.m_executor_size, nullptr);
     }
