@@ -70,6 +70,10 @@ if(LIBCORO_FEATURE_NETWORKING)
     target_link_libraries(coro_http_200_ok_server PUBLIC libcoro)
     target_compile_options(coro_http_200_ok_server PUBLIC ${LIBCORO_EXAMPLE_OPTIONS})
 
+    add_executable(coro_condition_variable coro_condition_variable.cpp)
+    target_link_libraries(coro_condition_variable PUBLIC libcoro)
+    target_compile_options(coro_condition_variable PUBLIC ${LIBCORO_EXAMPLE_OPTIONS})
+
     if(NOT EMSCRIPTEN)
         add_executable(coro_when_any coro_when_any.cpp)
         target_link_libraries(coro_when_any PUBLIC libcoro)

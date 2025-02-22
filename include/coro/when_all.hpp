@@ -185,7 +185,7 @@ public:
     }
 
     auto operator=(const when_all_ready_awaitable&) -> when_all_ready_awaitable& = delete;
-    auto operator=(when_all_ready_awaitable&&) -> when_all_ready_awaitable&       = delete;
+    auto operator=(when_all_ready_awaitable&&) -> when_all_ready_awaitable&      = delete;
 
     auto operator co_await() & noexcept
     {

@@ -41,6 +41,7 @@ if(LIBCORO_FEATURE_NETWORKING)
     list(APPEND LIBCORO_TEST_SOURCE_FILES
         bench.cpp
         test_io_scheduler.cpp
+        test_condition_variable.cpp
     )
 endif()
 
