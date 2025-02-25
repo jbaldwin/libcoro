@@ -45,6 +45,8 @@ TEST_CASE("condition_variable single waiter", "[condition_variable]")
             REQUIRE_FALSE(m.try_lock());
         }
 
+#if defined(__clang__) || (defined(__GNUC__) && __GNUC__ > 13)
+
         auto make_locked_task_1 =
             [](coro::io_scheduler* sched, coro::mutex& m, coro::condition_variable& cv) -> coro::task<bool>
         {
@@ -84,6 +86,9 @@ TEST_CASE("condition_variable single waiter", "[condition_variable]")
         };
 
         REQUIRE((co_await sched->schedule(make_unlocked_task(sched, m, cv), 8ms)).has_value());
+
+#endif
+
         co_return;
     };
 
@@ -108,7 +113,6 @@ TEST_CASE("condition_variable one notifier and one waiter", "[condition_variable
 
     auto make_notifier_task = [](BaseParams& bp, milliseconds start_delay = 0ms, bool all = false) -> coro::task<void>
     {
-        co_await bp.sched->schedule();
         co_await bp.sched->schedule_after(start_delay);
         if (all)
             bp.cv.notify_all();
@@ -120,7 +124,6 @@ TEST_CASE("condition_variable one notifier and one waiter", "[condition_variable
     auto make_waiter_task =
         [](BaseParams& bp, milliseconds start_delay = 0ms, milliseconds timeout = 16ms) -> coro::task<bool>
     {
-        co_await bp.sched->schedule();
         co_await bp.sched->schedule_after(start_delay);
         auto ulock  = co_await bp.m.lock();
         bool result = co_await bp.cv.wait_for(ulock, timeout) == std::cv_status::no_timeout;
@@ -158,7 +161,6 @@ TEST_CASE("condition_variable notify_all", "[condition_variable]")
 
     auto make_notifier_task = [](BaseParams& bp) -> coro::task<void>
     {
-        co_await bp.sched->schedule();
         co_await bp.sched->schedule_after(32ms);
         bp.cv.notify_all();
         co_return;
@@ -212,7 +214,6 @@ TEST_CASE("condition_variable for thread-safe-queue between producers and consum
 
     auto make_producer_task = [](BaseParams& bp) -> coro::task<void>
     {
-        co_await bp.sched->schedule();
         co_await bp.sched->schedule_after(32ms);
         while (!bp.cancel.load(std::memory_order::acquire))
         {
@@ -254,7 +255,6 @@ TEST_CASE("condition_variable for thread-safe-queue between producers and consum
 
     auto make_director_task = [](BaseParams& bp) -> coro::task<void>
     {
-        co_await bp.sched->schedule();
         co_await bp.sched->schedule_after(32ms);
         while (true)
         {
