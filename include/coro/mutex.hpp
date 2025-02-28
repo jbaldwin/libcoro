@@ -25,7 +25,7 @@ public:
         adopt
     };
 
-    explicit scoped_lock(mutex& m, lock_strategy strategy = lock_strategy::adopt) : m_mutex(&m)
+    explicit scoped_lock(class coro::mutex& m, lock_strategy strategy = lock_strategy::adopt) : m_mutex(&m)
     {
         // Future -> support acquiring the lock?  Not sure how to do that without being able to
         // co_await in the constructor.
@@ -55,10 +55,10 @@ public:
      */
     auto unlock() -> void;
 
-    auto get_mutex() const noexcept -> mutex*;
+    class coro::mutex* mutex() const noexcept;
 
 private:
-    mutex* m_mutex{nullptr};
+    class coro::mutex* m_mutex{nullptr};
 };
 
 class mutex
