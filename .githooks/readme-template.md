@@ -250,7 +250,7 @@ $ ./examples/coro_semaphore
 ```
 
 ### condition_variable
-The `coro::condition_variable` is a thread safe async tool used with a `coro::mutex` (`coro::scoped_lock`) to suspend one or more `coro:task` until another `coro:task` both modifies a shared variable (the condition) and notifies the `coro::condition_variable`
+The `coro::condition_variable` is a thread safe async tool used with a `coro::mutex` (`coro::scoped_lock`) to suspend one or more `coro::task` until another `coro::task` both modifies a shared variable (the condition) and notifies the `coro::condition_variable`
 
 ```C++
 ${EXAMPLE_CORO_CONDITION_VARIABLE_CPP}
