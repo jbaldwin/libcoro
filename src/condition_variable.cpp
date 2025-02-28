@@ -41,7 +41,7 @@ auto condition_variable::wait(scoped_lock& lock) -> task<void>
 {
     using namespace std::chrono_literals;
 
-    auto mtx = lock.get_mutex();
+    auto mtx = lock.mutex();
     lock.unlock();
 
     co_await wait_for_notify();
@@ -66,7 +66,7 @@ auto condition_variable::wait_for_ms(scoped_lock& lock, const std::chrono::milli
 {
     assert(m_scheduler);
 
-    auto mtx = lock.get_mutex();
+    auto mtx = lock.mutex();
     lock.unlock();
 
     auto result = co_await m_scheduler->schedule(wait_task(), duration);
