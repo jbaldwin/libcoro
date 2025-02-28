@@ -115,9 +115,13 @@ TEST_CASE("condition_variable one notifier and one waiter", "[condition_variable
     {
         co_await bp.sched->schedule_after(start_delay);
         if (all)
+        {
             bp.cv.notify_all();
+        }
         else
+        {
             bp.cv.notify_one();
+        }
         co_return;
     };
 
@@ -171,7 +175,9 @@ TEST_CASE("condition_variable notify_all", "[condition_variable]")
         co_await bp.sched->schedule();
         auto ulock = co_await bp.m.lock();
         if (co_await bp.cv.wait_for(ulock, timeout) == std::cv_status::timeout)
+        {
             ++bp.number_of_timeouts;
+        }
         co_return;
     };
 
@@ -223,7 +229,9 @@ TEST_CASE("condition_variable for thread-safe-queue between producers and consum
 
                 // limit for end of test
                 if (value >= bp.max_value)
+                {
                     break;
+                }
 
                 bp.values_not_delivered.insert(value);
                 bp.q.push(value);
@@ -241,13 +249,17 @@ TEST_CASE("condition_variable for thread-safe-queue between producers and consum
             auto ulock = co_await bp.m.lock();
             co_await bp.cv.wait(ulock, [&bp]() { return bp.q.size() | bp.cancel.load(std::memory_order::acquire); });
             if (bp.cancel.load(std::memory_order::acquire))
+            {
                 break;
+            }
 
             auto value = bp.q.front();
             bp.q.pop();
             auto ok = bp.values_not_delivered.erase(value);
             if (!ok)
+            {
                 bp.values_not_produced.insert(value);
+            }
         }
 
         co_return;
@@ -261,7 +273,9 @@ TEST_CASE("condition_variable for thread-safe-queue between producers and consum
             {
                 auto ulock = co_await bp.m.lock();
                 if ((bp.next.load(std::memory_order::acquire) >= bp.max_value) && bp.q.empty())
+                {
                     break;
+                }
             }
             co_await bp.sched->schedule_after(256ms);
         }

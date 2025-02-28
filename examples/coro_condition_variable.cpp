@@ -5,7 +5,7 @@
 
 using namespace std::chrono_literals;
 
-// Thread-safe queue
+// Coroutine thread-safe queue
 template<typename T>
 class TSQueue
 {
@@ -13,7 +13,7 @@ private:
     // Underlying queue
     std::queue<T> m_queue;
 
-    // mutex for thread synchronization
+    // mutex for coroutine synchronization
     coro::mutex m_mutex;
 
     // Condition variable for signaling
@@ -31,7 +31,7 @@ public:
         // Add item
         m_queue.push(item);
 
-        // Notify one thread that
+        // Notify one coroutine that
         // is waiting
         m_cond.notify_one();
     }
@@ -45,7 +45,9 @@ public:
 
         // wait until queue is not empty
         if (!co_await m_cond.wait_for(lock, timeout, [this]() { return !m_queue.empty(); }))
+        {
             co_return coro::unexpected<coro::timeout_status>{coro::timeout_status::timeout};
+        }
 
         assert(!m_queue.empty());
 
@@ -59,9 +61,9 @@ public:
 
 struct Params
 {
-    int             max_value{};
-    std::atomic_int next_value{};
-    TSQueue<int>    queue{};
+    int              max_value{};
+    std::atomic_int  next_value{};
+    TSQueue<int>     queue{};
     std::vector<int> output;
 };
 
@@ -104,7 +106,9 @@ int main()
             auto v = co_await p->queue.pop(1s);
 
             if (!v.has_value())
+            {
                 co_return;
+            }
 
             p->output.push_back(v.value());
 
@@ -126,8 +130,11 @@ int main()
 
     // Wait for all tasks to complete.
     coro::sync_wait(coro::when_all(std::move(tasks)));
-    for(auto &v: params->output)
+    for (auto& v : params->output)
+    {
         std::cout << v << std::endl;
+    }
+
     std::cout << "finished" << std::endl;
     return 0;
 }
