@@ -7,9 +7,9 @@ namespace coro
 {
 
 /**
- * The @ref coro::condition_variable is a thread safe async tool used with a @ref coro::mutex (@ref coro::scoped_lock)
- * to suspend one or more @ref coro::task until another @ref coro::task both modifies a shared variable
- *  (the condition) and notifies the @ref coro::condition_variable
+ * The coro::condition_variable is a thread safe async tool used with a coro::mutex (coro::scoped_lock)
+ * to suspend one or more coro::task until another coro::task both modifies a shared variable
+ *  (the condition) and notifies the coro::condition_variable
  */
 class condition_variable
 {
@@ -129,7 +129,7 @@ private:
     /// timeout. unlocked == nullptr
     std::atomic<void*> m_lock{nullptr};
 
-    /// Internal unification version of the function for waiting on a @ref coro::condition_variable with a time limit
+    /// Internal unification version of the function for waiting on a coro::condition_variable with a time limit
     [[nodiscard]] auto wait_for_ms(scoped_lock& lock, const std::chrono::milliseconds duration) -> task<std::cv_status>;
 
     /// Internal helper function to wait for a condition variable
