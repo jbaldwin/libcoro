@@ -87,7 +87,7 @@ void condition_variable::lock() noexcept
     while (true)
     {
         void* unlocked{};
-        if (m_lock.compare_exchange_weak(unlocked, this, std::memory_order::acq_rel))
+        if (m_lock.compare_exchange_weak(unlocked, this, std::memory_order::release, std::memory_order::acquire))
         {
             break;
         }
