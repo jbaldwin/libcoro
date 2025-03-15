@@ -54,71 +54,14 @@ void detail::strategy_based_on_io_scheduler::unlock() noexcept
 
 void detail::strategy_based_on_io_scheduler::insert_waiter(wait_operation* waiter) noexcept
 {
-    while (true)
-    {
-        wait_operation* current = m_internal_waiters.load(std::memory_order::acquire);
-        waiter->m_next.store(current, std::memory_order::release);
-
-        if (!m_internal_waiters.compare_exchange_weak(
-                current, waiter, std::memory_order::release, std::memory_order::acquire))
-        {
-            continue;
-        }
-
-        break;
-    }
+    std::lock_guard<detail::strategy_based_on_io_scheduler> guard{*this};
+    m_internal_waiters.insert(waiter->m_awaiting_coroutine);
 }
 
 bool detail::strategy_based_on_io_scheduler::extract_waiter(wait_operation* waiter) noexcept
 {
     std::lock_guard<detail::strategy_based_on_io_scheduler> guard{*this};
-    bool                                                    result{};
-
-    while (true)
-    {
-        wait_operation* current = m_internal_waiters.load(std::memory_order::acquire);
-
-        if (!current)
-        {
-            break;
-        }
-
-        wait_operation* next = current->m_next.load(std::memory_order::acquire);
-
-        if (current == waiter)
-        {
-            if (!m_internal_waiters.compare_exchange_weak(
-                    current, next, std::memory_order::release, std::memory_order::acquire))
-            {
-                continue;
-            }
-        }
-
-        while (next && next != waiter)
-        {
-            current = next;
-            next    = current->m_next.load(std::memory_order::acquire);
-        }
-
-        if (!next)
-        {
-            break;
-        }
-
-        wait_operation* new_next = waiter->m_next.load(std::memory_order::acquire);
-
-        if (!current->m_next.compare_exchange_strong(
-                next, new_next, std::memory_order::release, std::memory_order::acquire))
-        {
-            continue;
-        }
-
-        waiter->m_next.store(nullptr, std::memory_order::release);
-        result = true;
-        break;
-    }
-
-    return result;
+    return m_internal_waiters.erase(waiter->m_awaiting_coroutine);
 }
 
 detail::strategy_based_on_io_scheduler::strategy_based_on_io_scheduler(std::shared_ptr<io_scheduler> io_scheduler)
@@ -133,9 +76,14 @@ void detail::strategy_based_on_io_scheduler::notify_one() noexcept
 
     if (auto waiter_guard = extract_one())
     {
-        if (auto sched = m_scheduler.lock())
+        auto h = waiter_guard.value();
+
+        if (h && !h.done())
         {
-            sched->resume(waiter_guard.value()->m_awaiting_coroutine);
+            if (auto sched = m_scheduler.lock())
+            {
+                sched->resume(h);
+            }
         }
     }
 }
@@ -146,15 +94,17 @@ void detail::strategy_based_on_io_scheduler::notify_all() noexcept
 
     if (auto waiter_guard = extract_all())
     {
+        auto values = waiter_guard.values();
+
         if (auto sched = m_scheduler.lock())
         {
-            auto* waiter = waiter_guard.value();
-            do
+            for (const auto& h : values)
             {
-                auto* next = waiter->m_next.load(std::memory_order::acquire);
-                sched->resume(waiter->m_awaiting_coroutine);
-                waiter = next;
-            } while (waiter);
+                if (h && !h.done())
+                {
+                    sched->resume(h);
+                }
+            }
         }
     }
 }
@@ -162,52 +112,19 @@ void detail::strategy_based_on_io_scheduler::notify_all() noexcept
 detail::strategy_based_on_io_scheduler::wait_operation_guard detail::strategy_based_on_io_scheduler::extract_all()
 {
     wait_operation_guard result{this};
-
-    while (true)
-    {
-        auto* current = m_internal_waiters.load(std::memory_order::acquire);
-        if (!current)
-        {
-            break;
-        }
-
-        if (!m_internal_waiters.compare_exchange_weak(
-                current, nullptr, std::memory_order::release, std::memory_order::acquire))
-        {
-            continue;
-        }
-
-        result.set_value(current);
-        break;
-    }
-
+    result.set_values(m_internal_waiters);
+    m_internal_waiters.clear();
     return result;
 }
 
 detail::strategy_based_on_io_scheduler::wait_operation_guard detail::strategy_based_on_io_scheduler::extract_one()
 {
     wait_operation_guard result{this};
-
-    while (true)
+    if (!m_internal_waiters.empty())
     {
-        auto* current = m_internal_waiters.load(std::memory_order::acquire);
-        if (!current)
-        {
-            break;
-        }
-
-        auto* next = current->m_next.load(std::memory_order::acquire);
-        if (!m_internal_waiters.compare_exchange_weak(
-                current, next, std::memory_order::release, std::memory_order::acquire))
-        {
-            continue;
-        }
-
-        current->m_next.store(nullptr, std::memory_order::release);
-        result.set_value(current);
-        break;
+        result.set_value(*m_internal_waiters.begin());
+        m_internal_waiters.erase(m_internal_waiters.begin());
     }
-
     return result;
 }
 
@@ -234,31 +151,45 @@ void detail::strategy_based_on_io_scheduler::wait_operation::await_resume() noex
 }
 
 detail::strategy_based_on_io_scheduler::wait_operation_guard::wait_operation_guard(
-    detail::strategy_based_on_io_scheduler* cv) noexcept
-    : m_cv(cv)
+    detail::strategy_based_on_io_scheduler* strategy) noexcept
+    : m_strategy(strategy)
 {
-    m_cv->lock();
+    m_strategy->lock();
 }
 
 detail::strategy_based_on_io_scheduler::wait_operation_guard::~wait_operation_guard()
 {
-    m_cv->unlock();
+    m_strategy->unlock();
 }
 
 detail::strategy_based_on_io_scheduler::wait_operation_guard::operator bool() const noexcept
 {
-    return m_value;
+    return !m_values.empty();
 }
 
-void detail::strategy_based_on_io_scheduler::wait_operation_guard::set_value(wait_operation* value) noexcept
+void detail::strategy_based_on_io_scheduler::wait_operation_guard::set_value(std::coroutine_handle<> value) noexcept
 {
-    m_value = value;
+    m_values = {value};
 }
 
-detail::strategy_based_on_io_scheduler::wait_operation*
-    detail::strategy_based_on_io_scheduler::wait_operation_guard::value() const noexcept
+std::coroutine_handle<> detail::strategy_based_on_io_scheduler::wait_operation_guard::value() const noexcept
 {
-    return m_value;
+    if (m_values.empty())
+        return nullptr;
+
+    return *m_values.begin();
+}
+
+void detail::strategy_based_on_io_scheduler::wait_operation_guard::set_values(
+    std::unordered_set<std::coroutine_handle<>> values) noexcept
+{
+    m_values = values;
+}
+
+std::unordered_set<std::coroutine_handle<>>
+    detail::strategy_based_on_io_scheduler::wait_operation_guard::values() const noexcept
+{
+    return m_values;
 }
 
 #endif
