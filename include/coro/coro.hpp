@@ -9,7 +9,6 @@
 #include "coro/expected.hpp"
 
 #ifdef LIBCORO_FEATURE_NETWORKING
-    #include "coro/condition_variable.hpp"
     #include "coro/io_scheduler.hpp"
     #include "coro/net/dns/resolver.hpp"
     #include "coro/net/tcp/client.hpp"
@@ -30,7 +29,9 @@
     #include "coro/net/udp/peer.hpp"
 #endif
 
+#include "coro/condition_variable.hpp"
 #include "coro/event.hpp"
+#include "coro/facade.hpp"
 #include "coro/generator.hpp"
 #include "coro/latch.hpp"
 #include "coro/mutex.hpp"

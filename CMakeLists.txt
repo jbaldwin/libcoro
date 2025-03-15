@@ -87,7 +87,9 @@ set(LIBCORO_SOURCE_FILES
 
     include/coro/attribute.hpp
     include/coro/coro.hpp
+    include/coro/condition_variable.hpp src/condition_variable.cpp
     include/coro/event.hpp src/event.cpp
+    include/coro/facade.hpp src/facade.cpp
     include/coro/generator.hpp
     include/coro/latch.hpp
     include/coro/mutex.hpp src/mutex.cpp
@@ -109,7 +111,6 @@ if(LIBCORO_FEATURE_NETWORKING)
         include/coro/fd.hpp
         include/coro/io_scheduler.hpp src/io_scheduler.cpp
         include/coro/poll.hpp src/poll.cpp
-        include/coro/condition_variable.hpp src/condition_variable.cpp
     )
 
     list(APPEND LIBCORO_SOURCE_FILES

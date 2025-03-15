@@ -6,17 +6,18 @@
 #include <iostream>
 #include <queue>
 
+#ifdef LIBCORO_FEATURE_NETWORKING
+
 TEST_CASE("condition_variable single waiter", "[condition_variable]")
 {
     using namespace std::chrono;
     using namespace std::chrono_literals;
 
-    auto                     sched = coro::io_scheduler::make_shared();
+    auto                     sched = coro::facade::instance()->get_io_scheduler();
     coro::mutex              m;
-    coro::condition_variable cv(sched);
+    coro::condition_variable cv;
 
-    auto make_test_task =
-        [](coro::io_scheduler* sched, coro::mutex& m, coro::condition_variable& cv) -> coro::task<void>
+    auto make_test_task = [](auto sched, coro::mutex& m, coro::condition_variable& cv) -> coro::task<void>
     {
         co_await sched->schedule();
 
@@ -45,10 +46,9 @@ TEST_CASE("condition_variable single waiter", "[condition_variable]")
             REQUIRE_FALSE(m.try_lock());
         }
 
-#if defined(__clang__) || (defined(__GNUC__) && __GNUC__ > 13)
+    #if defined(__clang__) || (defined(__GNUC__) && __GNUC__ > 13)
 
-        auto make_locked_task_1 =
-            [](coro::io_scheduler* sched, coro::mutex& m, coro::condition_variable& cv) -> coro::task<bool>
+        auto make_locked_task_1 = [](auto sched, coro::mutex& m, coro::condition_variable& cv) -> coro::task<bool>
         {
             co_await sched->schedule();
             auto ulock = co_await m.lock();
@@ -61,8 +61,7 @@ TEST_CASE("condition_variable single waiter", "[condition_variable]")
 
         REQUIRE_FALSE((co_await sched->schedule(make_locked_task_1(sched, m, cv), 8ms)).has_value());
 
-        auto make_locked_task_2 =
-            [](coro::io_scheduler* sched, coro::mutex& m, coro::condition_variable& cv) -> coro::task<bool>
+        auto make_locked_task_2 = [](auto sched, coro::mutex& m, coro::condition_variable& cv) -> coro::task<bool>
         {
             co_await sched->schedule();
             auto ulock = co_await m.lock();
@@ -75,8 +74,7 @@ TEST_CASE("condition_variable single waiter", "[condition_variable]")
 
         REQUIRE_FALSE((co_await sched->schedule(make_locked_task_2(sched, m, cv), 8ms)).has_value());
 
-        auto make_unlocked_task =
-            [](coro::io_scheduler* sched, coro::mutex& m, coro::condition_variable& cv) -> coro::task<bool>
+        auto make_unlocked_task = [](auto sched, coro::mutex& m, coro::condition_variable& cv) -> coro::task<bool>
         {
             co_await sched->schedule();
             auto ulock = co_await m.lock();
@@ -87,14 +85,12 @@ TEST_CASE("condition_variable single waiter", "[condition_variable]")
 
         REQUIRE((co_await sched->schedule(make_unlocked_task(sched, m, cv), 8ms)).has_value());
 
-#endif
+    #endif
 
         co_return;
     };
 
-    coro::sync_wait(make_test_task(sched.get(), m, cv));
-    std::this_thread::sleep_for(32ms);
-    sched->shutdown();
+    coro::sync_wait(make_test_task(sched, m, cv));
 }
 
 TEST_CASE("condition_variable one notifier and one waiter", "[condition_variable]")
@@ -104,7 +100,7 @@ TEST_CASE("condition_variable one notifier and one waiter", "[condition_variable
 
     struct BaseParams
     {
-        std::shared_ptr<coro::io_scheduler> sched = coro::io_scheduler::make_shared();
+        std::shared_ptr<coro::io_scheduler> sched = coro::facade::instance()->get_io_scheduler();
         coro::mutex                         m;
         coro::condition_variable            cv{sched};
     };
@@ -143,9 +139,6 @@ TEST_CASE("condition_variable one notifier and one waiter", "[condition_variable
         std::get<1>(coro::sync_wait(coro::when_all(make_notifier_task(bp, 8ms), make_waiter_task(bp)))).return_value());
     REQUIRE(std::get<1>(coro::sync_wait(coro::when_all(make_notifier_task(bp, 8ms, true), make_waiter_task(bp))))
                 .return_value());
-
-    std::this_thread::sleep_for(32ms);
-    bp.sched->shutdown();
 }
 
 TEST_CASE("condition_variable notify_all", "[condition_variable]")
@@ -155,10 +148,11 @@ TEST_CASE("condition_variable notify_all", "[condition_variable]")
 
     struct BaseParams
     {
-        std::shared_ptr<coro::io_scheduler> sched = coro::io_scheduler::make_shared();
-        coro::mutex                         m;
-        coro::condition_variable            cv{sched};
-        int                                 number_of_timeouts{};
+        std::shared_ptr<coro::io_scheduler> sched = coro::facade::instance()->get_io_scheduler();
+        ;
+        coro::mutex              m;
+        coro::condition_variable cv{sched};
+        int                      number_of_timeouts{};
     };
 
     BaseParams bp;
@@ -192,11 +186,11 @@ TEST_CASE("condition_variable notify_all", "[condition_variable]")
     tasks.emplace_back(make_notifier_task(bp));
 
     coro::sync_wait(coro::when_all(std::move(tasks)));
-    std::this_thread::sleep_for(256ms);
-    bp.sched->shutdown();
 
     REQUIRE(bp.number_of_timeouts == 0);
 }
+
+#endif
 
 TEST_CASE("condition_variable for thread-safe-queue between producers and consumers", "[condition_variable]")
 {
@@ -205,22 +199,22 @@ TEST_CASE("condition_variable for thread-safe-queue between producers and consum
 
     struct BaseParams
     {
-        std::shared_ptr<coro::io_scheduler> sched = coro::io_scheduler::make_shared();
-        coro::mutex                         m;
-        coro::condition_variable            cv{sched};
-        std::atomic_bool                    cancel{false};
-        std::atomic_int32_t                 next{0};
-        int32_t                             max_value{10000};
-        std::queue<int32_t>                 q;
-        std::set<int32_t>                   values_not_delivered;
-        std::set<int32_t>                   values_not_produced;
+        coro::facade*            sched = coro::facade::instance();
+        coro::mutex              m;
+        coro::condition_variable cv;
+        std::atomic_bool         cancel{false};
+        std::atomic_int32_t      next{0};
+        int32_t                  max_value{10000};
+        std::queue<int32_t>      q;
+        std::set<int32_t>        values_not_delivered;
+        std::set<int32_t>        values_not_produced;
     };
 
     BaseParams bp;
 
     auto make_producer_task = [](BaseParams& bp) -> coro::task<void>
     {
-        co_await bp.sched->schedule_after(32ms);
+        co_await bp.sched->schedule();
         while (!bp.cancel.load(std::memory_order::acquire))
         {
             {
@@ -247,7 +241,7 @@ TEST_CASE("condition_variable for thread-safe-queue between producers and consum
         while (true)
         {
             auto ulock = co_await bp.m.lock();
-            co_await bp.cv.wait(ulock, [&bp]() { return bp.q.size() | bp.cancel.load(std::memory_order::acquire); });
+            co_await bp.cv.wait(ulock, [&bp]() { return bp.q.size() || bp.cancel.load(std::memory_order::acquire); });
             if (bp.cancel.load(std::memory_order::acquire))
             {
                 break;
@@ -267,7 +261,7 @@ TEST_CASE("condition_variable for thread-safe-queue between producers and consum
 
     auto make_director_task = [](BaseParams& bp) -> coro::task<void>
     {
-        co_await bp.sched->schedule_after(32ms);
+        co_await bp.sched->schedule();
         while (true)
         {
             {
@@ -277,7 +271,9 @@ TEST_CASE("condition_variable for thread-safe-queue between producers and consum
                     break;
                 }
             }
-            co_await bp.sched->schedule_after(256ms);
+
+            std::this_thread::sleep_for(16ms);
+            co_await bp.sched->yield();
         }
 
         bp.cancel.store(true, std::memory_order::release);
@@ -300,8 +296,6 @@ TEST_CASE("condition_variable for thread-safe-queue between producers and consum
     tasks.emplace_back(make_director_task(bp));
 
     coro::sync_wait(coro::when_all(std::move(tasks)));
-    std::this_thread::sleep_for(256ms);
-    bp.sched->shutdown();
 
     REQUIRE(bp.values_not_delivered.size() == 0);
     REQUIRE(bp.values_not_produced.size() == 0);
