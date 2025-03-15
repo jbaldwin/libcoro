@@ -211,8 +211,8 @@ detail::strategy_based_on_io_scheduler::wait_operation_guard detail::strategy_ba
     return result;
 }
 
-detail::strategy_based_on_io_scheduler::wait_operation::wait_operation(detail::strategy_based_on_io_scheduler& cv)
-    : m_strategy(cv)
+detail::strategy_based_on_io_scheduler::wait_operation::wait_operation(detail::strategy_based_on_io_scheduler& strategy)
+    : m_strategy(strategy)
 {
 }
 
@@ -263,7 +263,7 @@ detail::strategy_based_on_io_scheduler::wait_operation*
 
 #endif
 
-detail::strategy_base::wait_operation::wait_operation(detail::strategy_base& cv) : m_strategy(cv)
+detail::strategy_base::wait_operation::wait_operation(detail::strategy_base& strategy) : m_strategy(strategy)
 {
 }
 

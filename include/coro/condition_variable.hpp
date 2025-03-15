@@ -16,6 +16,11 @@ namespace coro
 namespace concepts
 {
 // clang-format off
+
+
+/**
+ * Concept of basic capabilities condition_variable
+ */
 template<typename strategy_type>
 concept cv_strategy_base = requires(strategy_type s)
 {
@@ -24,6 +29,9 @@ concept cv_strategy_base = requires(strategy_type s)
     { s.wait_for_notify() } -> coro::concepts::awaiter;
 };
 
+/**
+ * Concept of full capabilities condition_variable
+ */
 template<typename strategy_type>
 concept cv_strategy = cv_strategy_base<strategy_type> and requires(strategy_type s, coro::scoped_lock l, std::chrono::milliseconds d)
 {
@@ -35,12 +43,16 @@ concept cv_strategy = cv_strategy_base<strategy_type> and requires(strategy_type
 namespace detail
 {
 
+/**
+ * The strategy implementing basic features of condition_variable, such as wait(), notify_one(), notify_all(). Does not
+ * require LIBCORO_FEATURE_NETWORKING for its operation
+ */
 class strategy_base
 {
 public:
     struct wait_operation
     {
-        explicit wait_operation(strategy_base& cv);
+        explicit wait_operation(strategy_base& strategy);
 
         auto await_ready() const noexcept -> bool { return false; }
         auto await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept -> bool;
@@ -54,6 +66,10 @@ public:
         std::atomic<wait_operation*> m_next{nullptr};
     };
 
+    /**
+     * Notifies and resumes one waiter immediately at the moment of the call, the calling coroutine will be forced to
+     * wait for the switching of the awakened coroutine
+     */
     void notify_one() noexcept;
 
     /**
@@ -61,7 +77,7 @@ public:
      * the waiters across the executor's threads.
      */
     template<concepts::executor executor_type>
-    [[nodiscard]] auto notify_one(executor_type& e) -> task<void>
+    void notify_one(executor_type& e)
     {
         while (true)
         {
@@ -81,10 +97,12 @@ public:
             e.resume(current->m_awaiting_coroutine);
             break;
         }
-
-        co_return;
     }
 
+    /**
+     * Notifies and resumes all awaiters immediately at the moment of the call, the calling coroutine will be forced to
+     * wait for the switching of all awakened coroutines
+     */
     void notify_all() noexcept;
 
     /**
@@ -92,7 +110,7 @@ public:
      * the waiters across the executor's threads.
      */
     template<concepts::executor executor_type>
-    [[nodiscard]] auto notify_all(executor_type& e) -> task<void>
+    void notify_all(executor_type& e)
     {
         while (true)
         {
@@ -132,8 +150,6 @@ public:
                 e.resume(current->m_awaiting_coroutine);
             } while (next);
         }
-
-        co_return;
     }
 
     /// Internal helper function to wait for a condition variable
@@ -150,6 +166,10 @@ protected:
 
 #ifdef LIBCORO_FEATURE_NETWORKING
 
+/**
+ * The strategy fully implements all the capabilities of condition_variable, including such as wait_for(), wait_until().
+ * Requires LIBCORO_FEATURE_NETWORKING for its operation.
+ */
 class strategy_based_on_io_scheduler
 {
 public:
@@ -158,7 +178,7 @@ public:
 
     struct wait_operation
     {
-        explicit wait_operation(strategy_based_on_io_scheduler& cv);
+        explicit wait_operation(strategy_based_on_io_scheduler& strategy);
         ~wait_operation();
 
         auto await_ready() const noexcept -> bool { return false; }
@@ -234,18 +254,26 @@ protected:
     /// a task with a time limit
     [[nodiscard]] auto wait_task() -> task<bool>;
 };
-
-using default_strategy = strategy_based_on_io_scheduler;
-#else
-using default_strategy = strategy_base;
 #endif
 
+/**
+ * You can set a custom default strategy for the coro::condition_variable
+ */
+#ifdef LIBCORO_CONDITION_VARIABLE_DEFAULT_STRATEGY
+using default_strategy = LIBCORO_CONDITION_VARIABLE_DEFAULT_STRATEGY;
+#else
+    #ifdef LIBCORO_FEATURE_NETWORKING
+using default_strategy = strategy_based_on_io_scheduler;
+    #else  // LIBCORO_FEATURE_NETWORKING
+using default_strategy = strategy_base;
+    #endif // LIBCORO_FEATURE_NETWORKING
+#endif     // LIBCORO_CONDITION_VARIABLE_DEFAULT_STRATEGY
 } // namespace detail
 
 /**
- * The coro::condition_variable is a thread safe async tool used with a coro::mutex (coro::scoped_lock)
+ * The coro::condition_variable_base is a thread safe async tool used with a coro::mutex (coro::scoped_lock)
  * to suspend one or more coro::task until another coro::task both modifies a shared variable
- *  (the condition) and notifies the coro::condition_variable
+ *  (the condition) and notifies the coro::condition_variable_base
  */
 template<concepts::cv_strategy_base Strategy>
 class condition_variable_base : public Strategy
@@ -434,6 +462,9 @@ inline auto condition_variable_base<Strategy>::wait_for(
     }
 }
 
+/**
+ * this is coro::condition_variable_base with default strategy parameter (coro::detail::default_strategy)
+ */
 using condition_variable = condition_variable_base<detail::default_strategy>;
 
 } // namespace coro
