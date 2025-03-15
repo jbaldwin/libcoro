@@ -715,7 +715,115 @@ The `coro::condition_variable` is a thread safe async tool used with a `coro::mu
 #include <queue>
 #include <vector>
 
+#ifdef EMSCRIPTEN
+    #include <set>
+#endif
+
 using namespace std::chrono_literals;
+
+namespace coro
+{
+
+#ifdef EMSCRIPTEN
+class stop_token;
+class stop_source;
+
+template<typename Callback>
+class stop_callback;
+
+class istop_callback
+{
+public:
+    virtual void operator()() = 0;
+};
+
+class stop_token
+{
+public:
+    explicit stop_token(std::weak_ptr<std::atomic_bool> stop_requested) : m_stop_requested(stop_requested) {}
+
+    bool stop_requested() const
+    {
+        if (auto sr = m_stop_requested.lock())
+        {
+            return *sr;
+        }
+        return true;
+    }
+
+private:
+    friend class stop_source;
+
+    template<typename Callback>
+    friend class stop_callback;
+
+    std::weak_ptr<std::atomic_bool>            m_stop_requested;
+    std::shared_ptr<std::set<istop_callback*>> m_callbacks = std::make_shared<std::set<istop_callback*>>();
+
+    void request_stop()
+    {
+        for (auto cb : *m_callbacks)
+        {
+            (*cb)();
+        }
+    }
+};
+
+template<typename Callback>
+class stop_callback : istop_callback
+{
+public:
+    stop_callback(stop_token& st, Callback cb) : m_stop_token(st), m_callback(cb)
+    {
+        m_stop_token.m_callbacks->insert(this);
+    }
+
+    ~stop_callback() { m_stop_token.m_callbacks->erase(this); }
+
+private:
+    friend class stop_token;
+
+    stop_token& m_stop_token;
+    Callback    m_callback;
+
+    void operator()() { m_callback(); }
+};
+
+class stop_source
+{
+public:
+    stop_token get_token()
+    {
+        stop_token result{m_stop_requested};
+        m_tokens.push_back(result);
+        return result;
+    }
+
+    void request_stop()
+    {
+        bool expected{};
+        if (!m_stop_requested->compare_exchange_strong(
+                expected, true, std::memory_order::release, std::memory_order::acquire))
+            return;
+
+        for (auto& token : m_tokens)
+        {
+            token.request_stop();
+        }
+    }
+
+private:
+    std::shared_ptr<std::atomic_bool> m_stop_requested = std::make_shared<std::atomic_bool>();
+    std::vector<stop_token>           m_tokens;
+};
+#else
+using stop_source = std::stop_source;
+using stop_token  = std::stop_token;
+
+template<class Callback>
+using stop_callback = std::stop_callback<Callback>;
+#endif
+} // namespace coro
 
 // Coroutine thread-safe queue
 template<typename T>
@@ -724,7 +832,7 @@ class TSQueue
 public:
     TSQueue() = default;
 
-    explicit TSQueue(std::stop_source& stop_source)
+    explicit TSQueue(coro::stop_source& stop_source)
         : m_stop(stop_source.get_token()),
           m_stop_callback(m_stop, [this] { m_cond.notify_all(); })
     {
@@ -745,7 +853,7 @@ public:
     }
 
     // Pops an element off the queue
-    [[nodiscard]] auto pop() -> coro::task<coro::expected<T, std::stop_token>>
+    [[nodiscard]] auto pop() -> coro::task<coro::expected<T, coro::stop_token>>
     {
         // acquire lock
         auto lock = co_await m_mutex.lock();
@@ -755,7 +863,7 @@ public:
 
         if (m_stop.stop_requested())
         {
-            co_return coro::unexpected<std::stop_token>(m_stop);
+            co_return coro::unexpected<coro::stop_token>(m_stop);
         }
 
         assert(!m_queue.empty());
@@ -764,7 +872,7 @@ public:
         T item = m_queue.front();
         m_queue.pop();
 
-        co_return coro::expected<T, std::stop_token>{item};
+        co_return coro::expected<T, coro::stop_token>{item};
     }
 
     [[nodiscard]] auto empty() -> coro::task<bool>
@@ -776,9 +884,9 @@ public:
     }
 
 private:
-    std::stop_token m_stop;
+    coro::stop_token m_stop;
 
-    std::stop_callback<std::function<void()>> m_stop_callback;
+    coro::stop_callback<std::function<void()>> m_stop_callback;
 
     // Underlying queue
     std::queue<T> m_queue;
@@ -792,11 +900,11 @@ private:
 
 struct Params
 {
-    std::stop_source stop_source;
-    int              max_value{};
-    std::atomic_int  next_value{};
-    TSQueue<int>     queue{stop_source};
-    std::vector<int> output;
+    coro::stop_source stop_source;
+    int               max_value{};
+    std::atomic_int   next_value{};
+    TSQueue<int>      queue{stop_source};
+    std::vector<int>  output;
 };
 
 int main()

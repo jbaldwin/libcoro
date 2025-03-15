@@ -58,8 +58,8 @@ TEST_CASE("condition_variable single waiter", "[condition_variable]")
             // unreachable
             co_return true;
         };
-
-        REQUIRE_FALSE((co_await sched->schedule(make_locked_task_1(sched, m, cv), 8ms)).has_value());
+        auto res1 = co_await sched->schedule(make_locked_task_1(sched, m, cv), 8ms);
+        REQUIRE_FALSE(res1.has_value());
 
         auto make_locked_task_2 = [](auto sched, coro::mutex& m, coro::condition_variable& cv) -> coro::task<bool>
         {
@@ -72,7 +72,8 @@ TEST_CASE("condition_variable single waiter", "[condition_variable]")
             co_return true;
         };
 
-        REQUIRE_FALSE((co_await sched->schedule(make_locked_task_2(sched, m, cv), 8ms)).has_value());
+        auto res2 = co_await sched->schedule(make_locked_task_2(sched, m, cv), 8ms);
+        REQUIRE_FALSE(res2.has_value());
 
         auto make_unlocked_task = [](auto sched, coro::mutex& m, coro::condition_variable& cv) -> coro::task<bool>
         {
@@ -83,7 +84,8 @@ TEST_CASE("condition_variable single waiter", "[condition_variable]")
             co_return true;
         };
 
-        REQUIRE((co_await sched->schedule(make_unlocked_task(sched, m, cv), 8ms)).has_value());
+        auto res3 = co_await sched->schedule(make_unlocked_task(sched, m, cv), 8ms);
+        REQUIRE(res3.has_value());
 
     #endif
 
