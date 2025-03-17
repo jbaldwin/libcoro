@@ -9,17 +9,6 @@
 #endif
 
 #include "coro/mutex.hpp"
-#include <unordered_set>
-
-#if (!defined(__clang__) && (defined(__GNUC__) && __GNUC__ <= 13)) || (defined(__clang__) && __clang_major__ < 18)
-
-template<>
-struct std::hash<std::coroutine_handle<>>
-{
-    std::size_t operator()(const std::coroutine_handle<>& h) const noexcept { return ptrdiff_t(h.address()); }
-};
-
-#endif
 
 namespace coro
 {
@@ -183,9 +172,14 @@ protected:
  */
 class strategy_based_on_io_scheduler
 {
+protected:
+    struct wait_operation_link;
+
 public:
     explicit strategy_based_on_io_scheduler(
         std::shared_ptr<io_scheduler> io_scheduler = coro::facade::instance()->get_io_scheduler());
+
+    ~strategy_based_on_io_scheduler();
 
     struct wait_operation
     {
@@ -201,6 +195,7 @@ public:
 
         strategy_based_on_io_scheduler& m_strategy;
         std::coroutine_handle<>         m_awaiting_coroutine;
+        wait_operation_link*            m_link = nullptr;
     };
 
     void notify_one() noexcept;
@@ -217,50 +212,46 @@ protected:
     friend class std::lock_guard<strategy_based_on_io_scheduler>;
     friend struct wait_operation;
 
+    struct wait_operation_link
+    {
+        std::atomic<void*>                access;
+        std::atomic<wait_operation*>      waiter;
+        std::atomic<wait_operation_link*> next;
+
+        /// Lock a mutex m_lock for exclusive operation on waiter
+        void lock() noexcept;
+
+        /// Unlock a mutex m_lock for exclusive operation on waiter
+        void unlock() noexcept;
+    };
+
     /// A scheduler is needed to suspend coroutines and then wake them up upon notification or timeout.
     std::weak_ptr<io_scheduler> m_scheduler;
 
     /// A set of grabbed internal waiters that are only accessed by the notify'er or task that was cancelled due to
     /// timeout.
-    std::unordered_set<std::coroutine_handle<>> m_internal_waiters;
+    std::atomic<wait_operation_link*> m_internal_waiters;
 
-    /// An atomic-based mutex analog to prevent race conditions between the notify'er and the task being cancelled on
-    /// timeout. unlocked == nullptr
-    std::atomic<void*> m_lock{nullptr};
-
-    /// Lock a mutex m_lock for exclusive operation on @ref m_internal_waiters
-    void lock() noexcept;
-
-    /// Unlock a mutex m_lock for exclusive operation on @ref m_internal_waiters
-    void unlock() noexcept;
+    /// A list of free links for object pool of wait_operation_link
+    std::atomic<wait_operation_link*> m_free_links;
 
     /// Insert @ref waiter to @ref m_internal_waiters
     void insert_waiter(wait_operation* waiter) noexcept;
 
     /// Extract @ref waiter from @ref m_internal_waiters
-    bool extract_waiter(wait_operation* waiter) noexcept;
+    void extract_waiter(wait_operation* waiter) noexcept;
 
-    class wait_operation_guard
-    {
-    public:
-        explicit wait_operation_guard(strategy_based_on_io_scheduler* strategy) noexcept;
-        ~wait_operation_guard();
-        operator bool() const noexcept;
-        std::coroutine_handle<>                     value() const noexcept;
-        std::unordered_set<std::coroutine_handle<>> values() const noexcept;
-        void                                        set_value(std::coroutine_handle<> value) noexcept;
-        void set_values(std::unordered_set<std::coroutine_handle<>> values) noexcept;
+    wait_operation_link* acquire_link();
+    void                 release_link(wait_operation_link* link);
+    void                 recycle_links(wait_operation_link* links);
 
-    private:
-        strategy_based_on_io_scheduler*             m_strategy{};
-        std::unordered_set<std::coroutine_handle<>> m_values{};
-    };
+    using wait_operation_links = std::unique_ptr<wait_operation_link, std::function<void(wait_operation_link*)>>;
 
     /// Extract one waiter from @ref m_internal_waiters
-    wait_operation_guard extract_one();
+    wait_operation_links extract_one();
 
     /// Extract all waiter from @ref m_internal_waiters
-    wait_operation_guard extract_all();
+    wait_operation_links extract_all();
 
     /// Internal helper function to wait for a condition variable. This is necessary for the scheduler when he schedules
     /// a task with a time limit
