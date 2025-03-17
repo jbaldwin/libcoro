@@ -13,6 +13,8 @@ TEST_CASE("condition_variable single waiter", "[condition_variable]")
     using namespace std::chrono;
     using namespace std::chrono_literals;
 
+    std::cout << "condition_variable single waiter" << std::endl;
+
     auto                     sched = coro::facade::instance()->get_io_scheduler();
     coro::mutex              m;
     coro::condition_variable cv;
@@ -100,6 +102,8 @@ TEST_CASE("condition_variable one notifier and one waiter", "[condition_variable
     using namespace std::chrono;
     using namespace std::chrono_literals;
 
+    std::cout << "condition_variable one notifier and one waiter" << std::endl;
+
     struct BaseParams
     {
         std::shared_ptr<coro::io_scheduler> sched = coro::facade::instance()->get_io_scheduler();
@@ -147,6 +151,8 @@ TEST_CASE("condition_variable notify_all", "[condition_variable]")
 {
     using namespace std::chrono;
     using namespace std::chrono_literals;
+
+    std::cout << "condition_variable notify_all" << std::endl;
 
     struct BaseParams
     {
@@ -199,6 +205,8 @@ TEST_CASE("condition_variable for thread-safe-queue between producers and consum
     using namespace std::chrono;
     using namespace std::chrono_literals;
 
+    std::cout << "condition_variable for thread-safe-queue between producers and consumers" << std::endl;
+
     struct BaseParams
     {
         coro::facade*            sched = coro::facade::instance();
@@ -210,6 +218,8 @@ TEST_CASE("condition_variable for thread-safe-queue between producers and consum
         std::queue<int32_t>      q;
         std::set<int32_t>        values_not_delivered;
         std::set<int32_t>        values_not_produced;
+        std::atomic_int32_t      producers{0};
+        std::atomic_int32_t      consumers{0};
     };
 
     BaseParams bp;
@@ -234,6 +244,7 @@ TEST_CASE("condition_variable for thread-safe-queue between producers and consum
             }
             bp.cv.notify_one();
         }
+        bp.producers.fetch_sub(1, std::memory_order::acq_rel);
         co_return;
     };
 
@@ -258,6 +269,7 @@ TEST_CASE("condition_variable for thread-safe-queue between producers and consum
             }
         }
 
+        bp.consumers.fetch_sub(1, std::memory_order::acq_rel);
         co_return;
     };
 
@@ -278,6 +290,7 @@ TEST_CASE("condition_variable for thread-safe-queue between producers and consum
             co_await bp.sched->yield();
         }
 
+        std::this_thread::sleep_for(64ms);
         bp.cancel.store(true, std::memory_order::release);
         bp.cv.notify_all();
         co_return;
@@ -288,11 +301,13 @@ TEST_CASE("condition_variable for thread-safe-queue between producers and consum
     for (int64_t i = 0; i < 64; ++i)
     {
         tasks.emplace_back(make_consumer_task(bp));
+        bp.consumers.fetch_add(1, std::memory_order::acq_rel);
     }
 
     for (int64_t i = 0; i < 16; ++i)
     {
         tasks.emplace_back(make_producer_task(bp));
+        bp.producers.fetch_add(1, std::memory_order::acq_rel);
     }
 
     tasks.emplace_back(make_director_task(bp));
@@ -301,4 +316,6 @@ TEST_CASE("condition_variable for thread-safe-queue between producers and consum
 
     REQUIRE(bp.values_not_delivered.size() == 0);
     REQUIRE(bp.values_not_produced.size() == 0);
+
+    std::cout << "condition_variable test completed" << std::endl;
 }
