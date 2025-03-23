@@ -8,6 +8,7 @@
     #include <condition_variable>
 #endif
 
+#include "coro/detail/lockfree_object_pool.hpp"
 #include "coro/mutex.hpp"
 
 namespace coro
@@ -22,11 +23,11 @@ namespace concepts
  * Concept of basic capabilities condition_variable
  */
 template<typename strategy_type>
-concept cv_strategy_base = requires(strategy_type s)
+concept cv_strategy_base = requires(strategy_type s, scoped_lock& l)
 {
+    { s.wait(l) }-> std::same_as<task<void>>;
     { s.notify_one() } -> std::same_as<void>;
     { s.notify_all() } -> std::same_as<void>;
-    { s.wait_for_notify() } -> coro::concepts::awaiter;
 };
 
 /**
@@ -61,10 +62,35 @@ public:
     private:
         friend class strategy_base;
 
-        strategy_base&               m_strategy;
-        std::coroutine_handle<>      m_awaiting_coroutine;
-        std::atomic<wait_operation*> m_next{nullptr};
+        strategy_base&          m_strategy;
+        std::coroutine_handle<> m_awaiting_coroutine;
     };
+
+    /**
+     * Suspend the current coroutine until the condition variable is awakened
+     * @param lock an lock which must be locked by the calling coroutine
+     * @return The task to await until the condition variable is awakened.
+     */
+    auto wait(scoped_lock& lock) -> task<void>;
+
+    /**
+     * Suspend the current coroutine until the condition variable is awakened. This will distribute
+     * the waiters across the executor's threads.
+     * @param lock an lock which must be locked by the calling coroutine
+     * @return The task to await until the condition variable is awakened.
+     */
+    template<concepts::executor executor_type>
+    auto wait(scoped_lock& lock, executor_type& e) -> task<void>
+    {
+        auto mtx = lock.mutex();
+        lock.unlock(e);
+
+        co_await wait_for_notify();
+
+        auto ulock = co_await mtx->lock();
+        lock       = std::move(ulock);
+        co_return;
+    }
 
     /**
      * Notifies and resumes one waiter immediately at the moment of the call, the calling coroutine will be forced to
@@ -79,23 +105,9 @@ public:
     template<concepts::executor executor_type>
     void notify_one(executor_type& e)
     {
-        while (true)
+        if (auto waiter = m_internal_waiters.pop().value_or(nullptr))
         {
-            auto* current = m_internal_waiters.load(std::memory_order::acquire);
-            if (!current)
-            {
-                break;
-            }
-
-            auto* next = current->m_next.load(std::memory_order::acquire);
-            if (!m_internal_waiters.compare_exchange_weak(
-                    current, next, std::memory_order::release, std::memory_order::acquire))
-            {
-                continue;
-            }
-
-            e.resume(current->m_awaiting_coroutine);
-            break;
+            e.resume(waiter->m_awaiting_coroutine);
         }
     }
 
@@ -112,56 +124,20 @@ public:
     template<concepts::executor executor_type>
     void notify_all(executor_type& e)
     {
-        while (true)
+        while (auto waiter = m_internal_waiters.pop().value_or(nullptr))
         {
-            auto* current = m_internal_waiters.load(std::memory_order::acquire);
-            if (!current)
-            {
-                break;
-            }
-
-            if (!m_internal_waiters.compare_exchange_weak(
-                    current, nullptr, std::memory_order::release, std::memory_order::acquire))
-            {
-                continue;
-            }
-
-            auto* next         = current->m_next.load(std::memory_order::acquire);
-            auto* locked_value = get_locked_value();
-
-            if (next == locked_value)
-            {
-                // another thread in notify_all() has already taken this waiter
-                break;
-            }
-
-            if (!current->m_next.compare_exchange_weak(
-                    next, locked_value, std::memory_order::release, std::memory_order::acquire))
-            {
-                continue;
-            }
-
-            e.resume(current->m_awaiting_coroutine);
-
-            do
-            {
-                current = next;
-                next    = current->m_next.load(std::memory_order::acquire);
-                e.resume(current->m_awaiting_coroutine);
-            } while (next);
+            e.resume(waiter->m_awaiting_coroutine);
         }
     }
 
     /// Internal helper function to wait for a condition variable
-    [[nodiscard]] auto wait_for_notify() -> wait_operation;
+    [[nodiscard]] auto wait_for_notify() -> wait_operation { return wait_operation{*this}; };
 
 protected:
     friend struct wait_operation;
 
-    /// A list of grabbed internal waiters that are only accessed by the notify'er
-    std::atomic<wait_operation*> m_internal_waiters{nullptr};
-
-    wait_operation* get_locked_value() noexcept;
+    /// A queue of grabbed internal waiters that are only accessed by the notify'er the wait'er
+    coro::detail::lockfree_queue_based_on_pool<wait_operation*> m_internal_waiters;
 };
 
 #ifdef LIBCORO_FEATURE_NETWORKING
@@ -174,6 +150,9 @@ class strategy_based_on_io_scheduler
 {
 protected:
     struct wait_operation_link;
+    using wait_operation_link_ptr = wait_operation_link*;
+    using wait_operation_link_unique_ptr =
+        std::unique_ptr<wait_operation_link, std::function<void(wait_operation_link*)>>;
 
 public:
     explicit strategy_based_on_io_scheduler(
@@ -188,15 +167,17 @@ public:
 
         auto await_ready() const noexcept -> bool { return false; }
         auto await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept -> bool;
-        auto await_resume() noexcept -> void;
+        auto await_resume() noexcept -> void {};
 
     private:
         friend class strategy_based_on_io_scheduler;
 
-        strategy_based_on_io_scheduler& m_strategy;
-        std::coroutine_handle<>         m_awaiting_coroutine;
-        wait_operation_link*            m_link = nullptr;
+        strategy_based_on_io_scheduler&      m_strategy;
+        std::coroutine_handle<>              m_awaiting_coroutine;
+        std::atomic<wait_operation_link_ptr> m_link{nullptr};
     };
+
+    auto wait(scoped_lock& lock) -> task<void>;
 
     void notify_one() noexcept;
 
@@ -214,26 +195,18 @@ protected:
 
     struct wait_operation_link
     {
-        std::atomic<void*>                access;
-        std::atomic<wait_operation*>      waiter;
-        std::atomic<wait_operation_link*> next;
-
-        /// Lock a mutex m_lock for exclusive operation on waiter
-        void lock() noexcept;
-
-        /// Unlock a mutex m_lock for exclusive operation on waiter
-        void unlock() noexcept;
+        std::atomic<wait_operation*> waiter{nullptr};
+        wait_operation_link_ptr      next{nullptr};
     };
 
     /// A scheduler is needed to suspend coroutines and then wake them up upon notification or timeout.
     std::weak_ptr<io_scheduler> m_scheduler;
 
-    /// A set of grabbed internal waiters that are only accessed by the notify'er or task that was cancelled due to
-    /// timeout.
-    std::atomic<wait_operation_link*> m_internal_waiters;
+    /// A queue of grabbed internal waiters that are only accessed by the notify'er the wait'er
+    coro::detail::lockfree_queue_based_on_pool<wait_operation_link_ptr> m_internal_waiters;
 
-    /// A list of free links for object pool of wait_operation_link
-    std::atomic<wait_operation_link*> m_free_links;
+    /// A object pool of free wait_operation_link_ptr
+    coro::detail::lockfree_object_pool<wait_operation_link> m_free_links;
 
     /// Insert @ref waiter to @ref m_internal_waiters
     void insert_waiter(wait_operation* waiter) noexcept;
@@ -241,21 +214,18 @@ protected:
     /// Extract @ref waiter from @ref m_internal_waiters
     void extract_waiter(wait_operation* waiter) noexcept;
 
-    wait_operation_link* acquire_link();
-    void                 release_link(wait_operation_link* link);
-    void                 recycle_links(wait_operation_link* links);
-
-    using wait_operation_links = std::unique_ptr<wait_operation_link, std::function<void(wait_operation_link*)>>;
-
     /// Extract one waiter from @ref m_internal_waiters
-    wait_operation_links extract_one();
+    wait_operation_link_unique_ptr extract_one();
 
     /// Extract all waiter from @ref m_internal_waiters
-    wait_operation_links extract_all();
+    wait_operation_link_ptr extract_all();
 
     /// Internal helper function to wait for a condition variable. This is necessary for the scheduler when he schedules
     /// a task with a time limit
-    [[nodiscard]] auto wait_task() -> task<bool>;
+    [[nodiscard]] auto wait_task(std::shared_ptr<wait_operation> wo) -> task<bool>;
+
+    [[nodiscard]] auto timeout_task(std::shared_ptr<wait_operation> wo, std::chrono::milliseconds timeout)
+        -> coro::task<timeout_status>;
 };
 #endif
 
@@ -307,7 +277,7 @@ public:
      * @param lock an lock which must be locked by the calling coroutine
      * @return The task to await until the condition variable is awakened.
      */
-    [[nodiscard]] auto wait(scoped_lock& lock) -> task<void>;
+    using Strategy::wait;
 
     /**
      * Suspend the current coroutine until the condition variable is awakened and predicate becomes true
@@ -370,19 +340,6 @@ public:
     [[nodiscard]] auto wait_until(
         scoped_lock& lock, const std::chrono::time_point<Clock, Duration>& wakeup, Predicate pred) -> task<bool>;
 };
-
-template<concepts::cv_strategy_base Strategy>
-inline auto condition_variable_base<Strategy>::wait(scoped_lock& lock) -> task<void>
-{
-    auto mtx = lock.mutex();
-    lock.unlock();
-
-    co_await Strategy::wait_for_notify();
-
-    auto ulock = co_await mtx->lock();
-    lock       = std::move(ulock);
-    co_return;
-}
 
 template<concepts::cv_strategy_base Strategy>
 template<class Predicate>

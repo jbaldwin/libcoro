@@ -1,8 +1,5 @@
 #include "coro/condition_variable.hpp"
-
-// this is necessary for std::lock_guard
 #include <cassert>
-#include <mutex>
 
 namespace coro
 {
@@ -13,132 +10,131 @@ auto detail::strategy_based_on_io_scheduler::wait_for_ms(scoped_lock& lock, cons
     -> task<std::cv_status>
 {
     assert(!m_scheduler.expired());
-
-    auto mtx = lock.mutex();
-    lock.unlock();
-
     if (auto sched = m_scheduler.lock())
     {
-        auto result = co_await sched->schedule(wait_task(), duration);
+        auto mtx = lock.mutex();
+        lock.unlock(*sched);
+
+        auto wo     = std::make_shared<wait_operation>(*this);
+        auto result = co_await when_any(wait_task(wo), timeout_task(wo, duration));
 
         auto ulock = co_await mtx->lock();
         lock       = std::move(ulock);
-        co_return result.has_value() ? std::cv_status::no_timeout : std::cv_status::timeout;
+        co_return std::holds_alternative<timeout_status>(result) ? std::cv_status::timeout : std::cv_status::no_timeout;
     }
-
     co_return std::cv_status::timeout;
 }
 
-auto detail::strategy_based_on_io_scheduler::wait_task() -> task<bool>
+auto detail::strategy_based_on_io_scheduler::wait_task(
+    std::shared_ptr<detail::strategy_based_on_io_scheduler::wait_operation> wo) -> task<bool>
 {
-    co_await wait_for_notify();
+    #if !defined(__clang__) && defined(__GNUC__) && __GNUC__ < 11
+    struct wait_operation_proxy
+    {
+        explicit wait_operation_proxy(std::shared_ptr<detail::strategy_based_on_io_scheduler::wait_operation> wo)
+            : m_wo(wo)
+        {
+        }
+
+        auto await_ready() const noexcept -> bool { return false; }
+        auto await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept -> bool
+        {
+            return m_wo->await_suspend(awaiting_coroutine);
+        }
+        auto await_resume() noexcept -> void {};
+
+    private:
+        std::shared_ptr<detail::strategy_based_on_io_scheduler::wait_operation> m_wo;
+    };
+
+    co_await wait_operation_proxy(wo);
+    #else
+    co_await *wo;
+    #endif
+
     co_return true;
+}
+
+auto detail::strategy_based_on_io_scheduler::timeout_task(
+    std::shared_ptr<detail::strategy_based_on_io_scheduler::wait_operation> wo,
+    std::chrono::milliseconds                                               timeout) -> coro::task<timeout_status>
+{
+    assert(!m_scheduler.expired());
+    if (auto sched = m_scheduler.lock())
+    {
+        co_await sched->schedule_after(timeout);
+    }
+    extract_waiter(wo.get());
+    co_return timeout_status::timeout;
 }
 
 void detail::strategy_based_on_io_scheduler::insert_waiter(wait_operation* waiter) noexcept
 {
-    auto* link = acquire_link();
-    link->waiter.store(waiter, std::memory_order::release);
-    waiter->m_link = link;
-
-    while (true)
-    {
-        auto* current = m_internal_waiters.load(std::memory_order::acquire);
-        link->next.store(current, std::memory_order::release);
-
-        if (!m_internal_waiters.compare_exchange_weak(
-                current, link, std::memory_order::release, std::memory_order::acquire))
-        {
-            continue;
-        }
-
-        break;
-    }
+    auto ptr = m_free_links.acquire();
+    ptr->waiter.store(waiter, std::memory_order::relaxed);
+    waiter->m_link.store(ptr.get(), std::memory_order::relaxed);
+    m_internal_waiters.push(ptr.release());
 }
 
 void detail::strategy_based_on_io_scheduler::extract_waiter(wait_operation* waiter) noexcept
 {
-    std::lock_guard<wait_operation_link> lk(*waiter->m_link);
-    waiter->m_link->waiter.store(nullptr, std::memory_order::release);
-}
+    auto link = waiter->m_link.exchange(nullptr, std::memory_order::acq_rel);
+    if (!link)
+        return;
 
-void detail::strategy_based_on_io_scheduler::release_link(wait_operation_link* link)
-{
-    while (true)
-    {
-        auto* current = m_free_links.load(std::memory_order::acquire);
-        link->next.store(current, std::memory_order::release);
-
-        if (!m_free_links.compare_exchange_weak(current, link, std::memory_order::release, std::memory_order::acquire))
-        {
-            continue;
-        }
-
-        break;
-    }
-}
-
-void detail::strategy_based_on_io_scheduler::recycle_links(wait_operation_link* links)
-{
-    while (links)
-    {
-        auto* next = links->next.load(std::memory_order::acquire);
-        release_link(links);
-        links = next;
-    }
-}
-
-detail::strategy_based_on_io_scheduler::wait_operation_link* detail::strategy_based_on_io_scheduler::acquire_link()
-{
-    while (true)
-    {
-        auto* current = m_free_links.load(std::memory_order::acquire);
-        if (!current)
-        {
-            break;
-        }
-
-        auto* next = current->next.load(std::memory_order::acquire);
-        if (!m_free_links.compare_exchange_weak(current, next, std::memory_order::release, std::memory_order::acquire))
-        {
-            continue;
-        }
-
-        return current;
-    }
-
-    return new wait_operation_link;
+    link->waiter.store(nullptr);
 }
 
 detail::strategy_based_on_io_scheduler::strategy_based_on_io_scheduler(std::shared_ptr<io_scheduler> io_scheduler)
-    : m_scheduler(io_scheduler)
+    : m_scheduler(io_scheduler),
+      m_free_links(
+          std::function<std::unique_ptr<wait_operation_link>()>([]()
+                                                                { return std::make_unique<wait_operation_link>(); }),
+          [](wait_operation_link* ptr)
+          {
+              ptr->waiter.store(nullptr, std::memory_order::relaxed);
+              ptr->next = nullptr;
+          })
 {
     assert(io_scheduler);
 }
 
 detail::strategy_based_on_io_scheduler::~strategy_based_on_io_scheduler()
 {
-    auto* waiter_link = m_free_links.load(std::memory_order::acquire);
-    while (waiter_link)
+}
+
+task<void> detail::strategy_based_on_io_scheduler::wait(scoped_lock& lock)
+{
+    assert(!m_scheduler.expired());
+
+    if (auto sched = m_scheduler.lock())
     {
-        auto* next = waiter_link->next.load(std::memory_order::acquire);
-        delete waiter_link;
-        waiter_link = next;
+        auto mtx = lock.mutex();
+        lock.unlock(*sched);
+
+        co_await wait_for_notify();
+
+        auto ulock = co_await mtx->lock();
+        lock       = std::move(ulock);
     }
+    co_return;
 }
 
 void detail::strategy_based_on_io_scheduler::notify_one() noexcept
 {
     assert(!m_scheduler.expired());
 
-    if (auto waiter_link = extract_one())
+    while (auto waiter_link = extract_one())
     {
         if (auto sched = m_scheduler.lock())
         {
-            std::lock_guard<wait_operation_link> lk(*waiter_link);
-            if (auto* waiter = waiter_link->waiter.load(std::memory_order::acquire))
+            if (auto* waiter = waiter_link->waiter.exchange(nullptr, std::memory_order::acq_rel))
             {
-                sched->resume(waiter->m_awaiting_coroutine);
+                if (waiter->m_link.exchange(nullptr, std::memory_order::acq_rel))
+                {
+                    sched->resume(waiter->m_awaiting_coroutine);
+                    break;
+                }
             }
         }
     }
@@ -148,88 +144,25 @@ void detail::strategy_based_on_io_scheduler::notify_all() noexcept
 {
     assert(!m_scheduler.expired());
 
-    if (auto waiter_links = extract_all())
+    if (auto sched = m_scheduler.lock())
     {
-        if (auto sched = m_scheduler.lock())
+        while (auto waiter_link = extract_one())
         {
-            auto* waiter_link = waiter_links.get();
-            while (waiter_link)
+            if (auto* waiter = waiter_link->waiter.exchange(nullptr, std::memory_order::acq_rel))
             {
+                if (waiter->m_link.exchange(nullptr, std::memory_order::acq_rel))
                 {
-                    std::lock_guard<wait_operation_link> lk(*waiter_link);
-                    if (auto* waiter = waiter_link->waiter.load(std::memory_order::acquire))
-                    {
-                        sched->resume(waiter->m_awaiting_coroutine);
-                    }
+                    sched->resume(waiter->m_awaiting_coroutine);
                 }
-                auto* next  = waiter_link->next.load(std::memory_order::acquire);
-                waiter_link = next;
             }
         }
     }
 }
 
-detail::strategy_based_on_io_scheduler::wait_operation_links detail::strategy_based_on_io_scheduler::extract_one()
+detail::strategy_based_on_io_scheduler::wait_operation_link_unique_ptr
+    detail::strategy_based_on_io_scheduler::extract_one()
 {
-    while (true)
-    {
-        auto* current = m_internal_waiters.load(std::memory_order::acquire);
-        if (!current)
-        {
-            break;
-        }
-
-        auto* next = current->next.load(std::memory_order::acquire);
-        if (!m_internal_waiters.compare_exchange_weak(
-                current, next, std::memory_order::release, std::memory_order::acquire))
-        {
-            continue;
-        }
-
-        if (current->waiter.load(std::memory_order::acquire))
-        {
-            current->next.store(nullptr, std::memory_order::release);
-            return {current, [this](wait_operation_link* ptr) { recycle_links(ptr); }};
-        }
-
-        // skip expired waiters
-        release_link(current);
-    }
-
-    return nullptr;
-}
-
-detail::strategy_based_on_io_scheduler::wait_operation_links detail::strategy_based_on_io_scheduler::extract_all()
-{
-    while (true)
-    {
-        auto* current = m_internal_waiters.load(std::memory_order::acquire);
-        if (!current)
-        {
-            break;
-        }
-
-        if (!m_internal_waiters.compare_exchange_weak(
-                current, nullptr, std::memory_order::release, std::memory_order::acquire))
-        {
-            continue;
-        }
-
-        while (current)
-        {
-            if (current->waiter.load(std::memory_order::acquire))
-            {
-                return {current, [this](wait_operation_link* ptr) { recycle_links(ptr); }};
-            }
-
-            // skip expired waiters
-            auto* next = current->next.load(std::memory_order::acquire);
-            release_link(current);
-            current = next;
-        }
-    }
-
-    return nullptr;
+    return {m_internal_waiters.pop().value_or(nullptr), m_free_links.pool_deleter()};
 }
 
 detail::strategy_based_on_io_scheduler::wait_operation::wait_operation(detail::strategy_based_on_io_scheduler& strategy)
@@ -250,27 +183,6 @@ auto detail::strategy_based_on_io_scheduler::wait_operation::await_suspend(
     return true;
 }
 
-void detail::strategy_based_on_io_scheduler::wait_operation::await_resume() noexcept
-{
-}
-
-void detail::strategy_based_on_io_scheduler::wait_operation_link::lock() noexcept
-{
-    while (true)
-    {
-        void* unlocked{};
-        if (access.compare_exchange_weak(unlocked, this, std::memory_order::release, std::memory_order::acquire))
-        {
-            break;
-        }
-    }
-}
-
-void detail::strategy_based_on_io_scheduler::wait_operation_link::unlock() noexcept
-{
-    access.store(nullptr, std::memory_order::release);
-}
-
 #endif
 
 detail::strategy_base::wait_operation::wait_operation(detail::strategy_base& strategy) : m_strategy(strategy)
@@ -280,19 +192,7 @@ detail::strategy_base::wait_operation::wait_operation(detail::strategy_base& str
 bool detail::strategy_base::wait_operation::await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept
 {
     m_awaiting_coroutine = awaiting_coroutine;
-    while (true)
-    {
-        wait_operation* current = m_strategy.m_internal_waiters.load(std::memory_order::acquire);
-        m_next.store(current, std::memory_order::release);
-
-        if (!m_strategy.m_internal_waiters.compare_exchange_weak(
-                current, this, std::memory_order::release, std::memory_order::acquire))
-        {
-            continue;
-        }
-
-        break;
-    }
+    m_strategy.m_internal_waiters.push(this);
     return true;
 }
 
@@ -300,78 +200,32 @@ void detail::strategy_base::wait_operation::await_resume() noexcept
 {
 }
 
+auto detail::strategy_base::wait(scoped_lock& lock) -> task<void>
+{
+    auto mtx = lock.mutex();
+    lock.unlock();
+
+    co_await wait_for_notify();
+
+    auto ulock = co_await mtx->lock();
+    lock       = std::move(ulock);
+    co_return;
+}
+
 void detail::strategy_base::notify_one() noexcept
 {
-    while (true)
+    if (auto waiter = m_internal_waiters.pop().value_or(nullptr))
     {
-        auto* current = m_internal_waiters.load(std::memory_order::acquire);
-        if (!current)
-        {
-            break;
-        }
-
-        auto* next = current->m_next.load(std::memory_order::acquire);
-        if (!m_internal_waiters.compare_exchange_weak(
-                current, next, std::memory_order::release, std::memory_order::acquire))
-        {
-            continue;
-        }
-
-        current->m_awaiting_coroutine.resume();
-        break;
+        waiter->m_awaiting_coroutine.resume();
     }
 }
 
 void detail::strategy_base::notify_all() noexcept
 {
-    while (true)
+    while (auto waiter = m_internal_waiters.pop().value_or(nullptr))
     {
-        auto* current = m_internal_waiters.load(std::memory_order::acquire);
-        if (!current)
-        {
-            break;
-        }
-
-        if (!m_internal_waiters.compare_exchange_weak(
-                current, nullptr, std::memory_order::release, std::memory_order::acquire))
-        {
-            continue;
-        }
-
-        auto* next         = current->m_next.load(std::memory_order::acquire);
-        auto* locked_value = get_locked_value();
-
-        if (next == locked_value)
-        {
-            // another thread in notify_all() has already taken this waiter
-            break;
-        }
-
-        if (!current->m_next.compare_exchange_weak(
-                next, locked_value, std::memory_order::release, std::memory_order::acquire))
-        {
-            continue;
-        }
-
-        current->m_awaiting_coroutine.resume();
-
-        do
-        {
-            current = next;
-            next    = current->m_next.load(std::memory_order::acquire);
-            current->m_awaiting_coroutine.resume();
-        } while (next);
+        waiter->m_awaiting_coroutine.resume();
     }
-}
-
-detail::strategy_base::wait_operation* detail::strategy_base::get_locked_value() noexcept
-{
-    return reinterpret_cast<detail::strategy_base::wait_operation*>(this);
-}
-
-auto detail::strategy_base::wait_for_notify() -> detail::strategy_base::wait_operation
-{
-    return wait_operation{*this};
 }
 
 } // namespace coro
