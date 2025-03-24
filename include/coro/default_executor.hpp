@@ -10,19 +10,19 @@ namespace coro
 {
 
 /**
- * Facade for universal access to default scheduler or default thread pool.
- * This facade supports the concept of coro::concepts::executor.
+ * Default executor for universal access to default scheduler or default thread pool.
+ * This coro::default_executor supports the concept of coro::concepts::executor.
  */
-class facade
+class default_executor
 {
 public:
-    facade();
+    default_executor();
 
     /**
-     * Getting a single instance of facade per process
-     * @return single instance of facade
+     * Getting a single instance of default_executor per process
+     * @return single instance of default_executor
      */
-    static facade* instance();
+    static default_executor* instance();
 
 #ifdef LIBCORO_FEATURE_NETWORKING
     [[nodiscard]] auto schedule() -> coro::io_scheduler::schedule_operation;
@@ -54,7 +54,7 @@ public:
 
 #ifdef LIBCORO_FEATURE_NETWORKING
     /**
-     * Set up default coro::io_scheduler::options before constructing a single instance of the facade
+     * Set up default coro::io_scheduler::options before constructing a single instance of the default_executor
      * @param io_scheduler_options io_scheduler options
      */
     static void set_io_scheduler_options(io_scheduler::options io_scheduler_options);
@@ -65,7 +65,7 @@ public:
     std::shared_ptr<io_scheduler> get_io_scheduler();
 #else
     /**
-     * Set up default coro::thread_pool::options before constructing a single instance of the facade
+     * Set up default coro::thread_pool::options before constructing a single instance of the default_executor
      * @param thread_pool_options thread_pool options
      */
     static void set_thread_pool_options(thread_pool::options thread_pool_options);

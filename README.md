@@ -801,7 +801,7 @@ struct Params
 
 int main()
 {
-    auto*                         scheduler = coro::facade::instance();
+    auto*                         scheduler = coro::default_executor::instance();
     std::vector<coro::task<void>> tasks{};
     auto                          params = std::make_shared<Params>();
     params->max_value                    = 20;

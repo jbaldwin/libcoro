@@ -15,7 +15,7 @@ TEST_CASE("condition_variable single waiter", "[condition_variable]")
 
     std::cout << "condition_variable single waiter" << std::endl;
 
-    auto                     sched = coro::facade::instance()->get_io_scheduler();
+    auto                     sched = coro::default_executor::instance()->get_io_scheduler();
     coro::mutex              m;
     coro::condition_variable cv;
 
@@ -106,7 +106,7 @@ TEST_CASE("condition_variable one notifier and one waiter", "[condition_variable
 
     struct BaseParams
     {
-        std::shared_ptr<coro::io_scheduler> sched = coro::facade::instance()->get_io_scheduler();
+        std::shared_ptr<coro::io_scheduler> sched = coro::default_executor::instance()->get_io_scheduler();
         coro::mutex                         m;
         coro::condition_variable            cv{sched};
     };
@@ -156,7 +156,7 @@ TEST_CASE("condition_variable notify_all", "[condition_variable]")
 
     struct BaseParams
     {
-        std::shared_ptr<coro::io_scheduler> sched = coro::facade::instance()->get_io_scheduler();
+        std::shared_ptr<coro::io_scheduler> sched = coro::default_executor::instance()->get_io_scheduler();
         ;
         coro::mutex              m;
         coro::condition_variable cv{sched};
@@ -209,7 +209,7 @@ TEST_CASE("condition_variable for thread-safe-queue between producers and consum
 
     struct BaseParams
     {
-        coro::facade*            sched = coro::facade::instance();
+        coro::default_executor*  sched = coro::default_executor::instance();
         coro::mutex              m;
         coro::condition_variable cv;
         std::atomic_bool         cancel{false};

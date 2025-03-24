@@ -1,6 +1,6 @@
 #pragma once
 
-#include "coro/facade.hpp"
+#include "coro/default_executor.hpp"
 #ifdef LIBCORO_FEATURE_NETWORKING
     #include "coro/io_scheduler.hpp"
 #else
@@ -156,7 +156,7 @@ protected:
 
 public:
     explicit strategy_based_on_io_scheduler(
-        std::shared_ptr<io_scheduler> io_scheduler = coro::facade::instance()->get_io_scheduler());
+        std::shared_ptr<io_scheduler> io_scheduler = coro::default_executor::instance()->get_io_scheduler());
 
     ~strategy_based_on_io_scheduler();
 
