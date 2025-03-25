@@ -33,6 +33,7 @@
 #include "coro/generator.hpp"
 #include "coro/latch.hpp"
 #include "coro/mutex.hpp"
+#include "coro/queue.hpp"
 #include "coro/ring_buffer.hpp"
 #include "coro/semaphore.hpp"
 #include "coro/shared_mutex.hpp"
