@@ -27,7 +27,7 @@ struct node
     bool                  is_dummy{false};
 
     node() = default;
-    node(const T& data) : data(data), is_cleaned(false) {}
+    explicit node(const T& data) : data(data), is_cleaned(false) {}
 
     void clean()
     {
@@ -64,12 +64,11 @@ public:
         using namespace std::chrono_literals;
 
         node<T>* current = ref.load(std::memory_order::relaxed);
-        node<T>* result;
         do
         {
-            result     = current;
-            m_node_ptr = current;
-            current    = ref.load(std::memory_order::acquire);
+            node<T>* result = current;
+            m_node_ptr      = current;
+            current         = ref.load(std::memory_order::acquire);
             if (m_node_ptr && m_node_ptr->is_removed.load(std::memory_order::acquire))
             {
                 std::this_thread::sleep_for(1us);
@@ -97,7 +96,7 @@ public:
         }
 
         m_is_removed = true;
-        m_node_ptr->is_removed.store(true, std::memory_order_release);
+        m_node_ptr->is_removed.store(true, std::memory_order::release);
         decrement();
     }
 
@@ -347,7 +346,7 @@ private:
         using node_type = lock_free_queue::node<T>;
         using item_type = T;
 
-        pool_allocator(lockfree_queue_based_on_pool& queue) : m_queue(queue) {}
+        explicit pool_allocator(lockfree_queue_based_on_pool& queue) : m_queue(queue) {}
 
         constexpr node_type* allocate(const item_type& item)
         {
@@ -407,7 +406,7 @@ private:
         using node_type = lock_free_queue::node<T>;
         using item_type = node_type*;
 
-        free_allocator(lockfree_queue_based_on_pool& queue) : m_queue(queue) {}
+        explicit free_allocator(lockfree_queue_based_on_pool& queue) : m_queue(queue) {}
 
         constexpr node_type* allocate(const item_type& item)
         {

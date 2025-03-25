@@ -89,13 +89,13 @@ struct Params
 
 int main()
 {
-    auto*                         scheduler = coro::default_executor::instance();
+    auto                          default_scheduler = coro::default_executor::instance();
     std::vector<coro::task<void>> tasks{};
     auto                          params = std::make_shared<Params>();
     params->max_value                    = 20;
 
     // These tasks will produce values ​​and put them into a queue
-    auto make_producer_task = [](auto* scheduler, std::shared_ptr<Params> p) -> coro::task<void>
+    auto make_producer_task = [](auto scheduler, std::shared_ptr<Params> p) -> coro::task<void>
     {
         // Immediately schedule onto the scheduler.
         co_await scheduler->schedule();
@@ -113,7 +113,7 @@ int main()
     };
 
     // These tasks will consume values ​​from the queue, and wait for new data if the queue is empty
-    auto make_consumer_task = [](auto* scheduler, std::shared_ptr<Params> p) -> coro::task<void>
+    auto make_consumer_task = [](auto scheduler, std::shared_ptr<Params> p) -> coro::task<void>
     {
         // Immediately schedule onto the scheduler.
         co_await scheduler->schedule();
@@ -135,7 +135,7 @@ int main()
         co_return;
     };
 
-    auto make_director_task = [](auto* scheduler, std::shared_ptr<Params> p) -> coro::task<void>
+    auto make_director_task = [](auto scheduler, std::shared_ptr<Params> p) -> coro::task<void>
     {
         // Immediately schedule onto the scheduler.
         co_await scheduler->schedule();
@@ -157,15 +157,15 @@ int main()
 
     for (int i = 0; i < 3; ++i)
     {
-        tasks.emplace_back(make_consumer_task(scheduler, params));
+        tasks.emplace_back(make_consumer_task(default_scheduler, params));
     }
 
     for (int i = 0; i < 3; ++i)
     {
-        tasks.emplace_back(make_producer_task(scheduler, params));
+        tasks.emplace_back(make_producer_task(default_scheduler, params));
     }
 
-    tasks.emplace_back(make_director_task(scheduler, params));
+    tasks.emplace_back(make_director_task(default_scheduler, params));
 
     // Wait for all tasks to complete.
     coro::sync_wait(coro::when_all(std::move(tasks)));
