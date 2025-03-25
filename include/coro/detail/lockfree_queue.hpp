@@ -21,7 +21,7 @@ struct node
 
     T                     data{};
     std::atomic<node<T>*> next{nullptr};
-    std::atomic<uint32_t> ref_count{0};
+    std::atomic<int32_t>  ref_count{0};
     std::atomic<bool>     is_removed{false};
     std::atomic<bool>     is_cleaned{true};
     bool                  is_dummy{false};
@@ -31,9 +31,11 @@ struct node
 
     void clean()
     {
+        assert(ref_count.load(std::memory_order::acquire) >= 0);
+
         data = {};
-        next.store(nullptr, std::memory_order::relaxed);
-        is_removed.store(false, std::memory_order::relaxed);
+        next.store(nullptr, std::memory_order::release);
+        is_removed.store(false, std::memory_order::release);
         is_cleaned.store(true, std::memory_order::release);
     }
 };
@@ -47,6 +49,8 @@ class guard_ptr
 
     void decrement()
     {
+        assert(m_node_ptr->ref_count.load(std::memory_order::acquire) >= 1);
+
         if (m_node_ptr->ref_count.fetch_sub(1, std::memory_order::acq_rel) < 2)
         {
             if (m_node_ptr->is_removed.load(std::memory_order::acquire) &&
@@ -56,6 +60,8 @@ class guard_ptr
                 m_node_ptr = nullptr;
             }
         }
+
+        m_node_ptr = nullptr;
     }
 
 public:
@@ -68,24 +74,25 @@ public:
         {
             node<T>* result = current;
             m_node_ptr      = current;
-            current         = ref.load(std::memory_order::acquire);
-            if (m_node_ptr && m_node_ptr->is_removed.load(std::memory_order::acquire))
+            if (m_node_ptr)
             {
-                std::this_thread::sleep_for(1us);
-                m_is_removed = true;
-                m_node_ptr   = nullptr;
-                return;
+                m_node_ptr->ref_count.fetch_add(1, std::memory_order::acq_rel);
+                if (m_node_ptr->is_removed.load(std::memory_order::acquire))
+                {
+                    decrement();
+                    m_is_removed = true;
+                    return;
+                }
             }
-
+            current = ref.load(std::memory_order::acquire);
             if (result == current)
                 break;
 
+            if (m_node_ptr)
+            {
+                decrement();
+            }
         } while (true);
-
-        if (m_node_ptr)
-        {
-            m_node_ptr->ref_count.fetch_add(1, std::memory_order::acq_rel);
-        }
     }
 
     void remove()
@@ -362,7 +369,8 @@ private:
                         continue;
 
                     bool is_shutdown = false;
-                    while (!(is_shutdown = m_queue.m_shutdown.load(std::memory_order::acquire) || !result->is_cleaned))
+                    while (!(is_shutdown = m_queue.m_shutdown.load(std::memory_order::acquire)) &&
+                           !result->is_cleaned.load(std::memory_order::acquire))
                     {
                         std::this_thread::sleep_for(1us);
                     }
