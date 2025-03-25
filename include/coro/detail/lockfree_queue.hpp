@@ -47,7 +47,7 @@ class guard_ptr
 
     void decrement()
     {
-        if (m_node_ptr->ref_count.fetch_sub(1, std::memory_order::acq_rel) < 1)
+        if (m_node_ptr->ref_count.fetch_sub(1, std::memory_order::acq_rel) < 2)
         {
             if (m_node_ptr->is_removed.load(std::memory_order::acquire) &&
                 m_node_ptr->ref_count.load(std::memory_order::acquire) <= 0)
@@ -334,7 +334,7 @@ public:
     ~lockfree_queue_based_on_pool()
     {
         clear();
-        m_shutdown.store(true, std::memory_order_release);
+        m_shutdown.store(true, std::memory_order::release);
     }
 
 private:
