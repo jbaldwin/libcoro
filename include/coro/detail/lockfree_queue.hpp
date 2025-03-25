@@ -22,10 +22,20 @@ struct node
     T                     data{};
     std::atomic<node<T>*> next{nullptr};
     std::atomic<uint32_t> ref_count{0};
-    std::atomic<bool>     removed{false};
+    std::atomic<bool>     is_removed{false};
+    std::atomic<bool>     is_cleaned{true};
+    bool                  is_dummy{false};
 
     node() = default;
-    node(const T& data) : data(data) {}
+    node(const T& data) : data(data), is_cleaned(false) {}
+
+    void clean()
+    {
+        data = {};
+        next.store(nullptr, std::memory_order::relaxed);
+        is_removed.store(false, std::memory_order::relaxed);
+        is_cleaned.store(true, std::memory_order::release);
+    }
 };
 
 template<typename T, class Dispose>
@@ -39,7 +49,7 @@ class guard_ptr
     {
         if (m_node_ptr->ref_count.fetch_sub(1, std::memory_order::acq_rel) < 1)
         {
-            if (m_node_ptr->removed.load(std::memory_order::acquire) &&
+            if (m_node_ptr->is_removed.load(std::memory_order::acquire) &&
                 m_node_ptr->ref_count.load(std::memory_order::acquire) <= 0)
             {
                 m_dispose(m_node_ptr);
@@ -60,7 +70,7 @@ public:
             result     = current;
             m_node_ptr = current;
             current    = ref.load(std::memory_order::acquire);
-            if (m_node_ptr && m_node_ptr->removed.load(std::memory_order::acquire))
+            if (m_node_ptr && m_node_ptr->is_removed.load(std::memory_order::acquire))
             {
                 std::this_thread::sleep_for(1us);
                 m_is_removed = true;
@@ -87,7 +97,7 @@ public:
         }
 
         m_is_removed = true;
-        m_node_ptr->removed.store(true, std::memory_order_release);
+        m_node_ptr->is_removed.store(true, std::memory_order_release);
         decrement();
     }
 
@@ -112,11 +122,11 @@ namespace concepts
 // clang-format off
 
 template<typename allocator_type, typename item_type = allocator_type::item_type, typename node_type = allocator_type::node_type>
-concept lockfree_queue_allocator = requires(allocator_type a, node_type* node_ptr, item_type item)
+concept lockfree_queue_allocator = requires(allocator_type a, node_type* released_node, node_type* data_node, item_type item)
 {
     { a.allocate(item) }-> std::same_as<node_type*>;
-    { a.return_value(node_ptr) } -> std::same_as<item_type>;
-    { a.deallocate(node_ptr) } -> std::same_as<void>;
+    { a.return_value(released_node, data_node) } -> std::same_as<item_type>;
+    { a.deallocate(released_node) } -> std::same_as<void>;
 };
 
 // clang-format on
@@ -142,11 +152,15 @@ public:
         std::construct_at(result, item);
         return result;
     }
-    constexpr item_type return_value(node_type* value) { return value->data; }
-    constexpr void      deallocate(node_type* ptr)
+    constexpr item_type return_value(node_type* released_node, node_type* data_node)
     {
-        std::destroy_at(ptr);
-        alloc.deallocate(ptr, 1);
+        (void)released_node;
+        return data_node->data;
+    }
+    constexpr void deallocate(node_type* released_node)
+    {
+        std::destroy_at(released_node);
+        alloc.deallocate(released_node, 1);
     }
 
 private:
@@ -176,8 +190,11 @@ protected:
     }
 
 public:
-    lockfree_queue() : m_head(&m_dummy), m_tail(&m_dummy) {}
-    explicit lockfree_queue(Alloc allocator) : m_alloc(allocator), m_head(&m_dummy), m_tail(&m_dummy) {}
+    lockfree_queue() : m_head(&m_dummy), m_tail(&m_dummy) { m_dummy.is_dummy = true; }
+    explicit lockfree_queue(Alloc allocator) : m_alloc(allocator), m_head(&m_dummy), m_tail(&m_dummy)
+    {
+        m_dummy.is_dummy = true;
+    }
 
     ~lockfree_queue()
     {
@@ -277,7 +294,7 @@ public:
             if (m_head.compare_exchange_strong(
                     head_node, next_node, std::memory_order::acquire, std::memory_order::relaxed))
             {
-                std::optional<T> result = m_alloc.return_value(next_node);
+                std::optional<T> result = m_alloc.return_value(head_node, next_node);
                 if (head_node != &m_dummy)
                     head_guard.remove();
                 return result;
@@ -334,30 +351,50 @@ private:
 
         constexpr node_type* allocate(const item_type& item)
         {
-            auto node = m_queue.m_queue_free.pop();
-            if (node)
-            {
-                node_type* result = node.value();
-                result->data      = item;
-                return result;
-            }
+            using namespace std::chrono_literals;
 
-            return m_queue.allocate(item);
+            while (true)
+            {
+                auto node = m_queue.m_queue_free.pop();
+                if (node)
+                {
+                    node_type* result = node.value();
+                    if (result->is_dummy)
+                        continue;
+
+                    bool is_shutdown = false;
+                    while (!(is_shutdown = m_queue.m_shutdown.load(std::memory_order::acquire) || !result->is_cleaned))
+                    {
+                        std::this_thread::sleep_for(1us);
+                    }
+
+                    if (is_shutdown)
+                    {
+                        assert("attempt to use a queue at the moment of its destruction");
+                        throw std::bad_alloc();
+                    }
+
+                    result->data = item;
+                    return result;
+                }
+                return m_queue.allocate(item);
+            }
         }
-        constexpr item_type return_value(node_type* value) { return value->data; }
-        constexpr void      deallocate(node_type* ptr)
+        constexpr item_type return_value(node_type* released_node, node_type* data_node)
+        {
+            (void)released_node;
+            return data_node->data;
+        }
+        constexpr void deallocate(node_type* released_node)
         {
             if (m_queue.m_shutdown.load(std::memory_order::acquire))
             {
-                m_queue.deallocate(ptr);
+                m_queue.deallocate(released_node);
                 return;
             }
 
-            ptr->data = {};
-            ptr->next.store(nullptr, std::memory_order::release);
-            ptr->ref_count.store(0, std::memory_order::release);
-            ptr->removed.store(false, std::memory_order::release);
-            m_queue.m_queue_free.push(ptr);
+            released_node->clean();
+            m_queue.m_queue_free.push(released_node);
         }
 
     private:
@@ -374,24 +411,24 @@ private:
 
         constexpr node_type* allocate(const item_type& item)
         {
-            if (!item)
-                return m_queue.allocate(nullptr);
-
+            assert(item);
+            item->is_cleaned.store(false, std::memory_order::release);
             return item;
         }
-        constexpr item_type return_value(node_type* value) { return value; }
-        constexpr void      deallocate(node_type* ptr)
+        constexpr item_type return_value(node_type* released_node, node_type* data_node)
+        {
+            (void)data_node;
+            return released_node;
+        }
+        constexpr void deallocate(node_type* released_node)
         {
             if (m_queue.m_shutdown.load(std::memory_order::acquire))
             {
-                m_queue.deallocate(ptr);
+                m_queue.deallocate(released_node);
                 return;
             }
 
-            ptr->data = {};
-            ptr->next.store(nullptr, std::memory_order::release);
-            ptr->ref_count.store(0, std::memory_order::release);
-            ptr->removed.store(false, std::memory_order::release);
+            released_node->clean();
         }
 
     private:
@@ -408,7 +445,7 @@ private:
         auto result = new node_type(item);
         return result;
     }
-    constexpr void deallocate(node_type* ptr) { delete ptr; }
+    constexpr void deallocate(node_type* released_node) { delete released_node; }
 };
 
 } // namespace detail

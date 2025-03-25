@@ -53,17 +53,39 @@ class strategy_base
 public:
     struct wait_operation
     {
-        explicit wait_operation(strategy_base& strategy);
+        explicit wait_operation(strategy_base& strategy, scoped_lock&& lock);
 
         auto await_ready() const noexcept -> bool { return false; }
         auto await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept -> bool;
         auto await_resume() noexcept -> void;
 
-    private:
+    protected:
         friend class strategy_base;
 
         strategy_base&          m_strategy;
         std::coroutine_handle<> m_awaiting_coroutine;
+        scoped_lock             m_lock;
+    };
+
+    template<concepts::executor executor_type>
+    struct wait_operation_with_executor : wait_operation
+    {
+        explicit wait_operation_with_executor(strategy_base& strategy, scoped_lock&& lock, executor_type& e)
+            : wait_operation(strategy, std::move(lock)),
+              m_executor(e)
+        {
+        }
+
+        auto await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept -> bool
+        {
+            m_awaiting_coroutine = awaiting_coroutine;
+            m_strategy.m_internal_waiters.push(this);
+            m_lock.unlock(m_executor);
+            return true;
+        }
+
+    private:
+        executor_type& m_executor;
     };
 
     /**
@@ -83,9 +105,8 @@ public:
     auto wait(scoped_lock& lock, executor_type& e) -> task<void>
     {
         auto mtx = lock.mutex();
-        lock.unlock(e);
 
-        co_await wait_for_notify();
+        co_await wait_for_notify(std::move(lock), e);
 
         auto ulock = co_await mtx->lock();
         lock       = std::move(ulock);
@@ -131,7 +152,20 @@ public:
     }
 
     /// Internal helper function to wait for a condition variable
-    [[nodiscard]] auto wait_for_notify() -> wait_operation { return wait_operation{*this}; };
+    [[nodiscard]] auto wait_for_notify(scoped_lock&& lock) -> wait_operation
+    {
+        return wait_operation{*this, std::move(lock)};
+    };
+
+    /**
+     * Internal helper function to wait for a condition variable. This will distribute coro::mutex
+     * waiters across the executor's threads.
+     */
+    template<concepts::executor executor_type>
+    [[nodiscard]] auto wait_for_notify(scoped_lock&& lock, executor_type& e) -> wait_operation
+    {
+        return wait_operation_with_executor{*this, std::move(lock), e};
+    };
 
 protected:
     friend struct wait_operation;
@@ -150,7 +184,6 @@ class strategy_based_on_io_scheduler
 {
 protected:
     struct wait_operation_link;
-    using wait_operation_link_ptr = wait_operation_link*;
     using wait_operation_link_unique_ptr =
         std::unique_ptr<wait_operation_link, std::function<void(wait_operation_link*)>>;
 
@@ -162,7 +195,7 @@ public:
 
     struct wait_operation
     {
-        explicit wait_operation(strategy_based_on_io_scheduler& strategy);
+        explicit wait_operation(strategy_based_on_io_scheduler& strategy, scoped_lock&& lock);
         ~wait_operation();
 
         auto await_ready() const noexcept -> bool { return false; }
@@ -172,9 +205,10 @@ public:
     private:
         friend class strategy_based_on_io_scheduler;
 
-        strategy_based_on_io_scheduler&      m_strategy;
-        std::coroutine_handle<>              m_awaiting_coroutine;
-        std::atomic<wait_operation_link_ptr> m_link{nullptr};
+        strategy_based_on_io_scheduler&   m_strategy;
+        std::coroutine_handle<>           m_awaiting_coroutine;
+        std::atomic<wait_operation_link*> m_link{nullptr};
+        scoped_lock                       m_lock;
     };
 
     auto wait(scoped_lock& lock) -> task<void>;
@@ -184,7 +218,10 @@ public:
     void notify_all() noexcept;
 
     /// Internal helper function to wait for a condition variable
-    [[nodiscard]] auto wait_for_notify() -> wait_operation { return wait_operation{*this}; };
+    [[nodiscard]] auto wait_for_notify(scoped_lock&& lock) -> wait_operation
+    {
+        return wait_operation{*this, std::move(lock)};
+    };
 
     /// Internal unification version of the function for waiting on a coro::condition_variable with a time limit
     [[nodiscard]] auto wait_for_ms(scoped_lock& lock, const std::chrono::milliseconds duration) -> task<std::cv_status>;
@@ -196,14 +233,13 @@ protected:
     struct wait_operation_link
     {
         std::atomic<wait_operation*> waiter{nullptr};
-        wait_operation_link_ptr      next{nullptr};
     };
 
     /// A scheduler is needed to suspend coroutines and then wake them up upon notification or timeout.
     std::weak_ptr<io_scheduler> m_scheduler;
 
     /// A queue of grabbed internal waiters that are only accessed by the notify'er the wait'er
-    coro::detail::lockfree_queue_based_on_pool<wait_operation_link_ptr> m_internal_waiters;
+    coro::detail::lockfree_queue_based_on_pool<wait_operation_link*> m_internal_waiters;
 
     /// A object pool of free wait_operation_link_ptr
     coro::detail::lockfree_object_pool<wait_operation_link> m_free_links;
@@ -216,9 +252,6 @@ protected:
 
     /// Extract one waiter from @ref m_internal_waiters
     wait_operation_link_unique_ptr extract_one();
-
-    /// Extract all waiter from @ref m_internal_waiters
-    wait_operation_link_ptr extract_all();
 
     /// Internal helper function to wait for a condition variable. This is necessary for the scheduler when he schedules
     /// a task with a time limit

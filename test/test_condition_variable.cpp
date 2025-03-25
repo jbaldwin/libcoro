@@ -231,7 +231,7 @@ TEST_CASE("condition_variable for thread-safe-queue between producers and consum
         {
             {
                 auto ulock = co_await bp.m.lock();
-                auto value = bp.next.fetch_add(1);
+                auto value = bp.next.fetch_add(1, std::memory_order::acq_rel);
 
                 // limit for end of test
                 if (value >= bp.max_value)
