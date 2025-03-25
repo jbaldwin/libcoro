@@ -14,9 +14,11 @@ auto scoped_lock::unlock() -> void
     if (m_mutex != nullptr)
     {
         std::atomic_thread_fence(std::memory_order::release);
-        m_mutex->unlock();
+
+        class coro::mutex* mtx = m_mutex;
         // Only allow a scoped lock to unlock the mutex a single time.
         m_mutex = nullptr;
+        mtx->unlock();
     }
 }
 
