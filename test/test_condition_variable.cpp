@@ -57,25 +57,33 @@ TEST_CASE("condition_variable single waiter", "[condition_variable]")
 
             co_await cv.wait(ulock);
 
-            // unreachable
             co_return true;
         };
         auto res1 = co_await sched->schedule(make_locked_task_1(sched, m, cv), 8ms);
         REQUIRE_FALSE(res1.has_value());
+        cv.notify_one();
 
         auto make_locked_task_2 = [](auto sched, coro::mutex& m, coro::condition_variable& cv) -> coro::task<bool>
         {
             co_await sched->schedule();
             auto ulock = co_await m.lock();
 
-            co_await cv.wait(ulock, []() { return false; });
+            co_await cv.wait(
+                ulock,
+                []()
+                {
+                    static bool next   = false;
+                    bool        result = next;
+                    next               = true;
+                    return result;
+                });
 
-            // unreachable
             co_return true;
         };
 
         auto res2 = co_await sched->schedule(make_locked_task_2(sched, m, cv), 8ms);
         REQUIRE_FALSE(res2.has_value());
+        cv.notify_one();
 
         auto make_unlocked_task = [](auto sched, coro::mutex& m, coro::condition_variable& cv) -> coro::task<bool>
         {
@@ -91,6 +99,7 @@ TEST_CASE("condition_variable single waiter", "[condition_variable]")
 
     #endif
 
+        co_await sched->schedule_after(256ms);
         co_return;
     };
 
@@ -138,11 +147,16 @@ TEST_CASE("condition_variable one notifier and one waiter", "[condition_variable
 
     REQUIRE_FALSE(std::get<1>(coro::sync_wait(coro::when_all(make_notifier_task(bp), make_waiter_task(bp, 16ms))))
                       .return_value());
+    bp.cv.notify_one();
+
     REQUIRE_FALSE(
         std::get<1>(coro::sync_wait(coro::when_all(make_notifier_task(bp, 0ms, true), make_waiter_task(bp, 16ms))))
             .return_value());
+    bp.cv.notify_one();
+
     REQUIRE(
         std::get<1>(coro::sync_wait(coro::when_all(make_notifier_task(bp, 8ms), make_waiter_task(bp)))).return_value());
+
     REQUIRE(std::get<1>(coro::sync_wait(coro::when_all(make_notifier_task(bp, 8ms, true), make_waiter_task(bp))))
                 .return_value());
 }
