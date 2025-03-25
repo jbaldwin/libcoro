@@ -255,10 +255,12 @@ protected:
 
     /// Internal helper function to wait for a condition variable. This is necessary for the scheduler when he schedules
     /// a task with a time limit
-    [[nodiscard]] auto wait_task(std::shared_ptr<wait_operation> wo) -> task<bool>;
+    [[nodiscard]] auto wait_task(std::shared_ptr<wait_operation> wo, std::stop_source stop_source) -> task<bool>;
 
-    [[nodiscard]] auto timeout_task(std::shared_ptr<wait_operation> wo, std::chrono::milliseconds timeout)
-        -> coro::task<timeout_status>;
+    [[nodiscard]] auto timeout_task(
+        std::shared_ptr<wait_operation> wo,
+        std::chrono::milliseconds       timeout,
+        std::stop_source                stop_source) -> coro::task<timeout_status>;
 };
 #endif
 
