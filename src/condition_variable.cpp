@@ -76,7 +76,7 @@ auto detail::strategy_based_on_io_scheduler::timeout_task(
 
     while ((steady_clock::now() < deadline) && !stop_source.stop_requested())
     {
-        auto remain       = duration_cast<milliseconds>(steady_clock::now() - deadline);
+        auto remain       = duration_cast<milliseconds>(deadline - steady_clock::now());
         auto next_timeout = std::min(remain, s_stop_source_check_interval);
         if (auto sched = m_scheduler.lock())
         {
