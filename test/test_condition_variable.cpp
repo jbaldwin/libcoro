@@ -245,6 +245,7 @@ TEST_CASE("condition_variable for thread-safe-queue between producers and consum
         {
             {
                 auto ulock = co_await bp.m.lock();
+                REQUIRE_FALSE(bp.m.try_lock());
                 auto value = bp.next.fetch_add(1, std::memory_order::acq_rel);
 
                 // limit for end of test
@@ -268,7 +269,14 @@ TEST_CASE("condition_variable for thread-safe-queue between producers and consum
         while (true)
         {
             auto ulock = co_await bp.m.lock();
-            co_await bp.cv.wait(ulock, [&bp]() { return bp.q.size() || bp.cancel.load(std::memory_order::acquire); });
+            co_await bp.cv.wait(
+                ulock,
+                [&bp]()
+                {
+                    REQUIRE_FALSE(bp.m.try_lock());
+                    return bp.q.size() || bp.cancel.load(std::memory_order::acquire);
+                });
+            REQUIRE_FALSE(bp.m.try_lock());
             if (bp.cancel.load(std::memory_order::acquire))
             {
                 break;
@@ -294,6 +302,7 @@ TEST_CASE("condition_variable for thread-safe-queue between producers and consum
         {
             {
                 auto ulock = co_await bp.m.lock();
+                REQUIRE_FALSE(bp.m.try_lock());
                 if ((bp.next.load(std::memory_order::acquire) >= bp.max_value) && bp.q.empty())
                 {
                     break;

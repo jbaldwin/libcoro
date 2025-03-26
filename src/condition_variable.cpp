@@ -72,7 +72,8 @@ auto detail::strategy_based_on_io_scheduler::timeout_task(
     using namespace std::chrono_literals;
 
     assert(!m_scheduler.expired());
-    auto deadline = steady_clock::now() + timeout;
+    auto deadline   = steady_clock::now() + timeout;
+    auto stop_token = stop_source.get_token();
 
     while ((steady_clock::now() < deadline) && !stop_source.stop_requested())
     {
@@ -84,7 +85,10 @@ auto detail::strategy_based_on_io_scheduler::timeout_task(
         }
     }
 
-    extract_waiter(wo.get());
+    if (!stop_token.stop_requested())
+    {
+        extract_waiter(wo.get());
+    }
     co_return timeout_status::timeout;
 }
 

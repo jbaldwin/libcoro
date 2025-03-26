@@ -69,30 +69,26 @@ public:
     {
         using namespace std::chrono_literals;
 
-        node<T>* current = ref.load(std::memory_order::relaxed);
         do
         {
-            node<T>* result = current;
-            m_node_ptr      = current;
-            if (m_node_ptr)
+            m_node_ptr = ref.load(std::memory_order::acquire);
+            if (!m_node_ptr)
             {
-                m_node_ptr->ref_count.fetch_add(1, std::memory_order::acq_rel);
-                if (m_node_ptr->is_removed.load(std::memory_order::acquire))
-                {
-                    decrement();
-                    m_is_removed = true;
-                    return;
-                }
+                return;
             }
-            current = ref.load(std::memory_order::acquire);
-            if (result == current)
-                break;
-
-            if (m_node_ptr)
+            if (m_node_ptr->is_removed.load(std::memory_order::acquire))
             {
-                decrement();
+                m_is_removed = true;
+                m_node_ptr   = nullptr;
+                return;
+            }
+            node<T>* current = ref.load(std::memory_order::acquire);
+            if (m_node_ptr == current)
+            {
+                break;
             }
         } while (true);
+        m_node_ptr->ref_count.fetch_add(1, std::memory_order::acq_rel);
     }
 
     void remove()
@@ -222,6 +218,7 @@ public:
         using namespace std::chrono_literals;
 
         auto new_node = m_alloc.allocate(value);
+        assert(new_node->next.load() == nullptr);
         while (true)
         {
             guard_type tail_guard(m_tail, [this](node_type* n) { dispose_node(n); });
@@ -229,26 +226,25 @@ public:
             {
                 continue;
             }
-            auto       tail_node = tail_guard.value();
-            guard_type next_guard(tail_node->next, [this](node_type* n) { dispose_node(n); });
-            if (next_guard.is_removed())
-            {
-                continue;
-            }
-            auto next_node = next_guard.value();
+            auto tail_node = tail_guard.value();
+            assert(tail_node != new_node);
+            auto next_node = tail_node->next.load(std::memory_order::acquire);
 
             if (next_node != nullptr)
             {
+                assert(tail_node != next_node);
+
                 // Tail is misplaced, advance it
                 m_tail.compare_exchange_weak(
                     tail_node, next_node, std::memory_order::release, std::memory_order::relaxed);
                 continue;
             }
 
-            node_type* expected{};
+            node_type* expected = nullptr;
             if (tail_node->next.compare_exchange_strong(
                     expected, new_node, std::memory_order::release, std::memory_order::relaxed))
             {
+                assert(tail_node != new_node);
                 m_tail.compare_exchange_strong(
                     tail_node, new_node, std::memory_order::release, std::memory_order::relaxed);
                 return;
@@ -291,11 +287,15 @@ public:
 
             if (head_node == tail_node)
             {
+                assert(tail_node != next_node);
+
                 // It is needed to help push()
                 m_tail.compare_exchange_strong(
                     tail_node, next_node, std::memory_order::release, std::memory_order::relaxed);
                 continue;
             }
+
+            assert(head_node != next_node);
 
             if (m_head.compare_exchange_strong(
                     head_node, next_node, std::memory_order::acquire, std::memory_order::relaxed))
