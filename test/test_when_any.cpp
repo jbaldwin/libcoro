@@ -4,6 +4,7 @@
 #include <coro/coro.hpp>
 #include <iostream>
 #include <stop_token>
+#include <variant>
 
 TEST_CASE("when_any two tasks", "[when_any]")
 {
@@ -15,6 +16,84 @@ TEST_CASE("when_any two tasks", "[when_any]")
 
     auto result = coro::sync_wait(coro::when_any(std::move(tasks)));
     REQUIRE(result == 1);
+}
+
+TEST_CASE("when_any return void", "[when_any]")
+{
+    coro::thread_pool     tp{};
+    std::atomic<uint64_t> counter{0};
+
+    auto make_task = [](coro::thread_pool& tp, std::atomic<uint64_t>& counter, uint64_t i) -> coro::task<void>
+    {
+        co_await tp.schedule();
+        // One thread will win.
+        uint64_t expected = 0;
+        counter.compare_exchange_strong(expected, i);
+        co_return;
+    };
+
+    std::vector<coro::task<void>> tasks;
+    for (auto i = 1; i <= 4; ++i)
+    {
+        tasks.emplace_back(make_task(tp, counter, i));
+    }
+
+    coro::sync_wait(coro::when_any(std::move(tasks)));
+    REQUIRE(counter.load() > 0);
+}
+
+TEST_CASE("when_any tuple return void (monostate)", "[when_any]")
+{
+    // This test needs to use a mutex to guarantee that the task that sets the counter
+    // is the first task to complete, otherwise there is a race condition if counter is atomic
+    // as the other task could complete first (unlikely but happens) and cause the REQUIRE statements
+    // between what is returned to mismatch from what is executed.
+    coro::mutex       m{};
+    coro::thread_pool tp{};
+    uint64_t          counter{0};
+
+    auto make_task_return_void =
+        [](coro::thread_pool& tp, coro::mutex& m, uint64_t& counter, uint64_t i) -> coro::task<std::monostate>
+    {
+        co_await tp.schedule();
+        co_await m.lock();
+        if (counter == 0)
+        {
+            counter = i;
+        }
+        else
+        {
+            REQUIRE(counter == 2);
+        }
+        co_return std::monostate{};
+    };
+
+    auto make_task = [](coro::thread_pool& tp, coro::mutex& m, uint64_t& counter, uint64_t i) -> coro::task<uint64_t>
+    {
+        co_await tp.schedule();
+        co_await m.lock();
+        if (counter == 0)
+        {
+            counter = i;
+        }
+        else
+        {
+            REQUIRE(counter == 1);
+        }
+        co_return i;
+    };
+
+    auto result =
+        coro::sync_wait(coro::when_any(make_task_return_void(tp, m, counter, 1), make_task(tp, m, counter, 2)));
+    if (std::holds_alternative<std::monostate>(result))
+    {
+        REQUIRE(counter == 1);
+    }
+    else
+    {
+        REQUIRE(std::get<uint64_t>(result) == 2);
+        REQUIRE(counter == 2);
+    }
 }
 
 #ifdef LIBCORO_FEATURE_NETWORKING

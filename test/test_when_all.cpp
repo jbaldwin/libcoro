@@ -204,3 +204,25 @@ TEST_CASE("when_all each task throws", "[when_all]")
         }
     }
 }
+
+TEST_CASE("when_all return void", "[when_all]")
+{
+    coro::thread_pool     tp{};
+    std::atomic<uint64_t> counter{0};
+
+    auto make_task = [](coro::thread_pool& tp, std::atomic<uint64_t>& counter, uint64_t i) -> coro::task<void>
+    {
+        co_await tp.schedule();
+        counter += i;
+        co_return;
+    };
+
+    std::vector<coro::task<void>> tasks;
+    for (auto i = 1; i <= 4; ++i)
+    {
+        tasks.emplace_back(make_task(tp, counter, i));
+    }
+
+    coro::sync_wait(coro::when_all(std::move(tasks)));
+    REQUIRE(counter == 1 + 2 + 3 + 4);
+}
