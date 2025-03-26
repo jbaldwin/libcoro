@@ -51,16 +51,22 @@ namespace detail
 class strategy_base
 {
 public:
+    template<concepts::executor executor_type>
+    struct wait_operation_with_executor;
+
     struct wait_operation
     {
         explicit wait_operation(strategy_base& strategy, scoped_lock&& lock);
 
         auto await_ready() const noexcept -> bool { return false; }
         auto await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept -> bool;
-        auto await_resume() noexcept -> void;
+        auto await_resume() noexcept -> void {}
 
     protected:
         friend class strategy_base;
+
+        template<concepts::executor executor_type>
+        friend struct wait_operation_with_executor;
 
         strategy_base&          m_strategy;
         std::coroutine_handle<> m_awaiting_coroutine;
@@ -68,23 +74,26 @@ public:
     };
 
     template<concepts::executor executor_type>
-    struct wait_operation_with_executor : wait_operation
+    struct wait_operation_with_executor
     {
         explicit wait_operation_with_executor(strategy_base& strategy, scoped_lock&& lock, executor_type& e)
-            : wait_operation(strategy, std::move(lock)),
+            : m_waiter(strategy, std::move(lock)),
               m_executor(e)
         {
         }
 
+        auto await_ready() const noexcept -> bool { return false; }
         auto await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept -> bool
         {
-            m_awaiting_coroutine = awaiting_coroutine;
-            m_strategy.m_internal_waiters.push(this);
-            m_lock.unlock(m_executor);
+            m_waiter.m_awaiting_coroutine = awaiting_coroutine;
+            m_waiter.m_strategy.m_internal_waiters.push(&m_waiter);
+            m_waiter.m_lock.unlock(m_executor);
             return true;
         }
+        auto await_resume() noexcept -> void {}
 
     private:
+        wait_operation m_waiter;
         executor_type& m_executor;
     };
 

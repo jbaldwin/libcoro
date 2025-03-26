@@ -219,10 +219,6 @@ bool detail::strategy_base::wait_operation::await_suspend(std::coroutine_handle<
     return true;
 }
 
-void detail::strategy_base::wait_operation::await_resume() noexcept
-{
-}
-
 auto detail::strategy_base::wait(scoped_lock& lock) -> task<void>
 {
     auto mtx = lock.mutex();
