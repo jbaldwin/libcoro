@@ -39,13 +39,13 @@ public:
     ~scoped_lock();
 
     scoped_lock(const scoped_lock&) = delete;
-    scoped_lock(scoped_lock&& other) : m_mutex(std::exchange(other.m_mutex, nullptr)) {}
+    scoped_lock(scoped_lock&& other) : m_mutex(other.m_mutex.exchange(nullptr, std::memory_order::acq_rel)) {}
     auto operator=(const scoped_lock&) -> scoped_lock& = delete;
     auto operator=(scoped_lock&& other) noexcept -> scoped_lock&
     {
         if (std::addressof(other) != this)
         {
-            m_mutex = std::exchange(other.m_mutex, nullptr);
+            m_mutex.store(other.m_mutex.exchange(nullptr, std::memory_order::acq_rel), std::memory_order::release);
         }
         return *this;
     }
@@ -67,7 +67,7 @@ public:
     class coro::mutex* mutex() const noexcept;
 
 private:
-    class coro::mutex* m_mutex{nullptr};
+    std::atomic<class coro::mutex*> m_mutex{nullptr};
 };
 
 class mutex
@@ -179,12 +179,13 @@ private:
 template<concepts::executor executor_type>
 inline auto scoped_lock::unlock(executor_type& e) -> void
 {
-    if (m_mutex != nullptr)
+    if (auto mtx = m_mutex.load(std::memory_order::acquire))
     {
         std::atomic_thread_fence(std::memory_order::release);
-        m_mutex->unlock(e);
+
         // Only allow a scoped lock to unlock the mutex a single time.
         m_mutex = nullptr;
+        mtx->unlock(e);
     }
 }
 
