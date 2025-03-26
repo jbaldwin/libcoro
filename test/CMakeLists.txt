@@ -7,6 +7,7 @@ set(LIBCORO_TEST_SOURCE_FILES
     test_latch.cpp
     test_mutex.cpp
     test_ring_buffer.cpp
+    test_queue.cpp
     test_semaphore.cpp
     test_shared_mutex.cpp
     test_sync_wait.cpp

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <coro/expected.hpp>
+#include "coro/expected.hpp"
 
 #include <array>
 #include <atomic>
@@ -74,7 +74,6 @@ public:
             // Don't suspend if the stop signal has been set.
             if (m_rb.m_stopped.load(std::memory_order::acquire))
             {
-                m_stopped = true;
                 return false;
             }
 
@@ -89,7 +88,8 @@ public:
          */
         auto await_resume() -> rb::produce_result
         {
-            return !m_stopped ? rb::produce_result::produced : rb::produce_result::ring_buffer_stopped;
+            return !m_rb.m_stopped.load(std::memory_order::acquire) ? rb::produce_result::produced
+                                                                    : rb::produce_result::ring_buffer_stopped;
         }
 
     private:
@@ -104,8 +104,6 @@ public:
         produce_operation* m_next{nullptr};
         /// The element this produce operation is producing into the ring buffer.
         element m_e;
-        /// Was the operation stopped?
-        bool m_stopped{false};
     };
 
     struct consume_operation
@@ -131,7 +129,6 @@ public:
             // Don't suspend if the stop signal has been set.
             if (m_rb.m_stopped.load(std::memory_order::acquire))
             {
-                m_stopped = true;
                 return false;
             }
             m_awaiting_coroutine   = awaiting_coroutine;
@@ -145,7 +142,7 @@ public:
          */
         auto await_resume() -> expected<element, rb::consume_result>
         {
-            if (m_stopped)
+            if (m_rb.m_stopped.load(std::memory_order::acquire))
             {
                 return unexpected<rb::consume_result>(rb::consume_result::ring_buffer_stopped);
             }
@@ -165,8 +162,6 @@ public:
         consume_operation* m_next{nullptr};
         /// The element this consume operation will consume.
         element m_e;
-        /// Was the operation stopped?
-        bool m_stopped{false};
     };
 
     /**
@@ -202,20 +197,19 @@ public:
      */
     auto notify_waiters() -> void
     {
-        std::unique_lock lk{m_mutex};
-        // Only wake up waiters once.
-        if (m_stopped.load(std::memory_order::acquire))
+        auto expected = false;
+        if (!m_stopped.compare_exchange_strong(expected, true, std::memory_order::acq_rel, std::memory_order::relaxed))
         {
+            // Only wake up waiters once.
             return;
         }
 
-        m_stopped.exchange(true, std::memory_order::release);
+        std::unique_lock lk{m_mutex};
 
         while (m_produce_waiters != nullptr)
         {
-            auto* to_resume      = m_produce_waiters;
-            to_resume->m_stopped = true;
-            m_produce_waiters    = m_produce_waiters->m_next;
+            auto* to_resume   = m_produce_waiters;
+            m_produce_waiters = m_produce_waiters->m_next;
 
             lk.unlock();
             to_resume->m_awaiting_coroutine.resume();
@@ -224,9 +218,8 @@ public:
 
         while (m_consume_waiters != nullptr)
         {
-            auto* to_resume      = m_consume_waiters;
-            to_resume->m_stopped = true;
-            m_consume_waiters    = m_consume_waiters->m_next;
+            auto* to_resume   = m_consume_waiters;
+            m_consume_waiters = m_consume_waiters->m_next;
 
             lk.unlock();
             to_resume->m_awaiting_coroutine.resume();

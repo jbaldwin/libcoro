@@ -85,6 +85,7 @@ set(LIBCORO_SOURCE_FILES
     include/coro/generator.hpp
     include/coro/latch.hpp
     include/coro/mutex.hpp src/mutex.cpp
+    include/coro/queue.hpp
     include/coro/ring_buffer.hpp
     include/coro/semaphore.hpp src/semaphore.cpp
     include/coro/shared_mutex.hpp

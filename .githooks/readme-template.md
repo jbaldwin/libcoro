@@ -25,6 +25,7 @@
     - [coro::shared_mutex](#shared_mutex)
     - [coro::semaphore](#semaphore)
     - [coro::ring_buffer<element, num_elements>](#ring_buffer)
+    - [coro::queue](#queue)
 * Schedulers
     - [coro::thread_pool](#thread_pool) for coroutine cooperative multitasking
     - [coro::io_scheduler](#io_scheduler) for driving i/o events
@@ -264,6 +265,43 @@ consumer 0 shutting down, stop signal received
 consumer 1 shutting down, stop signal received
 consumer 2 shutting down, stop signal received
 consumer 3 shutting down, stop signal received
+```
+
+### queue
+The `coro::queue<element_type>` is thread safe async multi-producer multi-consumer queue. Producing into the queue is not an asynchronous operation, it will either immediately use a consumer that is awaiting on `pop()` to process the element, or if no consumer is available place the element into the queue. All consume waiters on the queue are resumed in a LIFO manner when an element becomes available to consume.
+
+```C++
+${EXAMPLE_CORO_QUEUE_CPP}
+```
+
+Expected output:
+```bash
+$ ./examples/coro_queue
+consumed 0
+consumed 1
+consumed 0
+consumed 2
+consumed 3
+consumed 4
+consumed 1
+consumed 0
+consumed 0
+consumed 0
+consumed 1
+consumed 1
+consumed 2
+consumed 2
+consumed 3
+consumed 4
+consumed 3
+consumed 4
+consumed 2
+consumed 3
+consumed 4
+consumed 1
+consumed 2
+consumed 3
+consumed 4
 ```
 
 ### thread_pool

@@ -71,6 +71,10 @@ example_contents=$(cat 'examples/coro_ring_buffer.cpp')
 echo "${template_contents/\$\{EXAMPLE_CORO_RING_BUFFER_CPP\}/$example_contents}" > README.md
 
 template_contents=$(cat 'README.md')
+example_contents=$(cat 'examples/coro_queue.cpp')
+echo "${template_contents/\$\{EXAMPLE_CORO_QUEUE_CPP\}/$example_contents}" > README.md
+
+template_contents=$(cat 'README.md')
 example_contents=$(cat 'examples/coro_shared_mutex.cpp')
 echo "${template_contents/\$\{EXAMPLE_CORO_SHARED_MUTEX_CPP\}/$example_contents}" > README.md
 
