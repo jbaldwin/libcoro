@@ -24,6 +24,7 @@
     - [coro::mutex](#mutex)
     - [coro::shared_mutex](#shared_mutex)
     - [coro::semaphore](#semaphore)
+    - [coro::condition_variable](#condition_variable)
     - [coro::ring_buffer<element, num_elements>](#ring_buffer)
 * Schedulers
     - [coro::thread_pool](#thread_pool) for coroutine cooperative multitasking
@@ -246,6 +247,39 @@ Expected output, note that there is no lock around the `std::cout` so some of th
 ```bash
 $ ./examples/coro_semaphore
 1, 23, 25, 24, 22, 27, 28, 29, 21, 20, 19, 18, 17, 14, 31, 30, 33, 32, 41, 40, 37, 39, 38, 36, 35, 34, 43, 46, 47, 48, 45, 42, 44, 26, 16, 15, 13, 52, 54, 55, 53, 49, 51, 57, 58, 50, 62, 63, 61, 60, 59, 56, 12, 11, 8, 10, 9, 7, 6, 5, 4, 3, 642, , 66, 67, 6568, , 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100,
+```
+
+### condition_variable
+The `coro::condition_variable` is a thread safe async tool used with a `coro::mutex` (`coro::scoped_lock`) to suspend one or more `coro::task` until another `coro::task` both modifies a shared variable (the condition) and notifies the `coro::condition_variable`
+
+```C++
+${EXAMPLE_CORO_CONDITION_VARIABLE_CPP}
+```
+
+Expected output:
+```bash
+$ ./examples/coro_condition_variable
+1
+3
+0
+6
+5
+7
+8
+2
+4
+9
+12
+14
+11
+15
+13
+16
+17
+18
+19
+10
+finished
 ```
 
 ### ring_buffer

@@ -11,13 +11,19 @@ scoped_lock::~scoped_lock()
 
 auto scoped_lock::unlock() -> void
 {
-    if (m_mutex != nullptr)
+    if (auto mtx = m_mutex.load(std::memory_order::acquire))
     {
         std::atomic_thread_fence(std::memory_order::release);
-        m_mutex->unlock();
+
         // Only allow a scoped lock to unlock the mutex a single time.
         m_mutex = nullptr;
+        mtx->unlock();
     }
+}
+
+class coro::mutex* scoped_lock::mutex() const noexcept
+{
+    return m_mutex;
 }
 
 auto mutex::lock_operation::await_ready() const noexcept -> bool

@@ -9,6 +9,7 @@
     #include "coro/expected.hpp"
     #include "coro/mutex.hpp"
     #include "coro/task.hpp"
+    #include "coro/when_all.hpp"
 
     #include <atomic>
     #include <cassert>
@@ -41,8 +42,9 @@ auto make_when_any_tuple_task(
 
 template<typename return_type, concepts::awaitable... awaitable_type>
 [[nodiscard]] auto make_when_any_tuple_controller_task(
-    coro::event& notify, std::optional<return_type>& return_value, awaitable_type... awaitables)
-    -> coro::detail::task_self_deleting
+    coro::event&                notify,
+    std::optional<return_type>& return_value,
+    awaitable_type... awaitables) -> coro::detail::task_self_deleting
 {
     std::atomic<bool> first_completed{false};
     co_await when_all(make_when_any_tuple_task(first_completed, notify, return_value, std::move(awaitables))...);
@@ -101,8 +103,9 @@ template<
     typename return_type               = typename concepts::awaitable_traits<awaitable_type>::awaiter_return_type,
     typename return_type_base          = std::remove_reference_t<return_type>>
 static auto make_when_any_controller_task(
-    range_type awaitables, coro::event& notify, std::optional<return_type_base>& return_value)
-    -> coro::detail::task_self_deleting
+    range_type                       awaitables,
+    coro::event&                     notify,
+    std::optional<return_type_base>& return_value) -> coro::detail::task_self_deleting
 {
     // This must live for as long as the longest running when_any task since each task tries to see
     // if it was the first to complete. Only the very first task to complete will set the return_value
@@ -130,8 +133,9 @@ static auto make_when_any_controller_task(
 } // namespace detail
 
 template<concepts::awaitable... awaitable_type>
-[[nodiscard]] auto when_any(std::stop_source stop_source, awaitable_type... awaitables) -> coro::task<
-    std::variant<std::remove_reference_t<typename concepts::awaitable_traits<awaitable_type>::awaiter_return_type>...>>
+[[nodiscard]] auto when_any(std::stop_source stop_source, awaitable_type... awaitables)
+    -> coro::task<std::variant<
+        std::remove_reference_t<typename concepts::awaitable_traits<awaitable_type>::awaiter_return_type>...>>
 {
     using return_type = std::variant<
         std::remove_reference_t<typename concepts::awaitable_traits<awaitable_type>::awaiter_return_type>...>;
@@ -148,8 +152,9 @@ template<concepts::awaitable... awaitable_type>
 }
 
 template<concepts::awaitable... awaitable_type>
-[[nodiscard]] auto when_any(awaitable_type... awaitables) -> coro::task<
-    std::variant<std::remove_reference_t<typename concepts::awaitable_traits<awaitable_type>::awaiter_return_type>...>>
+[[nodiscard]] auto when_any(awaitable_type... awaitables)
+    -> coro::task<std::variant<
+        std::remove_reference_t<typename concepts::awaitable_traits<awaitable_type>::awaiter_return_type>...>>
 {
     using return_type = std::variant<
         std::remove_reference_t<typename concepts::awaitable_traits<awaitable_type>::awaiter_return_type>...>;

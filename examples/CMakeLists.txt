@@ -57,6 +57,12 @@ add_executable(coro_when_all coro_when_all.cpp)
 target_link_libraries(coro_when_all PUBLIC libcoro)
 target_compile_options(coro_when_all PUBLIC ${LIBCORO_EXAMPLE_OPTIONS})
 
+if(NOT EMSCRIPTEN)
+    add_executable(coro_condition_variable coro_condition_variable.cpp)
+    target_link_libraries(coro_condition_variable PUBLIC libcoro)
+    target_compile_options(coro_condition_variable PUBLIC ${LIBCORO_EXAMPLE_OPTIONS})
+endif()
+
 if(LIBCORO_FEATURE_NETWORKING)
     add_executable(coro_io_scheduler coro_io_scheduler.cpp)
     target_link_libraries(coro_io_scheduler PUBLIC libcoro)

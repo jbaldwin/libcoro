@@ -25,7 +25,7 @@ namespace coro
  * the thread pool will stop accepting new tasks but will complete all tasks that were scheduled
  * prior to the shutdown request.
  */
-class thread_pool
+class thread_pool : public std::enable_shared_from_this<thread_pool>
 {
 public:
     /**

@@ -21,6 +21,9 @@ if (NOT "$ENV{version}" STREQUAL "")
     set(PROJECT_VERSION "$ENV{version}" CACHE INTERNAL "Copied from environment variable")
 endif()
 
+option(LIBCORO_ENABLE_ASAN           "Build with address sanitizer")
+option(LIBCORO_ENABLE_TSAN           "Build with thread sanitizer")
+option(LIBCORO_ENABLE_USAN           "Build with undefined sanitizer")
 option(LIBCORO_EXTERNAL_DEPENDENCIES "Use Cmake find_package to resolve dependencies instead of embedded libraries, Default=OFF." OFF)
 option(LIBCORO_BUILD_TESTS           "Build the tests, Default=ON." ON)
 option(LIBCORO_CODE_COVERAGE         "Enable code coverage, tests must also be enabled, Default=OFF" OFF)
@@ -40,6 +43,9 @@ endif()
 cmake_dependent_option(LIBCORO_FEATURE_NETWORKING "Include networking features, Default=ON." ON "NOT EMSCRIPTEN; NOT MSVC" OFF)
 cmake_dependent_option(LIBCORO_FEATURE_TLS "Include TLS encryption features, Default=ON." ON "NOT EMSCRIPTEN; NOT MSVC" OFF)
 
+message("${PROJECT_NAME} LIBCORO_ENABLE_ASAN           = ${LIBCORO_ENABLE_ASAN}")
+message("${PROJECT_NAME} LIBCORO_ENABLE_TSAN           = ${LIBCORO_ENABLE_TSAN}")
+message("${PROJECT_NAME} LIBCORO_ENABLE_USAN           = ${LIBCORO_ENABLE_USAN}")
 message("${PROJECT_NAME} LIBCORO_EXTERNAL_DEPENDENCIES = ${LIBCORO_EXTERNAL_DEPENDENCIES}")
 message("${PROJECT_NAME} LIBCORO_BUILD_TESTS           = ${LIBCORO_BUILD_TESTS}")
 message("${PROJECT_NAME} LIBCORO_CODE_COVERAGE         = ${LIBCORO_CODE_COVERAGE}")
@@ -76,12 +82,16 @@ set(LIBCORO_SOURCE_FILES
     include/coro/concepts/promise.hpp
     include/coro/concepts/range_of.hpp
 
+    include/coro/detail/lockfree_object_pool.hpp
+    include/coro/detail/lockfree_queue.hpp
     include/coro/detail/task_self_deleting.hpp / src/detail/task_self_deleting.cpp
     include/coro/detail/void_value.hpp
 
     include/coro/attribute.hpp
     include/coro/coro.hpp
+    include/coro/condition_variable.hpp src/condition_variable.cpp
     include/coro/event.hpp src/event.cpp
+    include/coro/default_executor.hpp src/default_executor.cpp
     include/coro/generator.hpp
     include/coro/latch.hpp
     include/coro/mutex.hpp src/mutex.cpp
@@ -145,6 +155,22 @@ endif()
 
 add_library(${PROJECT_NAME} ${LIBCORO_SOURCE_FILES})
 set_target_properties(${PROJECT_NAME} PROPERTIES LINKER_LANGUAGE CXX PREFIX "" VERSION ${PROJECT_VERSION} SOVERSION ${PROJECT_VERSION_MAJOR})
+
+if(LIBCORO_ENABLE_ASAN)
+    add_compile_options(-g -O0 -fno-omit-frame-pointer -fsanitize=address)
+    add_link_options( -fsanitize=address)
+endif()
+
+if(LIBCORO_ENABLE_TSAN)
+    add_compile_options(-g -O0 -fno-omit-frame-pointer -fsanitize=thread)
+    add_link_options(-fsanitize=thread)
+endif()
+
+if(LIBCORO_ENABLE_USAN)
+    add_compile_options(-g -O0 -fno-omit-frame-pointer -fsanitize=undefined)
+    add_link_options(-fsanitize=undefined)
+endif()
+
 target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_20)
 target_include_directories(${PROJECT_NAME} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include PUBLIC ${CMAKE_CURRENT_BINARY_DIR}/include)
 generate_export_header(${PROJECT_NAME} BASE_NAME CORO EXPORT_FILE_NAME include/coro/export.hpp)

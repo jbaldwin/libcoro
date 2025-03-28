@@ -29,6 +29,8 @@
     #include "coro/net/udp/peer.hpp"
 #endif
 
+#include "coro/condition_variable.hpp"
+#include "coro/default_executor.hpp"
 #include "coro/event.hpp"
 #include "coro/generator.hpp"
 #include "coro/latch.hpp"
