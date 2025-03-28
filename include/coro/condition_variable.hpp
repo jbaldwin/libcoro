@@ -198,7 +198,7 @@ protected:
 
 public:
     explicit strategy_based_on_io_scheduler(
-        std::shared_ptr<io_scheduler> io_scheduler = coro::default_executor::instance()->get_io_scheduler());
+        std::shared_ptr<io_scheduler> io_scheduler = coro::default_executor::io_executor());
 
     ~strategy_based_on_io_scheduler();
 

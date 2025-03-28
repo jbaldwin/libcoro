@@ -15,7 +15,7 @@ TEST_CASE("condition_variable single waiter", "[condition_variable]")
 
     std::cout << "condition_variable single waiter" << std::endl;
 
-    auto                     sched = coro::default_executor::instance()->get_io_scheduler();
+    auto                     sched = coro::default_executor::io_executor();
     coro::mutex              m;
     coro::condition_variable cv;
 
@@ -115,7 +115,7 @@ TEST_CASE("condition_variable one notifier and one waiter", "[condition_variable
 
     struct BaseParams
     {
-        std::shared_ptr<coro::io_scheduler> sched = coro::default_executor::instance()->get_io_scheduler();
+        std::shared_ptr<coro::io_scheduler> sched = coro::default_executor::io_executor();
         coro::mutex                         m;
         coro::condition_variable            cv{sched};
     };
@@ -170,11 +170,10 @@ TEST_CASE("condition_variable notify_all", "[condition_variable]")
 
     struct BaseParams
     {
-        std::shared_ptr<coro::io_scheduler> sched = coro::default_executor::instance()->get_io_scheduler();
-        ;
-        coro::mutex              m;
-        coro::condition_variable cv{sched};
-        int                      number_of_timeouts{};
+        std::shared_ptr<coro::io_scheduler> sched = coro::default_executor::io_executor();
+        coro::mutex                         m;
+        coro::condition_variable            cv{sched};
+        int                                 number_of_timeouts{};
     };
 
     BaseParams bp;
@@ -223,17 +222,17 @@ TEST_CASE("condition_variable for thread-safe-queue between producers and consum
 
     struct BaseParams
     {
-        coro::default_executor*  sched = coro::default_executor::instance();
-        coro::mutex              m;
-        coro::condition_variable cv;
-        std::atomic_bool         cancel{false};
-        std::atomic_int32_t      next{0};
-        int32_t                  max_value{10000};
-        std::queue<int32_t>      q;
-        std::set<int32_t>        values_not_delivered;
-        std::set<int32_t>        values_not_produced;
-        std::atomic_int32_t      producers{0};
-        std::atomic_int32_t      consumers{0};
+        std::shared_ptr<coro::thread_pool> sched = coro::default_executor::executor();
+        coro::mutex                        m;
+        coro::condition_variable           cv;
+        std::atomic_bool                   cancel{false};
+        std::atomic_int32_t                next{0};
+        int32_t                            max_value{10000};
+        std::queue<int32_t>                q;
+        std::set<int32_t>                  values_not_delivered;
+        std::set<int32_t>                  values_not_produced;
+        std::atomic_int32_t                producers{0};
+        std::atomic_int32_t                consumers{0};
     };
 
     BaseParams bp;
