@@ -236,7 +236,6 @@ public:
     [[nodiscard]] auto wait_for_ms(scoped_lock& lock, const std::chrono::milliseconds duration) -> task<std::cv_status>;
 
 protected:
-    friend class std::lock_guard<strategy_based_on_io_scheduler>;
     friend struct wait_operation;
 
     struct wait_operation_link
@@ -250,7 +249,7 @@ protected:
     /// A queue of grabbed internal waiters that are only accessed by the notify'er the wait'er
     coro::detail::lockfree_queue_based_on_pool<wait_operation_link*> m_internal_waiters;
 
-    /// A object pool of free wait_operation_link_ptr
+    /// A object pool of free wait_operation_link
     coro::detail::lockfree_object_pool<wait_operation_link> m_free_links;
 
     /// Insert @ref waiter to @ref m_internal_waiters
@@ -262,14 +261,23 @@ protected:
     /// Extract one waiter from @ref m_internal_waiters
     wait_operation_link_unique_ptr extract_one();
 
-    /// Internal helper function to wait for a condition variable. This is necessary for the scheduler when he schedules
-    /// a task with a time limit
+    /**
+     * Internal helper function to wait for a condition variable. This is necessary for wait_for_ms
+     * @param wo a wait operation, which is also used in timeout_task for extract_waiter
+     * @param stop_source a stop event to cancel coroutine
+     */
     [[nodiscard]] auto wait_task(std::shared_ptr<wait_operation> wo, std::stop_source stop_source) -> task<bool>;
 
+    /**
+     * Internal helper function to wait for timeout and extract_waiter. This is necessary for wait_for_ms
+     * @param wo a wait operation, which is used for extract_waiter
+     * @param timeout the maximum duration to wait
+     * @param stop_source a stop event to cancel coroutine
+     */
     [[nodiscard]] auto timeout_task(
         std::shared_ptr<wait_operation> wo,
         std::chrono::milliseconds       timeout,
-        std::stop_source                stop_source) -> coro::task<timeout_status>;
+        std::stop_source                stop_source) -> task<timeout_status>;
 };
 #endif
 
@@ -312,7 +320,7 @@ public:
     using Strategy::notify_one;
 
     /**
-     * Notifies all waiting threads
+     * Notifies all waiting coroutines
      */
     using Strategy::notify_all;
 

@@ -29,7 +29,7 @@ auto detail::strategy_based_on_io_scheduler::wait_task(
     std::shared_ptr<detail::strategy_based_on_io_scheduler::wait_operation> wo,
     std::stop_source                                                        stop_source) -> task<bool>
 {
-    auto stop = [wo, stop_source]()
+    auto stop = [wo]()
     {
         if (!wo->m_awaiting_coroutine.done())
             wo->m_awaiting_coroutine.resume();
