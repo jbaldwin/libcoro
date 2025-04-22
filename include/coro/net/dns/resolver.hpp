@@ -17,7 +17,6 @@
 #include <functional>
 #include <memory>
 #include <mutex>
-#include <sys/epoll.h>
 #include <unordered_set>
 #include <vector>
 

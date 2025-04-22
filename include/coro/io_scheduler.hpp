@@ -3,8 +3,11 @@
 #include "coro/detail/poll_info.hpp"
 #include "coro/expected.hpp"
 #include "coro/fd.hpp"
+#include "coro/io_notifier.hpp"
 #include "coro/poll.hpp"
 #include "coro/thread_pool.hpp"
+#include "io_notifier.hpp"
+#include <unistd.h>
 
 #ifdef LIBCORO_FEATURE_NETWORKING
     #include "coro/net/socket.hpp"
@@ -15,7 +18,7 @@
 #include <map>
 #include <memory>
 #include <optional>
-#include <sys/eventfd.h>
+#include <stop_token>
 #include <thread>
 #include <vector>
 
@@ -152,8 +155,8 @@ public:
                 if (m_scheduler.m_schedule_fd_triggered.compare_exchange_strong(
                         expected, true, std::memory_order::release, std::memory_order::relaxed))
                 {
-                    eventfd_t value{1};
-                    eventfd_write(m_scheduler.m_schedule_fd, value);
+                    const int control = 1;
+                    ::write(m_scheduler.m_schedule_fd, reinterpret_cast<const void*>(&control), sizeof(control));
                 }
             }
             else
@@ -294,10 +297,7 @@ public:
     /**
      * Yields the current task to the end of the queue of waiting tasks.
      */
-    [[nodiscard]] auto yield() -> schedule_operation
-    {
-        return schedule_operation{*this};
-    };
+    [[nodiscard]] auto yield() -> schedule_operation { return schedule_operation{*this}; };
 
     /**
      * Yields the current task for the given amount of time.
@@ -373,8 +373,8 @@ public:
             if (m_schedule_fd_triggered.compare_exchange_strong(
                     expected, true, std::memory_order::release, std::memory_order::relaxed))
             {
-                eventfd_t value{1};
-                eventfd_write(m_schedule_fd, value);
+                const int stop = 1;
+                ::write(m_schedule_fd, reinterpret_cast<const void*>(&stop), sizeof(stop));
             }
 
             return true;
@@ -403,10 +403,7 @@ public:
     /**
      * @return True if the task queue is empty and zero tasks are currently executing.
      */
-    auto empty() const noexcept -> bool
-    {
-        return size() == 0;
-    }
+    auto empty() const noexcept -> bool { return size() == 0; }
 
     /**
      * Starts the shutdown of the io scheduler.  All currently executing and pending tasks will complete
@@ -418,12 +415,12 @@ private:
     /// The configuration options.
     options m_opts;
 
-    /// The event loop epoll file descriptor.
-    fd_t m_epoll_fd{-1};
+    /// The io event notifier.
+    io_notifier m_io_notifier;
+    /// The timer handle for timed events, e.g. yield_for() or scheduler_after().
+    timer_handle m_timer;
     /// The event loop fd to trigger a shutdown.
     fd_t m_shutdown_fd{-1};
-    /// The event loop timer fd for timed events, e.g. yield_for() or scheduler_after().
-    fd_t m_timer_fd{-1};
     /// The schedule file descriptor if the scheduler is in inline processing mode.
     fd_t              m_schedule_fd{-1};
     std::atomic<bool> m_schedule_fd_triggered{false};
@@ -467,8 +464,6 @@ private:
 
     static const constexpr std::chrono::milliseconds m_default_timeout{1000};
     static const constexpr std::chrono::milliseconds m_no_timeout{0};
-    static const constexpr std::size_t               m_max_events = 16;
-    std::array<struct epoll_event, m_max_events>     m_events{};
     std::vector<std::coroutine_handle<>>             m_handles_to_resume{};
 
     auto process_event_execute(detail::poll_info* pi, poll_status status) -> void;

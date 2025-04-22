@@ -114,6 +114,7 @@ if(LIBCORO_FEATURE_NETWORKING)
 
         include/coro/fd.hpp
         include/coro/io_scheduler.hpp src/io_scheduler.cpp
+        include/coro/io_notifier.hpp src/io_notifier.cpp
         include/coro/poll.hpp src/poll.cpp
     )
 

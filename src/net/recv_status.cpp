@@ -14,6 +14,7 @@ static const std::string recv_status_invalid_argument{"invalid_argument"};
 static const std::string recv_status_no_memory{"no_memory"};
 static const std::string recv_status_not_connected{"not_connected"};
 static const std::string recv_status_not_a_socket{"not_a_socket"};
+static const std::string connection_reset_by_peer{"connection_reset_by_peer"};
 static const std::string recv_status_unknown{"unknown"};
 
 auto to_string(recv_status status) -> const std::string&
@@ -45,6 +46,8 @@ auto to_string(recv_status status) -> const std::string&
             return recv_status_not_connected;
         case recv_status::not_a_socket:
             return recv_status_not_a_socket;
+        case recv_status::connection_reset_by_peer:
+            return connection_reset_by_peer;
     }
 
     return recv_status_unknown;

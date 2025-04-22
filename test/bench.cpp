@@ -134,7 +134,7 @@ TEST_CASE("benchmark thread_pool{1} counter task", "[benchmark]")
 {
     constexpr std::size_t iterations = default_iterations;
 
-    auto tp = coro::thread_pool::make_shared(coro::thread_pool::options{1});
+    auto                  tp = coro::thread_pool::make_shared(coro::thread_pool::options{1});
     std::atomic<uint64_t> counter{0};
 
     auto make_task = [](std::shared_ptr<coro::thread_pool> tp, std::atomic<uint64_t>& c) -> coro::task<void>
@@ -170,7 +170,7 @@ TEST_CASE("benchmark thread_pool{2} counter task", "[benchmark]")
 {
     constexpr std::size_t iterations = default_iterations;
 
-    auto tp = coro::thread_pool::make_shared(coro::thread_pool::options{2});
+    auto                  tp = coro::thread_pool::make_shared(coro::thread_pool::options{2});
     std::atomic<uint64_t> counter{0};
 
     auto make_task = [](std::shared_ptr<coro::thread_pool> tp, std::atomic<uint64_t>& c) -> coro::task<void>
@@ -206,7 +206,7 @@ TEST_CASE("benchmark thread_pool{N} counter task", "[benchmark]")
 {
     constexpr std::size_t iterations = default_iterations;
 
-    auto tp = coro::thread_pool::make_shared();
+    auto                  tp = coro::thread_pool::make_shared();
     std::atomic<uint64_t> counter{0};
 
     auto make_task = [](std::shared_ptr<coro::thread_pool> tp, std::atomic<uint64_t>& c) -> coro::task<void>
@@ -383,9 +383,10 @@ TEST_CASE("benchmark tcp::server echo server thread pool", "[benchmark]")
     std::atomic<uint64_t> accepted{0};
     std::atomic<uint64_t> clients_completed{0};
 
-    auto server_scheduler = coro::io_scheduler::make_shared(coro::io_scheduler::options{
-        .pool               = coro::thread_pool::options{},
-        .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_on_thread_pool});
+    auto server_scheduler = coro::io_scheduler::make_shared(
+        coro::io_scheduler::options{
+            .pool               = coro::thread_pool::options{},
+            .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_on_thread_pool});
     auto make_server_task = [](std::shared_ptr<coro::io_scheduler> server_scheduler,
                                std::atomic<uint64_t>&              listening,
                                std::atomic<uint64_t>&              accepted) -> coro::task<void>
@@ -451,9 +452,10 @@ TEST_CASE("benchmark tcp::server echo server thread pool", "[benchmark]")
     std::mutex                                    g_histogram_mutex;
     std::map<std::chrono::milliseconds, uint64_t> g_histogram;
 
-    auto client_scheduler = coro::io_scheduler::make_shared(coro::io_scheduler::options{
-        .pool               = coro::thread_pool::options{},
-        .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_on_thread_pool});
+    auto client_scheduler = coro::io_scheduler::make_shared(
+        coro::io_scheduler::options{
+            .pool               = coro::thread_pool::options{},
+            .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_on_thread_pool});
     auto make_client_task = [](std::shared_ptr<coro::io_scheduler>            client_scheduler,
                                const std::string&                             msg,
                                std::atomic<uint64_t>&                         clients_completed,
@@ -698,16 +700,17 @@ TEST_CASE("benchmark tcp::server echo server inline", "[benchmark]")
     std::vector<std::thread> server_threads{};
     for (size_t i = 0; i < server_count; ++i)
     {
-        server_threads.emplace_back(std::thread{[&]()
-                                                {
-                                                    server s{};
-                                                    s.id = server_id++;
-                                                    std::cerr << "coro::sync_wait(make_server_task(s));\n";
-                                                    coro::sync_wait(make_server_task(s, listening, accepted));
-                                                    std::cerr << "server.scheduler->shutdown()\n";
-                                                    s.scheduler->shutdown();
-                                                    std::cerr << "server thread exiting\n";
-                                                }});
+        server_threads.emplace_back(
+            std::thread{[&]()
+                        {
+                            server s{};
+                            s.id = server_id++;
+                            std::cerr << "coro::sync_wait(make_server_task(s));\n";
+                            coro::sync_wait(make_server_task(s, listening, accepted));
+                            std::cerr << "server.scheduler->shutdown()\n";
+                            s.scheduler->shutdown();
+                            std::cerr << "server thread exiting\n";
+                        }});
     }
 
     // The server can take a small bit of time to start up, if we don't wait for it to notify then
@@ -722,20 +725,21 @@ TEST_CASE("benchmark tcp::server echo server inline", "[benchmark]")
     std::vector<client>      clients{};
     for (size_t i = 0; i < client_count; ++i)
     {
-        client_threads.emplace_back(std::thread{
-            [&]()
-            {
-                client c{};
-                for (size_t i = 0; i < connections / client_count; ++i)
-                {
-                    c.tasks.emplace_back(make_client_task(c, msg, clients_completed, g_histogram, g_histogram_mutex));
-                }
-                std::cerr << "coro::sync_wait(coro::when_all(std::move(c.tasks)));\n";
-                coro::sync_wait(coro::when_all(std::move(c.tasks)));
-                std::cerr << "client.scheduler->shutdown()\n";
-                c.scheduler->shutdown();
-                std::cerr << "client thread exiting\n";
-            }});
+        client_threads.emplace_back(
+            std::thread{[&]()
+                        {
+                            client c{};
+                            for (size_t i = 0; i < connections / client_count; ++i)
+                            {
+                                c.tasks.emplace_back(
+                                    make_client_task(c, msg, clients_completed, g_histogram, g_histogram_mutex));
+                            }
+                            std::cerr << "coro::sync_wait(coro::when_all(std::move(c.tasks)));\n";
+                            coro::sync_wait(coro::when_all(std::move(c.tasks)));
+                            std::cerr << "client.scheduler->shutdown()\n";
+                            c.scheduler->shutdown();
+                            std::cerr << "client thread exiting\n";
+                        }});
     }
 
     for (auto& ct : client_threads)
@@ -770,9 +774,10 @@ TEST_CASE("benchmark tls::server echo server thread pool", "[benchmark]")
     std::atomic<uint64_t> accepted{0};
     std::atomic<uint64_t> clients_completed{0};
 
-    auto server_scheduler = coro::io_scheduler::make_shared(coro::io_scheduler::options{
-        .pool               = coro::thread_pool::options{},
-        .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_on_thread_pool});
+    auto server_scheduler = coro::io_scheduler::make_shared(
+        coro::io_scheduler::options{
+            .pool               = coro::thread_pool::options{},
+            .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_on_thread_pool});
     auto make_server_task = [](std::shared_ptr<coro::io_scheduler> server_scheduler,
                                std::atomic<uint64_t>&              listening,
                                std::atomic<uint64_t>&              accepted) -> coro::task<void>
@@ -867,9 +872,10 @@ TEST_CASE("benchmark tls::server echo server thread pool", "[benchmark]")
     coro::mutex                                   histogram_mutex;
     std::map<std::chrono::milliseconds, uint64_t> g_histogram;
 
-    auto client_scheduler = coro::io_scheduler::make_shared(coro::io_scheduler::options{
-        .pool               = coro::thread_pool::options{},
-        .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_on_thread_pool});
+    auto client_scheduler = coro::io_scheduler::make_shared(
+        coro::io_scheduler::options{
+            .pool               = coro::thread_pool::options{},
+            .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_on_thread_pool});
     auto make_client_task = [](std::shared_ptr<coro::io_scheduler>            client_scheduler,
                                const std::string&                             msg,
                                std::atomic<uint64_t>&                         clients_completed,
