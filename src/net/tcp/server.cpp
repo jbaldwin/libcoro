@@ -7,11 +7,12 @@ namespace coro::net::tcp
 server::server(std::shared_ptr<io_scheduler> scheduler, options opts)
     : m_io_scheduler(std::move(scheduler)),
       m_options(std::move(opts)),
-      m_accept_socket(net::make_accept_socket(
-          net::socket::options{net::domain_t::ipv4, net::socket::type_t::tcp, net::socket::blocking_t::no},
-          m_options.address,
-          m_options.port,
-          m_options.backlog))
+      m_accept_socket(
+          net::make_accept_socket(
+              net::socket::options{net::domain_t::ipv4, net::socket::type_t::tcp, net::socket::blocking_t::no},
+              m_options.address,
+              m_options.port,
+              m_options.backlog))
 {
     if (m_io_scheduler == nullptr)
     {

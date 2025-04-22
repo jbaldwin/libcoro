@@ -1,4 +1,5 @@
 #include "coro/net/socket.hpp"
+#include <sys/socket.h>
 
 namespace coro::net
 {
@@ -108,7 +109,15 @@ auto make_accept_socket(const socket::options& opts, const net::ip_address& addr
     socket s = make_socket(opts);
 
     int sock_opt{1};
-    if (setsockopt(s.native_handle(), SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &sock_opt, sizeof(sock_opt)) < 0)
+    // BSD and macOS use a different SO_REUSEPORT implementation than Linux that enables both duplicate address and port
+    // bindings with a single flag.
+#if defined(__linux__)
+    int sock_opt_name = SO_REUSEADDR | SO_REUSEPORT;
+#elif defined(__FreeBSD__) || defined(__APPLE__) || defined(__OpenBSD__) || defined(__NetBSD__)
+    int sock_opt_name = SO_REUSEPORT;
+#endif
+
+    if (setsockopt(s.native_handle(), SOL_SOCKET, sock_opt_name, &sock_opt, sizeof(sock_opt)) < 0)
     {
         throw std::runtime_error{"Failed to setsockopt(SO_REUSEADDR | SO_REUSEPORT)"};
     }
@@ -118,7 +127,7 @@ auto make_accept_socket(const socket::options& opts, const net::ip_address& addr
     server.sin_port   = htons(port);
     server.sin_addr   = *reinterpret_cast<const in_addr*>(address.data().data());
 
-    if (bind(s.native_handle(), (struct sockaddr*)&server, sizeof(server)) < 0)
+    if (bind(s.native_handle(), reinterpret_cast<sockaddr*>(&server), sizeof(server)) < 0)
     {
         throw std::runtime_error{"Failed to bind."};
     }
