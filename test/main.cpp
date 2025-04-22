@@ -26,9 +26,11 @@ struct test_setup_networking
 
     ~test_setup_networking()
     {
+    #ifdef LIBCORO_FEATURE_TLS
         // Cleanup the temporary key.pem and cert.pem files.
         auto unused = system("rm key.pem cert.pem");
         (void)unused;
+    #endif
     }
 };
 
