@@ -19,7 +19,7 @@ int main()
 
         for (size_t i = 0; i < iterations; ++i)
         {
-            q.push(i);
+            co_await q.push(i);
         }
 
         pd.count_down(); // Notify the shutdown task this producer is complete.
@@ -32,11 +32,7 @@ int main()
         // entire queue to be drained before shutting it down.
         co_await tp.schedule();
         co_await pd;
-        while (!q.empty())
-        {
-            co_await tp.yield();
-        }
-        q.shutdown_notify_waiters();
+        co_await q.shutdown_notify_waiters_drain(tp);
         co_return;
     };
 

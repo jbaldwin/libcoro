@@ -16,8 +16,8 @@ TEST_CASE("queue shutdown produce", "[queue]")
         co_return std::move(*expected);
     };
 
-    q.shutdown_notify_waiters();
-    q.push(42);
+    coro::sync_wait(q.shutdown_notify_waiters());
+    coro::sync_wait(q.push(42));
 
     auto result = coro::sync_wait(make_consumer_task(q));
     REQUIRE(result == 0);
@@ -38,7 +38,7 @@ TEST_CASE("queue single produce consume", "[queue]")
         co_return std::move(*expected);
     };
 
-    q.push(42);
+    coro::sync_wait(q.push(42));
 
     auto result = coro::sync_wait(make_consumer_task(q));
     REQUIRE(result == 42);
@@ -63,7 +63,7 @@ TEST_CASE("queue multiple produce and consume", "[queue]")
     std::vector<coro::task<uint64_t>> tasks{};
     for (uint64_t i = 0; i < ITERATIONS; ++i)
     {
-        q.push(i);
+        coro::sync_wait(q.push(i));
         tasks.emplace_back(make_consumer_task(q));
     }
 
@@ -85,17 +85,11 @@ TEST_CASE("queue produce consume direct", "[queue]")
         co_await tp.schedule();
         for (uint64_t i = 0; i < ITERATIONS; ++i)
         {
-            q.push(i);
+            co_await q.push(i);
             co_await tp.yield();
         }
 
-        // Wait for all elements to be consumed and then wake all waiters.
-        while (!q.empty())
-        {
-            co_await tp.yield();
-        }
-
-        q.shutdown_notify_waiters();
+        co_await q.shutdown_notify_waiters_drain(tp);
 
         co_return 0;
     };
@@ -137,7 +131,7 @@ TEST_CASE("queue multithreaded produce consume", "[queue]")
         co_await tp.schedule();
         for (uint64_t i = 0; i < ITERATIONS; ++i)
         {
-            q.push(i);
+            co_await q.push(i);
             co_await tp.yield();
         }
 
@@ -149,14 +143,9 @@ TEST_CASE("queue multithreaded produce consume", "[queue]")
     {
         // Wait for all producers to complete.
         co_await w;
-        // Wait for all elements to be consumed.
-        while (!q.empty())
-        {
-            co_await tp.yield();
-        }
 
         // Wake up all waiters.
-        q.shutdown_notify_waiters();
+        co_await q.shutdown_notify_waiters_drain(tp);
     };
 
     auto make_consumer_task =
@@ -202,8 +191,8 @@ TEST_CASE("queue stopped", "[queue]")
         co_return std::move(*expected);
     };
 
-    q.push(42);
-    q.shutdown_notify_waiters();
+    coro::sync_wait(q.push(42));
+    coro::sync_wait(q.shutdown_notify_waiters());
 
     auto result = coro::sync_wait(make_consumer_task(q));
     REQUIRE(result == 0);
