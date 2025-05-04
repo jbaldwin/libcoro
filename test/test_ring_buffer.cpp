@@ -55,8 +55,10 @@ TEST_CASE("ring_buffer many elements many producers many consumers", "[ring_buff
 
     coro::thread_pool               tp{coro::thread_pool::options{.thread_count = 4}};
     coro::ring_buffer<uint64_t, 64> rb{};
+    coro::latch                     wait{producers};
 
-    auto make_producer_task = [](coro::thread_pool& tp, coro::ring_buffer<uint64_t, 64>& rb) -> coro::task<void>
+    auto make_producer_task =
+        [](coro::thread_pool& tp, coro::ring_buffer<uint64_t, 64>& rb, coro::latch& w) -> coro::task<void>
     {
         co_await tp.schedule();
         auto to_produce = iterations / producers;
@@ -65,6 +67,16 @@ TEST_CASE("ring_buffer many elements many producers many consumers", "[ring_buff
         {
             co_await rb.produce(i);
         }
+
+        w.count_down();
+        co_return;
+    };
+
+    auto make_shutdown_task =
+        [](coro::thread_pool& tp, coro::ring_buffer<uint64_t, 64>& rb, coro::latch& w) -> coro::task<void>
+    {
+        co_await tp.schedule();
+        co_await w;
 
         // Wait for all the values to be consumed prior to shutting down the ring buffer.
         while (!rb.empty())
@@ -107,8 +119,9 @@ TEST_CASE("ring_buffer many elements many producers many consumers", "[ring_buff
     }
     for (size_t i = 0; i < producers; ++i)
     {
-        tasks.emplace_back(make_producer_task(tp, rb));
+        tasks.emplace_back(make_producer_task(tp, rb, wait));
     }
+    tasks.emplace_back(make_shutdown_task(tp, rb, wait));
 
     coro::sync_wait(coro::when_all(std::move(tasks)));
 
