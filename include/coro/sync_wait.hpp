@@ -7,6 +7,7 @@
 #include <condition_variable>
 #include <exception>
 #include <mutex>
+#include <stdexcept>
 #include <variant>
 
 namespace coro
@@ -67,9 +68,9 @@ public:
 
     static constexpr bool return_type_is_reference = std::is_reference_v<return_type>;
     using stored_type                              = std::conditional_t<
-        return_type_is_reference,
-        std::remove_reference_t<return_type>*,
-        std::remove_const_t<return_type>>;
+                                     return_type_is_reference,
+                                     std::remove_reference_t<return_type>*,
+                                     std::remove_const_t<return_type>>;
     using variant_type = std::variant<unset_return_value, stored_type, std::exception_ptr>;
 
     sync_wait_task_promise() noexcept                                        = default;
@@ -88,9 +89,9 @@ public:
     auto get_return_object() noexcept { return coroutine_type::from_promise(*this); }
 
     template<typename value_type>
-    requires(return_type_is_reference and std::is_constructible_v<return_type, value_type&&>) or
-        (not return_type_is_reference and
-         std::is_constructible_v<stored_type, value_type&&>) auto return_value(value_type&& value) -> void
+        requires(return_type_is_reference and std::is_constructible_v<return_type, value_type &&>) or
+                (not return_type_is_reference and std::is_constructible_v<stored_type, value_type &&>)
+    auto return_value(value_type&& value) -> void
     {
         if constexpr (return_type_is_reference)
         {
@@ -103,7 +104,8 @@ public:
         }
     }
 
-    auto return_value(stored_type value) -> void requires(not return_type_is_reference)
+    auto return_value(stored_type value) -> void
+        requires(not return_type_is_reference)
     {
         if constexpr (std::is_move_constructible_v<stored_type>)
         {
