@@ -4,7 +4,6 @@
 #include "coro/expected.hpp"
 #include "coro/sync_wait.hpp"
 
-#include <mutex>
 #include <queue>
 
 namespace coro
@@ -30,7 +29,6 @@ enum class queue_consume_result
     queue_stopped
 };
 
-
 /**
  * @brief An unbounded queue. If the queue is empty and there are waiters to consume then
  *        there are no allocations and the coroutine context will simply be passed to the
@@ -52,10 +50,7 @@ public:
          *
          * @return coro::task<scoped_lock>
          */
-        auto make_acquire_lock_task() -> coro::task<scoped_lock>
-        {
-            co_return co_await m_queue.m_mutex.lock();
-        }
+        auto make_acquire_lock_task() -> coro::task<scoped_lock> { co_return co_await m_queue.m_mutex.lock(); }
 
         auto await_ready() noexcept -> bool
         {
@@ -146,30 +141,11 @@ public:
     queue() {}
     ~queue() {}
 
-    queue(const queue&) = delete;
-    queue(queue&& other)
-    {
-        m_waiters  = std::exchange(other.m_waiters, nullptr);
-        m_mutex    = std::move(other.m_mutex);
-        m_elements = std::move(other.m_elements);
-        m_shutting_down = std::move(other.m_shutting_down);
-        m_stopped = std::move(other.m_stopped);
-    }
+    queue(const queue&)  = delete;
+    queue(queue&& other) = delete;
 
-    auto operator=(const queue&) -> queue& = delete;
-    auto operator=(queue&& other) -> queue&
-    {
-        if (std::addressof(other) != this)
-        {
-            m_waiters  = std::exchange(other.m_waiters, nullptr);
-            m_mutex    = std::move(other.m_mutex);
-            m_elements = std::move(other.m_elements);
-            m_shutting_down = std::move(other.m_shutting_down);
-            m_stopped = std::move(other.m_stopped);
-        }
-
-        return *this;
-    }
+    auto operator=(const queue&) -> queue&  = delete;
+    auto operator=(queue&& other) -> queue& = delete;
 
     /**
      * @brief Determines if the queue is empty.
@@ -312,7 +288,8 @@ public:
     auto shutdown_notify_waiters() -> coro::task<void>
     {
         auto expected = false;
-        if (!m_shutting_down.compare_exchange_strong(expected, true, std::memory_order::acq_rel, std::memory_order::relaxed))
+        if (!m_shutting_down.compare_exchange_strong(
+                expected, true, std::memory_order::acq_rel, std::memory_order::relaxed))
         {
             co_return;
         }
@@ -345,12 +322,13 @@ public:
     auto shutdown_notify_waiters_drain(executor_t& e) -> coro::task<void>
     {
         auto expected = false;
-        if (!m_shutting_down.compare_exchange_strong(expected, true, std::memory_order::acq_rel, std::memory_order::relaxed))
+        if (!m_shutting_down.compare_exchange_strong(
+                expected, true, std::memory_order::acq_rel, std::memory_order::relaxed))
         {
             co_return;
         }
 
-        while(!empty())
+        while (!empty())
         {
             co_await e.yield();
         }
