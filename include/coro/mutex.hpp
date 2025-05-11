@@ -1,5 +1,6 @@
 #pragma once
 
+#include "coro/concepts/executor.hpp"
 #include <atomic>
 #include <coroutine>
 #include <mutex>
@@ -25,7 +26,7 @@ public:
         adopt
     };
 
-    explicit scoped_lock(mutex& m, lock_strategy strategy = lock_strategy::adopt) : m_mutex(&m)
+    explicit scoped_lock(class coro::mutex& m, lock_strategy strategy = lock_strategy::adopt) : m_mutex(&m)
     {
         // Future -> support acquiring the lock?  Not sure how to do that without being able to
         // co_await in the constructor.
@@ -38,13 +39,13 @@ public:
     ~scoped_lock();
 
     scoped_lock(const scoped_lock&) = delete;
-    scoped_lock(scoped_lock&& other) : m_mutex(std::exchange(other.m_mutex, nullptr)) {}
+    scoped_lock(scoped_lock&& other) : m_mutex(other.m_mutex.exchange(nullptr, std::memory_order::acq_rel)) {}
     auto operator=(const scoped_lock&) -> scoped_lock& = delete;
     auto operator=(scoped_lock&& other) noexcept -> scoped_lock&
     {
         if (std::addressof(other) != this)
         {
-            m_mutex = std::exchange(other.m_mutex, nullptr);
+            m_mutex.store(other.m_mutex.exchange(nullptr, std::memory_order::acq_rel), std::memory_order::release);
         }
         return *this;
     }
@@ -55,8 +56,18 @@ public:
      */
     auto unlock() -> void;
 
+    /**
+     * Unlocks the scoped lock prior to it going out of scope.  Calling this multiple times has no
+     * additional affect after the first call. This will distribute
+     * the waiters across the executor's threads.
+     */
+    template<concepts::executor executor_type>
+    auto unlock(executor_type& e) -> void;
+
+    class coro::mutex* mutex() const noexcept;
+
 private:
-    mutex* m_mutex{nullptr};
+    std::atomic<class coro::mutex*> m_mutex{nullptr};
 };
 
 class mutex
@@ -104,6 +115,50 @@ public:
      */
     auto unlock() -> void;
 
+    /**
+     * Releases the mutex's lock. This will distribute
+     * the waiters across the executor's threads.
+     */
+    template<concepts::executor executor_type>
+    auto unlock(executor_type& e) -> void
+    {
+        if (m_internal_waiters == nullptr)
+        {
+            void* current = m_state.load(std::memory_order::relaxed);
+            if (current == nullptr)
+            {
+                // If there are no internal waiters and there are no atomic waiters, attempt to set the
+                // mutex as unlocked.
+                if (m_state.compare_exchange_strong(
+                        current,
+                        const_cast<void*>(unlocked_value()),
+                        std::memory_order::release,
+                        std::memory_order::relaxed))
+                {
+                    return; // The mutex is now unlocked with zero waiters.
+                }
+                // else we failed to unlock, someone added themself as a waiter.
+            }
+
+            // There are waiters on the atomic list, acquire them and update the state for all others.
+            m_internal_waiters = static_cast<lock_operation*>(m_state.exchange(nullptr, std::memory_order::acq_rel));
+
+            // Should internal waiters be reversed to allow for true FIFO, or should they be resumed
+            // in this reverse order to maximum throuhgput?  If this list ever gets 'long' the reversal
+            // will take some time, but it might guarantee better latency across waiters.  This LIFO
+            // middle ground on the atomic waiters means the best throughput at the cost of the first
+            // waiter possibly having added latency based on the queue length of waiters.  Either way
+            // incurs a cost but this way for short lists will most likely be faster even though it
+            // isn't completely fair.
+        }
+
+        // assert m_internal_waiters != nullptr
+
+        lock_operation* to_resume = m_internal_waiters;
+        m_internal_waiters        = m_internal_waiters->m_next;
+        e.resume(to_resume->m_awaiting_coroutine);
+    }
+
 private:
     friend struct lock_operation;
 
@@ -120,5 +175,18 @@ private:
     /// m_state linked list.
     auto unlocked_value() const noexcept -> const void* { return &m_state; }
 };
+
+template<concepts::executor executor_type>
+inline auto scoped_lock::unlock(executor_type& e) -> void
+{
+    if (auto mtx = m_mutex.load(std::memory_order::acquire))
+    {
+        std::atomic_thread_fence(std::memory_order::release);
+
+        // Only allow a scoped lock to unlock the mutex a single time.
+        m_mutex = nullptr;
+        mtx->unlock(e);
+    }
+}
 
 } // namespace coro

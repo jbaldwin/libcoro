@@ -5,6 +5,7 @@
 #include "coro/fd.hpp"
 #include "coro/poll.hpp"
 #include "coro/thread_pool.hpp"
+#include "coro/when_any.hpp"
 
 #ifdef LIBCORO_FEATURE_NETWORKING
     #include "coro/net/socket.hpp"
@@ -77,7 +78,7 @@ public:
 
         /// If inline task processing is enabled then the io worker will resume tasks on its thread
         /// rather than scheduling them to be picked up by the thread pool.
-        const execution_strategy_t execution_strategy{execution_strategy_t::process_tasks_on_thread_pool};
+        execution_strategy_t execution_strategy{execution_strategy_t::process_tasks_on_thread_pool};
     };
 
     /**
@@ -290,10 +291,7 @@ public:
     /**
      * Yields the current task to the end of the queue of waiting tasks.
      */
-    [[nodiscard]] auto yield() -> schedule_operation
-    {
-        return schedule_operation{*this};
-    };
+    [[nodiscard]] auto yield() -> schedule_operation { return schedule_operation{*this}; };
 
     /**
      * Yields the current task for the given amount of time.
@@ -330,8 +328,9 @@ public:
      * @return THe result of the poll operation.
      */
     [[nodiscard]] auto poll(
-        const net::socket& sock, coro::poll_op op, std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
-        -> coro::task<poll_status>
+        const net::socket&        sock,
+        coro::poll_op             op,
+        std::chrono::milliseconds timeout = std::chrono::milliseconds{0}) -> coro::task<poll_status>
     {
         return poll(sock.native_handle(), op, timeout);
     }
@@ -395,10 +394,7 @@ public:
     /**
      * @return True if the task queue is empty and zero tasks are currently executing.
      */
-    auto empty() const noexcept -> bool
-    {
-        return size() == 0;
-    }
+    auto empty() const noexcept -> bool { return size() == 0; }
 
     /**
      * Starts the shutdown of the io scheduler.  All currently executing and pending tasks will complete
