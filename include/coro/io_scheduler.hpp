@@ -1,12 +1,12 @@
 #pragma once
 
 #include "coro/detail/poll_info.hpp"
+#include "coro/detail/timer_handle.hpp"
 #include "coro/expected.hpp"
 #include "coro/fd.hpp"
 #include "coro/io_notifier.hpp"
 #include "coro/poll.hpp"
 #include "coro/thread_pool.hpp"
-#include "io_notifier.hpp"
 #include <unistd.h>
 
 #ifdef LIBCORO_FEATURE_NETWORKING
@@ -156,7 +156,7 @@ public:
                         expected, true, std::memory_order::release, std::memory_order::relaxed))
                 {
                     const int control = 1;
-                    ::write(m_scheduler.m_schedule_fd, reinterpret_cast<const void*>(&control), sizeof(control));
+                    ::write(m_scheduler.m_schedule_fd[1], reinterpret_cast<const void*>(&control), sizeof(control));
                 }
             }
             else
@@ -373,8 +373,8 @@ public:
             if (m_schedule_fd_triggered.compare_exchange_strong(
                     expected, true, std::memory_order::release, std::memory_order::relaxed))
             {
-                const int stop = 1;
-                ::write(m_schedule_fd, reinterpret_cast<const void*>(&stop), sizeof(stop));
+                const int value = 1;
+                ::write(m_schedule_fd[1], reinterpret_cast<const void*>(&value), sizeof(value));
             }
 
             return true;
@@ -418,12 +418,12 @@ private:
     /// The io event notifier.
     io_notifier m_io_notifier;
     /// The timer handle for timed events, e.g. yield_for() or scheduler_after().
-    timer_handle m_timer;
+    detail::timer_handle m_timer;
     /// The event loop fd to trigger a shutdown.
-    fd_t m_shutdown_fd{-1};
+    std::array<fd_t, 2> m_shutdown_fd{-1};
     /// The schedule file descriptor if the scheduler is in inline processing mode.
-    fd_t              m_schedule_fd{-1};
-    std::atomic<bool> m_schedule_fd_triggered{false};
+    std::array<fd_t, 2> m_schedule_fd{-1};
+    std::atomic<bool>   m_schedule_fd_triggered{false};
 
     /// The number of tasks executing or awaiting events in this io scheduler.
     std::atomic<std::size_t> m_size{0};
@@ -462,9 +462,11 @@ private:
     static constexpr const int   m_schedule_object{0};
     static constexpr const void* m_schedule_ptr = &m_schedule_object;
 
-    static const constexpr std::chrono::milliseconds m_default_timeout{1000};
-    static const constexpr std::chrono::milliseconds m_no_timeout{0};
-    std::vector<std::coroutine_handle<>>             m_handles_to_resume{};
+    static const constexpr std::chrono::milliseconds              m_default_timeout{1000};
+    static const constexpr std::chrono::milliseconds              m_no_timeout{0};
+    static const constexpr std::size_t                            m_max_events = 16;
+    std::vector<std::pair<detail::poll_info*, coro::poll_status>> m_recent_events{};
+    std::vector<std::coroutine_handle<>>                          m_handles_to_resume{};
 
     auto process_event_execute(detail::poll_info* pi, poll_status status) -> void;
     auto process_timeout_execute() -> void;

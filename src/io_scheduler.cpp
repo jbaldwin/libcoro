@@ -23,15 +23,15 @@ io_scheduler::io_scheduler(options&& opts, private_constructor)
         m_thread_pool = thread_pool::make_shared(std::move(m_opts.pool));
     }
 
-    auto shutdown_pipe = std::array<fd_t, 2>{};
-    ::pipe(shutdown_pipe.data());
-    m_io_notifier.watch(shutdown_pipe[0], coro::poll_op::read, const_cast<void*>(m_shutdown_ptr), true);
-    m_shutdown_fd = shutdown_pipe[1];
+    m_shutdown_fd = std::array<fd_t, 2>{};
+    ::pipe(m_shutdown_fd.data());
+    m_io_notifier.watch(m_shutdown_fd[0], coro::poll_op::read, const_cast<void*>(m_shutdown_ptr), true);
 
-    auto schedule_pipe = std::array<fd_t, 2>{};
-    ::pipe(schedule_pipe.data());
-    m_io_notifier.watch(schedule_pipe[0], coro::poll_op::read, const_cast<void*>(m_schedule_ptr), true);
-    m_schedule_fd = schedule_pipe[1];
+    m_schedule_fd = std::array<fd_t, 2>{};
+    ::pipe(m_schedule_fd.data());
+    m_io_notifier.watch(m_schedule_fd[0], coro::poll_op::read, const_cast<void*>(m_schedule_ptr), true);
+
+    m_recent_events.reserve(m_max_events);
 }
 
 auto io_scheduler::make_shared(options opts) -> std::shared_ptr<io_scheduler>
@@ -58,11 +58,29 @@ io_scheduler::~io_scheduler()
         m_io_thread.join();
     }
 
-    if (m_schedule_fd != -1)
+    if (m_shutdown_fd[0] != -1)
     {
-        close(m_schedule_fd);
-        m_schedule_fd = -1;
+        close(m_shutdown_fd[0]);
+        m_shutdown_fd[0] = -1;
     }
+    if (m_shutdown_fd[1] != -1)
+    {
+        close(m_shutdown_fd[1]);
+        m_shutdown_fd[1] = -1;
+    }
+
+    if (m_schedule_fd[0] != -1)
+    {
+        close(m_schedule_fd[0]);
+        m_schedule_fd[0] = -1;
+    }
+    if (m_schedule_fd[1] != -1)
+    {
+        close(m_schedule_fd[1]);
+        m_schedule_fd[1] = -1;
+    }
+
+    // TODO Close all pipe-fds
 }
 
 auto io_scheduler::process_events(std::chrono::milliseconds timeout) -> std::size_t
@@ -152,7 +170,7 @@ auto io_scheduler::shutdown() noexcept -> void
 
         // Signal the event loop to stop asap, triggering the event fd is safe.
         uint64_t value{1};
-        auto     written = ::write(m_shutdown_fd, &value, sizeof(value));
+        auto     written = ::write(m_shutdown_fd[1], &value, sizeof(value));
         (void)written;
 
         if (m_io_thread.joinable())
@@ -221,7 +239,11 @@ auto io_scheduler::process_events_dedicated_thread() -> void
 
 auto io_scheduler::process_events_execute(std::chrono::milliseconds timeout) -> void
 {
-    for (auto& [handle_ptr, poll_status] : m_io_notifier.next_events(timeout))
+    // Clear the recent events without decreasing the allocated capacity to reduce allocations
+    m_recent_events.clear();
+    m_io_notifier.next_events(m_recent_events, timeout);
+
+    for (auto& [handle_ptr, poll_status] : m_recent_events)
     {
         if (handle_ptr == m_timer_ptr)
         {
@@ -278,7 +300,7 @@ auto io_scheduler::process_scheduled_execute_inline() -> void
 
         // Clear the schedule eventfd if this is a scheduled task.
         int control = 0;
-        ::read(m_schedule_fd, reinterpret_cast<void*>(&control), sizeof(control));
+        ::read(m_schedule_fd[1], reinterpret_cast<void*>(&control), sizeof(control));
 
         // Clear the in memory flag to reduce eventfd_* calls on scheduling.
         m_schedule_fd_triggered.exchange(false, std::memory_order::release);

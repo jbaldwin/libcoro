@@ -1,16 +1,16 @@
 #pragma once
 
 #include <string>
-#ifdef __linux__
+#if defined(__linux__)
     #include <sys/epoll.h>
 #endif
-#ifdef __APPLE__
+#if defined(__FreeBSD__) || defined(__APPLE__) || defined(__OpenBSD__) || defined(__NetBSD__)
     #include <sys/event.h>
 #endif
 
 namespace coro
 {
-#ifdef __linux__
+#if defined(__linux__)
 enum class poll_op : uint64_t
 {
     /// Poll for read operations.
@@ -21,7 +21,7 @@ enum class poll_op : uint64_t
     read_write = EPOLLIN | EPOLLOUT
 };
 #endif
-#ifdef __APPLE__
+#if defined(__FreeBSD__) || defined(__APPLE__) || defined(__OpenBSD__) || defined(__NetBSD__)
 enum class poll_op : int64_t
 {
     /// Poll for read operations.
