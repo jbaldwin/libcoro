@@ -540,9 +540,7 @@ TEST_CASE("benchmark tcp::server echo server thread pool", "[benchmark]")
         std::cerr << ms.count() << " : " << count << "\n";
     }
 }
-#endif
 
-/*
 TEST_CASE("benchmark tcp::server echo server inline", "[benchmark]")
 {
     const constexpr std::size_t connections             = 100;
@@ -701,16 +699,17 @@ TEST_CASE("benchmark tcp::server echo server inline", "[benchmark]")
     for (size_t i = 0; i < server_count; ++i)
     {
         server_threads.emplace_back(
-            std::thread{[&]()
-                        {
-                            server s{};
-                            s.id = server_id++;
-                            std::cerr << "coro::sync_wait(make_server_task(s));\n";
-                            coro::sync_wait(make_server_task(s, listening, accepted));
-                            std::cerr << "server.scheduler->shutdown()\n";
-                            s.scheduler->shutdown();
-                            std::cerr << "server thread exiting\n";
-                        }});
+            [&]()
+            {
+                server s{
+                    .id = server_id++,
+                };
+                std::cerr << "coro::sync_wait(make_server_task(s));\n";
+                coro::sync_wait(make_server_task(s, listening, accepted));
+                std::cerr << "server.scheduler->shutdown()\n";
+                s.scheduler->shutdown();
+                std::cerr << "server thread exiting\n";
+            });
     }
 
     // The server can take a small bit of time to start up, if we don't wait for it to notify then
@@ -722,35 +721,37 @@ TEST_CASE("benchmark tcp::server echo server inline", "[benchmark]")
 
     // Spawn N client connections across a set number of clients.
     std::vector<std::thread> client_threads{};
-    std::vector<client>      clients{};
     for (size_t i = 0; i < client_count; ++i)
     {
         client_threads.emplace_back(
-            std::thread{[&]()
-                        {
-                            client c{};
-                            for (size_t i = 0; i < connections / client_count; ++i)
-                            {
-                                c.tasks.emplace_back(
-                                    make_client_task(c, msg, clients_completed, g_histogram, g_histogram_mutex));
-                            }
-                            std::cerr << "coro::sync_wait(coro::when_all(std::move(c.tasks)));\n";
-                            coro::sync_wait(coro::when_all(std::move(c.tasks)));
-                            std::cerr << "client.scheduler->shutdown()\n";
-                            c.scheduler->shutdown();
-                            std::cerr << "client thread exiting\n";
-                        }});
+            [&]()
+            {
+                client c{};
+                for (size_t i = 0; i < connections / client_count; ++i)
+                {
+                    c.tasks.emplace_back(make_client_task(c, msg, clients_completed, g_histogram, g_histogram_mutex));
+                }
+                std::cerr << "coro::sync_wait(coro::when_all(std::move(c.tasks)));\n";
+                coro::sync_wait(coro::when_all(std::move(c.tasks)));
+                std::cerr << "client.scheduler->shutdown()\n";
+                c.scheduler->shutdown();
+                std::cerr << "client thread exiting\n";
+            });
     }
 
     for (auto& ct : client_threads)
     {
         ct.join();
     }
+    std::cout << "Joined all clients" << std::endl;
 
+    std::cout << "JOining " << server_threads.size() << " servers" << std::endl;
     for (auto& st : server_threads)
     {
         st.join();
+        std::cout << "Joined s" << std::endl;
     }
+    std::cout << "Joined all servers" << std::endl;
 
     auto stop = sc::now();
     print_stats("benchmark tcp::client and tcp::server inline", ops, start, stop);
@@ -761,7 +762,7 @@ TEST_CASE("benchmark tcp::server echo server inline", "[benchmark]")
     }
 }
 
-#ifdef LIBCORO_FEATURE_TLS
+    #ifdef LIBCORO_FEATURE_TLS
 TEST_CASE("benchmark tls::server echo server thread pool", "[benchmark]")
 {
     const constexpr std::size_t connections             = 100;
@@ -1005,6 +1006,5 @@ TEST_CASE("benchmark tls::server echo server thread pool", "[benchmark]")
         std::cerr << ms.count() << " : " << count << "\n";
     }
 }
-#endif // LIBCORO_FEATURE_TLS
-#endif // LIBCORO_FEATURE_NETWORKING
-*/
+    #endif // LIBCORO_FEATURE_TLS
+#endif     // LIBCORO_FEATURE_NETWORKING
