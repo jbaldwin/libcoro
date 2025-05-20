@@ -4,23 +4,9 @@
 
 namespace coro
 {
-scoped_lock::~scoped_lock()
+namespace detail
 {
-    unlock();
-}
-
-auto scoped_lock::unlock() -> void
-{
-    if (m_mutex != nullptr)
-    {
-        std::atomic_thread_fence(std::memory_order::release);
-        m_mutex->unlock();
-        // Only allow a scoped lock to unlock the mutex a single time.
-        m_mutex = nullptr;
-    }
-}
-
-auto mutex::lock_operation::await_ready() const noexcept -> bool
+auto lock_operation_base::await_ready() const noexcept -> bool
 {
     if (m_mutex.try_lock())
     {
@@ -31,7 +17,7 @@ auto mutex::lock_operation::await_ready() const noexcept -> bool
     return false;
 }
 
-auto mutex::lock_operation::await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept -> bool
+auto lock_operation_base::await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept -> bool
 {
     m_awaiting_coroutine = awaiting_coroutine;
     void* current        = m_mutex.m_state.load(std::memory_order::acquire);
@@ -49,7 +35,7 @@ auto mutex::lock_operation::await_suspend(std::coroutine_handle<> awaiting_corou
         {
             // If the current value is a waiting lock operation, or nullptr, set our next to that
             // lock op and attempt to set ourself as the head of the waiter list.
-            m_next    = static_cast<lock_operation*>(current);
+            m_next    = static_cast<lock_operation_base*>(current);
             new_value = static_cast<void*>(this);
         }
     } while (!m_mutex.m_state.compare_exchange_weak(current, new_value, std::memory_order::acq_rel));
@@ -63,6 +49,28 @@ auto mutex::lock_operation::await_suspend(std::coroutine_handle<> awaiting_corou
     }
 
     return true;
+}
+
+// auto lock_operation::await_resume() noexcept -> scoped_lock
+// {
+//     return scoped_lock{m_mutex};
+// }
+
+} // namespace detail
+
+scoped_lock::~scoped_lock()
+{
+    unlock();
+}
+
+auto scoped_lock::unlock() -> void
+{
+    if (m_mutex != nullptr)
+    {
+        std::atomic_thread_fence(std::memory_order::release);
+        m_mutex->unlock();
+        m_mutex = nullptr;
+    }
 }
 
 auto mutex::try_lock() -> bool
@@ -92,7 +100,7 @@ auto mutex::unlock() -> void
         }
 
         // There are waiters on the atomic list, acquire them and update the state for all others.
-        m_internal_waiters = static_cast<lock_operation*>(m_state.exchange(nullptr, std::memory_order::acq_rel));
+        m_internal_waiters = static_cast<detail::lock_operation_base*>(m_state.exchange(nullptr, std::memory_order::acq_rel));
 
         // Should internal waiters be reversed to allow for true FIFO, or should they be resumed
         // in this reverse order to maximum throuhgput?  If this list ever gets 'long' the reversal
@@ -105,8 +113,8 @@ auto mutex::unlock() -> void
 
     // assert m_internal_waiters != nullptr
 
-    lock_operation* to_resume = m_internal_waiters;
-    m_internal_waiters        = m_internal_waiters->m_next;
+    detail::lock_operation_base* to_resume = m_internal_waiters;
+    m_internal_waiters                     = m_internal_waiters->m_next;
     to_resume->m_awaiting_coroutine.resume();
 }
 

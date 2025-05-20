@@ -66,6 +66,16 @@ public:
         return std::coroutine_handle<promise_self_deleting>::from_promise(*m_promise);
     }
 
+    auto resume() -> bool
+    {
+        auto h = handle();
+        if (!h.done())
+        {
+            h.resume();
+        }
+        return !h.done();
+    }
+
 private:
     promise_self_deleting* m_promise{nullptr};
 };

@@ -940,7 +940,7 @@ TEST_CASE("benchmark tls::server echo server thread pool", "[benchmark]")
 
             {
                 // std::cerr << "CLIENT: writing histogram\n";
-                auto lock = co_await histogram_mutex.lock();
+                auto lock = co_await histogram_mutex.scoped_lock();
                 for (auto [ms, count] : histogram)
                 {
                     g_histogram[ms] += count;
