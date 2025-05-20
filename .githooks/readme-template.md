@@ -26,6 +26,7 @@
     - [coro::semaphore](#semaphore)
     - [coro::ring_buffer<element, num_elements>](#ring_buffer)
     - [coro::queue](#queue)
+    - [coro::condition_variable](#condition_variable)
 * Schedulers
     - [coro::thread_pool](#thread_pool) for coroutine cooperative multitasking
     - [coro::io_scheduler](#io_scheduler) for driving i/o events
@@ -304,6 +305,47 @@ consumed 3
 consumed 4
 ```
 
+### condition_variable
+`coro:condition_variable` allows for tasks to await on the condition until notified with an optional predicate and timeout and stop token. The API for `coro::condition_variable` mostly matches `std::condition_variable`.
+
+NOTE: It is important to *not* hold the `coro::scoped_lock` when calling `notify_one()` or `notify_all()`, this differs from `std::condition_variable` which allows it but doesn't require it. `coro::condition_variable` will deadlock in this scenario based on how coroutines work vs threads.
+
+```C++
+${EXAMPLE_CORO_CONDITION_VARIABLE_CPP}
+```
+
+Expected output:
+```bash
+$ ./examples/coro_condition_variable
+0 predicate condition = 0               # every call to cv.wait() will invoke the predicate to see if they are ready
+1 predicate condition = 0
+cv.notify_one() condition = 0           # one waiter is awoken but the predicate is not satisfied
+1 predicate condition = 0
+cv.notify_one() condition = 1           # one waiter is awoken and the predicate is satisfied
+1 predicate condition = 1
+1 waiter condition = 1
+1 predicate condition = 0
+cv.notify_all() condition = 2           # both predicates will pass and both waiters will wake up
+1 predicate condition = 2
+1 waiter condition = 2
+0 predicate condition = 1
+0 waiter condition = 1
+0 predicate condition = 0
+1 predicate condition = 0
+cv.notify_all() condition = 1           # one predicate will pass and will wake up
+1 predicate condition = 1
+1 waiter condition = 1
+0 predicate condition = 0
+1 predicate condition = 0
+ss.request_stop()                       # request to stop, wakeup all waiters and exit
+1 predicate condition = 0
+1 waiter condition = 0
+1 ss.stop_requsted() co_return
+0 predicate condition = 0
+0 waiter condition = 0
+0 ss.stop_requsted() co_return
+```
+
 ### thread_pool
 `coro::thread_pool` is a statically sized pool of worker threads to execute scheduled coroutines from a FIFO queue.  One way to schedule a coroutine on a thread pool is to use the pool's `schedule()` function which should be `co_awaited` inside the coroutine to transfer the execution from the current thread to a thread pool worker thread.  Its important to note that scheduling will first place the coroutine into the FIFO queue and will be picked up by the first available thread in the pool, e.g. there could be a delay if there is a lot of work queued up.
 
@@ -480,12 +522,12 @@ Transfer/sec:     18.33MB
 
 #### Tested Operating Systems
 
- * ubuntu:20.04, 22.04
- * fedora:32-40
+ * ubuntu:22.04, 24.04
+ * fedora:37-40
  * openSUSE/leap:15.6
  * Windows 2022
  * Emscripten 3.1.45
- * MacOS 12
+ * MacOS 15
 
 #### Cloning the project
 This project uses git submodules, to properly checkout this project use:
