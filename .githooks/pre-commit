@@ -34,6 +34,12 @@ done
 # template_contents=$(cat '.githooks/readme-template.md')
 cp .githooks/readme-template.md README.md
 
+# Disable patsub_replacement
+#
+# If the patsub_replacement shell option is enabled using shopt,
+# any unquoted instances of ‘&’ in string are replaced with the matching portion of pattern
+shopt -u patsub_replacement
+
 template_contents=$(cat 'README.md')
 example_contents=$(cat 'examples/coro_task.cpp')
 echo "${template_contents/\$\{EXAMPLE_CORO_TASK_CPP\}/$example_contents}" > README.md
