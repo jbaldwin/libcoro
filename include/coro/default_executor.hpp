@@ -10,7 +10,8 @@ namespace coro::default_executor
 {
 
 /**
- * Set up default coro::thread_pool::options before constructing a single instance of the default_executor
+ * Set up default coro::thread_pool::options before constructing a single instance of coro::thread_pool in
+ * coro::default_executor::executor()
  * @param thread_pool_options thread_pool options
  */
 void set_executor_options(thread_pool::options thread_pool_options);
@@ -22,7 +23,8 @@ std::shared_ptr<thread_pool> executor();
 
 #ifdef LIBCORO_FEATURE_NETWORKING
 /**
- * Set up default coro::io_scheduler::options before constructing a single instance of the default_io_executor
+ * Set up default coro::io_scheduler::options before constructing a single instance of coro::io_scheduler in
+ * coro::default_executor::io_executor()
  * @param io_scheduler_options io_scheduler options
  */
 void set_io_executor_options(io_scheduler::options io_scheduler_options);
