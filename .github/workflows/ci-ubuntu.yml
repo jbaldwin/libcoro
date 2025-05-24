@@ -3,8 +3,8 @@ name: ci-ubuntu
 on: [pull_request, workflow_dispatch]
 
 jobs:
-    ci-ubuntu-20-04-gplusplus:
-        name: ci-ubuntu-20.04-g++-${{ matrix.gplusplus_version }}-networking-${{ matrix.libcoro_feature_networking.enabled }}-tls-${{ matrix.libcoro_feature_networking.tls }}
+    ci-ubuntu-24-04-gplusplus:
+        name: ci-ubuntu-24.04-g++-${{ matrix.gplusplus_version }}-networking-${{ matrix.libcoro_feature_networking.enabled }}-tls-${{ matrix.libcoro_feature_networking.tls }}
         runs-on: ubuntu-latest
         strategy:
             matrix:
@@ -13,7 +13,7 @@ jobs:
                 libcoro_feature_networking: [ {enabled: ON, tls: ON}, {enabled: ON, tls: OFF}, {enabled: OFF, tls: OFF} ]
                 libcoro_build_shared_libs: [OFF, ON]
         container:
-            image: ubuntu:20.04
+            image: ubuntu:24.04
             env:
                 TZ: America/New_York
                 DEBIAN_FRONTEND: noninteractive

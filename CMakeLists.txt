@@ -88,6 +88,7 @@ set(LIBCORO_SOURCE_FILES
     include/coro/detail/void_value.hpp
 
     include/coro/attribute.hpp
+    include/coro/condition_variable.hpp src/condition_variable.cpp
     include/coro/coro.hpp
     include/coro/event.hpp src/event.cpp
     include/coro/generator.hpp

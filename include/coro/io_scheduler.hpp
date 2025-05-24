@@ -278,7 +278,11 @@ public:
      * @param amount The amount of time to wait before resuming execution of this task.
      *               Given zero or negative amount of time this behaves identical to schedule().
      */
-    [[nodiscard]] auto schedule_after(std::chrono::milliseconds amount) -> coro::task<void>;
+    template<class rep_type, class period_type>
+     [[nodiscard]] auto schedule_after(std::chrono::duration<rep_type, period_type> amount) -> coro::task<void>
+    {
+        return yield_for_internal(std::chrono::duration_cast<std::chrono::nanoseconds>(amount));
+    }
 
     /**
      * Schedules the current task to run at a given time point in the future.
@@ -300,7 +304,11 @@ public:
      * @param amount The amount of time to yield for before resuming executino of this task.
      *               Given zero or negative amount of time this behaves identical to yield().
      */
-    [[nodiscard]] auto yield_for(std::chrono::milliseconds amount) -> coro::task<void>;
+    template<class rep_type, class period_type>
+    [[nodiscard]] auto yield_for(std::chrono::duration<rep_type, period_type> amount) -> coro::task<void>
+    {
+        return yield_for_internal(std::chrono::duration_cast<std::chrono::nanoseconds>(amount));
+    }
 
     /**
      * Yields the current task until the given time point in the future.
@@ -435,6 +443,8 @@ private:
 
     /// Has the io_scheduler been requested to shut down?
     std::atomic<bool> m_shutdown_requested{false};
+
+    auto yield_for_internal(std::chrono::nanoseconds amount) -> coro::task<void>;
 
     std::atomic<bool> m_io_processing{false};
     auto              process_events_manual(std::chrono::milliseconds timeout) -> void;

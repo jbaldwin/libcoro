@@ -30,7 +30,7 @@ int main()
         // Now that the ring buffer is empty signal to all the consumers its time to stop.  Note that
         // the stop signal works on producers as well, but this example only uses 1 producer.
         {
-            auto scoped_lock = co_await m.lock();
+            auto scoped_lock = co_await m.scoped_lock();
             std::cerr << "\nproducer is sending stop signal";
         }
         rb.notify_waiters();
@@ -45,7 +45,7 @@ int main()
         while (true)
         {
             auto expected    = co_await rb.consume();
-            auto scoped_lock = co_await m.lock(); // just for synchronizing std::cout/cerr
+            auto scoped_lock = co_await m.scoped_lock(); // just for synchronizing std::cout/cerr
             if (!expected)
             {
                 std::cerr << "\nconsumer " << id << " shutting down, stop signal received";

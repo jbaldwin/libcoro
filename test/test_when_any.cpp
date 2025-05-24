@@ -50,10 +50,10 @@ TEST_CASE("when_any tuple return void (monostate)", "[when_any]")
     // between what is returned to mismatch from what is executed.
     coro::mutex       m{};
     coro::thread_pool tp{};
-    uint64_t          counter{0};
+    std::atomic<uint64_t>          counter{0};
 
     auto make_task_return_void =
-        [](coro::thread_pool& tp, coro::mutex& m, uint64_t& counter, uint64_t i) -> coro::task<std::monostate>
+        [](coro::thread_pool& tp, coro::mutex& m, std::atomic<uint64_t>& counter, uint64_t i) -> coro::task<std::monostate>
     {
         co_await tp.schedule();
         co_await m.lock();
@@ -68,7 +68,7 @@ TEST_CASE("when_any tuple return void (monostate)", "[when_any]")
         co_return std::monostate{};
     };
 
-    auto make_task = [](coro::thread_pool& tp, coro::mutex& m, uint64_t& counter, uint64_t i) -> coro::task<uint64_t>
+    auto make_task = [](coro::thread_pool& tp, coro::mutex& m, std::atomic<uint64_t>& counter, uint64_t i) -> coro::task<uint64_t>
     {
         co_await tp.schedule();
         co_await m.lock();
@@ -85,6 +85,11 @@ TEST_CASE("when_any tuple return void (monostate)", "[when_any]")
 
     auto result =
         coro::sync_wait(coro::when_any(make_task_return_void(tp, m, counter, 1), make_task(tp, m, counter, 2)));
+
+    // Because of how coro::mutex works.. we need to release it after when_any returns since it symetrically transfers to the other coroutine task
+    // and can cause a race condition where the result does not equal the counter. This guarantees the task has fully completed before issuing REQUIREs.
+    m.unlock();
+
     if (std::holds_alternative<std::monostate>(result))
     {
         REQUIRE(counter == 1);

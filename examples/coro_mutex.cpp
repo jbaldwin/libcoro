@@ -15,7 +15,7 @@ int main()
         // lock() function returns a coro::scoped_lock that holds the mutex and automatically
         // unlocks the mutex upon destruction.  This behaves just like std::scoped_lock.
         {
-            auto scoped_lock = co_await mutex.lock();
+            auto scoped_lock = co_await mutex.scoped_lock();
             output.emplace_back(i);
         } // <-- scoped lock unlocks the mutex here.
         co_return;

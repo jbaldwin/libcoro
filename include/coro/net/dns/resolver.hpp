@@ -31,7 +31,7 @@ static uint64_t m_ares_count;
 static std::mutex m_ares_mutex;
 } // namespace detail
 
-template<concepts::io_exceutor executor_type>
+template<concepts::io_executor executor_type>
 class resolver;
 
 enum class status
@@ -40,7 +40,7 @@ enum class status
     error
 };
 
-template<concepts::io_exceutor executor_type>
+template<concepts::io_executor executor_type>
 class result
 {
     friend resolver<executor_type>;
@@ -75,7 +75,7 @@ private:
     friend auto ares_dns_callback(void* arg, int status, int timeouts, struct hostent* host) -> void;
 };
 
-template<concepts::io_exceutor executor_type>
+template<concepts::io_executor executor_type>
 class resolver
 {
 public:

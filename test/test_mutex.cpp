@@ -16,7 +16,7 @@ TEST_CASE("mutex single waiter not locked", "[mutex]")
     {
         std::cerr << "Acquiring lock\n";
         {
-            auto scoped_lock = co_await m.lock();
+            auto scoped_lock = co_await m.scoped_lock();
             REQUIRE_FALSE(m.try_lock());
             std::cerr << "lock acquired, emplacing back 1\n";
             output.emplace_back(1);
@@ -55,7 +55,7 @@ TEST_CASE("mutex many waiters until event", "[mutex]")
     {
         co_await tp.schedule();
         std::cerr << "id = " << id << " waiting to acquire the lock\n";
-        auto scoped_lock = co_await m.lock();
+        auto scoped_lock = co_await m.scoped_lock();
 
         // Should always be locked upon acquiring the locks.
         REQUIRE_FALSE(m.try_lock());
@@ -70,7 +70,7 @@ TEST_CASE("mutex many waiters until event", "[mutex]")
     {
         co_await tp.schedule();
         std::cerr << "block task acquiring lock\n";
-        auto scoped_lock = co_await m.lock();
+        auto scoped_lock = co_await m.scoped_lock();
         REQUIRE_FALSE(m.try_lock());
         std::cerr << "block task acquired lock, waiting on event\n";
         co_await e;
@@ -108,9 +108,27 @@ TEST_CASE("mutex scoped_lock unlock prior to scope exit", "[mutex]")
     auto make_task = [](coro::mutex& m) -> coro::task<void>
     {
         {
-            auto lk = co_await m.lock();
+            auto lk = co_await m.scoped_lock();
             REQUIRE_FALSE(m.try_lock());
             lk.unlock();
+            REQUIRE(m.try_lock());
+        }
+        co_return;
+    };
+
+    coro::sync_wait(make_task(m));
+}
+
+TEST_CASE("mutex lock", "[mutex]")
+{
+    coro::mutex m;
+
+    auto make_task = [](coro::mutex& m) -> coro::task<void>
+    {
+        {
+            co_await m.lock();
+            REQUIRE_FALSE(m.try_lock());
+            m.unlock();
             REQUIRE(m.try_lock());
         }
         co_return;
