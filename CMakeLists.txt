@@ -90,6 +90,7 @@ set(LIBCORO_SOURCE_FILES
     include/coro/attribute.hpp
     include/coro/coro.hpp
     include/coro/event.hpp src/event.cpp
+    include/coro/default_executor.hpp src/default_executor.cpp
     include/coro/generator.hpp
     include/coro/latch.hpp
     include/coro/mutex.hpp src/mutex.cpp

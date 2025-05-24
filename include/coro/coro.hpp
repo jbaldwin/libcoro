@@ -30,6 +30,7 @@
 #endif
 
 #include "coro/event.hpp"
+#include "coro/default_executor.hpp"
 #include "coro/generator.hpp"
 #include "coro/latch.hpp"
 #include "coro/mutex.hpp"
