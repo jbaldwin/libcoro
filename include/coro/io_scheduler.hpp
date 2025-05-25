@@ -77,7 +77,7 @@ public:
 
         /// If inline task processing is enabled then the io worker will resume tasks on its thread
         /// rather than scheduling them to be picked up by the thread pool.
-        const execution_strategy_t execution_strategy{execution_strategy_t::process_tasks_on_thread_pool};
+        execution_strategy_t execution_strategy{execution_strategy_t::process_tasks_on_thread_pool};
     };
 
     /**
