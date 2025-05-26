@@ -558,13 +558,14 @@ TEST_CASE("benchmark tcp::server echo server inline", "[benchmark]")
     std::atomic<uint64_t> accepted{0};
     std::atomic<uint64_t> clients_completed{0};
 
-    std::atomic<uint64_t> server_id{0};
+    std::atomic<uint16_t> server_id{0};
+    std::atomic<uint16_t> client_id{0};
 
     using estrat = coro::io_scheduler::execution_strategy_t;
 
     struct server
     {
-        uint64_t                            id;
+        uint16_t                            id;
         std::shared_ptr<coro::io_scheduler> scheduler{coro::io_scheduler::make_shared(
             coro::io_scheduler::options{.execution_strategy = estrat::process_tasks_inline})};
         uint64_t                            live_clients{0};
@@ -573,6 +574,7 @@ TEST_CASE("benchmark tcp::server echo server inline", "[benchmark]")
 
     struct client
     {
+        uint16_t                            id;
         std::shared_ptr<coro::io_scheduler> scheduler{coro::io_scheduler::make_shared(
             coro::io_scheduler::options{.execution_strategy = estrat::process_tasks_inline})};
         std::vector<coro::task<void>>       tasks{};
@@ -631,7 +633,6 @@ TEST_CASE("benchmark tcp::server echo server inline", "[benchmark]")
                 if (c.socket().is_valid())
                 {
                     accepted.fetch_add(1, std::memory_order::release);
-
                     s.live_clients++;
                     s.scheduler->spawn(make_on_connection_task(s, std::move(c)));
                 }
@@ -639,7 +640,10 @@ TEST_CASE("benchmark tcp::server echo server inline", "[benchmark]")
         }
 
         std::cerr << "co_await s.wait_for_clients\n";
-        co_await s.wait_for_clients;
+        if (s.live_clients > 0)
+        {
+            co_await s.wait_for_clients;
+        }
         std::cerr << "make_server_task co_return\n";
         co_return;
     };
@@ -728,7 +732,9 @@ TEST_CASE("benchmark tcp::server echo server inline", "[benchmark]")
         client_threads.emplace_back(
             [&]()
             {
-                client c{};
+                client c{
+                    .id = client_id++,
+                };
                 for (size_t i = 0; i < connections / client_count; ++i)
                 {
                     c.tasks.emplace_back(make_client_task(c, msg, clients_completed, g_histogram, g_histogram_mutex));
@@ -745,15 +751,11 @@ TEST_CASE("benchmark tcp::server echo server inline", "[benchmark]")
     {
         ct.join();
     }
-    std::cout << "Joined all clients" << std::endl;
 
-    std::cout << "JOining " << server_threads.size() << " servers" << std::endl;
     for (auto& st : server_threads)
     {
         st.join();
-        std::cout << "Joined s" << std::endl;
     }
-    std::cout << "Joined all servers" << std::endl;
 
     auto stop = sc::now();
     print_stats("benchmark tcp::client and tcp::server inline", ops, start, stop);
