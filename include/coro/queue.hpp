@@ -50,7 +50,7 @@ public:
          *
          * @return coro::task<scoped_lock>
          */
-        auto make_acquire_lock_task() -> coro::task<scoped_lock> { co_return co_await m_queue.m_mutex.lock(); }
+        auto make_acquire_lock_task() -> coro::task<scoped_lock> { co_return co_await m_queue.m_mutex.scoped_lock(); }
 
         auto await_ready() noexcept -> bool
         {
@@ -183,7 +183,7 @@ public:
 
         // The general idea is to see if anyone is waiting, and if so directly transfer the element
         // to that waiter. If there is nobody waiting then move the element into the queue.
-        auto lock = co_await m_mutex.lock();
+        auto lock = co_await m_mutex.scoped_lock();
 
         if (m_waiters != nullptr)
         {
@@ -218,7 +218,7 @@ public:
             co_return queue_produce_result::queue_stopped;
         }
 
-        auto lock = co_await m_mutex.lock();
+        auto lock = co_await m_mutex.scoped_lock();
 
         if (m_waiters != nullptr)
         {
@@ -253,7 +253,7 @@ public:
             co_return queue_produce_result::queue_stopped;
         }
 
-        auto lock = co_await m_mutex.lock();
+        auto lock = co_await m_mutex.scoped_lock();
 
         if (m_waiters != nullptr)
         {
@@ -297,15 +297,14 @@ public:
         // Since this isn't draining just let the awaiters know we're stopped.
         m_stopped.exchange(true, std::memory_order::release);
 
-        auto lock = co_await m_mutex.lock();
         while (m_waiters != nullptr)
         {
+            co_await m_mutex.lock();
             auto* to_resume = m_waiters;
             m_waiters       = m_waiters->m_next;
+            m_mutex.unlock();
 
-            lock.unlock();
             to_resume->m_awaiting_coroutine.resume();
-            lock = co_await m_mutex.lock();
         }
     }
 
@@ -336,15 +335,14 @@ public:
         // Now that the queue is drained let all the awaiters know that we're stopped.
         m_stopped.exchange(true, std::memory_order::release);
 
-        auto lock = co_await m_mutex.lock();
         while (m_waiters != nullptr)
         {
+            co_await m_mutex.lock();
             auto* to_resume = m_waiters;
             m_waiters       = m_waiters->m_next;
+            m_mutex.unlock();
 
-            lock.unlock();
             to_resume->m_awaiting_coroutine.resume();
-            lock = co_await m_mutex.lock();
         }
     }
 

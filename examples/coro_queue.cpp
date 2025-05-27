@@ -48,7 +48,7 @@ int main()
                 break; // coro::queue is shutting down
             }
 
-            auto scoped_lock = co_await m.lock(); // Only used to make the output look nice.
+            auto scoped_lock = co_await m.scoped_lock(); // Only used to make the output look nice.
             std::cout << "consumed " << *expected << "\n";
         }
     };

@@ -9,11 +9,13 @@
     #include "coro/expected.hpp"
     #include "coro/mutex.hpp"
     #include "coro/task.hpp"
+    #include "coro/when_all.hpp"
 
     #include <atomic>
     #include <cassert>
     #include <coroutine>
     #include <stop_token>
+    #include <optional>
     #include <utility>
     #include <vector>
 
