@@ -62,7 +62,7 @@ auto scoped_lock::unlock() -> void
 {
     if (m_mutex != nullptr)
     {
-        std::atomic_thread_fence(std::memory_order::release);
+        std::atomic_thread_fence(std::memory_order::acq_rel);
         m_mutex->unlock();
         m_mutex = nullptr;
     }
