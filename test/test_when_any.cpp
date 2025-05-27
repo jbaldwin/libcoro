@@ -50,10 +50,10 @@ TEST_CASE("when_any tuple return void (monostate)", "[when_any]")
     // between what is returned to mismatch from what is executed.
     coro::mutex       m{};
     coro::thread_pool tp{};
-    uint64_t          counter{0};
+    std::atomic<uint64_t>          counter{0};
 
     auto make_task_return_void =
-        [](coro::thread_pool& tp, coro::mutex& m, uint64_t& counter, uint64_t i) -> coro::task<std::monostate>
+        [](coro::thread_pool& tp, coro::mutex& m, std::atomic<uint64_t>& counter, uint64_t i) -> coro::task<std::monostate>
     {
         co_await tp.schedule();
         co_await m.lock();
@@ -68,7 +68,7 @@ TEST_CASE("when_any tuple return void (monostate)", "[when_any]")
         co_return std::monostate{};
     };
 
-    auto make_task = [](coro::thread_pool& tp, coro::mutex& m, uint64_t& counter, uint64_t i) -> coro::task<uint64_t>
+    auto make_task = [](coro::thread_pool& tp, coro::mutex& m, std::atomic<uint64_t>& counter, uint64_t i) -> coro::task<uint64_t>
     {
         co_await tp.schedule();
         co_await m.lock();
@@ -85,6 +85,10 @@ TEST_CASE("when_any tuple return void (monostate)", "[when_any]")
 
     auto result =
         coro::sync_wait(coro::when_any(make_task_return_void(tp, m, counter, 1), make_task(tp, m, counter, 2)));
+    // Because of how coro::mutex works.. we need to release it after when_any returns since it symetrically transfers to the other coroutine task
+    // and can cause a race condition where the result does not equal the counter. This guarantees the task has fully completed before issuing REQUIREs.
+    m.unlock();
+
     if (std::holds_alternative<std::monostate>(result))
     {
         REQUIRE(counter == 1);
@@ -129,8 +133,10 @@ TEST_CASE("when_any two tasks one long running with cancellation", "[when_any]")
     auto             s = coro::io_scheduler::make_shared(
         coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
 
+    std::atomic<bool> thrown{false};
+
     auto make_task =
-        [](std::shared_ptr<coro::io_scheduler> s, std::stop_token stop_token, uint64_t amount) -> coro::task<uint64_t>
+        [](std::shared_ptr<coro::io_scheduler> s, std::stop_token stop_token, uint64_t amount, std::atomic<bool>& thrown) -> coro::task<uint64_t>
     {
         co_await s->schedule();
         try
@@ -154,18 +160,22 @@ TEST_CASE("when_any two tasks one long running with cancellation", "[when_any]")
         {
             REQUIRE(amount == 1);
             REQUIRE(e.what() == std::string{"task was cancelled"});
+            thrown = true;
         }
         co_return amount;
     };
 
     std::vector<coro::task<uint64_t>> tasks{};
-    tasks.emplace_back(make_task(s, stop_source.get_token(), 1));
-    tasks.emplace_back(make_task(s, stop_source.get_token(), 2));
+    tasks.emplace_back(make_task(s, stop_source.get_token(), 1, thrown));
+    tasks.emplace_back(make_task(s, stop_source.get_token(), 2, thrown));
 
     auto result = coro::sync_wait(coro::when_any(std::move(stop_source), std::move(tasks)));
     REQUIRE(result == 2);
 
-    std::this_thread::sleep_for(std::chrono::milliseconds{250});
+    while (!thrown)
+    {
+        std::this_thread::sleep_for(std::chrono::milliseconds{250});
+    }
 }
 
 TEST_CASE("when_any timeout", "[when_any]")
@@ -181,16 +191,17 @@ TEST_CASE("when_any timeout", "[when_any]")
         co_return 1;
     };
 
-    auto make_timeout_task = [](std::shared_ptr<coro::io_scheduler> scheduler) -> coro::task<int64_t>
+    auto make_timeout_task = [](std::shared_ptr<coro::io_scheduler> scheduler,
+                                std::chrono::milliseconds timeout) -> coro::task<int64_t>
     {
-        co_await scheduler->schedule_after(std::chrono::milliseconds{100});
+        co_await scheduler->schedule_after(timeout);
         co_return -1;
     };
 
     {
         std::vector<coro::task<int64_t>> tasks{};
         tasks.emplace_back(make_long_running_task(scheduler, std::chrono::milliseconds{50}));
-        tasks.emplace_back(make_timeout_task(scheduler));
+        tasks.emplace_back(make_timeout_task(scheduler, std::chrono::milliseconds{500}));
 
         auto result = coro::sync_wait(coro::when_any(std::move(tasks)));
         REQUIRE(result == 1);
@@ -199,7 +210,7 @@ TEST_CASE("when_any timeout", "[when_any]")
     {
         std::vector<coro::task<int64_t>> tasks{};
         tasks.emplace_back(make_long_running_task(scheduler, std::chrono::milliseconds{500}));
-        tasks.emplace_back(make_timeout_task(scheduler));
+        tasks.emplace_back(make_timeout_task(scheduler, std::chrono::milliseconds{50}));
 
         auto result = coro::sync_wait(coro::when_any(std::move(tasks)));
         REQUIRE(result == -1);
@@ -303,21 +314,21 @@ TEST_CASE("when_any tuple multiple", "[when_any]")
 
     {
         auto result = coro::sync_wait(
-            coro::when_any(make_task1(scheduler, 10ms), make_task2(scheduler, 50ms), make_task3(scheduler, 50ms)));
+            coro::when_any(make_task1(scheduler, 10ms), make_task2(scheduler, 150ms), make_task3(scheduler, 150ms)));
         REQUIRE(result.index() == 0);
         REQUIRE(std::get<0>(result) == 1);
     }
 
     {
         auto result = coro::sync_wait(
-            coro::when_any(make_task1(scheduler, 50ms), make_task2(scheduler, 10ms), make_task3(scheduler, 50ms)));
+            coro::when_any(make_task1(scheduler, 150ms), make_task2(scheduler, 10ms), make_task3(scheduler, 150ms)));
         REQUIRE(result.index() == 1);
         REQUIRE(std::get<1>(result) == 3.14);
     }
 
     {
         auto result = coro::sync_wait(
-            coro::when_any(make_task1(scheduler, 50ms), make_task2(scheduler, 50ms), make_task3(scheduler, 10ms)));
+            coro::when_any(make_task1(scheduler, 150ms), make_task2(scheduler, 150ms), make_task3(scheduler, 10ms)));
         REQUIRE(result.index() == 2);
         REQUIRE(std::get<2>(result) == "hello world");
     }

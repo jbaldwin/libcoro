@@ -1,5 +1,7 @@
 #pragma once
 
+#include "coro/task.hpp"
+
 #include <atomic>
 #include <coroutine>
 #include <mutex>
@@ -8,15 +10,66 @@
 namespace coro
 {
 class mutex;
+class scoped_lock;
+class condition_variable;
+
+namespace detail
+{
+
+struct lock_operation_base
+{
+    explicit lock_operation_base(coro::mutex& m) : m_mutex(m) {}
+    virtual ~lock_operation_base() = default;
+
+    lock_operation_base(const lock_operation_base&) = delete;
+    lock_operation_base(lock_operation_base&&) = delete;
+    auto operator=(const lock_operation_base&) -> lock_operation_base& = delete;
+    auto operator=(lock_operation_base&&) -> lock_operation_base& = delete;
+
+    auto await_ready() const noexcept -> bool;
+    auto await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept -> bool;
+
+protected:
+    friend class coro::mutex;
+
+    coro::mutex&            m_mutex;
+    std::coroutine_handle<> m_awaiting_coroutine;
+    lock_operation_base*    m_next{nullptr};
+};
+
+template<typename return_type>
+struct lock_operation : public lock_operation_base
+{
+    explicit lock_operation(coro::mutex& m) : lock_operation_base(m) {}
+    ~lock_operation() override = default;
+
+    lock_operation(const lock_operation&) = delete;
+    lock_operation(lock_operation&&) = delete;
+    auto operator=(const lock_operation&) -> lock_operation& = delete;
+    auto operator=(lock_operation&&) -> lock_operation& = delete;
+
+    auto await_resume() noexcept -> return_type
+    {
+        if constexpr (std::is_same_v<scoped_lock, return_type>)
+        {
+            return scoped_lock{m_mutex};
+        }
+        else
+        {
+            return;
+        }
+    }
+};
+
+} // namespace detail
 
 /**
- * A scoped RAII lock holder, just like std::lock_guard or std::scoped_lock in that the coro::mutex
- * is always unlocked unpon this coro::scoped_lock going out of scope.  It is possible to unlock the
- * coro::mutex prior to the end of its current scope by manually calling the unlock() function.
+ * A scoped RAII lock holder similar to std::unique_lock.
  */
 class scoped_lock
 {
-    friend class mutex;
+    friend class coro::mutex;
+    friend class coro::condition_variable; // cv.wait() functions need to be able do unlock and re-lock
 
 public:
     enum class lock_strategy
@@ -25,7 +78,7 @@ public:
         adopt
     };
 
-    explicit scoped_lock(mutex& m, lock_strategy strategy = lock_strategy::adopt) : m_mutex(&m)
+    explicit scoped_lock(class coro::mutex& m, lock_strategy strategy = lock_strategy::adopt) : m_mutex(&m)
     {
         // Future -> support acquiring the lock?  Not sure how to do that without being able to
         // co_await in the constructor.
@@ -38,7 +91,8 @@ public:
     ~scoped_lock();
 
     scoped_lock(const scoped_lock&) = delete;
-    scoped_lock(scoped_lock&& other) : m_mutex(std::exchange(other.m_mutex, nullptr)) {}
+    scoped_lock(scoped_lock&& other)
+        : m_mutex(std::exchange(other.m_mutex, nullptr)) {}
     auto operator=(const scoped_lock&) -> scoped_lock& = delete;
     auto operator=(scoped_lock&& other) noexcept -> scoped_lock&
     {
@@ -50,13 +104,12 @@ public:
     }
 
     /**
-     * Unlocks the scoped lock prior to it going out of scope.  Calling this multiple times has no
-     * additional affect after the first call.
+     * Unlocks the scoped lock prior to it going out of scope.
      */
     auto unlock() -> void;
 
 private:
-    mutex* m_mutex{nullptr};
+    class coro::mutex* m_mutex{nullptr};
 };
 
 class mutex
@@ -70,34 +123,25 @@ public:
     auto operator=(const mutex&) -> mutex& = delete;
     auto operator=(mutex&&) -> mutex&      = delete;
 
-    struct lock_operation
-    {
-        explicit lock_operation(mutex& m) : m_mutex(m) {}
-
-        auto await_ready() const noexcept -> bool;
-        auto await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept -> bool;
-        auto await_resume() noexcept -> scoped_lock { return scoped_lock{m_mutex}; }
-
-    private:
-        friend class mutex;
-
-        mutex&                  m_mutex;
-        std::coroutine_handle<> m_awaiting_coroutine;
-        lock_operation*         m_next{nullptr};
-    };
-
     /**
-     * To acquire the mutex's lock co_await this function.  Upon acquiring the lock it returns
-     * a coro::scoped_lock which will hold the mutex until the coro::scoped_lock destructs.
+     * @brief To acquire the mutex's lock co_await this function. Upon acquiring the lock it returns a coro::scoped_lock
+     *        which will hold the mutex until the coro::scoped_lock destructs.
      * @return A co_await'able operation to acquire the mutex.
      */
-    [[nodiscard]] auto lock() -> lock_operation { return lock_operation{*this}; };
+    [[nodiscard]] auto scoped_lock() -> detail::lock_operation<scoped_lock> { return detail::lock_operation<coro::scoped_lock>{*this}; }
+
+    /**
+     * @brief Locks the mutex.
+     *
+     * @return detail::lock_operation<void>
+     */
+    [[nodiscard]] auto lock() -> detail::lock_operation<void> { return detail::lock_operation<void>{*this}; }
 
     /**
      * Attempts to lock the mutex.
      * @return True if the mutex lock was acquired, otherwise false.
      */
-    auto try_lock() -> bool;
+    [[nodiscard]] auto try_lock() -> bool;
 
     /**
      * Releases the mutex's lock.
@@ -105,7 +149,7 @@ public:
     auto unlock() -> void;
 
 private:
-    friend struct lock_operation;
+    friend struct detail::lock_operation_base;
 
     /// unlocked -> state == unlocked_value()
     /// locked but empty waiter list == nullptr
@@ -113,7 +157,7 @@ private:
     std::atomic<void*> m_state;
 
     /// A list of grabbed internal waiters that are only accessed by the unlock()'er.
-    lock_operation* m_internal_waiters{nullptr};
+    detail::lock_operation_base* m_internal_waiters{nullptr};
 
     /// Inactive value, this cannot be nullptr since we want nullptr to signify that the mutex
     /// is locked but there are zero waiters, this makes it easy to CAS new waiters into the

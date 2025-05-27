@@ -526,7 +526,7 @@ int main()
         // lock() function returns a coro::scoped_lock that holds the mutex and automatically
         // unlocks the mutex upon destruction.  This behaves just like std::scoped_lock.
         {
-            auto scoped_lock = co_await mutex.lock();
+            auto scoped_lock = co_await mutex.scoped_lock();
             output.emplace_back(i);
         } // <-- scoped lock unlocks the mutex here.
         co_return;
@@ -742,7 +742,7 @@ int main()
         // Now that the ring buffer is empty signal to all the consumers its time to stop.  Note that
         // the stop signal works on producers as well, but this example only uses 1 producer.
         {
-            auto scoped_lock = co_await m.lock();
+            auto scoped_lock = co_await m.scoped_lock();
             std::cerr << "\nproducer is sending stop signal";
         }
         rb.notify_waiters();
@@ -757,7 +757,7 @@ int main()
         while (true)
         {
             auto expected    = co_await rb.consume();
-            auto scoped_lock = co_await m.lock(); // just for synchronizing std::cout/cerr
+            auto scoped_lock = co_await m.scoped_lock(); // just for synchronizing std::cout/cerr
             if (!expected)
             {
                 std::cerr << "\nconsumer " << id << " shutting down, stop signal received";
@@ -854,7 +854,7 @@ int main()
                 break; // coro::queue is shutting down
             }
 
-            auto scoped_lock = co_await m.lock(); // Only used to make the output look nice.
+            auto scoped_lock = co_await m.scoped_lock(); // Only used to make the output look nice.
             std::cout << "consumed " << *expected << "\n";
         }
     };
