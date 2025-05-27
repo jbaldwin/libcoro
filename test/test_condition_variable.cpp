@@ -793,4 +793,48 @@ TEST_CASE("wait_until(s lock stop_token time_point predicate) 1 waiter predicate
     REQUIRE(std::get<1>(results).return_value() == 0);
 }
 
+TEST_CASE("notify_all(executor)", "[condition_variable]")
+{
+    auto s = coro::io_scheduler::make_shared();
+    coro::condition_variable cv{};
+    coro::mutex m{};
+
+    auto make_waiter = [](coro::condition_variable& cv, coro::mutex& m, uint64_t id) -> coro::task<int64_t>
+    {
+        {
+            auto lk = co_await m.scoped_lock();
+            co_await cv.wait(lk);
+            std::cerr << "waiter" << id << " notified\n";
+        }
+        co_return id;
+    };
+
+    auto make_notifier = [](std::shared_ptr<coro::io_scheduler> s, coro::condition_variable& cv) -> coro::task<int64_t>
+    {
+        // Make sure all waiters are waiting.
+        co_await s->yield_for(std::chrono::milliseconds{50});
+        std::cerr << "notify_all(s)\n";
+        cv.notify_all(s);
+        co_return 0;
+    };
+
+    auto results = coro::sync_wait(coro::when_all(
+        make_waiter(cv, m, 1),
+        make_waiter(cv, m, 2),
+        make_waiter(cv, m, 3),
+        make_waiter(cv, m, 4),
+        make_waiter(cv, m, 5),
+        make_waiter(cv, m, 6),
+        make_waiter(cv, m, 7),
+        make_waiter(cv, m, 8),
+        make_waiter(cv, m, 9),
+        make_waiter(cv, m, 10),
+        make_notifier(s, cv)
+    ));
+
+    uint64_t counter{0};
+    std::apply([&counter](auto&&... tasks) -> void { ((counter += tasks.return_value()), ...); }, results);
+    REQUIRE(counter == 55);
+}
+
 #endif

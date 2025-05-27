@@ -360,6 +360,36 @@ public:
      */
     auto notify_all() -> coro::task<void>;
 
+#ifdef LIBCORO_FEATURE_NETWORKING
+    /**
+     * @brief Notifies all waiters and resumes them on the given executor. Note that each waiter must be notified synchronously so
+     *        this is useful if the task is long lived and can be immediately parallelized after the condition is ready. This does not
+     *        need to be co_await'ed like `notify_all()` since this will execute the notify on the given executor.
+     *
+     * @tparam executor_type The type of executor that the waiters will be resumed on.
+     * @param executor The executor that each waiter will be resumed on.
+     * @return void
+     */
+    template<coro::concepts::io_executor executor_type>
+    auto notify_all(std::shared_ptr<executor_type> executor) -> void
+    {
+        auto* waiter = dequeue_waiter_all();
+        awaiter_base* next;
+
+        while (waiter != nullptr)
+        {
+            // Need to grab next before notifying since the notifier will self destruct after completing.
+            next = waiter->m_next;
+            // This will kick off each task in parallel on the scheduler, they will fight over the lock
+            // but will give the best parallelism scheduling them immediately.
+            executor->spawn(make_notify_all_executor_individual_task(waiter));
+            waiter = next;
+        }
+
+        return;
+    }
+#endif
+
     /**
      * @brief Waits until notified.
      *
@@ -476,6 +506,23 @@ public:
 private:
     /// @brief The list of waiters.
     std::atomic<awaiter_base*> m_awaiters{nullptr};
+
+#ifdef LIBCORO_FEATURE_NETWORKING
+    auto make_notify_all_executor_individual_task(awaiter_base* waiter) -> coro::task<void>
+    {
+        switch (co_await waiter->on_notify())
+        {
+            case notify_status_t::not_ready:
+                // Re-enqueue since the predicate isn't ready and return since the notify has been satisfied.
+                enqueue_waiter(waiter);
+                break;
+            case notify_status_t::ready:
+            case notify_status_t::awaiter_dead:
+                // Don't re-enqueue any awaiters that are ready or dead.
+                break;
+        }
+    }
+#endif
 
     /**
      * @brief Enqueues a waiter at the head to be awoken by a notify.
