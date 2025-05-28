@@ -75,17 +75,10 @@ TEST_CASE("ring_buffer many elements many producers many consumers", "[ring_buff
     auto make_shutdown_task =
         [](coro::thread_pool& tp, coro::ring_buffer<uint64_t, 64>& rb, coro::latch& w) -> coro::task<void>
     {
+        // Wait for all producers to complete before signally shutdown with drain.
         co_await tp.schedule();
         co_await w;
-
-        // Wait for all the values to be consumed prior to shutting down the ring buffer.
-        while (!rb.empty())
-        {
-            co_await tp.yield();
-        }
-
-        rb.notify_waiters(); // signal to all consumers (or even producers) we are done/shutting down.
-
+        co_await rb.shutdown_drain(tp);
         co_return;
     };
 
@@ -150,13 +143,7 @@ TEST_CASE("ring_buffer producer consumer separate threads", "[ring_buffer]")
             co_await rb.produce(i);
         }
 
-        while (!rb.empty())
-        {
-            co_await producer_tp.yield();
-        }
-
-        rb.notify_waiters(); // Shut everything down.
-
+        co_await rb.shutdown_drain(producer_tp);
         co_return;
     };
 
@@ -191,6 +178,8 @@ TEST_CASE("ring_buffer producer consumer separate threads", "[ring_buffer]")
 
 TEST_CASE("ring_buffer issue-242 default constructed complex objects on consume", "[ring_buffer]")
 {
+    std::cerr << "BEGIN ring_buffer issue-242 default constructed complex objects on consume\n";
+
     struct message
     {
         message(uint32_t i, std::string t) : id(i), text(std::move(t)) {}
@@ -280,7 +269,7 @@ TEST_CASE("ring_buffer issue-242 default constructed complex objects on consume"
         std::cerr << "buffer.produce(move(data)) start\n";
         auto result = co_await buffer.produce(std::move(data));
         std::cerr << "buffer.produce(move(data)) done\n";
-        REQUIRE(result == coro::rb::produce_result::produced);
+        REQUIRE(result == coro::ring_buffer_result::produce::produced);
         std::cerr << "exit produce coroutine\n";
         co_return;
     };
@@ -302,6 +291,8 @@ TEST_CASE("ring_buffer issue-242 default constructed complex objects on consume"
 
 TEST_CASE("ring_buffer issue-242 default constructed complex objects on consume in coroutines", "[ring_buffer]")
 {
+    std::cerr << "BEGIN ring_buffer issue-242 default constructed complex objects on consume in coroutines\n";
+
     struct message
     {
         uint32_t    id;
@@ -334,11 +325,11 @@ TEST_CASE("ring_buffer issue-242 default constructed complex objects on consume 
     {
         example data{};
         data.msg = {message{.id = 1, .text = "Hello World!"}};
-        std::cout << "Inside the coroutine\n";
-        std::cout << "ID: " << data.msg.value().id << "\n";
-        std::cout << "Text: " << data.msg.value().text << "\n";
+        std::cerr << "Inside the coroutine\n";
+        std::cerr << "ID: " << data.msg.value().id << "\n";
+        std::cerr << "Text: " << data.msg.value().text << "\n";
         auto result = co_await buffer.produce(std::move(data));
-        REQUIRE(result == coro::rb::produce_result::produced);
+        REQUIRE(result == coro::ring_buffer_result::produce::produced);
         co_return;
     };
 
@@ -351,19 +342,23 @@ TEST_CASE("ring_buffer issue-242 default constructed complex objects on consume 
         co_return std::move(data);
     };
 
+    std::cerr << "coro::sync_wait(produce(buffer))\n";
     coro::sync_wait(produce(buffer));
+    std::cerr << "coro::sync_wait(consume(buffer))\n";
     auto data = coro::sync_wait(consume(buffer));
 
     REQUIRE(data.msg.has_value());
     REQUIRE(data.msg.value().id == 1);
     REQUIRE(data.msg.value().text == "Hello World!");
-    std::cout << "Outside the coroutine\n";
-    std::cout << "ID: " << data.msg.value().id << "\n";
-    std::cout << "Text: " << data.msg.value().text << "\n";
+    std::cerr << "Outside the coroutine\n";
+    std::cerr << "ID: " << data.msg.value().id << "\n";
+    std::cerr << "Text: " << data.msg.value().text << "\n";
+    std::cerr << "END ring_buffer issue-242 complex\n";
 }
 
 TEST_CASE("ring_buffer issue-242 basic type", "[ring_buffer]")
 {
+    std::cerr << "BEGIN ring_buffer issue-242 basic type\n";
     coro::ring_buffer<uint32_t, 1> buffer;
 
     const auto foo = [](coro::ring_buffer<uint32_t, 1>& buffer) -> coro::task<void>
@@ -378,4 +373,5 @@ TEST_CASE("ring_buffer issue-242 basic type", "[ring_buffer]")
 
     auto data = std::move(*result);
     REQUIRE(data == 1);
+    std::cerr << "END ring_buffer issue-242 basic type\n";
 }

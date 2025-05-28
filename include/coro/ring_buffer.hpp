@@ -10,19 +10,19 @@
 
 namespace coro
 {
-namespace rb
+namespace ring_buffer_result
 {
-enum class produce_result
+enum class produce
 {
     produced,
-    ring_buffer_stopped
+    stopped
 };
 
-enum class consume_result
+enum class consume
 {
-    ring_buffer_stopped
+    stopped
 };
-} // namespace rb
+} // namespace ring_buffer_result
 
 /**
  * @tparam element The type of element the ring buffer will store.  Note that this type should be
@@ -33,6 +33,17 @@ enum class consume_result
 template<typename element, size_t num_elements>
 class ring_buffer
 {
+private:
+    enum running_state_t
+    {
+        /// @brief The ring buffer is still running.
+        running,
+        /// @brief The ring buffer is draining all elements, produce is no longer allowed.
+        draining,
+        /// @brief The ring buffer is fully shutdown, all produce and consume tasks will be woken up with result::stopped.
+        stopped,
+    };
+
 public:
     /**
      * static_assert If `num_elements` == 0.
@@ -42,7 +53,7 @@ public:
     ~ring_buffer()
     {
         // Wake up anyone still using the ring buffer.
-        notify_waiters();
+        shutdown();
     }
 
     ring_buffer(const ring_buffer<element, num_elements>&) = delete;
@@ -57,6 +68,11 @@ public:
 
         auto await_ready() noexcept -> bool
         {
+            if (m_rb.m_running_state.load(std::memory_order::acquire) != running_state_t::running)
+            {
+                return true;
+            }
+
             std::unique_lock lk{m_rb.m_mutex};
             return m_rb.try_produce_locked(lk, m_e);
         }
@@ -71,8 +87,8 @@ public:
                 return false;
             }
 
-            // Don't suspend if the stop signal has been set.
-            if (m_rb.m_stopped.load(std::memory_order::acquire))
+            // Don't suspend if stopping has been requested.
+            if (m_rb.m_running_state.load(std::memory_order::acquire) != running_state_t::running)
             {
                 return false;
             }
@@ -86,10 +102,11 @@ public:
         /**
          * @return produce_result
          */
-        auto await_resume() -> rb::produce_result
+        auto await_resume() -> ring_buffer_result::produce
         {
-            return !m_rb.m_stopped.load(std::memory_order::acquire) ? rb::produce_result::produced
-                                                                    : rb::produce_result::ring_buffer_stopped;
+            return m_rb.m_running_state.load(std::memory_order::acquire) == running_state_t::running
+                    ? ring_buffer_result::produce::produced
+                    : ring_buffer_result::produce::stopped;
         }
 
     private:
@@ -127,7 +144,7 @@ public:
             }
 
             // Don't suspend if the stop signal has been set.
-            if (m_rb.m_stopped.load(std::memory_order::acquire))
+            if (m_rb.m_running_state.load(std::memory_order::acquire) != running_state_t::running)
             {
                 return false;
             }
@@ -138,13 +155,13 @@ public:
         }
 
         /**
-         * @return The consumed element or std::nullopt if the consume has failed.
+         * @return The consumed element or ring_buffer_stopped if the ring buffer has been shutdown.
          */
-        auto await_resume() -> expected<element, rb::consume_result>
+        auto await_resume() -> expected<element, ring_buffer_result::consume>
         {
-            if (m_rb.m_stopped.load(std::memory_order::acquire))
+            if (m_rb.m_running_state.load(std::memory_order::acquire) == running_state_t::stopped)
             {
-                return unexpected<rb::consume_result>(rb::consume_result::ring_buffer_stopped);
+                return unexpected<ring_buffer_result::consume>(ring_buffer_result::consume::stopped);
             }
 
             return std::move(m_e);
@@ -182,8 +199,7 @@ public:
      */
     auto size() const -> size_t
     {
-        std::atomic_thread_fence(std::memory_order::acquire);
-        return m_used;
+        return m_used.load();
     }
 
     /**
@@ -192,39 +208,64 @@ public:
     auto empty() const -> bool { return size() == 0; }
 
     /**
-     * Wakes up all currently awaiting producers and consumers.  Their await_resume() function
-     * will return an expected consume result that the ring buffer has stopped.
+     * @brief Wakes up all currently awaiting producers and consumers.  Their await_resume() function
+     *        will return an expected consume result that the ring buffer has stopped.
      */
-    auto notify_waiters() -> void
+    auto shutdown() -> void
     {
-        auto expected = false;
-        if (!m_stopped.compare_exchange_strong(expected, true, std::memory_order::acq_rel, std::memory_order::relaxed))
+        // Only wake up waiters once.
+        auto expected = m_running_state.load(std::memory_order::acquire);
+        if (expected == running_state_t::stopped)
         {
-            // Only wake up waiters once.
             return;
         }
 
-        std::unique_lock lk{m_mutex};
+        // Only let one caller do the wake-ups, this can go from running or draining to stopped
+        if (!m_running_state.compare_exchange_strong(expected, running_state_t::stopped, std::memory_order::acq_rel, std::memory_order::relaxed))
+        {
+            return;
+        }
 
         while (m_produce_waiters != nullptr)
         {
-            auto* to_resume   = m_produce_waiters;
-            m_produce_waiters = m_produce_waiters->m_next;
+            m_mutex.lock();
+            auto* to_resume   = m_produce_waiters.load();
+            m_produce_waiters = to_resume->m_next;
+            m_mutex.unlock();
 
-            lk.unlock();
             to_resume->m_awaiting_coroutine.resume();
-            lk.lock();
         }
 
         while (m_consume_waiters != nullptr)
         {
-            auto* to_resume   = m_consume_waiters;
-            m_consume_waiters = m_consume_waiters->m_next;
+            m_mutex.lock();
+            auto* to_resume   = m_consume_waiters.load();
+            m_consume_waiters = to_resume->m_next;
+            m_mutex.unlock();
 
-            lk.unlock();
             to_resume->m_awaiting_coroutine.resume();
-            lk.lock();
         }
+
+        return;
+    }
+
+    template<coro::concepts::executor executor_t>
+    [[nodiscard]] auto shutdown_drain(executor_t& e) -> coro::task<void>
+    {
+        // Do not allow any more produces, the state must be in running to drain.
+        auto expected = running_state_t::running;
+        if (!m_running_state.compare_exchange_strong(expected, running_state_t::draining, std::memory_order::acq_rel, std::memory_order::relaxed))
+        {
+            co_return;
+        }
+
+        while (!empty())
+        {
+            co_await e.yield();
+        }
+
+        shutdown();
+        co_return;
     }
 
 private:
@@ -235,18 +276,18 @@ private:
 
     std::array<element, num_elements> m_elements{};
     /// The current front pointer to an open slot if not full.
-    size_t m_front{0};
+    std::atomic<size_t> m_front{0};
     /// The current back pointer to the oldest item in the buffer if not empty.
-    size_t m_back{0};
+    std::atomic<size_t> m_back{0};
     /// The number of items in the ring buffer.
-    size_t m_used{0};
+    std::atomic<size_t> m_used{0};
 
     /// The LIFO list of produce waiters.
-    produce_operation* m_produce_waiters{nullptr};
+    std::atomic<produce_operation*> m_produce_waiters{nullptr};
     /// The LIFO list of consume watier.
-    consume_operation* m_consume_waiters{nullptr};
+    std::atomic<consume_operation*> m_consume_waiters{nullptr};
 
-    std::atomic<bool> m_stopped{false};
+    std::atomic<running_state_t> m_running_state{running_state_t::running};
 
     auto try_produce_locked(std::unique_lock<std::mutex>& lk, element& e) -> bool
     {
@@ -259,10 +300,10 @@ private:
         m_front             = (m_front + 1) % num_elements;
         ++m_used;
 
-        if (m_consume_waiters != nullptr)
+        consume_operation* to_resume = m_consume_waiters.load();
+        if (to_resume != nullptr)
         {
-            consume_operation* to_resume = m_consume_waiters;
-            m_consume_waiters            = m_consume_waiters->m_next;
+            m_consume_waiters            = to_resume->m_next;
 
             // Since the consume operation suspended it needs to be provided an element to consume.
             to_resume->m_e = std::move(m_elements[m_back]);
@@ -287,10 +328,10 @@ private:
         m_back  = (m_back + 1) % num_elements;
         --m_used;
 
-        if (m_produce_waiters != nullptr)
+        produce_operation* to_resume = m_produce_waiters.load();
+        if (to_resume != nullptr)
         {
-            produce_operation* to_resume = m_produce_waiters;
-            m_produce_waiters            = m_produce_waiters->m_next;
+            m_produce_waiters            = to_resume->m_next;
 
             // Since the produce operation suspended it needs to be provided a slot to place its element.
             m_elements[m_front] = std::move(to_resume->m_e);
