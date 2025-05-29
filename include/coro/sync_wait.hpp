@@ -51,13 +51,10 @@ public:
 
     auto initial_suspend() noexcept -> std::suspend_always { return {}; }
 
-    auto unhandled_exception() -> void { m_exception = std::current_exception(); }
-
 protected:
     sync_wait_event*   m_event{nullptr};
-    std::exception_ptr m_exception;
 
-    ~sync_wait_task_promise_base() = default;
+    virtual ~sync_wait_task_promise_base() = default;
 };
 
 template<typename return_type>
@@ -78,7 +75,7 @@ public:
     sync_wait_task_promise(sync_wait_task_promise&&)                         = delete;
     auto operator=(const sync_wait_task_promise&) -> sync_wait_task_promise& = delete;
     auto operator=(sync_wait_task_promise&&) -> sync_wait_task_promise&      = delete;
-    ~sync_wait_task_promise()                                                = default;
+    ~sync_wait_task_promise() override                                       = default;
 
     auto start(sync_wait_event& event)
     {
@@ -115,6 +112,11 @@ public:
         {
             m_storage.template emplace<stored_type>(value);
         }
+    }
+
+    auto unhandled_exception() noexcept -> void
+    {
+        m_storage.template emplace<std::exception_ptr>(std::current_exception());
     }
 
     auto final_suspend() noexcept
@@ -212,8 +214,8 @@ class sync_wait_task_promise<void> : public sync_wait_task_promise_base
     using coroutine_type = std::coroutine_handle<sync_wait_task_promise<void>>;
 
 public:
-    sync_wait_task_promise() noexcept = default;
-    ~sync_wait_task_promise()         = default;
+    sync_wait_task_promise() noexcept  = default;
+    ~sync_wait_task_promise() override = default;
 
     auto start(sync_wait_event& event)
     {
@@ -235,6 +237,8 @@ public:
         return completion_notifier{};
     }
 
+    auto unhandled_exception() -> void { m_exception = std::current_exception(); }
+
     auto return_void() noexcept -> void {}
 
     auto result() -> void
@@ -244,6 +248,9 @@ public:
             std::rethrow_exception(m_exception);
         }
     }
+
+private:
+    std::exception_ptr m_exception;
 };
 
 template<typename return_type>
