@@ -3,7 +3,7 @@ name: ci-conan
 on: [pull_request, workflow_dispatch]
 
 jobs:
-    ci-conan-gcc10:
+    ci-conan-gcc11:
         name: ci-conan-g++-11-shared-${{ matrix.shared }}-build-type-${{ matrix.build_type }}
         runs-on: ubuntu-latest
         strategy:
@@ -11,7 +11,7 @@ jobs:
                 shared: ["False", "True"]
                 build_type: ["Release", "Debug"]
         container:
-            image: ubuntu:20.04
+            image: ubuntu:24.04
             env:
                 TZ: America/New_York
                 DEBIAN_FRONTEND: noninteractive
@@ -67,4 +67,4 @@ jobs:
             -   name: Test
                 run: |
                     cd build
-                    ctest -VVqw
+                    ctest -VV
