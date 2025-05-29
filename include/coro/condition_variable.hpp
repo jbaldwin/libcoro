@@ -356,11 +356,23 @@ public:
     auto notify_one() -> coro::task<void>;
 
     /**
+     * @brief Notifies a single waiter and resumes the waiter on the given executor.
+     *
+     * @tparam executor_type The type of executor that the waiter will be resumed on.
+     * @param executor The executor that the waiter will be resumed on.
+     */
+    template<coro::concepts::executor executor_type>
+    auto notify_one(std::shared_ptr<executor_type> executor) -> void
+    {
+        executor->spawn(notify_one());
+    }
+
+    /**
      * @brief Notifies all waiters.
      */
     auto notify_all() -> coro::task<void>;
 
-#ifdef LIBCORO_FEATURE_NETWORKING
+
     /**
      * @brief Notifies all waiters and resumes them on the given executor. Note that each waiter must be notified synchronously so
      *        this is useful if the task is long lived and can be immediately parallelized after the condition is ready. This does not
@@ -370,7 +382,7 @@ public:
      * @param executor The executor that each waiter will be resumed on.
      * @return void
      */
-    template<coro::concepts::io_executor executor_type>
+    template<coro::concepts::executor executor_type>
     auto notify_all(std::shared_ptr<executor_type> executor) -> void
     {
         auto* waiter = dequeue_waiter_all();
@@ -388,7 +400,7 @@ public:
 
         return;
     }
-#endif
+
 
     /**
      * @brief Waits until notified.
@@ -507,7 +519,6 @@ private:
     /// @brief The list of waiters.
     std::atomic<awaiter_base*> m_awaiters{nullptr};
 
-#ifdef LIBCORO_FEATURE_NETWORKING
     auto make_notify_all_executor_individual_task(awaiter_base* waiter) -> coro::task<void>
     {
         switch (co_await waiter->on_notify())
@@ -522,7 +533,6 @@ private:
                 break;
         }
     }
-#endif
 
     /**
      * @brief Enqueues a waiter at the head to be awoken by a notify.

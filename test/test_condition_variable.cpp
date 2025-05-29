@@ -837,4 +837,61 @@ TEST_CASE("notify_all(executor)", "[condition_variable]")
     REQUIRE(counter == 55);
 }
 
+TEST_CASE("notify_one(executor)", "[condition_variable]")
+{
+    struct Args
+    {
+        std::shared_ptr<coro::io_scheduler> sched = coro::io_scheduler::make_shared();
+        coro::condition_variable cv{};
+        coro::mutex m{};
+        std::atomic<int64_t> counter{0};
+    };
+
+    using namespace std::chrono_literals;
+
+    Args args;
+
+    auto task = [](Args& a) -> coro::task<void> {
+        co_await a.sched->schedule();
+        {
+            auto lk = co_await a.m.scoped_lock();
+            co_await a.cv.wait(lk);
+        }
+
+        // there is an imitation of very long processing,
+        // which prevents the awakening of other threads,
+        // since this coroutine does not plan to fall asleep anytime soon
+        // Note: original example was 1h, trimmed to 100ms for this test.
+        std::this_thread::sleep_for(100ms);
+        a.counter++;
+        co_return;
+    };
+
+    auto starter = [](Args& a) -> coro::task<void> {
+        co_await a.sched->schedule_after(20ms);
+
+        // Suppose we received a portion of data designed for parallel processing in n = 5 coroutine,
+        // while in the pool we have M = 5 threads.
+        // When trying to wake n coroutine, only one will wake up,
+        // because this coroutine is busy and does not plan to fall asleep
+        // (thereby returning to cv.notify_one() to awaken other coroutines)
+        a.cv.notify_one(a.sched);
+        a.cv.notify_one(a.sched);
+        a.cv.notify_one(a.sched);
+        a.cv.notify_one(a.sched);
+        a.cv.notify_one(a.sched);
+        co_return;
+    };
+
+    // in this scenario only one thread will wake up instead of 5 as intended
+    coro::sync_wait(coro::when_all(task(args),
+                                   task(args),
+                                   task(args),
+                                   task(args),
+                                   task(args),
+                                   starter(args)));
+
+    REQUIRE(args.counter == 5);
+}
+
 #endif
