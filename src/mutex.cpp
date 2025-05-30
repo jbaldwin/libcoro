@@ -96,14 +96,6 @@ auto mutex::unlock() -> void
 
         // There are waiters on the atomic list, acquire them and update the state for all others.
         m_internal_waiters = static_cast<detail::lock_operation_base*>(m_state.exchange(nullptr, std::memory_order::acq_rel));
-
-        // Should internal waiters be reversed to allow for true FIFO, or should they be resumed
-        // in this reverse order to maximum throuhgput?  If this list ever gets 'long' the reversal
-        // will take some time, but it might guarantee better latency across waiters.  This LIFO
-        // middle ground on the atomic waiters means the best throughput at the cost of the first
-        // waiter possibly having added latency based on the queue length of waiters.  Either way
-        // incurs a cost but this way for short lists will most likely be faster even though it
-        // isn't completely fair.
     }
 
     // assert m_internal_waiters != nullptr

@@ -18,7 +18,7 @@ enum class queue_produce_result
     /**
      * @brief The queue is shutting down or stopped, no more items are allowed to be produced.
      */
-    queue_stopped
+    stopped
 };
 
 enum class queue_consume_result
@@ -26,7 +26,7 @@ enum class queue_consume_result
     /**
      * @brief The queue has shut down/stopped and the user should stop calling pop().
      */
-    queue_stopped
+    stopped
 };
 
 /**
@@ -40,6 +40,14 @@ enum class queue_consume_result
 template<typename element_type>
 class queue
 {
+private:
+    enum running_state_t
+    {
+        running,
+        draining,
+        stopped,
+    };
+
 public:
     struct awaiter
     {
@@ -55,7 +63,7 @@ public:
         auto await_ready() noexcept -> bool
         {
             // This awaiter is ready when it has actually acquired an element or it is shutting down.
-            if (m_queue.m_stopped.load(std::memory_order::acquire))
+            if (m_queue.m_running_state.load(std::memory_order::acquire) == running_state_t::stopped)
             {
                 return false;
             }
@@ -81,13 +89,12 @@ public:
 
         auto await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept -> bool
         {
-            // Don't suspend if the stop signal has been set.
-            if (m_queue.m_stopped.load(std::memory_order::acquire))
+            auto lock = coro::sync_wait(make_acquire_lock_task());
+            if (m_queue.m_running_state.load(std::memory_order::acquire) == running_state_t::stopped)
             {
                 return false;
             }
 
-            auto lock = coro::sync_wait(make_acquire_lock_task());
             if (!m_queue.empty())
             {
                 if constexpr (std::is_move_constructible_v<element_type>)
@@ -127,7 +134,7 @@ public:
             else
             {
                 // If we don't have an item the queue has stopped, the prior functions will have checked the state.
-                return unexpected<queue_consume_result>(queue_consume_result::queue_stopped);
+                return unexpected<queue_consume_result>(queue_consume_result::stopped);
             }
         }
 
@@ -176,14 +183,14 @@ public:
      */
     auto push(const element_type& element) -> coro::task<queue_produce_result>
     {
-        if (m_shutting_down.load(std::memory_order::acquire))
-        {
-            co_return queue_produce_result::queue_stopped;
-        }
-
         // The general idea is to see if anyone is waiting, and if so directly transfer the element
         // to that waiter. If there is nobody waiting then move the element into the queue.
         auto lock = co_await m_mutex.scoped_lock();
+
+        if (m_running_state.load(std::memory_order::acquire) != running_state_t::running)
+        {
+            co_return queue_produce_result::stopped;
+        }
 
         if (m_waiters != nullptr)
         {
@@ -213,12 +220,12 @@ public:
      */
     auto push(element_type&& element) -> coro::task<queue_produce_result>
     {
-        if (m_shutting_down.load(std::memory_order::acquire))
-        {
-            co_return queue_produce_result::queue_stopped;
-        }
-
         auto lock = co_await m_mutex.scoped_lock();
+
+        if (m_running_state.load(std::memory_order::acquire) != running_state_t::running)
+        {
+            co_return queue_produce_result::stopped;
+        }
 
         if (m_waiters != nullptr)
         {
@@ -248,12 +255,12 @@ public:
     template<typename... args_type>
     auto emplace(args_type&&... args) -> coro::task<queue_produce_result>
     {
-        if (m_shutting_down.load(std::memory_order::acquire))
-        {
-            co_return queue_produce_result::queue_stopped;
-        }
-
         auto lock = co_await m_mutex.scoped_lock();
+
+        if (m_running_state.load(std::memory_order::acquire) != running_state_t::running)
+        {
+            co_return queue_produce_result::stopped;
+        }
 
         if (m_waiters != nullptr)
         {
@@ -285,26 +292,30 @@ public:
      *
      * @return coro::task<void>
      */
-    auto shutdown_notify_waiters() -> coro::task<void>
+    auto shutdown() -> coro::task<void>
     {
-        auto expected = false;
-        if (!m_shutting_down.compare_exchange_strong(
-                expected, true, std::memory_order::acq_rel, std::memory_order::relaxed))
+        auto expected = m_running_state.load(std::memory_order::acquire);
+        if (expected == running_state_t::stopped)
         {
             co_return;
         }
 
-        // Since this isn't draining just let the awaiters know we're stopped.
-        m_stopped.exchange(true, std::memory_order::release);
-
-        while (m_waiters != nullptr)
+        if (!m_running_state.compare_exchange_strong(
+                expected, running_state_t::stopped, std::memory_order::acq_rel, std::memory_order::relaxed))
         {
-            co_await m_mutex.lock();
-            auto* to_resume = m_waiters;
-            m_waiters       = m_waiters->m_next;
-            m_mutex.unlock();
+            co_return;
+        }
 
-            to_resume->m_awaiting_coroutine.resume();
+        // We use the lock to guarantee the m_running_state has propagated.
+        auto lk = co_await m_mutex.scoped_lock();
+        auto* waiters = m_waiters;
+        m_waiters = nullptr;
+        lk.unlock();
+        while (waiters != nullptr)
+        {
+            auto* next = waiters->m_next;
+            waiters->m_awaiting_coroutine.resume();
+            waiters = next;
         }
     }
 
@@ -318,11 +329,11 @@ public:
      * @return coro::task<void>
      */
     template<coro::concepts::executor executor_t>
-    auto shutdown_notify_waiters_drain(executor_t& e) -> coro::task<void>
+    auto shutdown_drain(executor_t& e) -> coro::task<void>
     {
-        auto expected = false;
-        if (!m_shutting_down.compare_exchange_strong(
-                expected, true, std::memory_order::acq_rel, std::memory_order::relaxed))
+        auto expected = running_state_t::running;
+        if (!m_running_state.compare_exchange_strong(
+                expected, running_state_t::draining, std::memory_order::acq_rel, std::memory_order::relaxed))
         {
             co_return;
         }
@@ -332,32 +343,19 @@ public:
             co_await e.yield();
         }
 
-        // Now that the queue is drained let all the awaiters know that we're stopped.
-        m_stopped.exchange(true, std::memory_order::release);
-
-        while (m_waiters != nullptr)
-        {
-            co_await m_mutex.lock();
-            auto* to_resume = m_waiters;
-            m_waiters       = m_waiters->m_next;
-            m_mutex.unlock();
-
-            to_resume->m_awaiting_coroutine.resume();
-        }
+        co_return co_await shutdown();
     }
 
 private:
     friend awaiter;
-    /// The list of pop() awaiters.
+    /// @brief The list of pop() awaiters.
     awaiter* m_waiters{nullptr};
-    /// Mutex for properly maintaining the queue.
+    /// @brief Mutex for properly maintaining the queue.
     coro::mutex m_mutex{};
-    /// The underlying queue data structure.
+    /// @brief The underlying queue data structure.
     std::queue<element_type> m_elements{};
-    /// Has the shutdown process begun?
-    std::atomic<bool> m_shutting_down{false};
-    /// Has this queue been shutdown?
-    std::atomic<bool> m_stopped{false};
+    /// @brief The current running state of the queue.
+    std::atomic<running_state_t> m_running_state{running_state_t::running};
 };
 
 } // namespace coro

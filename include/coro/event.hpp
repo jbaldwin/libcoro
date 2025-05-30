@@ -62,12 +62,12 @@ public:
          */
         auto await_resume() noexcept {}
 
+        /// @brief The next awaiter in line for this event, nullptr if this is the end.
+        awaiter* m_next{nullptr};
+        /// @brief The awaiting continuation coroutine handle.
+        std::coroutine_handle<> m_awaiting_coroutine;
         /// Refernce to the event that this awaiter is waiting on.
         const event& m_event;
-        /// The awaiting continuation coroutine handle.
-        std::coroutine_handle<> m_awaiting_coroutine;
-        /// The next awaiter in line for this event, nullptr if this is the end.
-        awaiter* m_next{nullptr};
     };
 
     /**
@@ -134,7 +134,7 @@ public:
      */
     auto reset() noexcept -> void;
 
-protected:
+private:
     /// For access to m_state.
     friend struct awaiter;
     /// The state of the event, nullptr is not set with zero awaiters.  Set to an awaiter* there are
@@ -144,7 +144,6 @@ protected:
     /// 3) this == The event is triggered and all awaiters are resumed.
     mutable std::atomic<void*> m_state;
 
-private:
     /**
      * Reverses the set of waiters from LIFO->FIFO and returns the new head.
      */

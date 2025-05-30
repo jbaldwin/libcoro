@@ -1,6 +1,7 @@
 #pragma once
 
 #include "coro/detail/task_self_deleting.hpp"
+#include "coro/detail/awaiter_list.hpp"
 #include "coro/concepts/executor.hpp"
 #include "coro/task.hpp"
 #include "coro/event.hpp"
@@ -25,6 +26,7 @@ class condition_variable
 public:
     using predicate_type = std::function<bool()>;
 
+private:
     enum notify_status_t
     {
         /// @brief The waiter is ready to be resumed, either the predicate passed or its been requested to stop.
@@ -47,12 +49,12 @@ public:
 
         /// @brief The next waiting awaiter.
         awaiter_base* m_next{nullptr};
+        /// @brief The coroutine to resume the waiter.
+        std::coroutine_handle<> m_awaiting_coroutine{nullptr};
         /// @brief The condition variable this waiter is waiting on.
         coro::condition_variable& m_condition_variable;
         /// @brief The lock that the wait() was called with.
         coro::scoped_lock& m_lock;
-        /// @brief The coroutine to resume the waiter.
-        std::coroutine_handle<> m_awaiting_coroutine{nullptr};
 
         /// @brief Each awaiter type defines its own notify behavior.
         /// @return The status of if the waiter's notify result.
@@ -276,7 +278,7 @@ public:
             controller_data data{m_status, m_predicate_result, std::move(m_predicate), std::move(m_stop_token)};
             // We enqueue the hook_task since we can make it live until the notify occurs and will properly resume the actual coroutine only once.
             awaiter_with_wait_hook hook_task{m_condition_variable, m_lock, data};
-            m_condition_variable.enqueue_waiter(&hook_task);
+            detail::awaiter_list_push(m_condition_variable.m_awaiters, static_cast<awaiter_base*>(&hook_task));
             m_lock.m_mutex->unlock(); // Unlock the actual lock now that we are setup, not the fake hook task.
 
             co_await coro::when_all(make_on_notify_callback_task(data), make_timeout_task(data));
@@ -342,6 +344,7 @@ public:
 
 #endif
 
+public:
     condition_variable() = default;
     ~condition_variable() = default;
 
@@ -385,7 +388,7 @@ public:
     template<coro::concepts::executor executor_type>
     auto notify_all(std::shared_ptr<executor_type> executor) -> void
     {
-        auto* waiter = dequeue_waiter_all();
+        auto* waiter = detail::awaiter_list_pop_all(m_awaiters);
         awaiter_base* next;
 
         while (waiter != nullptr)
@@ -525,7 +528,7 @@ private:
         {
             case notify_status_t::not_ready:
                 // Re-enqueue since the predicate isn't ready and return since the notify has been satisfied.
-                enqueue_waiter(waiter);
+                detail::awaiter_list_push(m_awaiters, waiter);
                 break;
             case notify_status_t::ready:
             case notify_status_t::awaiter_dead:
@@ -533,27 +536,6 @@ private:
                 break;
         }
     }
-
-    /**
-     * @brief Enqueues a waiter at the head to be awoken by a notify.
-     *
-     * @param a The waiter to enqueue.
-     */
-    auto enqueue_waiter(awaiter_base* a) -> void;
-
-    /**
-     * @brief Dequeues a single waiter to try and awaken from a notify.
-     *
-     * @return awaiter_base* The awaiter to try and awaken.
-     */
-    auto dequeue_waiter() -> awaiter_base*;
-
-    /**
-     * @brief Dequeues the entire list of waiters to try and awaken all of them.
-     *
-     * @return awaiter_base* The list of awaiters to try and awaken.
-     */
-    auto dequeue_waiter_all() -> awaiter_base*;
 };
 
 } // namespace coro

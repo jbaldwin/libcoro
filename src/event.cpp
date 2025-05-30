@@ -1,4 +1,5 @@
 #include "coro/event.hpp"
+#include "coro/detail/awaiter_list.hpp"
 #include "coro/thread_pool.hpp"
 
 namespace coro
@@ -33,22 +34,7 @@ auto event::set(resume_order_policy policy) noexcept -> void
 
 auto event::reverse(awaiter* curr) -> awaiter*
 {
-    if (curr == nullptr || curr->m_next == nullptr)
-    {
-        return curr;
-    }
-
-    awaiter* prev = nullptr;
-    awaiter* next = nullptr;
-    while (curr != nullptr)
-    {
-        next         = curr->m_next;
-        curr->m_next = prev;
-        prev         = curr;
-        curr         = next;
-    }
-
-    return prev;
+    return detail::awaiter_list_reverse(curr);
 }
 
 auto event::awaiter::await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept -> bool

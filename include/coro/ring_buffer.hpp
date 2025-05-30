@@ -226,23 +226,24 @@ public:
             return;
         }
 
-        while (m_produce_waiters != nullptr)
-        {
-            m_mutex.lock();
-            auto* to_resume   = m_produce_waiters.load();
-            m_produce_waiters = to_resume->m_next;
-            m_mutex.unlock();
+        m_mutex.lock();
+        auto* produce_waiters = m_produce_waiters.load(std::memory_order::acquire);
+        auto* consume_waiters = m_consume_waiters.load(std::memory_order::acquire);
+        m_produce_waiters = nullptr;
+        m_consume_waiters = nullptr;
+        m_mutex.unlock();
 
+        while (produce_waiters != nullptr)
+        {
+            auto* to_resume = produce_waiters;
+            produce_waiters = produce_waiters->m_next;
             to_resume->m_awaiting_coroutine.resume();
         }
 
-        while (m_consume_waiters != nullptr)
+        while (consume_waiters != nullptr)
         {
-            m_mutex.lock();
-            auto* to_resume   = m_consume_waiters.load();
-            m_consume_waiters = to_resume->m_next;
-            m_mutex.unlock();
-
+            auto* to_resume = consume_waiters;
+            consume_waiters = consume_waiters->m_next;
             to_resume->m_awaiting_coroutine.resume();
         }
 

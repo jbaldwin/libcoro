@@ -30,7 +30,7 @@ auto condition_variable::awaiter::await_ready() const noexcept -> bool
 auto condition_variable::awaiter::await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept -> bool
 {
     m_awaiting_coroutine = awaiting_coroutine;
-    m_condition_variable.enqueue_waiter(this);
+    coro::detail::awaiter_list_push(m_condition_variable.m_awaiters, static_cast<awaiter_base*>(this));
     m_lock.m_mutex->unlock();
     return true;
 }
@@ -60,7 +60,7 @@ auto condition_variable::awaiter_with_predicate::await_ready() const noexcept ->
 auto condition_variable::awaiter_with_predicate::await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept -> bool
 {
     m_awaiting_coroutine = awaiting_coroutine;
-    m_condition_variable.enqueue_waiter(this);
+    coro::detail::awaiter_list_push(m_condition_variable.m_awaiters, static_cast<awaiter_base*>(this));
     m_lock.m_mutex->unlock();
     return true;
 }
@@ -102,7 +102,7 @@ auto condition_variable::awaiter_with_predicate_stop_token::await_ready() noexce
 auto condition_variable::awaiter_with_predicate_stop_token::await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept -> bool
 {
     m_awaiting_coroutine = awaiting_coroutine;
-    m_condition_variable.enqueue_waiter(this);
+    coro::detail::awaiter_list_push(m_condition_variable.m_awaiters, static_cast<awaiter_base*>(this));
     m_lock.m_mutex->unlock();
     return true;
 }
@@ -201,7 +201,7 @@ auto condition_variable::notify_one() -> coro::task<void>
     // The loop is here in case there are *dead* awaiter_hook_tasks that need to be skipped.
     while (true)
     {
-        auto* waiter = dequeue_waiter();
+        auto* waiter = detail::awaiter_list_pop(m_awaiters);
         if (waiter == nullptr)
         {
             co_return; // There is nobody to currently notify.
@@ -214,7 +214,7 @@ auto condition_variable::notify_one() -> coro::task<void>
                 co_return;
             case notify_status_t::not_ready:
                 // Re-enqueue since the predicate isn't ready and return since the notify has been satisfied.
-                enqueue_waiter(waiter);
+                coro::detail::awaiter_list_push(m_awaiters, waiter);
                 co_return;
             case notify_status_t::awaiter_dead:
                 // This is an awaiter_with_wait_hook that timed out, try the next awaiter.
@@ -225,7 +225,7 @@ auto condition_variable::notify_one() -> coro::task<void>
 
 auto condition_variable::notify_all() -> coro::task<void>
 {
-    auto* waiter = dequeue_waiter_all();
+    auto* waiter = detail::awaiter_list_pop_all(m_awaiters);
     awaiter_base* next;
 
     while (waiter != nullptr)
@@ -237,7 +237,7 @@ auto condition_variable::notify_all() -> coro::task<void>
         {
             case notify_status_t::not_ready:
                 // Re-enqueue since the predicate isn't ready and return since the notify has been satisfied.
-                enqueue_waiter(waiter);
+                coro::detail::awaiter_list_push(m_awaiters, waiter);
                 break;
             case notify_status_t::ready:
             case notify_status_t::awaiter_dead:
@@ -276,48 +276,5 @@ auto condition_variable::wait(
 }
 
 #endif
-
-auto condition_variable::enqueue_waiter(awaiter_base* to_enqueue) -> void
-{
-    awaiter_base* current = m_awaiters.load(std::memory_order::acquire);
-    do
-    {
-        to_enqueue->m_next = current;
-    } while (!m_awaiters.compare_exchange_weak(
-        current, to_enqueue, std::memory_order::release, std::memory_order::acquire));
-}
-
-auto condition_variable::dequeue_waiter() -> awaiter_base*
-{
-    awaiter_base* waiter = m_awaiters.load(std::memory_order::acquire);
-    do
-    {
-        if (waiter == nullptr)
-        {
-            return nullptr;
-        }
-    } while (!m_awaiters.compare_exchange_weak(
-        waiter, waiter->m_next, std::memory_order::release, std::memory_order::acquire));
-
-    return waiter;
-}
-
-auto condition_variable::dequeue_waiter_all() -> awaiter_base*
-{
-    awaiter_base* head = m_awaiters.load(std::memory_order::acquire);
-
-    do
-    {
-        // The list has become empty.
-        if (head == nullptr)
-        {
-            break;
-        }
-    } while (!m_awaiters.compare_exchange_weak(
-        head, nullptr, std::memory_order::release, std::memory_order::acquire));
-
-    return head;
-}
-
 
 } // namespace coro

@@ -2,6 +2,8 @@
 
 #include <coro/coro.hpp>
 
+#include <iostream>
+
 TEST_CASE("queue shutdown produce", "[queue]")
 {
     coro::queue<uint64_t> q{};
@@ -16,7 +18,7 @@ TEST_CASE("queue shutdown produce", "[queue]")
         co_return std::move(*expected);
     };
 
-    coro::sync_wait(q.shutdown_notify_waiters());
+    coro::sync_wait(q.shutdown());
     coro::sync_wait(q.push(42));
 
     auto result = coro::sync_wait(make_consumer_task(q));
@@ -89,12 +91,12 @@ TEST_CASE("queue produce consume direct", "[queue]")
             co_await tp.yield();
         }
 
-        co_await q.shutdown_notify_waiters_drain(tp);
+        co_await q.shutdown_drain(tp);
 
         co_return 0;
     };
 
-    auto make_consumer_task = [&ITERATIONS](coro::thread_pool& tp, coro::queue<uint64_t>& q) -> coro::task<uint64_t>
+    auto make_consumer_task = [](coro::thread_pool& tp, coro::queue<uint64_t>& q) -> coro::task<uint64_t>
     {
         co_await tp.schedule();
 
@@ -109,6 +111,8 @@ TEST_CASE("queue produce consume direct", "[queue]")
             }
             sum += *expected;
         }
+
+        co_return sum;
     };
 
     auto results = coro::sync_wait(coro::when_all(make_consumer_task(tp, q), make_producer_task(tp, q)));
@@ -141,17 +145,22 @@ TEST_CASE("queue multithreaded produce consume", "[queue]")
 
     auto make_shutdown_task = [](coro::thread_pool& tp, coro::queue<uint64_t>& q, coro::latch& w) -> coro::task<void>
     {
+        co_await tp.schedule();
         // Wait for all producers to complete.
         co_await w;
 
         // Wake up all waiters.
-        co_await q.shutdown_notify_waiters_drain(tp);
+        std::cerr << "make_shutdown_task() q.shutdown_drain(tp)\n";
+        co_await q.shutdown_drain(tp);
+        std::cerr << "make_shutdown_task() co_return;\n";
+        co_return;
     };
 
     auto make_consumer_task =
-        [&ITERATIONS](
+        [](
             coro::thread_pool& tp, coro::queue<uint64_t>& q, std::atomic<uint64_t>& counter) -> coro::task<void>
     {
+        std::cerr << "make_consumer_task()\n";
         co_await tp.schedule();
 
         while (true)
@@ -159,10 +168,14 @@ TEST_CASE("queue multithreaded produce consume", "[queue]")
             auto expected = co_await q.pop();
             if (!expected)
             {
+                std::cerr << "make_consumer_task() q.pop() !expected co_return\n";
                 co_return;
             }
             counter += *expected;
         }
+
+        std::cerr << "make_consumer_task() co_return\n";
+        co_return;
     };
 
     std::vector<coro::task<void>> tasks{};
@@ -192,7 +205,7 @@ TEST_CASE("queue stopped", "[queue]")
     };
 
     coro::sync_wait(q.push(42));
-    coro::sync_wait(q.shutdown_notify_waiters());
+    coro::sync_wait(q.shutdown());
 
     auto result = coro::sync_wait(make_consumer_task(q));
     REQUIRE(result == 0);
