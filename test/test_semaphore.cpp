@@ -9,11 +9,12 @@
 
 TEST_CASE("semaphore binary", "[semaphore]")
 {
+    std::cerr << "BEGIN semaphore binary\n";
     std::vector<uint64_t> output;
 
-    coro::semaphore s{1};
+    coro::semaphore<1> s{1};
 
-    auto make_emplace_task = [](coro::semaphore& s, std::vector<uint64_t>& output) -> coro::task<void>
+    auto make_emplace_task = [](coro::semaphore<1>& s, std::vector<uint64_t>& output) -> coro::task<void>
     {
         std::cerr << "Acquiring semaphore\n";
         co_await s.acquire();
@@ -42,17 +43,19 @@ TEST_CASE("semaphore binary", "[semaphore]")
 
     REQUIRE(output.size() == 1);
     REQUIRE(output[0] == 1);
+    std::cerr << "END semaphore binary\n";
 }
 
 TEST_CASE("semaphore binary many waiters until event", "[semaphore]")
 {
+    std::cerr << "BEGIN semaphore binary many waiters until event\n";
     std::atomic<uint64_t>         value{0};
     std::vector<coro::task<void>> tasks;
 
-    coro::semaphore s{1}; // acquires and holds the semaphore until the event is triggered
+    coro::semaphore<1> s{1}; // acquires and holds the semaphore until the event is triggered
     coro::event     e;    // triggers the blocking thread to release the semaphore
 
-    auto make_task = [](coro::semaphore& s, std::atomic<uint64_t>& value, uint64_t id) -> coro::task<void>
+    auto make_task = [](coro::semaphore<1>& s, std::atomic<uint64_t>& value, uint64_t id) -> coro::task<void>
     {
         std::cerr << "id = " << id << " waiting to acquire the semaphore\n";
         co_await s.acquire();
@@ -67,7 +70,7 @@ TEST_CASE("semaphore binary many waiters until event", "[semaphore]")
         co_return;
     };
 
-    auto make_block_task = [](coro::semaphore& s, coro::event& e) -> coro::task<void>
+    auto make_block_task = [](coro::semaphore<1>& s, coro::event& e) -> coro::task<void>
     {
         std::cerr << "block task acquiring lock\n";
         co_await s.acquire();
@@ -99,10 +102,31 @@ TEST_CASE("semaphore binary many waiters until event", "[semaphore]")
     coro::sync_wait(coro::when_all(std::move(tasks)));
 
     REQUIRE(value == 4);
+    std::cerr << "END semaphore binary many waiters until event\n";
 }
 
-TEST_CASE("semaphore ringbuffer", "[semaphore]")
+TEST_CASE("semaphore release over max", "[semaphore]")
 {
+    coro::semaphore<2> s{0};
+    s.release();
+    REQUIRE(s.value() == 1);
+    s.release();
+    REQUIRE(s.value() == 2);
+    s.release();
+    REQUIRE(s.value() == 2);
+}
+
+TEST_CASE("semaphore try_acquire", "[semaphore]")
+{
+    coro::semaphore<2> s{2};
+    REQUIRE(s.try_acquire());
+    REQUIRE(s.try_acquire());
+    REQUIRE_FALSE(s.try_acquire());
+}
+
+TEST_CASE("semaphore produce consume", "[semaphore]")
+{
+    std::cerr << "BEGIN semaphore produce consume\n";
     const std::size_t iterations = 10;
 
     // This test is run in the context of a thread pool so the producer task can yield.  Otherwise
@@ -111,10 +135,10 @@ TEST_CASE("semaphore ringbuffer", "[semaphore]")
     std::atomic<uint64_t>         value{0};
     std::vector<coro::task<void>> tasks;
 
-    coro::semaphore s{2, 2};
+    coro::semaphore<2> s{2};
 
     auto make_consumer_task =
-        [](coro::thread_pool& tp, coro::semaphore& s, std::atomic<uint64_t>& value, uint64_t id) -> coro::task<void>
+        [](coro::thread_pool& tp, coro::semaphore<2>& s, std::atomic<uint64_t>& value, uint64_t id) -> coro::task<void>
     {
         co_await tp.schedule();
 
@@ -122,7 +146,7 @@ TEST_CASE("semaphore ringbuffer", "[semaphore]")
         {
             std::cerr << "id = " << id << " waiting to acquire the semaphore\n";
             auto result = co_await s.acquire();
-            if (result == coro::semaphore::acquire_result::acquired)
+            if (result == coro::semaphore_acquire_result::acquired)
             {
                 std::cerr << "id = " << id << " semaphore acquired, consuming value\n";
 
@@ -139,58 +163,63 @@ TEST_CASE("semaphore ringbuffer", "[semaphore]")
         co_return;
     };
 
-    auto make_producer_task = [](coro::thread_pool& tp, coro::semaphore& s) -> coro::task<void>
+    auto make_producer_task = [](coro::thread_pool& tp, coro::semaphore<2>& s, std::atomic<uint64_t>& value) -> coro::task<void>
     {
         co_await tp.schedule();
 
-        for (size_t i = 2; i < iterations; ++i)
+        // Keep producing until we hit the required amount.
+        while (value.load(std::memory_order::acquire) < iterations)
         {
             std::cerr << "producer: doing work\n";
             // Do some work...
+            co_await tp.yield();
 
             std::cerr << "producer: releasing\n";
             s.release();
             std::cerr << "producer: produced\n";
-            co_await tp.yield();
         }
 
         std::cerr << "producer exiting\n";
-        s.notify_waiters();
+        s.shutdown();
         co_return;
     };
 
-    tasks.emplace_back(make_producer_task(tp, s));
+    tasks.emplace_back(make_producer_task(tp, s, value));
     tasks.emplace_back(make_consumer_task(tp, s, value, 1));
 
     coro::sync_wait(coro::when_all(std::move(tasks)));
 
     REQUIRE(value == iterations);
+    std::cerr << "END semaphore produce consume\n";
 }
 
-TEST_CASE("semaphore ringbuffer many producers and consumers", "[semaphore]")
+TEST_CASE("semaphore 1 producers and many consumers", "[semaphore]")
 {
+    std::cerr << "BEGIN semaphore 1 producers and many consumers\n";
     const std::size_t consumers  = 16;
     const std::size_t producers  = 1;
     const std::size_t iterations = 100'000;
 
     std::atomic<uint64_t> value{0};
 
-    coro::semaphore s{50, 0};
+    coro::semaphore<50> s{0};
 
-    coro::thread_pool tp{}; // let er rip
+    coro::thread_pool tp{};
 
     auto make_consumer_task =
-        [](coro::thread_pool& tp, coro::semaphore& s, std::atomic<uint64_t>& value, uint64_t id) -> coro::task<void>
+        [](coro::thread_pool& tp, coro::semaphore<50>& s, std::atomic<uint64_t>& value, uint64_t id) -> coro::task<void>
     {
         co_await tp.schedule();
 
         while (true)
         {
+            // std::cerr << "consumer " << id << "s.acquire()\n";
             auto result = co_await s.acquire();
-            if (result == coro::semaphore::acquire_result::acquired)
+            if (result == coro::semaphore_acquire_result::acquired)
             {
+                // std::cerr << "consumer " << id << " acquired\n";
                 co_await tp.schedule();
-                value.fetch_add(1, std::memory_order::relaxed);
+                value.fetch_add(1, std::memory_order::release);
             }
             else
             {
@@ -202,24 +231,25 @@ TEST_CASE("semaphore ringbuffer many producers and consumers", "[semaphore]")
     };
 
     auto make_producer_task =
-        [](coro::thread_pool& tp, coro::semaphore& s, std::atomic<uint64_t>& value, uint64_t id) -> coro::task<void>
+        [](coro::thread_pool& tp, coro::semaphore<50>& s, std::atomic<uint64_t>& value, uint64_t id) -> coro::task<void>
     {
         co_await tp.schedule();
 
         for (size_t i = 0; i < iterations; ++i)
         {
+            // std::cerr << "producer " << id << " s.release()\n";
             s.release();
+            co_await tp.yield();
         }
 
-        while (value.load(std::memory_order::relaxed) < iterations)
+        // Wait for all jobs to complete.
+        while (value.load(std::memory_order::acquire) < iterations)
         {
             co_await tp.yield();
         }
 
         std::cerr << "producer " << id << " exiting\n";
-
-        s.notify_waiters();
-
+        s.shutdown();
         co_return;
     };
 
@@ -236,4 +266,5 @@ TEST_CASE("semaphore ringbuffer many producers and consumers", "[semaphore]")
     coro::sync_wait(coro::when_all(std::move(tasks)));
 
     REQUIRE(value >= iterations);
+    std::cerr << "END semaphore 1 producers and many consumers\n";
 }

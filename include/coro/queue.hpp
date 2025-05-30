@@ -285,7 +285,7 @@ public:
      *
      * @return coro::task<void>
      */
-    auto shutdown_notify_waiters() -> coro::task<void>
+    auto shutdown() -> coro::task<void>
     {
         auto expected = false;
         if (!m_shutting_down.compare_exchange_strong(
@@ -318,7 +318,7 @@ public:
      * @return coro::task<void>
      */
     template<coro::concepts::executor executor_t>
-    auto shutdown_notify_waiters_drain(executor_t& e) -> coro::task<void>
+    auto shutdown_drain(executor_t& e) -> coro::task<void>
     {
         auto expected = false;
         if (!m_shutting_down.compare_exchange_strong(

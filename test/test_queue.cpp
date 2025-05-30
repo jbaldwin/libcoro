@@ -16,7 +16,7 @@ TEST_CASE("queue shutdown produce", "[queue]")
         co_return std::move(*expected);
     };
 
-    coro::sync_wait(q.shutdown_notify_waiters());
+    coro::sync_wait(q.shutdown());
     coro::sync_wait(q.push(42));
 
     auto result = coro::sync_wait(make_consumer_task(q));
@@ -89,7 +89,7 @@ TEST_CASE("queue produce consume direct", "[queue]")
             co_await tp.yield();
         }
 
-        co_await q.shutdown_notify_waiters_drain(tp);
+        co_await q.shutdown_drain(tp);
 
         co_return 0;
     };
@@ -145,7 +145,7 @@ TEST_CASE("queue multithreaded produce consume", "[queue]")
         co_await w;
 
         // Wake up all waiters.
-        co_await q.shutdown_notify_waiters_drain(tp);
+        co_await q.shutdown_drain(tp);
     };
 
     auto make_consumer_task =
@@ -192,7 +192,7 @@ TEST_CASE("queue stopped", "[queue]")
     };
 
     coro::sync_wait(q.push(42));
-    coro::sync_wait(q.shutdown_notify_waiters());
+    coro::sync_wait(q.shutdown());
 
     auto result = coro::sync_wait(make_consumer_task(q));
     REQUIRE(result == 0);
