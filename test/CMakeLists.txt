@@ -15,7 +15,8 @@ set(LIBCORO_TEST_SOURCE_FILES
     test_thread_pool.cpp
     test_when_all.cpp
 
-    catch_amalgamated.cpp
+    catch_amalgamated.hpp catch_amalgamated.cpp
+    catch_extensions.hpp catch_extensions.cpp
 )
 
 if(NOT EMSCRIPTEN)

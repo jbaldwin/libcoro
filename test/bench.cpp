@@ -1,4 +1,5 @@
 #include "catch_amalgamated.hpp"
+#include "catch_extensions.hpp"
 
 #include <coro/coro.hpp>
 
@@ -393,21 +394,21 @@ TEST_CASE("benchmark tcp::server echo server thread pool", "[benchmark]")
             while (true)
             {
                 auto pstatus = co_await client.poll(coro::poll_op::read);
-                REQUIRE(pstatus == coro::poll_status::event);
+                REQUIRE_THREAD_SAFE(pstatus == coro::poll_status::event);
 
                 auto [rstatus, rspan] = client.recv(in);
                 if (rstatus == coro::net::recv_status::closed)
                 {
-                    REQUIRE(rspan.empty());
+                    REQUIRE_THREAD_SAFE(rspan.empty());
                     break;
                 }
-                REQUIRE(rstatus == coro::net::recv_status::ok);
+                REQUIRE_THREAD_SAFE(rstatus == coro::net::recv_status::ok);
 
                 in.resize(rspan.size());
 
                 auto [sstatus, remaining] = client.send(in);
-                REQUIRE(sstatus == coro::net::send_status::ok);
-                REQUIRE(remaining.empty());
+                REQUIRE_THREAD_SAFE(sstatus == coro::net::send_status::ok);
+                REQUIRE_THREAD_SAFE(remaining.empty());
             }
 
             wait_for_clients.count_down();
@@ -459,24 +460,24 @@ TEST_CASE("benchmark tcp::server echo server thread pool", "[benchmark]")
         coro::net::tcp::client                        client{client_scheduler};
 
         auto cstatus = co_await client.connect(); // std::chrono::seconds{1});
-        REQUIRE(cstatus == coro::net::connect_status::connected);
+        REQUIRE_THREAD_SAFE(cstatus == coro::net::connect_status::connected);
 
         for (size_t i = 1; i <= messages_per_connection; ++i)
         {
             auto req_start            = std::chrono::steady_clock::now();
             auto [sstatus, remaining] = client.send(msg);
-            REQUIRE(sstatus == coro::net::send_status::ok);
-            REQUIRE(remaining.empty());
+            REQUIRE_THREAD_SAFE(sstatus == coro::net::send_status::ok);
+            REQUIRE_THREAD_SAFE(remaining.empty());
 
             auto pstatus = co_await client.poll(coro::poll_op::read);
-            REQUIRE(pstatus == coro::poll_status::event);
+            REQUIRE_THREAD_SAFE(pstatus == coro::poll_status::event);
 
             std::string response(64, '\0');
             auto [rstatus, rspan] = client.recv(response);
-            REQUIRE(rstatus == coro::net::recv_status::ok);
-            REQUIRE(rspan.size() == msg.size());
+            REQUIRE_THREAD_SAFE(rstatus == coro::net::recv_status::ok);
+            REQUIRE_THREAD_SAFE(rspan.size() == msg.size());
             response.resize(rspan.size());
-            REQUIRE(response == msg);
+            REQUIRE_THREAD_SAFE(response == msg);
 
             auto req_stop = std::chrono::steady_clock::now();
             histogram[std::chrono::duration_cast<std::chrono::milliseconds>(req_stop - req_start)]++;
@@ -581,21 +582,21 @@ TEST_CASE("benchmark tcp::server echo server inline", "[benchmark]")
             while (true)
             {
                 auto pstatus = co_await client.poll(coro::poll_op::read);
-                REQUIRE(pstatus == coro::poll_status::event);
+                REQUIRE_THREAD_SAFE(pstatus == coro::poll_status::event);
 
                 auto [rstatus, rspan] = client.recv(in);
                 if (rstatus == coro::net::recv_status::closed)
                 {
-                    REQUIRE(rspan.empty());
+                    REQUIRE_THREAD_SAFE(rspan.empty());
                     break;
                 }
-                REQUIRE(rstatus == coro::net::recv_status::ok);
+                REQUIRE_THREAD_SAFE(rstatus == coro::net::recv_status::ok);
 
                 in.resize(rspan.size());
 
                 auto [sstatus, remaining] = client.send(in);
-                REQUIRE(sstatus == coro::net::send_status::ok);
-                REQUIRE(remaining.empty());
+                REQUIRE_THREAD_SAFE(sstatus == coro::net::send_status::ok);
+                REQUIRE_THREAD_SAFE(remaining.empty());
             }
 
             s.live_clients--;
@@ -650,24 +651,24 @@ TEST_CASE("benchmark tcp::server echo server inline", "[benchmark]")
         coro::net::tcp::client                        client{c.scheduler};
 
         auto cstatus = co_await client.connect(); // std::chrono::seconds{1});
-        REQUIRE(cstatus == coro::net::connect_status::connected);
+        REQUIRE_THREAD_SAFE(cstatus == coro::net::connect_status::connected);
 
         for (size_t i = 1; i <= messages_per_connection; ++i)
         {
             auto req_start            = std::chrono::steady_clock::now();
             auto [sstatus, remaining] = client.send(msg);
-            REQUIRE(sstatus == coro::net::send_status::ok);
-            REQUIRE(remaining.empty());
+            REQUIRE_THREAD_SAFE(sstatus == coro::net::send_status::ok);
+            REQUIRE_THREAD_SAFE(remaining.empty());
 
             auto pstatus = co_await client.poll(coro::poll_op::read);
-            REQUIRE(pstatus == coro::poll_status::event);
+            REQUIRE_THREAD_SAFE(pstatus == coro::poll_status::event);
 
             std::string response(64, '\0');
             auto [rstatus, rspan] = client.recv(response);
-            REQUIRE(rstatus == coro::net::recv_status::ok);
-            REQUIRE(rspan.size() == msg.size());
+            REQUIRE_THREAD_SAFE(rstatus == coro::net::recv_status::ok);
+            REQUIRE_THREAD_SAFE(rspan.size() == msg.size());
             response.resize(rspan.size());
-            REQUIRE(response == msg);
+            REQUIRE_THREAD_SAFE(response == msg);
 
             auto req_stop = std::chrono::steady_clock::now();
             histogram[std::chrono::duration_cast<std::chrono::milliseconds>(req_stop - req_start)]++;
@@ -786,13 +787,13 @@ TEST_CASE("benchmark tls::server echo server thread pool", "[benchmark]")
                 switch (rstatus)
                 {
                     case coro::net::tls::recv_status::ok:
-                        REQUIRE(rstatus == coro::net::tls::recv_status::ok);
+                        REQUIRE_THREAD_SAFE(rstatus == coro::net::tls::recv_status::ok);
                         data = std::string_view{rspan.begin(), rspan.end()};
                         // std::cerr << "SERVER CONNECTION: recv() -> " << data << "\n";
                         break;
                     case coro::net::tls::recv_status::closed:
                         // std::cerr << "SERVER CONNECTION: closed\n";
-                        REQUIRE(rspan.empty());
+                        REQUIRE_THREAD_SAFE(rspan.empty());
                         closed = true;
                         break;
                     case coro::net::tls::recv_status::want_read:
@@ -818,8 +819,8 @@ TEST_CASE("benchmark tls::server echo server thread pool", "[benchmark]")
 
                 // std::cerr << "SERVER CONNECTION: client.send()\n";
                 auto [sstatus, remaining] = co_await client.send(data);
-                REQUIRE(sstatus == coro::net::tls::send_status::ok);
-                REQUIRE(remaining.empty());
+                REQUIRE_THREAD_SAFE(sstatus == coro::net::tls::send_status::ok);
+                REQUIRE_THREAD_SAFE(remaining.empty());
                 // std::cerr << "SERVER CONNECTION: send() -> " << data << "\n";
             }
 
@@ -877,7 +878,7 @@ TEST_CASE("benchmark tls::server echo server thread pool", "[benchmark]")
                 client_scheduler, std::make_shared<coro::net::tls::context>(coro::net::tls::verify_peer_t::no)};
 
             auto cstatus = co_await client.connect();
-            REQUIRE(cstatus == coro::net::tls::connection_status::connected);
+            REQUIRE_THREAD_SAFE(cstatus == coro::net::tls::connection_status::connected);
 
             std::string in(64, '\0');
             auto        closed = false;
@@ -888,8 +889,8 @@ TEST_CASE("benchmark tls::server echo server thread pool", "[benchmark]")
 
                 auto [sstatus, remaining] = co_await client.send(msg);
                 // std::cerr << "CLIENT: send() -> " << msg << "\n";
-                REQUIRE(sstatus == coro::net::tls::send_status::ok);
-                REQUIRE(remaining.empty());
+                REQUIRE_THREAD_SAFE(sstatus == coro::net::tls::send_status::ok);
+                REQUIRE_THREAD_SAFE(remaining.empty());
 
                 // std::cerr << "CLIENT: recv()\n";
                 auto [rstatus, rspan] = co_await client.recv(in, {std::chrono::seconds{30}});
@@ -898,15 +899,15 @@ TEST_CASE("benchmark tls::server echo server thread pool", "[benchmark]")
                 {
                     case coro::net::tls::recv_status::ok:
                     {
-                        REQUIRE(rstatus == coro::net::tls::recv_status::ok);
+                        REQUIRE_THREAD_SAFE(rstatus == coro::net::tls::recv_status::ok);
                         auto data = std::string_view{rspan.begin(), rspan.end()};
-                        REQUIRE(data.length() > 0);
+                        REQUIRE_THREAD_SAFE(data.length() > 0);
                         // std::cerr << "CLIENT: recv() -> " << data << "\n";
                     }
                     break;
                     case coro::net::tls::recv_status::closed:
                         // std::cerr << "CLIENT: closed\n";
-                        REQUIRE(rspan.empty());
+                        REQUIRE_THREAD_SAFE(rspan.empty());
                         closed = true;
                         break;
                     case coro::net::tls::recv_status::want_read:
