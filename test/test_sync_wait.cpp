@@ -64,6 +64,58 @@ TEST_CASE("sync_wait task that throws", "[sync_wait]")
     REQUIRE_THROWS(coro::sync_wait(f()));
 }
 
+TEST_CASE("sync_wait task void that throws user exception inheriting std::exception", "[sync_wait]")
+{
+    struct user_exception : public std::exception
+    {
+        user_exception(std::string what)
+            : m_what(std::move(what)) { }
+        auto what() const noexcept -> const char* override { return m_what.data(); }
+
+        std::string m_what;
+    };
+
+    auto f = []() -> coro::task<void>
+    {
+        throw user_exception("user exception thrown");
+        co_return;
+    };
+
+    try {
+        coro::sync_wait(f());
+    } catch (const user_exception& e) {
+        REQUIRE(e.what() == std::string{"user exception thrown"});
+    } catch (...) {
+        FAIL("Expected user_exception");
+    }
+}
+
+TEST_CASE("sync_wait task int64_t that throws user exception inheriting std::exception", "[sync_wait]")
+{
+    struct user_exception : public std::exception
+    {
+        user_exception(std::string what)
+            : m_what(std::move(what)) { }
+        auto what() const noexcept -> const char* override { return m_what.data(); }
+
+        std::string m_what;
+    };
+
+    auto f = []() -> coro::task<uint64_t>
+    {
+        throw user_exception("user exception thrown");
+        co_return 1;
+    };
+
+    try {
+        coro::sync_wait(f());
+    } catch (const user_exception& e) {
+        REQUIRE(e.what() == std::string{"user exception thrown"});
+    } catch (...) {
+        FAIL("Expected user_exception");
+    }
+}
+
 TEST_CASE("sync_wait very rarely hangs issue-270", "[sync_wait]")
 {
     coro::thread_pool tp{};
