@@ -95,40 +95,9 @@ auto io_scheduler::spawn(coro::task<void>&& task) -> bool
     return resume(owned_task.handle());
 }
 
-auto io_scheduler::schedule_after(std::chrono::milliseconds amount) -> coro::task<void>
-{
-    return yield_for(amount);
-}
-
 auto io_scheduler::schedule_at(time_point time) -> coro::task<void>
 {
     return yield_until(time);
-}
-
-auto io_scheduler::yield_for(std::chrono::milliseconds amount) -> coro::task<void>
-{
-    if (amount <= 0ms)
-    {
-        co_await schedule();
-    }
-    else
-    {
-        // Yield/timeout tasks are considered live in the scheduler and must be accounted for. Note
-        // that if the user gives an invalid amount and schedule() is directly called it will account
-        // for the scheduled task there.
-        m_size.fetch_add(1, std::memory_order::release);
-
-        // Yielding does not requiring setting the timer position on the poll info since
-        // it doesn't have a corresponding 'event' that can trigger, it always waits for
-        // the timeout to occur before resuming.
-
-        detail::poll_info pi{};
-        add_timer_token(clock::now() + amount, pi);
-        co_await pi;
-
-        m_size.fetch_sub(1, std::memory_order::release);
-    }
-    co_return;
 }
 
 auto io_scheduler::yield_until(time_point time) -> coro::task<void>
@@ -211,6 +180,32 @@ auto io_scheduler::shutdown() noexcept -> void
             m_io_thread.join();
         }
     }
+}
+
+auto io_scheduler::yield_for_internal(std::chrono::nanoseconds amount) -> coro::task<void>
+{
+    if (amount <= 0ms)
+    {
+        co_await schedule();
+    }
+    else
+    {
+        // Yield/timeout tasks are considered live in the scheduler and must be accounted for. Note
+        // that if the user gives an invalid amount and schedule() is directly called it will account
+        // for the scheduled task there.
+        m_size.fetch_add(1, std::memory_order::release);
+
+        // Yielding does not requiring setting the timer position on the poll info since
+        // it doesn't have a corresponding 'event' that can trigger, it always waits for
+        // the timeout to occur before resuming.
+
+        detail::poll_info pi{};
+        add_timer_token(clock::now() + amount, pi);
+        co_await pi;
+
+        m_size.fetch_sub(1, std::memory_order::release);
+    }
+    co_return;
 }
 
 auto io_scheduler::process_events_manual(std::chrono::milliseconds timeout) -> void

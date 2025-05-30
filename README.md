@@ -26,6 +26,7 @@
     - [coro::semaphore](#semaphore)
     - [coro::ring_buffer<element, num_elements>](#ring_buffer)
     - [coro::queue](#queue)
+    - [coro::condition_variable](#condition_variable)
 * Schedulers
     - [coro::thread_pool](#thread_pool) for coroutine cooperative multitasking
     - [coro::io_scheduler](#io_scheduler) for driving i/o events
@@ -899,6 +900,144 @@ consumed 3
 consumed 4
 ```
 
+### condition_variable
+`coro:condition_variable` allows for tasks to await on the condition until notified with an optional predicate and timeout and stop token. The API for `coro::condition_variable` mostly matches `std::condition_variable`.
+
+NOTE: It is important to *not* hold the `coro::scoped_lock` when calling `notify_one()` or `notify_all()`, this differs from `std::condition_variable` which allows it but doesn't require it. `coro::condition_variable` will deadlock in this scenario based on how coroutines work vs threads.
+
+```C++
+#include <coro/coro.hpp>
+#include <iostream>
+
+int main()
+{
+    auto scheduler = coro::io_scheduler::make_shared();
+    coro::condition_variable cv{};
+    coro::mutex m{};
+    std::atomic<uint64_t> condition{0};
+    std::stop_source ss{};
+
+    auto make_waiter_task = [](std::shared_ptr<coro::io_scheduler> scheduler, coro::condition_variable& cv, coro::mutex& m, std::stop_source& ss, std::atomic<uint64_t>& condition, int64_t id) -> coro::task<void>
+    {
+        co_await scheduler->schedule();
+        while (true)
+        {
+            // Consume the condition until a stop is requested.
+            auto lock = co_await m.scoped_lock();
+            auto ready = co_await cv.wait(lock, ss.get_token(), [&id, &condition]() -> bool
+                {
+                    std::cerr << id << " predicate condition = " << condition << "\n";
+                    return condition > 0;
+                });
+            std::cerr << id << " waiter condition = " << condition << "\n";
+
+            if (ready)
+            {
+                // Handle event.
+
+                // It is worth noting that because condition variables must hold the lock to wake up they are naturally serialized.
+                // It is wise once the condition data is acquired the lock should be released and then spawn off any work into another task via the scheduler.
+                condition--;
+                lock.unlock();
+                // We'll yield for a bit to mimic work.
+                co_await scheduler->yield_for(std::chrono::milliseconds{10});
+            }
+
+            // Was this wake-up due to being stopped?
+            if (ss.stop_requested())
+            {
+                std::cerr << id << " ss.stop_requsted() co_return\n";
+                co_return;
+            }
+        }
+    };
+
+    auto make_notifier_task = [](std::shared_ptr<coro::io_scheduler> scheduler, coro::condition_variable& cv, coro::mutex& m, std::stop_source& ss, std::atomic<uint64_t>& condition) -> coro::task<void>
+    {
+        // To make this example more deterministic the notifier will wait between each notify event to showcase
+        // how exactly the condition variable will behave with the condition in certain states and the notify_one or notify_all.
+        co_await scheduler->schedule_after(std::chrono::milliseconds{50});
+
+        std::cerr << "cv.notify_one() condition = 0\n";
+        co_await cv.notify_one(); // Predicate will fail condition == 0.
+        {
+            // To guarantee the condition is 'updated' in the predicate it must be done behind the lock.
+            auto lock = co_await m.scoped_lock();
+            condition++;
+        }
+        // Notifying does not need to hold the lock.
+        std::cerr << "cv.notify_one() condition = 1\n";
+        co_await cv.notify_one(); // Predicate will pass condition == 1.
+
+        co_await scheduler->schedule_after(std::chrono::milliseconds{50});
+        {
+            auto lock = co_await m.scoped_lock();
+            condition += 2;
+        }
+        std::cerr << "cv.notify_all() condition = 2\n";
+        co_await cv.notify_all(); // Predicates will pass condition == 2 then condition == 1.
+
+        co_await scheduler->schedule_after(std::chrono::milliseconds{50});
+        {
+            auto lock = co_await m.scoped_lock();
+            condition++;
+        }
+        std::cerr << "cv.notify_all() condition = 1\n";
+        co_await cv.notify_all(); // Predicates will pass condition == 1 then Predicate will not pass condition == 0.
+
+        co_await scheduler->schedule_after(std::chrono::milliseconds{50});
+        {
+            auto lock = co_await m.scoped_lock();
+        }
+        std::cerr << "ss.request_stop()\n";
+        // To stop set the stop source to stop and then notify all waiters.
+        ss.request_stop();
+        co_await cv.notify_all();
+        co_return;
+    };
+
+    coro::sync_wait(
+        coro::when_all(
+            make_waiter_task(scheduler, cv, m, ss, condition, 0),
+            make_waiter_task(scheduler, cv, m, ss, condition, 1),
+            make_notifier_task(scheduler, cv, m, ss, condition)));
+
+    return 0;
+}
+```
+
+Expected output:
+```bash
+$ ./examples/coro_condition_variable
+0 predicate condition = 0               # every call to cv.wait() will invoke the predicate to see if they are ready
+1 predicate condition = 0
+cv.notify_one() condition = 0           # one waiter is awoken but the predicate is not satisfied
+1 predicate condition = 0
+cv.notify_one() condition = 1           # one waiter is awoken and the predicate is satisfied
+1 predicate condition = 1
+1 waiter condition = 1
+1 predicate condition = 0
+cv.notify_all() condition = 2           # both predicates will pass and both waiters will wake up
+1 predicate condition = 2
+1 waiter condition = 2
+0 predicate condition = 1
+0 waiter condition = 1
+0 predicate condition = 0
+1 predicate condition = 0
+cv.notify_all() condition = 1           # one predicate will pass and will wake up
+1 predicate condition = 1
+1 waiter condition = 1
+0 predicate condition = 0
+1 predicate condition = 0
+ss.request_stop()                       # request to stop, wakeup all waiters and exit
+1 predicate condition = 0
+1 waiter condition = 0
+1 ss.stop_requsted() co_return
+0 predicate condition = 0
+0 waiter condition = 0
+0 ss.stop_requsted() co_return
+```
+
 ### thread_pool
 `coro::thread_pool` is a statically sized pool of worker threads to execute scheduled coroutines from a FIFO queue.  One way to schedule a coroutine on a thread pool is to use the pool's `schedule()` function which should be `co_awaited` inside the coroutine to transfer the execution from the current thread to a thread pool worker thread.  Its important to note that scheduling will first place the coroutine into the FIFO queue and will be picked up by the first available thread in the pool, e.g. there could be a delay if there is a lot of work queued up.
 
@@ -1301,12 +1440,12 @@ Transfer/sec:     18.33MB
 
 #### Tested Operating Systems
 
- * ubuntu:20.04, 22.04
- * fedora:32-40
+ * ubuntu:22.04, 24.04
+ * fedora:37-40
  * openSUSE/leap:15.6
  * Windows 2022
  * Emscripten 3.1.45
- * MacOS 12
+ * MacOS 15
 
 #### Cloning the project
 This project uses git submodules, to properly checkout this project use:
