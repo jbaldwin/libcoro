@@ -284,7 +284,7 @@ auto condition_variable::enqueue_waiter(awaiter_base* to_enqueue) -> void
     {
         to_enqueue->m_next = current;
     } while (!m_awaiters.compare_exchange_weak(
-        current, to_enqueue, std::memory_order::release, std::memory_order::acquire));
+        current, to_enqueue, std::memory_order::acq_rel, std::memory_order::acquire));
 }
 
 auto condition_variable::dequeue_waiter() -> awaiter_base*
@@ -297,7 +297,7 @@ auto condition_variable::dequeue_waiter() -> awaiter_base*
             return nullptr;
         }
     } while (!m_awaiters.compare_exchange_weak(
-        waiter, waiter->m_next, std::memory_order::release, std::memory_order::acquire));
+        waiter, waiter->m_next, std::memory_order::acq_rel, std::memory_order::acquire));
 
     return waiter;
 }
@@ -314,7 +314,7 @@ auto condition_variable::dequeue_waiter_all() -> awaiter_base*
             break;
         }
     } while (!m_awaiters.compare_exchange_weak(
-        head, nullptr, std::memory_order::release, std::memory_order::acquire));
+        head, nullptr, std::memory_order::acq_rel, std::memory_order::acquire));
 
     return head;
 }
