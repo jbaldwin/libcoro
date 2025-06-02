@@ -32,7 +32,7 @@ int main()
         // entire queue to be drained before shutting it down.
         co_await tp.schedule();
         co_await pd;
-        co_await q.shutdown_notify_waiters_drain(tp);
+        co_await q.shutdown_drain(tp);
         co_return;
     };
 

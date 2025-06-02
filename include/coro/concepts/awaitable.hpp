@@ -90,6 +90,26 @@ struct awaitable_traits<awaitable>
     using awaiter_type        = decltype(get_awaiter(std::declval<awaitable>()));
     using awaiter_return_type = decltype(std::declval<awaiter_type>().await_resume());
 };
+
+namespace detail
+{
+/**
+ * @brief A generic awaitable object that is a forward linked list.
+ * This is used internally for most awaitables that track the next waiter via the m_next pointer.
+ *
+ * @tparam entry_type
+ */
+template<typename entry_type>
+concept awaiter_forward_list_entry = requires(entry_type* e)
+{
+    /// The next awaiter in the list.
+    { std::same_as<entry_type*, decltype(e->m_next)> };
+    /// The awaiting coroutine for this entry.
+    { std::same_as<std::coroutine_handle<>, decltype(e->m_awaiting_coroutine)> };
+};
+
+} // namespace detail
+
 // clang-format on
 
 } // namespace coro::concepts

@@ -84,6 +84,7 @@ set(LIBCORO_SOURCE_FILES
     include/coro/concepts/promise.hpp
     include/coro/concepts/range_of.hpp
 
+    include/coro/detail/awaiter_list.hpp
     include/coro/detail/task_self_deleting.hpp / src/detail/task_self_deleting.cpp
     include/coro/detail/void_value.hpp
 
