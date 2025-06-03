@@ -3,6 +3,7 @@
 #include "coro/concepts/executor.hpp"
 #include "coro/expected.hpp"
 #include "coro/sync_wait.hpp"
+#include "coro/task.hpp"
 
 #include <queue>
 
@@ -53,22 +54,16 @@ public:
     {
         explicit awaiter(queue<element_type>& q) noexcept : m_queue(q) {}
 
-        /**
-         * @brief Acquires the coro::queue lock.
-         *
-         * @return coro::task<scoped_lock>
-         */
-        auto make_acquire_lock_task() -> coro::task<scoped_lock> { co_return co_await m_queue.m_mutex.scoped_lock(); }
-
         auto await_ready() noexcept -> bool
         {
             // This awaiter is ready when it has actually acquired an element or it is shutting down.
             if (m_queue.m_running_state.load(std::memory_order::acquire) == running_state_t::stopped)
             {
-                return false;
+                m_queue.m_mutex.unlock();
+                return true; // await_resume with stopped
             }
 
-            auto lock = coro::sync_wait(make_acquire_lock_task());
+            // If we have items return it.
             if (!m_queue.empty())
             {
                 if constexpr (std::is_move_constructible_v<element_type>)
@@ -81,40 +76,21 @@ public:
                 }
 
                 m_queue.m_elements.pop();
+                m_queue.m_mutex.unlock();
                 return true;
             }
 
+            // Nothing available suspend, mutex will be unlocked in await_suspend.
             return false;
         }
 
         auto await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept -> bool
         {
-            auto lock = coro::sync_wait(make_acquire_lock_task());
-            if (m_queue.m_running_state.load(std::memory_order::acquire) == running_state_t::stopped)
-            {
-                return false;
-            }
-
-            if (!m_queue.empty())
-            {
-                if constexpr (std::is_move_constructible_v<element_type>)
-                {
-                    m_element = std::move(m_queue.m_elements.front());
-                }
-                else
-                {
-                    m_element = m_queue.m_elements.front();
-                }
-
-                m_queue.m_elements.pop();
-                return false;
-            }
-
             // No element is ready, put ourselves on the waiter list and suspend.
             this->m_next         = m_queue.m_waiters;
             m_queue.m_waiters    = this;
             m_awaiting_coroutine = awaiting_coroutine;
-
+            m_queue.m_mutex.unlock();
             return true;
         }
 
@@ -141,12 +117,14 @@ public:
         std::optional<element_type> m_element{std::nullopt};
         queue&                      m_queue;
         std::coroutine_handle<>     m_awaiting_coroutine{nullptr};
-        /// The next awaiter in line for this queue, nullptr if this is the end.
-        awaiter* m_next{nullptr};
+        awaiter*                    m_next{nullptr};
     };
 
     queue() {}
-    ~queue() {}
+    ~queue()
+    {
+        coro::sync_wait(shutdown());
+    }
 
     queue(const queue&)  = delete;
     queue(queue&& other) = delete;
@@ -192,6 +170,7 @@ public:
             co_return queue_produce_result::stopped;
         }
 
+        // assert(m_element.empty())
         if (m_waiters != nullptr)
         {
             awaiter* waiter = m_waiters;
@@ -285,7 +264,11 @@ public:
      * @return awaiter A waiter task that upon co_await complete returns an element or the queue
      *                 status that it is shut down.
      */
-    [[nodiscard]] auto pop() -> awaiter { return awaiter{*this}; }
+    [[nodiscard]] auto pop() -> coro::task<expected<element_type, queue_consume_result>>
+    {
+        co_await m_mutex.lock();
+        co_return co_await awaiter{*this};
+    }
 
     /**
      * @brief Shuts down the queue immediately discarding any elements that haven't been processed.
@@ -300,14 +283,14 @@ public:
             co_return;
         }
 
+        // We use the lock to guarantee the m_running_state has propagated.
+        auto lk = co_await m_mutex.scoped_lock();
         if (!m_running_state.compare_exchange_strong(
                 expected, running_state_t::stopped, std::memory_order::acq_rel, std::memory_order::relaxed))
         {
             co_return;
         }
 
-        // We use the lock to guarantee the m_running_state has propagated.
-        auto lk = co_await m_mutex.scoped_lock();
         auto* waiters = m_waiters;
         m_waiters = nullptr;
         lk.unlock();
@@ -331,12 +314,14 @@ public:
     template<coro::concepts::executor executor_t>
     auto shutdown_drain(executor_t& e) -> coro::task<void>
     {
+        auto lk = co_await m_mutex.scoped_lock();
         auto expected = running_state_t::running;
         if (!m_running_state.compare_exchange_strong(
                 expected, running_state_t::draining, std::memory_order::acq_rel, std::memory_order::relaxed))
         {
             co_return;
         }
+        lk.unlock();
 
         while (!empty())
         {

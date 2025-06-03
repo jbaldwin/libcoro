@@ -56,6 +56,7 @@ TEST_CASE("ring_buffer many elements many producers many consumers", "[ring_buff
     coro::thread_pool               tp{coro::thread_pool::options{.thread_count = 4}};
     coro::ring_buffer<uint64_t, 64> rb{};
     coro::latch                     wait{producers};
+    std::atomic<uint64_t> consumers_done{0};
 
     auto make_producer_task =
         [](coro::thread_pool& tp, coro::ring_buffer<uint64_t, 64>& rb, coro::latch& w) -> coro::task<void>
@@ -82,7 +83,7 @@ TEST_CASE("ring_buffer many elements many producers many consumers", "[ring_buff
         co_return;
     };
 
-    auto make_consumer_task = [](coro::thread_pool& tp, coro::ring_buffer<uint64_t, 64>& rb) -> coro::task<void>
+    auto make_consumer_task = [](coro::thread_pool& tp, coro::ring_buffer<uint64_t, 64>& rb, std::atomic<uint64_t>& consumers_done) -> coro::task<void>
     {
         co_await tp.schedule();
 
@@ -91,6 +92,10 @@ TEST_CASE("ring_buffer many elements many producers many consumers", "[ring_buff
             auto expected = co_await rb.consume();
             if (!expected)
             {
+                if (!rb.empty())
+                {
+                    continue;
+                }
                 break;
             }
 
@@ -100,6 +105,8 @@ TEST_CASE("ring_buffer many elements many producers many consumers", "[ring_buff
             co_await tp.yield(); // mimic some work
         }
 
+        consumers_done++;
+        std::cerr << "make_consumer_task() co_return with consumers_done = " << consumers_done << "\n";
         co_return;
     };
 
@@ -108,7 +115,7 @@ TEST_CASE("ring_buffer many elements many producers many consumers", "[ring_buff
 
     for (size_t i = 0; i < consumers; ++i)
     {
-        tasks.emplace_back(make_consumer_task(tp, rb));
+        tasks.emplace_back(make_consumer_task(tp, rb, consumers_done));
     }
     for (size_t i = 0; i < producers; ++i)
     {
@@ -155,6 +162,10 @@ TEST_CASE("ring_buffer producer consumer separate threads", "[ring_buffer]")
             auto expected = co_await rb.consume();
             if (!expected)
             {
+                if (!rb.empty())
+                {
+                    continue;
+                }
                 break;
             }
 
