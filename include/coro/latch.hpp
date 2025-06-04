@@ -5,8 +5,6 @@
 
 #include <atomic>
 
-#include <iostream>
-
 namespace coro
 {
 /**
@@ -27,7 +25,7 @@ public:
      *              latch starts 'completed' immediately and execution is resumed with no suspension.
      */
     latch(std::int64_t count) noexcept : m_count(count), m_event(count <= 0) {}
-    ~latch() { std::cerr << "~latch() exit\n"; }
+    ~latch() = default;
 
     latch(const latch&)                    = delete;
     latch(latch&&)                         = delete;

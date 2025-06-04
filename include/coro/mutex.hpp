@@ -29,12 +29,13 @@ struct lock_operation_base
     auto await_ready() const noexcept -> bool;
     auto await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept -> bool;
 
+    std::coroutine_handle<> m_awaiting_coroutine;
+    lock_operation_base*    m_next{nullptr};
+
 protected:
     friend class coro::mutex;
 
     coro::mutex&            m_mutex;
-    std::coroutine_handle<> m_awaiting_coroutine;
-    lock_operation_base*    m_next{nullptr};
 };
 
 template<typename return_type>
@@ -153,11 +154,8 @@ private:
 
     /// unlocked -> state == unlocked_value()
     /// locked but empty waiter list == nullptr
-    /// locked with waiters == lock_operation*
+    /// locked with waiters == lock_operation_base*
     std::atomic<void*> m_state;
-
-    /// A list of grabbed internal waiters that are only accessed by the unlock()'er.
-    detail::lock_operation_base* m_internal_waiters{nullptr};
 
     /// Inactive value, this cannot be nullptr since we want nullptr to signify that the mutex
     /// is locked but there are zero waiters, this makes it easy to CAS new waiters into the

@@ -173,8 +173,7 @@ public:
         // assert(m_element.empty())
         if (m_waiters != nullptr)
         {
-            awaiter* waiter = m_waiters;
-            m_waiters       = m_waiters->m_next;
+            auto* waiter = std::exchange(m_waiters, m_waiters->m_next);
             lock.unlock();
 
             // Transfer the element directly to the awaiter.
@@ -208,8 +207,7 @@ public:
 
         if (m_waiters != nullptr)
         {
-            awaiter* waiter = m_waiters;
-            m_waiters       = m_waiters->m_next;
+            auto* waiter = std::exchange(m_waiters, m_waiters->m_next);
             lock.unlock();
 
             // Transfer the element directly to the awaiter.
@@ -243,8 +241,7 @@ public:
 
         if (m_waiters != nullptr)
         {
-            awaiter* waiter = m_waiters;
-            m_waiters       = m_waiters->m_next;
+            auto* waiter = std::exchange(m_waiters, m_waiters->m_next);
             lock.unlock();
 
             waiter->m_element.emplace(std::forward<args_type>(args)...);

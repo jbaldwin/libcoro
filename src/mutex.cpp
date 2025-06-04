@@ -1,6 +1,5 @@
+#include "coro/detail/awaiter_list.hpp"
 #include "coro/mutex.hpp"
-
-#include <iostream>
 
 namespace coro
 {
@@ -8,47 +7,41 @@ namespace detail
 {
 auto lock_operation_base::await_ready() const noexcept -> bool
 {
-    if (m_mutex.try_lock())
-    {
-        // Since there is no mutex acquired, insert a memory fence to act like it.
-        std::atomic_thread_fence(std::memory_order::acquire);
-        return true;
-    }
-    return false;
+    return m_mutex.try_lock();
 }
 
 auto lock_operation_base::await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept -> bool
 {
     m_awaiting_coroutine = awaiting_coroutine;
-    void* current        = m_mutex.m_state.load(std::memory_order::acquire);
-    void* new_value;
-
+    auto& state = m_mutex.m_state;
+    void* current = state.load(std::memory_order::acquire);
     const void* unlocked_value = m_mutex.unlocked_value();
     do
     {
+        // While trying to suspend the lock can become available, if so attempt to grab it and then don't suspend.
+        // If the lock never becomes available then we place ourself at the head of the waiter list and suspend.
+
         if (current == unlocked_value)
         {
-            // If the current value is 'unlocked' then attempt to lock it.
-            new_value = nullptr;
+            // The lock has become available, try and lock.
+            if (state.compare_exchange_weak(current, nullptr, std::memory_order::acq_rel, std::memory_order::acquire))
+            {
+                // We've acquired the lock, don't suspend.
+                m_awaiting_coroutine = nullptr;
+                return false;
+            }
         }
-        else
+        else // if (current == nullptr || current is of type lock_operation_base*)
         {
-            // If the current value is a waiting lock operation, or nullptr, set our next to that
-            // lock op and attempt to set ourself as the head of the waiter list.
-            m_next    = static_cast<lock_operation_base*>(current);
-            new_value = static_cast<void*>(this);
+            // The lock is still owned, attempt to add ourself as a waiter.
+            m_next = static_cast<lock_operation_base*>(current);
+            if (state.compare_exchange_weak(current, static_cast<void*>(this), std::memory_order::acq_rel, std::memory_order::acquire))
+            {
+                // We've successfully added ourself to the waiter queue.
+                return true;
+            }
         }
-    } while (!m_mutex.m_state.compare_exchange_weak(current, new_value, std::memory_order::acq_rel));
-
-    // Don't suspend if the state went from unlocked -> locked with zero waiters.
-    if (current == unlocked_value)
-    {
-        std::atomic_thread_fence(std::memory_order::acquire);
-        m_awaiting_coroutine = nullptr; // nothing to await later since this doesn't suspend
-        return false;
-    }
-
-    return true;
+    } while (true);
 }
 
 } // namespace detail
@@ -76,33 +69,47 @@ auto mutex::try_lock() -> bool
 
 auto mutex::unlock() -> void
 {
-    if (m_internal_waiters == nullptr)
+    void* current = m_state.load(std::memory_order::acquire);
+    do
     {
-        void* current = m_state.load(std::memory_order::relaxed);
-        if (current == nullptr)
+        // Sanity check that the mutex isn't already unlocked.
+        if (current == const_cast<void*>(unlocked_value()))
         {
-            // If there are no internal waiters and there are no atomic waiters, attempt to set the
-            // mutex as unlocked.
-            if (m_state.compare_exchange_strong(
-                    current,
-                    const_cast<void*>(unlocked_value()),
-                    std::memory_order::release,
-                    std::memory_order::relaxed))
-            {
-                return; // The mutex is now unlocked with zero waiters.
-            }
-            // else we failed to unlock, someone added themself as a waiter.
+            throw std::runtime_error{"coro::mutex is already unlocked"};
         }
 
-        // There are waiters on the atomic list, acquire them and update the state for all others.
-        m_internal_waiters = static_cast<detail::lock_operation_base*>(m_state.exchange(nullptr, std::memory_order::acq_rel));
-    }
-
-    // assert m_internal_waiters != nullptr
-
-    detail::lock_operation_base* to_resume = m_internal_waiters;
-    m_internal_waiters                     = m_internal_waiters->m_next;
-    to_resume->m_awaiting_coroutine.resume();
+        // There are no current waiters, attempt to set the mutex as unlocked.
+        if (current == nullptr)
+        {
+            if (m_state.compare_exchange_weak(
+                current,
+                const_cast<void*>(unlocked_value()),
+                std::memory_order::acq_rel,
+                std::memory_order::acquire))
+            {
+                // We've successfully unlocked the mutex, return since there are no current waiters.
+                std::atomic_thread_fence(std::memory_order::acq_rel);
+                return;
+            }
+            else
+            {
+                // This means someone has added themselves as a waiter, we need to try again with our updated current state.
+                // assert(m_state now holds a lock_operation_base*)
+                continue;
+            }
+        }
+        else
+        {
+            // There are waiters, lets wake the first one up. This will set the state to the next waiter, or nullptr (no waiters but locked).
+            std::atomic<detail::lock_operation_base*>* casted = reinterpret_cast<std::atomic<detail::lock_operation_base*>*>(&m_state);
+            auto* waiter = detail::awaiter_list_pop<detail::lock_operation_base>(*casted);
+            // assert waiter != nullptr, nobody else should be unlocking this mutex.
+            // Directly transfer control to the waiter, they are now responsible for unlocking the mutex.
+            std::atomic_thread_fence(std::memory_order::acq_rel);
+            waiter->m_awaiting_coroutine.resume();
+            return;
+        }
+    } while (true);
 }
 
 } // namespace coro
