@@ -43,4 +43,5 @@ jobs:
       - name: Test
         run: |
           cd Release
+          # lldb -b -o r -- ctest --build-config Release -VV
           ctest --build-config Release -VV

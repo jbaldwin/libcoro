@@ -1,6 +1,8 @@
 #include "coro/thread_pool.hpp"
 #include "coro/detail/task_self_deleting.hpp"
 
+#include <iostream>
+
 namespace coro
 {
 thread_pool::operation::operation(thread_pool& tp) noexcept : m_thread_pool(tp)
@@ -30,6 +32,7 @@ thread_pool::thread_pool(options opts) : m_opts(std::move(opts))
 thread_pool::~thread_pool()
 {
     shutdown();
+    std::cerr << "~thread_pool() exit\n";
 }
 
 auto thread_pool::schedule() -> operation
@@ -75,23 +78,34 @@ auto thread_pool::resume(std::coroutine_handle<> handle) noexcept -> bool
 auto thread_pool::shutdown() noexcept -> void
 {
     // Only allow shutdown to occur once.
+    std::cerr << "thread_pool::shutdown()\n";
     if (m_shutdown_requested.exchange(true, std::memory_order::acq_rel) == false)
     {
         {
             // There is a race condition if we are not holding the lock with the executors
             // to always receive this.  std::jthread stop token works without this properly.
+            std::cerr << "thread_pool::shutdown() lock()\n";
             std::unique_lock<std::mutex> lk{m_wait_mutex};
+            std::cerr << "thread_pool::shutdown() notify_all()\n";
             m_wait_cv.notify_all();
         }
 
+        std::cerr << "thread_pool::shutdown() m_threads.size() = " << m_threads.size() << "\n";
         for (auto& thread : m_threads)
         {
+            std::cerr << "thread_pool::shutdown() thread.joinable()\n";
             if (thread.joinable())
             {
+                std::cerr << "thread_pool::shutdown() thread.join()\n";
                 thread.join();
+            }
+            else
+            {
+                std::cerr << "thread_pool::shutdown() thread is not joinable\n";
             }
         }
     }
+    std::cerr << "thread_pool::shutdown() return\n";
 }
 
 auto thread_pool::executor(std::size_t idx) -> void
@@ -117,7 +131,18 @@ auto thread_pool::executor(std::size_t idx) -> void
         lk.unlock();
 
         // Release the lock while executing the coroutine.
-        handle.resume();
+        if (handle == nullptr)
+        {
+            std::cerr << "handle is nullptr\n";
+        }
+        else if (handle.done())
+        {
+            std::cerr << "handle.done() == true\n";
+        }
+        else
+        {
+            handle.resume();
+        }
         m_size.fetch_sub(1, std::memory_order::release);
     }
 
@@ -129,6 +154,7 @@ auto thread_pool::executor(std::size_t idx) -> void
         // but the queue could be empty for threads that finished early.
         if (m_queue.empty())
         {
+            std::cerr << "m_queue.empty() breaking final loop m_size = " << m_size.load(std::memory_order::acquire) << "\n";
             break;
         }
 
@@ -137,7 +163,19 @@ auto thread_pool::executor(std::size_t idx) -> void
         lk.unlock();
 
         // Release the lock while executing the coroutine.
-        handle.resume();
+        if (handle == nullptr)
+        {
+            std::cerr << "handle is nullptr\n";
+        }
+        else if (handle.done())
+        {
+            std::cerr << "handle.done() == true\n";
+        }
+        else
+        {
+            std::cerr << "handle.resume()\n";
+            handle.resume();
+        }
         m_size.fetch_sub(1, std::memory_order::release);
     }
 
@@ -145,6 +183,8 @@ auto thread_pool::executor(std::size_t idx) -> void
     {
         m_opts.on_thread_stop_functor(idx);
     }
+
+    std::cerr << "thread_pool::executor() return\n";
 }
 
 auto thread_pool::schedule_impl(std::coroutine_handle<> handle) noexcept -> void

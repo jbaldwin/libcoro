@@ -10,6 +10,8 @@
 #include <mutex>
 #include <optional>
 
+#include <iostream>
+
 namespace coro
 {
 namespace ring_buffer_result
@@ -56,6 +58,7 @@ public:
     {
         // Wake up anyone still using the ring buffer.
         coro::sync_wait(shutdown());
+        std::cerr << "~ring_buffer() exit\n";
     }
 
     ring_buffer(const ring_buffer<element, num_elements>&) = delete;
@@ -73,23 +76,6 @@ public:
               m_e(std::move(e))
         {}
 
-        auto try_prepare_consume_operation() noexcept -> consume_operation*
-        {
-            auto* op = m_rb.m_consume_waiters.load(std::memory_order::acquire);
-            if (op != nullptr)
-            {
-                // Advance the consume operation waiters.
-                m_rb.m_consume_waiters.store(op->m_next, std::memory_order::release);
-
-                // Store the back element into the consumer that will be resumed.
-                auto back = m_rb.m_back.load(std::memory_order::acquire);
-                op->m_e = std::move(m_rb.m_elements[back]);
-                m_rb.m_back.store((back + 1) % num_elements, std::memory_order::release);
-                m_rb.m_used.fetch_sub(1, std::memory_order::release);
-            }
-            return op;
-        }
-
         auto await_ready() noexcept -> bool
         {
             auto& mutex = m_rb.m_mutex;
@@ -101,25 +87,33 @@ public:
                 return true; // Will be awoken with produce::stopped
             }
 
-            auto used = m_rb.m_used.load(std::memory_order::acquire);
-
-            auto* consume_op_to_resume = (used > 0) ? try_prepare_consume_operation() : nullptr;
-            if (used == num_elements && consume_op_to_resume == nullptr)
+            if (m_rb.m_used.load(std::memory_order::acquire) == num_elements)
             {
-                // Suspend there is no space, await_suspend will unlock.
-                return false;
+                return false; // ring buffer full, suspend
             }
 
             // There is guaranteed space to store
-            auto front = m_rb.m_front.load(std::memory_order::acquire);
-            m_rb.m_elements[front] = std::move(m_e);
-            m_rb.m_front.store((front + 1) % num_elements, std::memory_order::release);
+            auto slot = m_rb.m_front.fetch_add(1, std::memory_order::acq_rel) % num_elements;
+            m_rb.m_elements[slot] = std::move(m_e);
             m_rb.m_used.fetch_add(1, std::memory_order::release);
 
-            mutex.unlock();
-            if (consume_op_to_resume != nullptr)
+            auto* op = m_rb.m_consume_waiters.load(std::memory_order::acquire);
+            if (op != nullptr)
             {
-                consume_op_to_resume->m_awaiting_coroutine.resume();
+                // Advance the consume operation waiters.
+                m_rb.m_consume_waiters.store(op->m_next, std::memory_order::release);
+
+                // Store the back element into the consumer that will be resumed.
+                auto slot = m_rb.m_back.fetch_add(1, std::memory_order::acq_rel) % num_elements;
+                op->m_e = std::move(m_rb.m_elements[slot]);
+                m_rb.m_used.fetch_sub(1, std::memory_order::release);
+
+                mutex.unlock();
+                op->m_awaiting_coroutine.resume();
+            }
+            else
+            {
+                mutex.unlock();
             }
 
             return true;
@@ -164,21 +158,6 @@ public:
             : m_rb(rb)
         {}
 
-        auto try_prepare_produce_operation() noexcept -> produce_operation*
-        {
-            auto* op = m_rb.m_produce_waiters.load(std::memory_order::acquire);
-            if (op != nullptr)
-            {
-                m_rb.m_produce_waiters.store(op->m_next, std::memory_order::release);
-
-                auto front = m_rb.m_front.load(std::memory_order::acquire);
-                m_rb.m_elements[front] = std::move(op->m_e);
-                m_rb.m_front.store((front + 1) % num_elements, std::memory_order::release);
-                m_rb.m_used.fetch_add(1, std::memory_order::release);
-            }
-            return op;
-        }
-
         auto await_ready() noexcept -> bool
         {
             auto& mutex = m_rb.m_mutex;
@@ -190,24 +169,32 @@ public:
                 return true;
             }
 
-            auto used = m_rb.m_used.load(std::memory_order::acquire);
-
-            auto* produce_op_to_resume = (used < num_elements) ? try_prepare_produce_operation() : nullptr;
-            if (used == 0 && produce_op_to_resume == nullptr)
+            if (m_rb.m_used.load(std::memory_order::acquire) == 0)
             {
-                return false; // Suspend, await_suspend will unlock.
+                return false; // ring buffer is empty, suspsned.
             }
 
-            auto back = m_rb.m_back.load(std::memory_order::acquire);
-            m_e = std::move(m_rb.m_elements[back]);
-            m_rb.m_back.store((back + 1) % num_elements, std::memory_order::release);
+            auto slot = m_rb.m_back.fetch_add(1, std::memory_order::acq_rel) % num_elements;
+            m_e = std::move(m_rb.m_elements[slot]);
             m_rb.m_used.fetch_sub(1, std::memory_order::release);
 
-            mutex.unlock();
-            if (produce_op_to_resume != nullptr)
+            auto* op = m_rb.m_produce_waiters.load(std::memory_order::acquire);
+            if (op != nullptr)
             {
-                produce_op_to_resume->m_awaiting_coroutine.resume();
+                m_rb.m_produce_waiters.store(op->m_next, std::memory_order::release);
+
+                auto slot = m_rb.m_front.fetch_add(1, std::memory_order::acq_rel) % num_elements;
+                m_rb.m_elements[slot] = std::move(op->m_e);
+                m_rb.m_used.fetch_add(1, std::memory_order::release);
+
+                mutex.unlock();
+                op->m_awaiting_coroutine.resume();
             }
+            else
+            {
+                mutex.unlock();
+            }
+
             return true;
         }
 
@@ -287,13 +274,16 @@ public:
      */
     auto shutdown() -> coro::task<void>
     {
+        std::cerr << "ring_buffer::shutdown()\n";
         // Only wake up waiters once.
         auto expected = m_running_state.load(std::memory_order::acquire);
         if (expected == running_state_t::stopped)
         {
+            std::cerr << "ring_buffer::shutdown() already stopped returning\n";
             co_return;
         }
 
+        std::cerr << "ring_buffer::shutdown() acquire lock\n";
         auto lk = co_await m_mutex.scoped_lock();
         // Only let one caller do the wake-ups, this can go from running or draining to stopped
         if (!m_running_state.compare_exchange_strong(expected, running_state_t::stopped, std::memory_order::acq_rel, std::memory_order::relaxed))
@@ -301,30 +291,35 @@ public:
             co_return;
         }
 
+        std::cerr << "ring_buffer::shutdown() acquire m_produce waiters and m_consume_waiters\n";
         auto* produce_waiters = m_produce_waiters.exchange(nullptr, std::memory_order::acq_rel);
         auto* consume_waiters = m_consume_waiters.exchange(nullptr, std::memory_order::acq_rel);
         lk.unlock();
 
         while (produce_waiters != nullptr)
         {
-            auto* to_resume = produce_waiters;
-            produce_waiters = produce_waiters->m_next;
-            to_resume->m_awaiting_coroutine.resume();
+            auto* next = produce_waiters->m_next;
+            std::cerr << "ring_buffer::shutdown() produce_waiters->resume()\n";
+            produce_waiters->m_awaiting_coroutine.resume();
+            produce_waiters = next;
         }
 
         while (consume_waiters != nullptr)
         {
-            auto* to_resume = consume_waiters;
-            consume_waiters = consume_waiters->m_next;
-            to_resume->m_awaiting_coroutine.resume();
+            auto* next = consume_waiters->m_next;
+            std::cerr << "ring_buffer::shutdown() consume_waiters->resume()\n";
+            consume_waiters->m_awaiting_coroutine.resume();
+            consume_waiters = next;
         }
 
+        std::cerr << "ring_buffer::shutdown() co_return\n";
         co_return;
     }
 
     template<coro::concepts::executor executor_t>
     [[nodiscard]] auto shutdown_drain(executor_t& e) -> coro::task<void>
     {
+        std::cerr << "ring_buffer::shutdown_drain()\n";
         auto lk = co_await m_mutex.scoped_lock();
         // Do not allow any more produces, the state must be in running to drain.
         auto expected = running_state_t::running;
@@ -332,14 +327,27 @@ public:
         {
             co_return;
         }
+
+        std::cerr << "ring_buffer::shutdown_drain() exchange m_produce_waiters\n";
+        auto* produce_waiters = m_produce_waiters.exchange(nullptr, std::memory_order::acq_rel);
         lk.unlock();
 
+        while (produce_waiters != nullptr)
+        {
+            auto* next = produce_waiters->m_next;
+            std::cerr << "ring_buffer::shutdown_drain() produce_waiters->resume()\n";
+            produce_waiters->m_awaiting_coroutine.resume();
+            produce_waiters = next;
+        }
+
+        std::cerr << "ring_buffer::shutdown_drain() while(!empty())\n";
         while (!empty())
         {
             co_await e.yield();
         }
 
         co_await shutdown();
+        std::cerr << "ring_buffer::shutdown_drain() co_return\n";
         co_return;
     }
 

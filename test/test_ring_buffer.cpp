@@ -49,14 +49,17 @@ TEST_CASE("ring_buffer single element", "[ring_buffer]")
 
 TEST_CASE("ring_buffer many elements many producers many consumers", "[ring_buffer]")
 {
+    {
+    std::cerr << "BEGIN ring_buffer many elements many producers many consumers\n";
     const size_t iterations = 1'000'000;
     const size_t consumers  = 100;
     const size_t producers  = 100;
 
-    coro::thread_pool               tp{coro::thread_pool::options{.thread_count = 4}};
     coro::ring_buffer<uint64_t, 64> rb{};
+    coro::thread_pool               tp{coro::thread_pool::options{.thread_count = 4}};
     coro::latch                     wait{producers};
     std::atomic<uint64_t> consumers_done{0};
+    std::atomic<uint64_t> counter{0};
 
     auto make_producer_task =
         [](coro::thread_pool& tp, coro::ring_buffer<uint64_t, 64>& rb, coro::latch& w) -> coro::task<void>
@@ -83,7 +86,7 @@ TEST_CASE("ring_buffer many elements many producers many consumers", "[ring_buff
         co_return;
     };
 
-    auto make_consumer_task = [](coro::thread_pool& tp, coro::ring_buffer<uint64_t, 64>& rb, std::atomic<uint64_t>& consumers_done) -> coro::task<void>
+    auto make_consumer_task = [](coro::thread_pool& tp, coro::ring_buffer<uint64_t, 64>& rb, std::atomic<uint64_t>& counter, std::atomic<uint64_t>& consumers_done) -> coro::task<void>
     {
         co_await tp.schedule();
 
@@ -92,30 +95,25 @@ TEST_CASE("ring_buffer many elements many producers many consumers", "[ring_buff
             auto expected = co_await rb.consume();
             if (!expected)
             {
-                if (!rb.empty())
-                {
-                    continue;
-                }
                 break;
             }
 
             auto item = std::move(*expected);
-            (void)item;
+            counter.fetch_add(item, std::memory_order::seq_cst);
 
             co_await tp.yield(); // mimic some work
         }
 
-        consumers_done++;
-        std::cerr << "make_consumer_task() co_return with consumers_done = " << consumers_done << "\n";
+        std::cerr << "make_consumer_task() co_return with consumers_done = " << consumers_done.fetch_add(1) << "\n";
         co_return;
     };
 
     std::vector<coro::task<void>> tasks{};
-    tasks.reserve(consumers * producers);
+    tasks.reserve(consumers * producers + 1);
 
     for (size_t i = 0; i < consumers; ++i)
     {
-        tasks.emplace_back(make_consumer_task(tp, rb, consumers_done));
+        tasks.emplace_back(make_consumer_task(tp, rb, counter, consumers_done));
     }
     for (size_t i = 0; i < producers; ++i)
     {
@@ -123,9 +121,14 @@ TEST_CASE("ring_buffer many elements many producers many consumers", "[ring_buff
     }
     tasks.emplace_back(make_shutdown_task(tp, rb, wait));
 
+    std::cerr << "sync_wait(when_all(tasks))\n";
     coro::sync_wait(coro::when_all(std::move(tasks)));
+    std::cerr << "sync_wait() complete\n";
 
     REQUIRE(rb.empty());
+    REQUIRE(counter == 50005000ul * 100ul);
+    }
+    std::cerr << "END ring_buffer many elements many producers many consumers\n";
 }
 
 TEST_CASE("ring_buffer producer consumer separate threads", "[ring_buffer]")
@@ -162,10 +165,6 @@ TEST_CASE("ring_buffer producer consumer separate threads", "[ring_buffer]")
             auto expected = co_await rb.consume();
             if (!expected)
             {
-                if (!rb.empty())
-                {
-                    continue;
-                }
                 break;
             }
 
