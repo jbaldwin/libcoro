@@ -61,8 +61,6 @@ public:
     private:
         /// The thread pool that this operation will execute on.
         thread_pool& m_thread_pool;
-        /// The coroutine awaiting execution.
-        std::coroutine_handle<> m_awaiting_coroutine{nullptr};
     };
 
     struct options

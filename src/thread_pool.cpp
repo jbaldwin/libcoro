@@ -5,16 +5,12 @@ namespace coro
 {
 thread_pool::operation::operation(thread_pool& tp) noexcept : m_thread_pool(tp)
 {
+
 }
 
 auto thread_pool::operation::await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept -> void
 {
-    m_awaiting_coroutine = awaiting_coroutine;
-    m_thread_pool.schedule_impl(m_awaiting_coroutine);
-
-    // void return on await_suspend suspends the _this_ coroutine, which is now scheduled on the
-    // thread pool and returns control to the caller.  They could be sync_wait'ing or go do
-    // something else while this coroutine gets picked up by the thread pool.
+    m_thread_pool.schedule_impl(awaiting_coroutine);
 }
 
 thread_pool::thread_pool(options opts) : m_opts(std::move(opts))
