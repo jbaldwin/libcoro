@@ -118,7 +118,7 @@ TEST_CASE("sync_wait task int64_t that throws user exception inheriting std::exc
 
 TEST_CASE("sync_wait very rarely hangs issue-270", "[sync_wait]")
 {
-    coro::thread_pool tp{};
+    auto tp = coro::thread_pool::make_shared();
 
     const int ITERATIONS = 100;
 
@@ -137,9 +137,9 @@ TEST_CASE("sync_wait very rarely hangs issue-270", "[sync_wait]")
     std::atomic<int> count{0};
 
     auto make_task =
-        [](coro::thread_pool& tp, std::unordered_set<int>& data, std::atomic<int>& count, int i) -> coro::task<void>
+        [](std::shared_ptr<coro::thread_pool> tp, std::unordered_set<int>& data, std::atomic<int>& count, int i) -> coro::task<void>
     {
-        co_await tp.schedule();
+        co_await tp->schedule();
 
         if (data.find(i) != data.end())
         {

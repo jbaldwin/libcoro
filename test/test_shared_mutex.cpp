@@ -8,7 +8,7 @@
 
 TEST_CASE("mutex single waiter not locked exclusive", "[shared_mutex]")
 {
-    auto                  tp = std::make_shared<coro::thread_pool>(coro::thread_pool::options{.thread_count = 1});
+    auto                  tp = coro::thread_pool::make_shared(coro::thread_pool::options{.thread_count = 1});
     std::vector<uint64_t> output;
 
     coro::shared_mutex<coro::thread_pool> m{tp};
@@ -44,7 +44,7 @@ TEST_CASE("mutex single waiter not locked exclusive", "[shared_mutex]")
 
 TEST_CASE("mutex single waiter not locked shared", "[shared_mutex]")
 {
-    auto                  tp = std::make_shared<coro::thread_pool>(coro::thread_pool::options{.thread_count = 1});
+    auto                  tp = coro::thread_pool::make_shared(coro::thread_pool::options{.thread_count = 1});
     std::vector<uint64_t> values{1, 2, 3};
 
     coro::shared_mutex<coro::thread_pool> m{tp};

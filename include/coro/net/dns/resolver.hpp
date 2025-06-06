@@ -46,7 +46,7 @@ class result
     friend resolver<executor_type>;
 
 public:
-    result(executor_type& executor, coro::event& resume, uint64_t pending_dns_requests)
+    result(std::shared_ptr<executor_type>& executor, coro::event& resume, uint64_t pending_dns_requests)
         : m_executor(executor),
           m_resume(resume),
           m_pending_dns_requests(pending_dns_requests)
@@ -66,7 +66,7 @@ public:
     auto ip_addresses() const -> const std::vector<coro::net::ip_address>& { return m_ip_addresses; }
 
 private:
-    executor_type&                     m_executor;
+    std::shared_ptr<executor_type>&    m_executor;
     coro::event&                       m_resume;
     uint64_t                           m_pending_dns_requests{0};
     dns::status                        m_status{dns::status::complete};
@@ -137,7 +137,7 @@ public:
     auto host_by_name(const net::hostname& hn) -> coro::task<std::unique_ptr<result<executor_type>>>
     {
         coro::event resume_event{};
-        auto        result_ptr = std::make_unique<result<executor_type>>(*m_executor.get(), resume_event, 2);
+        auto        result_ptr = std::make_unique<result<executor_type>>(m_executor, resume_event, 2);
 
         ares_gethostbyname(m_ares_channel, hn.data().data(), AF_INET, ares_dns_callback, result_ptr.get());
         ares_gethostbyname(m_ares_channel, hn.data().data(), AF_INET6, ares_dns_callback, result_ptr.get());
@@ -270,7 +270,7 @@ private:
 
         if (result.m_pending_dns_requests == 0)
         {
-            result.m_resume.set(result.m_executor);
+            result.m_resume.set(result.m_executor, resume_order_policy::lifo);
         }
     }
 };

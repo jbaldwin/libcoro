@@ -7,15 +7,15 @@ int main()
     const size_t producers_count = 5;
     const size_t consumers_count = 2;
 
-    coro::thread_pool     tp{};
+    auto tp = coro::thread_pool::make_shared();
     coro::queue<uint64_t> q{};
     coro::latch           producers_done{producers_count};
     coro::mutex           m{}; /// Just for making the console prints look nice.
 
     auto make_producer_task =
-        [iterations](coro::thread_pool& tp, coro::queue<uint64_t>& q, coro::latch& pd) -> coro::task<void>
+        [iterations](std::shared_ptr<coro::thread_pool> tp, coro::queue<uint64_t>& q, coro::latch& pd) -> coro::task<void>
     {
-        co_await tp.schedule();
+        co_await tp->schedule();
 
         for (size_t i = 0; i < iterations; ++i)
         {
@@ -26,19 +26,19 @@ int main()
         co_return;
     };
 
-    auto make_shutdown_task = [](coro::thread_pool& tp, coro::queue<uint64_t>& q, coro::latch& pd) -> coro::task<void>
+    auto make_shutdown_task = [](std::shared_ptr<coro::thread_pool> tp, coro::queue<uint64_t>& q, coro::latch& pd) -> coro::task<void>
     {
         // This task will wait for all the producers to complete and then for the
         // entire queue to be drained before shutting it down.
-        co_await tp.schedule();
+        co_await tp->schedule();
         co_await pd;
         co_await q.shutdown_drain(tp);
         co_return;
     };
 
-    auto make_consumer_task = [](coro::thread_pool& tp, coro::queue<uint64_t>& q, coro::mutex& m) -> coro::task<void>
+    auto make_consumer_task = [](std::shared_ptr<coro::thread_pool> tp, coro::queue<uint64_t>& q, coro::mutex& m) -> coro::task<void>
     {
-        co_await tp.schedule();
+        co_await tp->schedule();
 
         while (true)
         {

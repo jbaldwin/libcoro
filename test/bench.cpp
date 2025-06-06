@@ -129,12 +129,12 @@ TEST_CASE("benchmark thread_pool{1} counter task", "[benchmark]")
 {
     constexpr std::size_t iterations = default_iterations;
 
-    coro::thread_pool     tp{coro::thread_pool::options{1}};
+    auto tp = coro::thread_pool::make_shared(coro::thread_pool::options{1});
     std::atomic<uint64_t> counter{0};
 
-    auto make_task = [](coro::thread_pool& tp, std::atomic<uint64_t>& c) -> coro::task<void>
+    auto make_task = [](std::shared_ptr<coro::thread_pool> tp, std::atomic<uint64_t>& c) -> coro::task<void>
     {
-        co_await tp.schedule();
+        co_await tp->schedule();
         c.fetch_add(1, std::memory_order::relaxed);
         co_return;
     };
@@ -154,23 +154,23 @@ TEST_CASE("benchmark thread_pool{1} counter task", "[benchmark]")
     // to any coroutine actually getting properly scheduled onto the background thread pool.
     // Inject a sleep here so it forces a thread context switch within valgrind.
     std::this_thread::sleep_for(std::chrono::milliseconds{10});
-    tp.shutdown();
+    tp->shutdown();
 
     print_stats("benchmark thread_pool{1} counter task", iterations, start, sc::now());
     REQUIRE(counter == iterations);
-    REQUIRE(tp.empty());
+    REQUIRE(tp->empty());
 }
 
 TEST_CASE("benchmark thread_pool{2} counter task", "[benchmark]")
 {
     constexpr std::size_t iterations = default_iterations;
 
-    coro::thread_pool     tp{coro::thread_pool::options{2}};
+    auto tp = coro::thread_pool::make_shared(coro::thread_pool::options{2});
     std::atomic<uint64_t> counter{0};
 
-    auto make_task = [](coro::thread_pool& tp, std::atomic<uint64_t>& c) -> coro::task<void>
+    auto make_task = [](std::shared_ptr<coro::thread_pool> tp, std::atomic<uint64_t>& c) -> coro::task<void>
     {
-        co_await tp.schedule();
+        co_await tp->schedule();
         c.fetch_add(1, std::memory_order::relaxed);
         co_return;
     };
@@ -186,27 +186,27 @@ TEST_CASE("benchmark thread_pool{2} counter task", "[benchmark]")
         tasks.back().resume();
     }
 
-    // This will fail in valgrind since it runs in a single 'thread', and thus is shutsdown prior
+    // This will fail in valgrind since it runs in a single 'thread', and thus is shutdown prior
     // to any coroutine actually getting properly scheduled onto the background thread pool.
     // Inject a sleep here so it forces a thread context switch within valgrind.
     std::this_thread::sleep_for(std::chrono::milliseconds{10});
-    tp.shutdown();
+    tp->shutdown();
 
     print_stats("benchmark thread_pool{2} counter task", iterations, start, sc::now());
     REQUIRE(counter == iterations);
-    REQUIRE(tp.empty());
+    REQUIRE(tp->empty());
 }
 
 TEST_CASE("benchmark thread_pool{N} counter task", "[benchmark]")
 {
     constexpr std::size_t iterations = default_iterations;
 
-    coro::thread_pool     tp{};
+    auto tp = coro::thread_pool::make_shared();
     std::atomic<uint64_t> counter{0};
 
-    auto make_task = [](coro::thread_pool& tp, std::atomic<uint64_t>& c) -> coro::task<void>
+    auto make_task = [](std::shared_ptr<coro::thread_pool> tp, std::atomic<uint64_t>& c) -> coro::task<void>
     {
-        co_await tp.schedule();
+        co_await tp->schedule();
         c.fetch_add(1, std::memory_order::relaxed);
         co_return;
     };
@@ -226,11 +226,11 @@ TEST_CASE("benchmark thread_pool{N} counter task", "[benchmark]")
     // to any coroutine actually getting properly scheduled onto the background thread pool.
     // Inject a sleep here so it forces a thread context switch within valgrind.
     std::this_thread::sleep_for(std::chrono::milliseconds{10});
-    tp.shutdown();
+    tp->shutdown();
 
     print_stats("benchmark thread_pool{N} counter task", iterations, start, sc::now());
     REQUIRE(counter == iterations);
-    REQUIRE(tp.empty());
+    REQUIRE(tp->empty());
 }
 
 TEST_CASE("benchmark counter task scheduler{1} yield", "[benchmark]")

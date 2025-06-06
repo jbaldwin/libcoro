@@ -4,6 +4,7 @@
 
 #include <atomic>
 #include <coroutine>
+#include <memory>
 
 namespace coro
 {
@@ -101,7 +102,7 @@ public:
      * the waiters across the executor's threads.
      */
     template<concepts::executor executor_type>
-    auto set(executor_type& e, resume_order_policy policy = resume_order_policy::lifo) noexcept -> void
+    auto set(std::shared_ptr<executor_type> e, resume_order_policy policy = resume_order_policy::lifo) noexcept -> void
     {
         void* old_value = m_state.exchange(this, std::memory_order::acq_rel);
         if (old_value != this)
@@ -117,7 +118,7 @@ public:
             while (waiters != nullptr)
             {
                 auto* next = waiters->m_next;
-                e.resume(waiters->m_awaiting_coroutine);
+                e->resume(waiters->m_awaiting_coroutine);
                 waiters = next;
             }
         }

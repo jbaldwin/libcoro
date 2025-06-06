@@ -27,23 +27,27 @@ namespace coro
  */
 class thread_pool : public std::enable_shared_from_this<thread_pool>
 {
+    struct private_constructor
+    {
+        private_constructor() = default;
+    };
 public:
     /**
-     * An operation is an awaitable type with a coroutine to resume the task scheduled on one of
+     * A schedule operation is an awaitable type with a coroutine to resume the task scheduled on one of
      * the executor threads.
      */
-    class operation
+    class schedule_operation
     {
         friend class thread_pool;
         /**
-         * Only thread_pools can create operations when a task is being scheduled.
-         * @param tp The thread pool that created this operation.
+         * Only thread_pools can create schedule operations when a task is being scheduled.
+         * @param tp The thread pool that created this schedule operation.
          */
-        explicit operation(thread_pool& tp) noexcept;
+        explicit schedule_operation(thread_pool& tp) noexcept;
 
     public:
         /**
-         * Operations always pause so the executing thread can be switched.
+         * Schedule operations always pause so the executing thread can be switched.
          */
         auto await_ready() noexcept -> bool { return false; }
 
@@ -59,7 +63,7 @@ public:
         auto await_resume() noexcept -> void {}
 
     private:
-        /// The thread pool that this operation will execute on.
+        /// @brief The thread pool that this schedule operation will execute on.
         thread_pool& m_thread_pool;
     };
 
@@ -77,13 +81,21 @@ public:
     };
 
     /**
-     * @param opts Thread pool configuration options.
+     * @see thread_pool::make_shared
      */
-    explicit thread_pool(
+    explicit thread_pool(options&& opts, private_constructor);
+
+    /**
+     * @brief Creates a thread pool executor.
+     *
+     * @param opts The thread pool's options.
+     * @return std::shared_ptr<thread_pool>
+     */
+    static auto make_shared(
         options opts = options{
             .thread_count            = std::thread::hardware_concurrency(),
             .on_thread_start_functor = nullptr,
-            .on_thread_stop_functor  = nullptr});
+            .on_thread_stop_functor  = nullptr}) -> std::shared_ptr<thread_pool>;
 
     thread_pool(const thread_pool&)                    = delete;
     thread_pool(thread_pool&&)                         = delete;
@@ -101,10 +113,10 @@ public:
      * Schedules the currently executing coroutine to be run on this thread pool.  This must be
      * called from within the coroutines function body to schedule the coroutine on the thread pool.
      * @throw std::runtime_error If the thread pool is `shutdown()` scheduling new tasks is not permitted.
-     * @return The operation to switch from the calling scheduling thread to the executor thread
+     * @return The schedule operation to switch from the calling scheduling thread to the executor thread
      *         pool thread.
      */
-    [[nodiscard]] auto schedule() -> operation;
+    [[nodiscard]] auto schedule() -> schedule_operation;
 
     /**
      * Spawns the given task to be run on this thread pool, the task is detached from the user.
@@ -188,7 +200,7 @@ public:
      * FIFO task queue.  This function is useful to yielding long processing tasks to let other tasks
      * get processing time.
      */
-    [[nodiscard]] auto yield() -> operation { return schedule(); }
+    [[nodiscard]] auto yield() -> schedule_operation { return schedule(); }
 
     /**
      * Shutsdown the thread pool.  This will finish any tasks scheduled prior to calling this

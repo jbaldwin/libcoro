@@ -86,9 +86,9 @@ public:
     explicit io_scheduler(options&& opts, private_constructor);
 
     /**
-     * @brief Creates an io_scheduler.
+     * @brief Creates an io_scheduler executor.
      *
-     * @param opts
+     * @param opts The scheduler's options.
      * @return std::shared_ptr<io_scheduler>
      */
     static auto make_shared(
@@ -108,7 +108,7 @@ public:
     auto operator=(const io_scheduler&) -> io_scheduler& = delete;
     auto operator=(io_scheduler&&) -> io_scheduler&      = delete;
 
-    ~io_scheduler();
+    virtual ~io_scheduler();
 
     /**
      * Given a thread_strategy_t::manual this function should be called at regular intervals to
@@ -434,7 +434,7 @@ private:
     /// The background io worker threads.
     std::thread m_io_thread;
     /// Thread pool for executing tasks when not in inline mode.
-    std::unique_ptr<thread_pool> m_thread_pool{nullptr};
+    std::shared_ptr<thread_pool> m_thread_pool{nullptr};
 
     std::mutex m_timed_events_mutex{};
     /// The map of time point's to poll infos for tasks that are yielding for a period of time

@@ -308,8 +308,8 @@ public:
      * @param e The executor to yield this task to wait for elements to be processed.
      * @return coro::task<void>
      */
-    template<coro::concepts::executor executor_t>
-    auto shutdown_drain(executor_t& e) -> coro::task<void>
+    template<coro::concepts::executor executor_type>
+    auto shutdown_drain(std::shared_ptr<executor_type> e) -> coro::task<void>
     {
         auto lk = co_await m_mutex.scoped_lock();
         auto expected = running_state_t::running;
@@ -322,7 +322,7 @@ public:
 
         while (!empty())
         {
-            co_await e.yield();
+            co_await e->yield();
         }
 
         co_return co_await shutdown();

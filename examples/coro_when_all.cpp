@@ -4,11 +4,11 @@
 int main()
 {
     // Create a thread pool to execute all the tasks in parallel.
-    coro::thread_pool tp{coro::thread_pool::options{.thread_count = 4}};
+    auto tp = coro::thread_pool::make_shared(coro::thread_pool::options{.thread_count = 4});
     // Create the task we want to invoke multiple times and execute in parallel on the thread pool.
-    auto twice = [](coro::thread_pool& tp, uint64_t x) -> coro::task<uint64_t>
+    auto twice = [](std::shared_ptr<coro::thread_pool> tp, uint64_t x) -> coro::task<uint64_t>
     {
-        co_await tp.schedule(); // Schedule onto the thread pool.
+        co_await tp->schedule(); // Schedule onto the thread pool.
         co_return x + x;        // Executed on the thread pool.
     };
 
@@ -35,9 +35,9 @@ int main()
     }
 
     // Use var args instead of a container as input to coro::when_all.
-    auto square = [](coro::thread_pool& tp, double x) -> coro::task<double>
+    auto square = [](std::shared_ptr<coro::thread_pool> tp, double x) -> coro::task<double>
     {
-        co_await tp.schedule();
+        co_await tp->schedule();
         co_return x* x;
     };
 
