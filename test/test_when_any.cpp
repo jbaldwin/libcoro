@@ -20,12 +20,12 @@ TEST_CASE("when_any two tasks", "[when_any]")
 
 TEST_CASE("when_any return void", "[when_any]")
 {
-    coro::thread_pool     tp{};
+    auto tp = coro::thread_pool::make_shared();
     std::atomic<uint64_t> counter{0};
 
-    auto make_task = [](coro::thread_pool& tp, std::atomic<uint64_t>& counter, uint64_t i) -> coro::task<void>
+    auto make_task = [](std::shared_ptr<coro::thread_pool> tp, std::atomic<uint64_t>& counter, uint64_t i) -> coro::task<void>
     {
-        co_await tp.schedule();
+        co_await tp->schedule();
         // One thread will win.
         uint64_t expected = 0;
         counter.compare_exchange_strong(expected, i);
@@ -49,13 +49,13 @@ TEST_CASE("when_any tuple return void (monostate)", "[when_any]")
     // as the other task could complete first (unlikely but happens) and cause the REQUIRE statements
     // between what is returned to mismatch from what is executed.
     coro::mutex       m{};
-    coro::thread_pool tp{};
+    auto tp = coro::thread_pool::make_shared();
     std::atomic<uint64_t>          counter{0};
 
     auto make_task_return_void =
-        [](coro::thread_pool& tp, coro::mutex& m, std::atomic<uint64_t>& counter, uint64_t i) -> coro::task<std::monostate>
+        [](std::shared_ptr<coro::thread_pool> tp, coro::mutex& m, std::atomic<uint64_t>& counter, uint64_t i) -> coro::task<std::monostate>
     {
-        co_await tp.schedule();
+        co_await tp->schedule();
         co_await m.lock();
         if (counter == 0)
         {
@@ -68,9 +68,9 @@ TEST_CASE("when_any tuple return void (monostate)", "[when_any]")
         co_return std::monostate{};
     };
 
-    auto make_task = [](coro::thread_pool& tp, coro::mutex& m, std::atomic<uint64_t>& counter, uint64_t i) -> coro::task<uint64_t>
+    auto make_task = [](std::shared_ptr<coro::thread_pool> tp, coro::mutex& m, std::atomic<uint64_t>& counter, uint64_t i) -> coro::task<uint64_t>
     {
-        co_await tp.schedule();
+        co_await tp->schedule();
         co_await m.lock();
         if (counter == 0)
         {

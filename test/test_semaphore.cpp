@@ -131,16 +131,16 @@ TEST_CASE("semaphore produce consume", "[semaphore]")
 
     // This test is run in the context of a thread pool so the producer task can yield.  Otherwise
     // the producer will just run wild!
-    coro::thread_pool             tp{coro::thread_pool::options{.thread_count = 1}};
+    auto tp = coro::thread_pool::make_shared(coro::thread_pool::options{.thread_count = 1});
     std::atomic<uint64_t>         value{0};
     std::vector<coro::task<void>> tasks;
 
     coro::semaphore<2> s{2};
 
     auto make_consumer_task =
-        [](coro::thread_pool& tp, coro::semaphore<2>& s, std::atomic<uint64_t>& value, uint64_t id) -> coro::task<void>
+        [](std::shared_ptr<coro::thread_pool> tp, coro::semaphore<2>& s, std::atomic<uint64_t>& value, uint64_t id) -> coro::task<void>
     {
-        co_await tp.schedule();
+        co_await tp->schedule();
 
         while (true)
         {
@@ -163,16 +163,16 @@ TEST_CASE("semaphore produce consume", "[semaphore]")
         co_return;
     };
 
-    auto make_producer_task = [](coro::thread_pool& tp, coro::semaphore<2>& s, std::atomic<uint64_t>& value) -> coro::task<void>
+    auto make_producer_task = [](std::shared_ptr<coro::thread_pool> tp, coro::semaphore<2>& s, std::atomic<uint64_t>& value) -> coro::task<void>
     {
-        co_await tp.schedule();
+        co_await tp->schedule();
 
         // Keep producing until we hit the required amount.
         while (value.load(std::memory_order::acquire) < iterations)
         {
             std::cerr << "producer: doing work\n";
             // Do some work...
-            co_await tp.yield();
+            co_await tp->yield();
 
             std::cerr << "producer: releasing\n";
             s.release();
@@ -204,12 +204,12 @@ TEST_CASE("semaphore 1 producers and many consumers", "[semaphore]")
 
     coro::semaphore<50> s{0};
 
-    coro::thread_pool tp{};
+    auto tp = coro::thread_pool::make_shared();
 
     auto make_consumer_task =
-        [](coro::thread_pool& tp, coro::semaphore<50>& s, std::atomic<uint64_t>& value, uint64_t id) -> coro::task<void>
+        [](std::shared_ptr<coro::thread_pool> tp, coro::semaphore<50>& s, std::atomic<uint64_t>& value, uint64_t id) -> coro::task<void>
     {
-        co_await tp.schedule();
+        co_await tp->schedule();
 
         while (true)
         {
@@ -218,7 +218,7 @@ TEST_CASE("semaphore 1 producers and many consumers", "[semaphore]")
             if (result == coro::semaphore_acquire_result::acquired)
             {
                 // std::cerr << "consumer " << id << " acquired\n";
-                co_await tp.schedule();
+                co_await tp->schedule();
                 value.fetch_add(1, std::memory_order::release);
             }
             else
@@ -231,21 +231,21 @@ TEST_CASE("semaphore 1 producers and many consumers", "[semaphore]")
     };
 
     auto make_producer_task =
-        [](coro::thread_pool& tp, coro::semaphore<50>& s, std::atomic<uint64_t>& value, uint64_t id) -> coro::task<void>
+        [](std::shared_ptr<coro::thread_pool> tp, coro::semaphore<50>& s, std::atomic<uint64_t>& value, uint64_t id) -> coro::task<void>
     {
-        co_await tp.schedule();
+        co_await tp->schedule();
 
         for (size_t i = 0; i < iterations; ++i)
         {
             // std::cerr << "producer " << id << " s.release()\n";
             s.release();
-            co_await tp.yield();
+            co_await tp->yield();
         }
 
         // Wait for all jobs to complete.
         while (value.load(std::memory_order::acquire) < iterations)
         {
-            co_await tp.yield();
+            co_await tp->yield();
         }
 
         std::cerr << "producer " << id << " exiting\n";

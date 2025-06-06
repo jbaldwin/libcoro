@@ -255,7 +255,7 @@ TEST_CASE("io_scheduler separate thread resume spawned thread", "[io_scheduler]"
             {
                 // mimic some expensive computation
                 // Resume the coroutine back onto the scheduler, not this background thread.
-                e.set(*s);
+                e.set(s);
             });
         third_party_thread.detach();
 
@@ -289,7 +289,7 @@ TEST_CASE("io_scheduler separate thread resume with return", "[io_scheduler]")
             }
 
             output = expected_value;
-            service_done.set(*s);
+            service_done.set(s);
         }};
 
     auto make_task = [](std::shared_ptr<coro::io_scheduler> s,
@@ -577,7 +577,7 @@ TEST_CASE("io_scheduler multipler event waiters", "[io_scheduler]")
     auto release = [](std::shared_ptr<coro::io_scheduler> s, coro::event& e) -> coro::task<void>
     {
         co_await s->schedule_after(10ms);
-        e.set(*s);
+        e.set(s);
     };
 
     coro::sync_wait(coro::when_all(spawn(s, e), release(s, e)));

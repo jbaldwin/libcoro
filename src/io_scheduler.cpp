@@ -23,29 +23,30 @@ io_scheduler::io_scheduler(options&& opts, private_constructor)
       m_schedule_fd(eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK))
 
 {
-}
-
-auto io_scheduler::make_shared(options opts) -> std::shared_ptr<io_scheduler>
-{
-    auto s = std::make_shared<io_scheduler>(std::move(opts), private_constructor{});
-
-    if (opts.execution_strategy == execution_strategy_t::process_tasks_on_thread_pool)
+    if (m_opts.execution_strategy == execution_strategy_t::process_tasks_on_thread_pool)
     {
-        s->m_thread_pool = std::make_unique<thread_pool>(std::move(s->m_opts.pool));
+        m_thread_pool = thread_pool::make_shared(std::move(m_opts.pool));
     }
 
     epoll_event e{};
     e.events = EPOLLIN;
 
     e.data.ptr = const_cast<void*>(m_shutdown_ptr);
-    epoll_ctl(s->m_epoll_fd, EPOLL_CTL_ADD, s->m_shutdown_fd, &e);
+    epoll_ctl(m_epoll_fd, EPOLL_CTL_ADD, m_shutdown_fd, &e);
 
     e.data.ptr = const_cast<void*>(m_timer_ptr);
-    epoll_ctl(s->m_epoll_fd, EPOLL_CTL_ADD, s->m_timer_fd, &e);
+    epoll_ctl(m_epoll_fd, EPOLL_CTL_ADD, m_timer_fd, &e);
 
     e.data.ptr = const_cast<void*>(m_schedule_ptr);
-    epoll_ctl(s->m_epoll_fd, EPOLL_CTL_ADD, s->m_schedule_fd, &e);
+    epoll_ctl(m_epoll_fd, EPOLL_CTL_ADD, m_schedule_fd, &e);
+}
 
+auto io_scheduler::make_shared(options opts) -> std::shared_ptr<io_scheduler>
+{
+    auto s = std::make_shared<io_scheduler>(std::move(opts), private_constructor{});
+
+    // Initialize once the shared pointer is constructed so it can be captured for
+    // the background thread.
     if (s->m_opts.thread_strategy == thread_strategy_t::spawn)
     {
         s->m_io_thread = std::thread([s]() { s->process_events_dedicated_thread(); });
