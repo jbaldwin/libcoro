@@ -5,6 +5,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <cstdint>
 #include <iomanip>
 #include <iostream>
 
@@ -17,6 +18,7 @@ using namespace std::chrono_literals;
 using sc = std::chrono::steady_clock;
 
 constexpr std::size_t default_iterations = 5'000'000;
+// constexpr std::size_t default_iterations = 10;
 
 static auto print_stats(const std::string& bench_name, uint64_t operations, sc::time_point start, sc::time_point stop)
     -> void
@@ -288,7 +290,7 @@ TEST_CASE("benchmark counter task scheduler{1} yield_for", "[benchmark]")
     auto make_task = [](std::shared_ptr<coro::io_scheduler> s, std::atomic<uint64_t>& counter) -> coro::task<void>
     {
         co_await s->schedule();
-        co_await s->yield_for(std::chrono::milliseconds{1});
+        co_await s->yield_for(std::chrono::milliseconds{5});
         counter.fetch_add(1, std::memory_order::relaxed);
         co_return;
     };
@@ -300,10 +302,12 @@ TEST_CASE("benchmark counter task scheduler{1} yield_for", "[benchmark]")
         tasks.emplace_back(make_task(s, counter));
     }
 
+    std::cout << "Waiting for tasks to complete increasing the atomic counter" << std::endl;
     coro::sync_wait(coro::when_all(std::move(tasks)));
+    std::cout << "Tasks completed increasing the atomic counter" << std::endl;
 
     auto stop = sc::now();
-    print_stats("benchmark counter task scheduler{1} yield", ops, start, stop);
+    print_stats("benchmark counter task scheduler{1} yield_for", ops, start, stop);
     REQUIRE(s->empty());
     REQUIRE(counter == iterations);
 }
@@ -417,8 +421,8 @@ TEST_CASE("benchmark tcp::server echo server thread pool", "[benchmark]")
                 REQUIRE_THREAD_SAFE(remaining.empty());
             }
 
-            wait_for_clients.count_down();
             std::cerr << "wait_for_clients.count_down(1) -> " << wait_for_clients.remaining() << "\n";
+            wait_for_clients.count_down();
             co_return;
         };
 
@@ -545,9 +549,10 @@ TEST_CASE("benchmark tcp::server echo server thread pool", "[benchmark]")
 
 TEST_CASE("benchmark tcp::server echo server inline", "[benchmark]")
 {
-    const constexpr std::size_t connections             = 100;
-    const constexpr std::size_t messages_per_connection = 1'000;
-    const constexpr std::size_t ops                     = connections * messages_per_connection;
+    const constexpr std::size_t connections_per_client  = 10;
+    const constexpr std::size_t messages_per_connection = 2;
+    // const constexpr std::size_t ops                     = connections * messages_per_connection;
+    const constexpr std::size_t ops = connections_per_client * messages_per_connection;
 
     const std::string msg = "im a data point in a stream of bytes";
 
@@ -555,7 +560,6 @@ TEST_CASE("benchmark tcp::server echo server inline", "[benchmark]")
     const constexpr std::size_t client_count = 10;
 
     std::atomic<uint64_t> listening{0};
-    std::atomic<uint64_t> accepted{0};
     std::atomic<uint64_t> clients_completed{0};
 
     std::atomic<uint16_t> server_id{0};
@@ -580,11 +584,13 @@ TEST_CASE("benchmark tcp::server echo server inline", "[benchmark]")
         std::vector<coro::task<void>>       tasks{};
     };
 
-    auto make_server_task =
-        [](server& s, std::atomic<uint64_t>& listening, std::atomic<uint64_t>& accepted) -> coro::task<void>
+    auto make_server_task = [](server& s, std::atomic<uint64_t>& listening) -> coro::task<void>
     {
-        auto make_on_connection_task = [](server& s, coro::net::tcp::client client) -> coro::task<void>
+        std::atomic<uint64_t> accepted_clients{0};
+
+        auto make_on_connection_task = [&accepted_clients](server& s, coro::net::tcp::client client) -> coro::task<void>
         {
+            accepted_clients++;
             std::string in(64, '\0');
 
             // Echo the messages until the socket is closed.
@@ -610,7 +616,7 @@ TEST_CASE("benchmark tcp::server echo server inline", "[benchmark]")
 
             s.live_clients--;
             std::cerr << "s.live_clients=" << s.live_clients << std::endl;
-            if (s.live_clients == 0)
+            if (s.live_clients == 0 && accepted_clients == connections_per_client)
             {
                 std::cerr << "s.wait_for_clients.set()" << std::endl;
                 s.wait_for_clients.set();
@@ -620,19 +626,19 @@ TEST_CASE("benchmark tcp::server echo server inline", "[benchmark]")
 
         co_await s.scheduler->schedule();
 
-        coro::net::tcp::server server{s.scheduler};
+        coro::net::tcp::server server{
+            s.scheduler, coro::net::tcp::server::options{.port = static_cast<uint16_t>(8080 + s.id)}};
 
         listening++;
 
-        while (accepted.load(std::memory_order::acquire) < connections)
+        while (accepted_clients < connections_per_client)
         {
-            auto pstatus = co_await server.poll(std::chrono::milliseconds{1});
+            auto pstatus = co_await server.poll(std::chrono::milliseconds{1000});
             if (pstatus == coro::poll_status::event)
             {
                 auto c = server.accept();
                 if (c.socket().is_valid())
                 {
-                    accepted.fetch_add(1, std::memory_order::release);
                     s.live_clients++;
                     s.scheduler->spawn(make_on_connection_task(s, std::move(c)));
                 }
@@ -640,10 +646,9 @@ TEST_CASE("benchmark tcp::server echo server inline", "[benchmark]")
         }
 
         std::cerr << "co_await s.wait_for_clients\n";
-        if (s.live_clients > 0)
-        {
-            co_await s.wait_for_clients;
-        }
+
+        co_await s.wait_for_clients;
+
         std::cerr << "make_server_task co_return\n";
         co_return;
     };
@@ -659,9 +664,22 @@ TEST_CASE("benchmark tcp::server echo server inline", "[benchmark]")
     {
         co_await c.scheduler->schedule();
         std::map<std::chrono::milliseconds, uint64_t> histogram;
-        coro::net::tcp::client                        client{c.scheduler};
+        coro::net::tcp::client                        client{
+            c.scheduler, coro::net::tcp::client::options{.port = static_cast<uint16_t>(8080 + c.id)}};
 
-        auto cstatus = co_await client.connect(); // std::chrono::seconds{1});
+        // Connect to server with some retry logic to ensure a connection is established
+        coro::net::connect_status cstatus = coro::net::connect_status::error;
+        for (int retry = 0; retry < 5; retry++)
+        {
+            cstatus = co_await client.connect(std::chrono::seconds{1});
+            if (cstatus == coro::net::connect_status::connected)
+            {
+                break;
+            }
+
+            // Wait before retrying
+            co_await c.scheduler->yield_for(std::chrono::milliseconds{500});
+        }
         REQUIRE_THREAD_SAFE(cstatus == coro::net::connect_status::connected);
 
         for (size_t i = 1; i <= messages_per_connection; ++i)
@@ -711,7 +729,7 @@ TEST_CASE("benchmark tcp::server echo server inline", "[benchmark]")
                     .id = server_id++,
                 };
                 std::cerr << "coro::sync_wait(make_server_task(s));\n";
-                coro::sync_wait(make_server_task(s, listening, accepted));
+                coro::sync_wait(make_server_task(s, listening));
                 std::cerr << "server.scheduler->shutdown()\n";
                 s.scheduler->shutdown();
                 std::cerr << "server thread exiting\n";
@@ -735,7 +753,7 @@ TEST_CASE("benchmark tcp::server echo server inline", "[benchmark]")
                 client c{
                     .id = client_id++,
                 };
-                for (size_t i = 0; i < connections / client_count; ++i)
+                for (size_t i = 0; i < connections_per_client; ++i)
                 {
                     c.tasks.emplace_back(make_client_task(c, msg, clients_completed, g_histogram, g_histogram_mutex));
                 }

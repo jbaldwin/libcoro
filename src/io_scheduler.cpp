@@ -79,8 +79,6 @@ io_scheduler::~io_scheduler()
         close(m_schedule_fd[1]);
         m_schedule_fd[1] = -1;
     }
-
-    // TODO Close all pipe-fds
 }
 
 auto io_scheduler::process_events(std::chrono::milliseconds timeout) -> std::size_t
@@ -169,9 +167,8 @@ auto io_scheduler::shutdown() noexcept -> void
         }
 
         // Signal the event loop to stop asap, triggering the event fd is safe.
-        uint64_t value{1};
-        auto     written = ::write(m_shutdown_fd[1], &value, sizeof(value));
-        (void)written;
+        const int value{1};
+        ::write(m_shutdown_fd[1], reinterpret_cast<const void*>(&value), sizeof(value));
 
         if (m_io_thread.joinable())
         {
