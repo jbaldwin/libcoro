@@ -14,6 +14,10 @@ if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
     link_libraries(-lc++)
 endif()
 
+if(UNIX AND NOT APPLE)
+    set(LINUX TRUE)
+endif()
+
 include(GNUInstallDirs)
 include(GenerateExportHeader)
 
@@ -111,11 +115,25 @@ set(LIBCORO_SOURCE_FILES
 if(LIBCORO_FEATURE_NETWORKING)
     list(APPEND LIBCORO_SOURCE_FILES
         include/coro/detail/poll_info.hpp
+        include/coro/detail/timer_handle.hpp src/detail/timer_handle.cpp
 
         include/coro/fd.hpp
         include/coro/io_scheduler.hpp src/io_scheduler.cpp
+        include/coro/io_notifier.hpp
         include/coro/poll.hpp src/poll.cpp
     )
+
+    if(LINUX)
+        list(APPEND LIBCORO_SOURCE_FILES
+            include/coro/detail/io_notifier_epoll.hpp src/detail/io_notifier_epoll.cpp
+        )
+    endif()
+    if(MACOSX)
+        list(APPEND LIBCORO_SOURCE_FILES
+            include/coro/detail/io_notifier_kqueue.hpp src/detail/io_notifier_kqueue.cpp
+        )
+    endif()
+
 
     list(APPEND LIBCORO_SOURCE_FILES
         include/coro/net/dns/resolver.hpp src/net/dns/resolver.cpp
