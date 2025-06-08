@@ -3,17 +3,17 @@
 
 int main()
 {
-    coro::thread_pool     tp{coro::thread_pool::options{.thread_count = 4}};
+    auto tp = coro::thread_pool::make_shared(coro::thread_pool::options{.thread_count = 4});
     std::vector<uint64_t> output{};
-    coro::mutex           mutex;
+    coro::mutex           mutex{};
 
     auto make_critical_section_task =
-        [](coro::thread_pool& tp, coro::mutex& mutex, std::vector<uint64_t>& output, uint64_t i) -> coro::task<void>
+        [](std::shared_ptr<coro::thread_pool> tp, coro::mutex& mutex, std::vector<uint64_t>& output, uint64_t i) -> coro::task<void>
     {
-        co_await tp.schedule();
-        // To acquire a mutex lock co_await its lock() function.  Upon acquiring the lock the
-        // lock() function returns a coro::scoped_lock that holds the mutex and automatically
-        // unlocks the mutex upon destruction.  This behaves just like std::scoped_lock.
+        co_await tp->schedule();
+        // To acquire a mutex lock co_await its scoped_lock() function. Upon acquiring the lock the
+        // scoped_lock() function returns a coro::scoped_lock that holds the mutex and automatically
+        // unlocks the mutex upon destruction. This behaves just like std::scoped_lock.
         {
             auto scoped_lock = co_await mutex.scoped_lock();
             output.emplace_back(i);

@@ -3,24 +3,33 @@
 
 namespace coro
 {
-thread_pool::operation::operation(thread_pool& tp) noexcept : m_thread_pool(tp)
+thread_pool::schedule_operation::schedule_operation(thread_pool& tp) noexcept : m_thread_pool(tp)
 {
 
 }
 
-auto thread_pool::operation::await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept -> void
+auto thread_pool::schedule_operation::await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept -> void
 {
     m_thread_pool.schedule_impl(awaiting_coroutine);
 }
 
-thread_pool::thread_pool(options opts) : m_opts(std::move(opts))
+thread_pool::thread_pool(options&& opts, private_constructor) : m_opts(opts)
 {
     m_threads.reserve(m_opts.thread_count);
+}
 
-    for (uint32_t i = 0; i < m_opts.thread_count; ++i)
+auto thread_pool::make_shared(options opts) -> std::shared_ptr<thread_pool>
+{
+    auto tp = std::make_shared<thread_pool>(std::move(opts), private_constructor{});
+
+    // Initialize once the shared pointer is constructor so it can be captured for
+    // the background threads.
+    for (uint32_t i = 0; i < tp->m_opts.thread_count; ++i)
     {
-        m_threads.emplace_back([this, i]() { executor(i); });
+        tp->m_threads.emplace_back([tp, i]() { tp->executor(i); });
     }
+
+    return tp;
 }
 
 thread_pool::~thread_pool()
@@ -28,12 +37,12 @@ thread_pool::~thread_pool()
     shutdown();
 }
 
-auto thread_pool::schedule() -> operation
+auto thread_pool::schedule() -> schedule_operation
 {
     m_size.fetch_add(1, std::memory_order::release);
     if (!m_shutdown_requested.load(std::memory_order::acquire))
     {
-        return operation{*this};
+        return schedule_operation{*this};
     }
     else
     {

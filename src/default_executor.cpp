@@ -44,7 +44,7 @@ std::shared_ptr<coro::thread_pool> coro::default_executor::executor()
         }
     } while (true);
 
-    s_default_executor_shared = std::make_shared<coro::thread_pool>(s_default_executor_options);
+    s_default_executor_shared = coro::thread_pool::make_shared(s_default_executor_options);
     s_default_executor.store(s_default_executor_shared.get(), std::memory_order::release);
     return s_default_executor_shared;
 }
