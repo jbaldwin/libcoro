@@ -13,8 +13,8 @@ auto sync_wait_event::set() noexcept -> void
     {
         std::unique_lock<std::mutex> lk{m_mutex};
         m_set.exchange(true, std::memory_order::seq_cst);
+        m_cv.notify_all();
     }
-    m_cv.notify_all();
 }
 
 auto sync_wait_event::reset() noexcept -> void
