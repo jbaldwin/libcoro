@@ -209,3 +209,25 @@ TEST_CASE("queue stopped", "[queue]")
     REQUIRE(result == 0);
     REQUIRE(q.size() == 1); // The item was not consumed due to shutdown.
 }
+
+TEST_CASE("queue.try_pop", "[queue]")
+{
+    coro::queue<uint64_t> q{};
+
+    auto expected = q.try_pop();
+    REQUIRE_FALSE(expected);
+    REQUIRE(expected.error() == coro::queue_consume_result::empty);
+
+    coro::sync_wait(q.push(42));
+    expected = q.try_pop();
+    REQUIRE(expected);
+    REQUIRE(expected.value() == 42);
+    REQUIRE(q.empty());
+
+    // I cannot think of a reliable way to test if the lock is acquired already.
+
+    coro::sync_wait(q.shutdown());
+    expected = q.try_pop();
+    REQUIRE_FALSE(expected);
+    REQUIRE(expected.error() == coro::queue_consume_result::stopped);
+}
