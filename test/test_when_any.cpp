@@ -98,7 +98,6 @@ TEST_CASE("when_any tuple return void (monostate)", "[when_any]")
     // Because of how coro::mutex works.. we need to release it after when_any returns since it symetrically transfers to the other coroutine task
     // and can cause a race condition where the result does not equal the counter. This guarantees the task has fully completed before issuing REQUIREs.
     m.unlock();
-    std::atomic_thread_fence(std::memory_order::acq_rel);
 
     if (std::holds_alternative<std::monostate>(result))
     {

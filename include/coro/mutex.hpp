@@ -156,6 +156,10 @@ private:
     /// locked but empty waiter list == nullptr
     /// locked with waiters == lock_operation_base*
     std::atomic<void*> m_state;
+    /// @brief Use an uncontested mutex to guarantee syncing between various coroutine threads.
+    ///        Various constructs like coro::condition_variable and coro::ring_buffer showed data races
+    ///        without this to properly tell the compiler to insert synchronization points.
+    std::mutex m_sync_mutex{};
 
     /// Inactive value, this cannot be nullptr since we want nullptr to signify that the mutex
     /// is locked but there are zero waiters, this makes it easy to CAS new waiters into the

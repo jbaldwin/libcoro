@@ -28,6 +28,7 @@ auto lock_operation_base::await_suspend(std::coroutine_handle<> awaiting_corouti
             {
                 // We've acquired the lock, don't suspend.
                 m_awaiting_coroutine = nullptr;
+                m_mutex.m_sync_mutex.lock();
                 return false;
             }
         }
@@ -64,11 +65,17 @@ auto scoped_lock::unlock() -> void
 auto mutex::try_lock() -> bool
 {
     void* expected = const_cast<void*>(unlocked_value());
-    return m_state.compare_exchange_strong(expected, nullptr, std::memory_order::acq_rel, std::memory_order::relaxed);
+    if (m_state.compare_exchange_strong(expected, nullptr, std::memory_order::acq_rel, std::memory_order::relaxed))
+    {
+        m_sync_mutex.lock();
+        return true;
+    }
+    return false;
 }
 
 auto mutex::unlock() -> void
 {
+    m_sync_mutex.unlock();
     void* current = m_state.load(std::memory_order::acquire);
     do
     {
@@ -88,7 +95,6 @@ auto mutex::unlock() -> void
                 std::memory_order::acquire))
             {
                 // We've successfully unlocked the mutex, return since there are no current waiters.
-                std::atomic_thread_fence(std::memory_order::acq_rel);
                 return;
             }
             else
@@ -105,7 +111,7 @@ auto mutex::unlock() -> void
             auto* waiter = detail::awaiter_list_pop<detail::lock_operation_base>(*casted);
             // assert waiter != nullptr, nobody else should be unlocking this mutex.
             // Directly transfer control to the waiter, they are now responsible for unlocking the mutex.
-            std::atomic_thread_fence(std::memory_order::acq_rel);
+            m_sync_mutex.lock(); // relock since its being passed to the waiter.
             waiter->m_awaiting_coroutine.resume();
             return;
         }
