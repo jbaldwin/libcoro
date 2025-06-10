@@ -8,6 +8,11 @@
 #include <iomanip>
 #include <iostream>
 
+TEST_CASE("bench", "[bench]")
+{
+    std::cerr << "[bench]\n\n";
+}
+
 using namespace std::chrono_literals;
 using sc = std::chrono::steady_clock;
 
@@ -996,3 +1001,8 @@ TEST_CASE("benchmark tls::server echo server thread pool", "[benchmark]")
 }
     #endif // LIBCORO_FEATURE_TLS
 #endif     // LIBCORO_FEATURE_NETWORKING
+
+TEST_CASE("~bench", "[bench]")
+{
+    std::cerr << "[~bench]\n\n";
+}

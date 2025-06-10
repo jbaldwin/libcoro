@@ -7,6 +7,11 @@
 #include <thread>
 #include <vector>
 
+TEST_CASE("semaphore", "[semaphore]")
+{
+    std::cerr << "[semaphore]\n\n";
+}
+
 TEST_CASE("semaphore binary", "[semaphore]")
 {
     std::cerr << "BEGIN semaphore binary\n";
@@ -267,4 +272,9 @@ TEST_CASE("semaphore 1 producers and many consumers", "[semaphore]")
 
     REQUIRE(value >= iterations);
     std::cerr << "END semaphore 1 producers and many consumers\n";
+}
+
+TEST_CASE("~semaphore", "[semaphore]")
+{
+    std::cerr << "[~semaphore]\n\n";
 }

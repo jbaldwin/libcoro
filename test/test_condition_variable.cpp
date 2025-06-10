@@ -6,6 +6,11 @@
 #include <thread>
 #include <iostream>
 
+TEST_CASE("condition_variable", "[condition_variable]")
+{
+    std::cerr << "[condition_variable]\n\n";
+}
+
 TEST_CASE("wait(lock) 1 waiter", "[condition_variable]")
 {
     coro::condition_variable cv{};
@@ -69,7 +74,7 @@ TEST_CASE("wait(lock stop_token predicate) 1 waiter", "[condition_variable]")
     auto make_waiter = [](coro::condition_variable& cv, coro::mutex& m, std::stop_source& ss) -> coro::task<int64_t>
     {
         auto lk = co_await m.scoped_lock();
-        auto result = co_await cv.wait(lk, ss.get_token(), [&ss]() -> bool { return false; });
+        auto result = co_await cv.wait(lk, ss.get_token(), []() -> bool { return false; });
         REQUIRE(result == false);
         co_return 42;
     };
@@ -220,7 +225,7 @@ TEST_CASE("wait(lock predicate) 3 waiters predicate notify_one", "[condition_var
     auto make_waiter = [](coro::condition_variable& cv, coro::mutex& m, std::atomic<int64_t>& e, int64_t r) -> coro::task<int64_t>
     {
         auto lk = co_await m.scoped_lock();
-        co_await cv.wait(lk, [&e, &r]() -> bool
+        co_await cv.wait(lk, [&e]() -> bool
         {
             return e > 0;
         });
@@ -895,3 +900,8 @@ TEST_CASE("notify_one(executor)", "[condition_variable]")
 }
 
 #endif
+
+TEST_CASE("~condition_variable", "[condition_variable]")
+{
+    std::cerr << "[~condition_variable]\n\n";
+}

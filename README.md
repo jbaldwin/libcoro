@@ -814,7 +814,7 @@ int main()
     coro::mutex           m{}; /// Just for making the console prints look nice.
 
     auto make_producer_task =
-        [iterations](std::shared_ptr<coro::thread_pool> tp, coro::queue<uint64_t>& q, coro::latch& pd) -> coro::task<void>
+        [](std::shared_ptr<coro::thread_pool> tp, coro::queue<uint64_t>& q, coro::latch& pd) -> coro::task<void>
     {
         co_await tp->schedule();
 

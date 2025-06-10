@@ -6,6 +6,11 @@
 #include <iostream>
 #include <thread>
 
+TEST_CASE("ring_buffer", "[ring_buffer]")
+{
+    std::cerr << "[ring_buffer]\n\n";
+}
+
 TEST_CASE("ring_buffer single element", "[ring_buffer]")
 {
     const size_t                   iterations = 10;
@@ -406,4 +411,9 @@ TEST_CASE("ring_buffer issue-242 basic type", "[ring_buffer]")
     auto data = std::move(*result);
     REQUIRE(data == 1);
     std::cerr << "END ring_buffer issue-242 basic type\n";
+}
+
+TEST_CASE("~ring_buffer", "[ring_buffer]")
+{
+    std::cerr << "[~ring_buffer]\n\n";
 }

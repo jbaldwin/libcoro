@@ -5,6 +5,12 @@
 #include <list>
 #include <ranges>
 #include <vector>
+#include <iostream>
+
+TEST_CASE("when_all", "[when_all]")
+{
+    std::cerr << "[when_all]\n\n";
+}
 
 TEST_CASE("when_all single task with tuple container", "[when_all]")
 {
@@ -225,4 +231,9 @@ TEST_CASE("when_all return void", "[when_all]")
 
     coro::sync_wait(coro::when_all(std::move(tasks)));
     REQUIRE(counter == 1 + 2 + 3 + 4);
+}
+
+TEST_CASE("~when_all", "[when_all]")
+{
+    std::cerr << "[~when_all]\n\n";
 }

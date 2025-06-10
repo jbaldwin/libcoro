@@ -6,6 +6,11 @@
 #include <iostream>
 #include <thread>
 
+TEST_CASE("shared_mutex", "[shared_mutex]")
+{
+    std::cerr << "[shared_mutex]\n\n";
+}
+
 TEST_CASE("mutex single waiter not locked exclusive", "[shared_mutex]")
 {
     auto                  tp = coro::thread_pool::make_shared(coro::thread_pool::options{.thread_count = 1});
@@ -174,3 +179,8 @@ TEST_CASE("mutex many shared and exclusive waiters interleaved", "[shared_mutex]
     coro::sync_wait(coro::when_all(make_shared_tasks_task(s, m, read_value), make_exclusive_task(s, m, read_value)));
 }
 #endif // #ifdef LIBCORO_FEATURE_NETWORKING
+
+TEST_CASE("~shared_mutex", "[shared_mutex]")
+{
+    std::cerr << "[~shared_mutex]\n\n";
+}

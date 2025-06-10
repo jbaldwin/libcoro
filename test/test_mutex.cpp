@@ -6,6 +6,11 @@
 #include <iostream>
 #include <thread>
 
+TEST_CASE("mutex", "[mutex]")
+{
+    std::cerr << "[mutex]\n\n";
+}
+
 TEST_CASE("mutex single waiter not locked", "[mutex]")
 {
     std::vector<uint64_t> output;
@@ -135,4 +140,9 @@ TEST_CASE("mutex lock", "[mutex]")
     };
 
     coro::sync_wait(make_task(m));
+}
+
+TEST_CASE("~mutex", "[mutex]")
+{
+    std::cerr << "[~mutex]\n\n";
 }
