@@ -4,6 +4,11 @@
 
 #include <iostream>
 
+TEST_CASE("queue", "[queue]")
+{
+    std::cerr << "[queue]\n\n";
+}
+
 TEST_CASE("queue shutdown produce", "[queue]")
 {
     coro::queue<uint64_t> q{};
@@ -230,4 +235,9 @@ TEST_CASE("queue.try_pop", "[queue]")
     expected = q.try_pop();
     REQUIRE_FALSE(expected);
     REQUIRE(expected.error() == coro::queue_consume_result::stopped);
+}
+
+TEST_CASE("~queue", "[queue]")
+{
+    std::cerr << "[~queue]\n\n";
 }

@@ -6,6 +6,11 @@
 #include <random>
 #include <unordered_set>
 
+TEST_CASE("sync_wait", "[sync_wait]")
+{
+    std::cerr << "[sync_wait]\n\n";
+}
+
 TEST_CASE("sync_wait simple integer return", "[sync_wait]")
 {
     auto func = []() -> coro::task<int> { co_return 11; };
@@ -240,4 +245,9 @@ TEST_CASE("issue-286", "[sync_wait]")
     REQUIRE(foo.v == 1337);
     REQUIRE(foo.m_copies == 0);
     REQUIRE(foo.m_moves == 2);
+}
+
+TEST_CASE("~sync_wait", "[sync_wait]")
+{
+    std::cerr << "[~sync_wait]\n\n";
 }

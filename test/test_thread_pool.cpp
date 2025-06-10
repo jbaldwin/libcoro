@@ -4,6 +4,11 @@
 
 #include <iostream>
 
+TEST_CASE("thread_pool", "[thread_pool]")
+{
+    std::cerr << "[thread_pool]\n\n";
+}
+
 TEST_CASE("thread_pool one worker one task", "[thread_pool]")
 {
     auto tp = coro::thread_pool::make_shared(coro::thread_pool::options{1});
@@ -266,4 +271,9 @@ TEST_CASE("thread_pool::schedule(task)", "[thread_pool]")
 
     REQUIRE(counter == 53);
     REQUIRE(main_tid != coroutine_tid);
+}
+
+TEST_CASE("~thread_pool", "[thread_pool]")
+{
+    std::cerr << "[~thread_pool]\n\n";
 }

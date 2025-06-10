@@ -7,6 +7,11 @@
 #include <stop_token>
 #include <variant>
 
+TEST_CASE("when_any", "[when_any]")
+{
+    std::cerr << "[when_any]\n\n";
+}
+
 TEST_CASE("when_any two tasks", "[when_any]")
 {
     auto make_task = [](uint64_t amount) -> coro::task<uint64_t> { co_return amount; };
@@ -343,3 +348,8 @@ TEST_CASE("when_any tuple multiple", "[when_any]")
 }
 
 #endif
+
+TEST_CASE("~when_any", "[when_any]")
+{
+    std::cerr << "[~when_any]\n\n";
+}

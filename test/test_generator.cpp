@@ -2,6 +2,13 @@
 
 #include <coro/coro.hpp>
 
+#include <iostream>
+
+TEST_CASE("generator", "[generator]")
+{
+    std::cerr << "[generator]\n\n";
+}
+
 TEST_CASE("generator single yield", "[generator]")
 {
     const std::string msg{"Hello World Generator!"};
@@ -76,4 +83,9 @@ TEST_CASE("generator satisfies view concept for compatibility with std::views::t
         }
         */
     }
+}
+
+TEST_CASE("~generator", "[generator]")
+{
+    std::cerr << "[~generator]\n\n";
 }

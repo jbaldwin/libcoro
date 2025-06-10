@@ -6,6 +6,11 @@
 #include <thread>
 #include <iostream>
 
+TEST_CASE("condition_variable", "[condition_variable]")
+{
+    std::cerr << "[condition_variable]\n\n";
+}
+
 TEST_CASE("wait(lock) 1 waiter", "[condition_variable]")
 {
     coro::condition_variable cv{};
@@ -895,3 +900,8 @@ TEST_CASE("notify_one(executor)", "[condition_variable]")
 }
 
 #endif
+
+TEST_CASE("~condition_variable", "[condition_variable]")
+{
+    std::cerr << "[~condition_variable]\n\n";
+}

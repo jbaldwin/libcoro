@@ -5,6 +5,7 @@
 #include <atomic>
 #include <chrono>
 #include <thread>
+#include <iostream>
 
 #include <cstring>
 #include <sys/epoll.h>
@@ -13,6 +14,11 @@
 #include <sys/timerfd.h>
 #include <sys/types.h>
 #include <unistd.h>
+
+TEST_CASE("io_scheduler", "[io_scheduler]")
+{
+    std::cerr << "[io_scheduler]\n\n";
+}
 
 using namespace std::chrono_literals;
 
@@ -824,4 +830,9 @@ TEST_CASE("io_scheduler::schedule(task)", "[thread_pool]")
 
     REQUIRE(counter == 53);
     REQUIRE(main_tid != coroutine_tid);
+}
+
+TEST_CASE("~io_scheduler", "[io_scheduler]")
+{
+    std::cerr << "[~io_scheduler]\n\n";
 }

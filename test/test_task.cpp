@@ -6,6 +6,11 @@
 #include <iostream>
 #include <thread>
 
+TEST_CASE("task", "[task]")
+{
+    std::cerr << "[task]\n\n";
+}
+
 TEST_CASE("task hello world", "[task]")
 {
     using task_type = coro::task<std::string>;
@@ -440,4 +445,9 @@ TEST_CASE("task promise sizeof", "[task]")
     REQUIRE(
         sizeof(coro::detail::promise<std::vector<int64_t>>) >=
         sizeof(std::coroutine_handle<>) + sizeof(std::variant<std::vector<int64_t>, std::exception_ptr>));
+}
+
+TEST_CASE("~task", "[task]")
+{
+    std::cerr << "[~task]\n\n";
 }

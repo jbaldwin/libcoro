@@ -4,6 +4,12 @@
 
 #include <chrono>
 #include <thread>
+#include <iostream>
+
+TEST_CASE("latch", "[latch]")
+{
+    std::cerr << "[latch]\n\n";
+}
 
 TEST_CASE("latch count=0", "[latch]")
 {
@@ -112,4 +118,9 @@ TEST_CASE("latch count=5 count_down=5", "[latch]")
     l.count_down(5);
     REQUIRE(task.is_ready());
     REQUIRE(task.promise().result() == 5);
+}
+
+TEST_CASE("~latch", "[latch]")
+{
+    std::cerr << "[~latch]\n\n";
 }

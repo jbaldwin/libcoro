@@ -4,6 +4,12 @@
 
 #include <chrono>
 #include <thread>
+#include <iostream>
+
+TEST_CASE("event", "[event]")
+{
+    std::cerr << "[event]\n\n";
+}
 
 TEST_CASE("event single awaiter", "[event]")
 {
@@ -286,4 +292,9 @@ TEST_CASE("event fifo single executor", "[event]")
     coro::sync_wait(coro::when_all(make_waiter(tp, e, counter, 1), make_setter(tp, e, counter)));
 
     REQUIRE(counter == 1);
+}
+
+TEST_CASE("~event", "[event]")
+{
+    std::cerr << "[~event]\n\n";
 }
