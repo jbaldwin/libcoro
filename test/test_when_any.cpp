@@ -14,6 +14,7 @@ TEST_CASE("when_any", "[when_any]")
 
 TEST_CASE("when_any two tasks", "[when_any]")
 {
+    std::cerr << "BEGIN when_any two tasks\n";
     auto make_task = [](uint64_t amount) -> coro::task<uint64_t> { co_return amount; };
 
     std::vector<coro::task<uint64_t>> tasks{};
@@ -26,6 +27,7 @@ TEST_CASE("when_any two tasks", "[when_any]")
 
 TEST_CASE("when_any return void", "[when_any]")
 {
+    std::cerr << "BEGIN when_any return void\n";
     auto tp = coro::thread_pool::make_shared();
     std::atomic<uint64_t> counter{0};
 
@@ -50,6 +52,8 @@ TEST_CASE("when_any return void", "[when_any]")
 
 TEST_CASE("when_any tuple return void (monostate)", "[when_any]")
 {
+    std::cerr << "BEGIN when_any tuple return void (monostate)\n";
+
     // This test needs to use a mutex to guarantee that the task that sets the counter
     // is the first task to complete, otherwise there is a race condition if counter is atomic
     // as the other task could complete first (unlikely but happens) and cause the REQUIRE statements
@@ -111,6 +115,7 @@ TEST_CASE("when_any tuple return void (monostate)", "[when_any]")
 
 TEST_CASE("when_any two tasks one long running", "[when_any]")
 {
+    std::cerr << "BEGIN when_any two tasks one long running\n";
     auto s = coro::io_scheduler::make_shared(
         coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
 
@@ -142,6 +147,7 @@ TEST_CASE("when_any two tasks one long running", "[when_any]")
 
 TEST_CASE("when_any two tasks one long running with cancellation", "[when_any]")
 {
+    std::cerr << "BEGIN when_any two tasks one long running with cancellation\n";
     std::stop_source stop_source{};
     auto             s = coro::io_scheduler::make_shared(
         coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
@@ -193,6 +199,7 @@ TEST_CASE("when_any two tasks one long running with cancellation", "[when_any]")
 
 TEST_CASE("when_any timeout", "[when_any]")
 {
+    std::cerr << "BEGIN when_any timeout\n";
     auto scheduler = coro::io_scheduler::make_shared(
         coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 2}});
 
@@ -232,6 +239,7 @@ TEST_CASE("when_any timeout", "[when_any]")
 
 TEST_CASE("when_any io_scheduler::schedule(task, timeout)", "[when_any]")
 {
+    std::cerr << "BEGIN when_any io_scheduler::schedule(task, timeout)\n";
     auto scheduler = coro::io_scheduler::make_shared(
         coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 2}});
 
@@ -260,6 +268,7 @@ TEST_CASE("when_any io_scheduler::schedule(task, timeout)", "[when_any]")
     #ifndef EMSCRIPTEN
 TEST_CASE("when_any io_scheduler::schedule(task, timeout stop_token)", "[when_any]")
 {
+    std::cerr << "BEGIN when_any io_scheduler::schedule(task, timeout stop_token)\n";
     auto scheduler = coro::io_scheduler::make_shared(
         coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 2}});
 
@@ -299,6 +308,7 @@ TEST_CASE("when_any io_scheduler::schedule(task, timeout stop_token)", "[when_an
 
 TEST_CASE("when_any tuple multiple", "[when_any]")
 {
+    std::cerr << "BEGIN when_any tuple multiple\n";
     using namespace std::chrono_literals;
 
     auto scheduler = coro::io_scheduler::make_shared(
