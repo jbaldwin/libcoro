@@ -27,7 +27,17 @@ enum class queue_consume_result
     /**
      * @brief The queue has shut down/stopped and the user should stop calling pop().
      */
-    stopped
+    stopped,
+
+    /**
+     * @brief try_pop() failed to acquire the lock.
+     */
+    try_lock_failure,
+
+    /**
+     * @brief try_pop() acquired the lock but there are no items in the queue.
+     */
+    empty,
 };
 
 /**
@@ -265,6 +275,53 @@ public:
     {
         co_await m_mutex.lock();
         co_return co_await awaiter{*this};
+    }
+
+    /**
+     * @brief Tries to pop the head element of the queue if available. This can fail if it cannot
+     *        acquire the lock via `coro::mutex::try_lock()` or if there are no elements available.
+     *        Does not block.
+     *
+     * @return expected<element_type, queue_consume_result> The head element if the lock was acquired
+     *         and an element is available.
+     *         queue_consume_result::stopped if the queue has been shutdown.
+     *         queue_consume_result::empty if lock was acquired but the queue is empty.
+     *         queue_consume_result::try_lock_failure if the queue is in use and the lock could not be acquired.
+     */
+    [[nodiscard]] auto try_pop() -> expected<element_type, queue_consume_result>
+    {
+        if (m_mutex.try_lock())
+        {
+            // Capture mutex into a scoped lock to manage unlocking correctly.
+            coro::scoped_lock lk{m_mutex};
+
+            // Return if stopped.
+            if (m_running_state.load(std::memory_order::acquire) == running_state_t::stopped)
+            {
+                return unexpected<queue_consume_result>(queue_consume_result::stopped);
+            }
+
+            // Return if empty.
+            if (empty())
+            {
+                return unexpected<queue_consume_result>(queue_consume_result::empty);
+            }
+
+            expected<element_type, queue_consume_result> value;
+            if constexpr (std::is_move_constructible_v<element_type>)
+            {
+                value = std::move(m_elements.front());
+            }
+            else
+            {
+                value = m_elements.front();
+            }
+
+            m_elements.pop();
+            return value;
+        }
+
+        return unexpected<queue_consume_result>(queue_consume_result::try_lock_failure);
     }
 
     /**
