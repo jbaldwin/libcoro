@@ -46,7 +46,10 @@ TEST_CASE("generator satisfies view concept for compatibility with std::views::t
     auto natural = [](size_t n) mutable -> coro::generator<size_t>
     {
         while (true)
-            co_yield ++n;
+        {
+            ++n;
+            co_yield n;
+        }
     };
     auto nat = natural(counter);
     static_assert(std::ranges::view<decltype(nat)>, "does not satisfy view concept");

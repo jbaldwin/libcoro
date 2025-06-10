@@ -1,4 +1,5 @@
 #include "catch_amalgamated.hpp"
+#include "catch_extensions.hpp"
 
 #include <chrono>
 #include <coro/coro.hpp>
@@ -63,7 +64,7 @@ TEST_CASE("when_any tuple return void (monostate)", "[when_any]")
         }
         else
         {
-            REQUIRE(counter == 2);
+            REQUIRE_THREAD_SAFE(counter == 2);
         }
         co_return std::monostate{};
     };
@@ -78,7 +79,7 @@ TEST_CASE("when_any tuple return void (monostate)", "[when_any]")
         }
         else
         {
-            REQUIRE(counter == 1);
+            REQUIRE_THREAD_SAFE(counter == 1);
         }
         co_return i;
     };
