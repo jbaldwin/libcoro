@@ -31,17 +31,24 @@ TEST_CASE("mutex single waiter not locked exclusive", "[shared_mutex]")
             std::cerr << "coroutine done\n";
         }
 
-        // The scoped lock should release the lock upon destructing.
-        REQUIRE(m.try_lock());
-        m.unlock();
+        // The scoped lock will release the lock upon destructing, but shared mutex
+        // scoped locks spawn the unlock() into the thread pool so it doesn't block.
+        while (!m.try_lock())
+        {
+            co_await m.executor()->yield();
+        }
+        co_await m.unlock();
 
         co_return;
     };
 
     coro::sync_wait(make_emplace_task(m, output));
 
+    // Wait for the spawned unlock() to complete.
+    tp->shutdown();
+
     REQUIRE(m.try_lock());
-    m.unlock();
+    coro::sync_wait(m.unlock());
 
     REQUIRE(output.size() == 1);
     REQUIRE(output[0] == 1);
@@ -69,23 +76,28 @@ TEST_CASE("mutex single waiter not locked shared", "[shared_mutex]")
             }
             std::cerr << "\ncoroutine done\n";
 
-            m.unlock_shared(); // manually locked shared on a shared, unlock
+            co_await m.unlock_shared(); // manually locked shared on a shared, unlock
         }
 
         // The scoped lock should release the lock upon destructing.
-        REQUIRE(m.try_lock());
-        m.unlock();
+        while (!m.try_lock())
+        {
+            co_await m.executor()->yield();
+        }
+        co_await m.unlock();
 
         co_return;
     };
 
     coro::sync_wait(make_emplace_task(m, values));
 
+    tp->shutdown(); // wait for spawned unlock() to complete
+
     REQUIRE(m.try_lock_shared());
-    m.unlock_shared();
+    coro::sync_wait(m.unlock_shared());
 
     REQUIRE(m.try_lock());
-    m.unlock();
+    coro::sync_wait(m.unlock());
 }
 
 #ifdef LIBCORO_FEATURE_NETWORKING
