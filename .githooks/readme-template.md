@@ -8,7 +8,7 @@
 
 **libcoro** is licensed under the Apache 2.0 license.
 
-**libcoro** is meant to provide low level coroutine constructs for building larger applications, the current focus is around high performance networking coroutine support.
+**libcoro** is meant to provide low level coroutine constructs for building larger applications.
 
 ## Overview
 * C++20 coroutines!
@@ -27,12 +27,12 @@
     - [coro::ring_buffer<element, num_elements>](#ring_buffer)
     - [coro::queue](#queue)
     - [coro::condition_variable](#condition_variable)
-* Schedulers
+* Executors
     - [coro::thread_pool](#thread_pool) for coroutine cooperative multitasking
     - [coro::io_scheduler](#io_scheduler) for driving i/o events
         - Can use `coro::thread_pool` for latency sensitive or long lived tasks.
         - Can use inline task processing for thread per core or short lived tasks.
-        - Currently uses an epoll driver, only supported on linux.
+        - Requires `LIBCORO_FEATURE_NETWORKING` to be supported.
 * Coroutine Networking
     - coro::net::dns::resolver for async dns
         - Uses libc-ares
@@ -509,25 +509,30 @@ Transfer/sec:     18.33MB
     C++20 Compiler with coroutine support
         g++ [10.2.1, 10.3.1, 11, 12, 13]
         clang++ [16, 17]
-            No networking/TLS support on MacOS.
         MSVC Windows 2022 CL
-            No networking/TLS support.
+            Does not currently support:
+                `LIBCORO_FEATURE_NETWORKING`
+                `LIBCORO_FEATURE_TLS`
     CMake
     make or ninja
     pthreads
-    openssl
+    c-ares for async dns (embedded via git submodules)
+    openssl for LIBCORO_FEATURE_TLS
     gcov/lcov (For generating coverage only)
 
 ### Build Instructions
 
 #### Tested Operating Systems
 
+Full feature supported operating systems:
  * ubuntu:22.04, 24.04
  * fedora:37-40
+ * MacOS 15
  * openSUSE/leap:15.6
+
+The following systems currently do not support `LIBCORO_FEATURE_NETWORKING` or `LIBCORO_FEATURE_TLS`:
  * Windows 2022
  * Emscripten 3.1.45
- * MacOS 15
 
 #### Cloning the project
 This project uses git submodules, to properly checkout this project use:
@@ -551,8 +556,8 @@ CMake Options:
 | LIBCORO_BUILD_TESTS           | ON      | Should the tests be built? Note this is only default ON if libcoro is the root CMakeLists.txt      |
 | LIBCORO_CODE_COVERAGE         | OFF     | Should code coverage be enabled? Requires tests to be enabled.                                     |
 | LIBCORO_BUILD_EXAMPLES        | ON      | Should the examples be built? Note this is only default ON if libcoro is the root CMakeLists.txt   |
-| LIBCORO_FEATURE_NETWORKING    | ON      | Include networking features. Requires Linux platform. MSVC/MacOS not supported.                    |
-| LIBCORO_FEATURE_TLS           | ON      | Include TLS features. Requires networking to be enabled. MSVC/MacOS not supported.                 |
+| LIBCORO_FEATURE_NETWORKING    | ON      | Include networking features. MSVC not currently supported                                          |
+| LIBCORO_FEATURE_TLS           | ON      | Include TLS features. Requires networking to be enabled. MSVC not currently supported.             |
 
 #### Adding to your project
 
