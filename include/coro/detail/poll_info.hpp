@@ -31,6 +31,8 @@ struct poll_info
     poll_info()  = default;
     ~poll_info() = default;
 
+    poll_info(fd_t fd, coro::poll_op op) : m_fd(fd), m_op(op) {}
+
     poll_info(const poll_info&)                    = delete;
     poll_info(poll_info&&)                         = delete;
     auto operator=(const poll_info&) -> poll_info& = delete;
@@ -56,6 +58,8 @@ struct poll_info
     /// The file descriptor being polled on.  This is needed so that if the timeout occurs first then
     /// the event loop can immediately disable the event within epoll.
     fd_t m_fd{-1};
+    /// The operation that is being waited for to be performed on the file descriptor.
+    coro::poll_op m_op;
     /// The timeout's position in the timeout map.  A poll() with no timeout or yield() this is empty.
     /// This is needed so that if the event occurs first then the event loop can immediately disable
     /// the timeout within epoll.

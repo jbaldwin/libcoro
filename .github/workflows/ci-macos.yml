@@ -11,7 +11,12 @@ jobs:
       matrix:
         clang_version: [20]
         cxx_standard: [20, 23]
-        libcoro_feature_networking: [{ enabled: OFF, tls: OFF }]
+        libcoro_feature_networking:
+          [
+            { enabled: ON, tls: ON },
+            { enabled: ON, tls: OFF },
+            { enabled: OFF, tls: OFF },
+          ]
         libcoro_build_shared_libs: [OFF, ON]
     steps:
       - name: Install Dependencies

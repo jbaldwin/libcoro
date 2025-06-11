@@ -4,10 +4,7 @@
 #include <atomic>
 #include <cstring>
 #include <optional>
-#include <sys/epoll.h>
-#include <sys/eventfd.h>
 #include <sys/socket.h>
-#include <sys/timerfd.h>
 #include <sys/types.h>
 #include <unistd.h>
 
@@ -15,30 +12,26 @@ using namespace std::chrono_literals;
 
 namespace coro
 {
+
 io_scheduler::io_scheduler(options&& opts, private_constructor)
     : m_opts(opts),
-      m_epoll_fd(epoll_create1(EPOLL_CLOEXEC)),
-      m_shutdown_fd(eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK)),
-      m_timer_fd(timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC)),
-      m_schedule_fd(eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK))
-
+      m_io_notifier(),
+      m_timer(static_cast<const void*>(&m_timer_object), m_io_notifier)
 {
     if (m_opts.execution_strategy == execution_strategy_t::process_tasks_on_thread_pool)
     {
         m_thread_pool = thread_pool::make_shared(std::move(m_opts.pool));
     }
 
-    epoll_event e{};
-    e.events = EPOLLIN;
+    m_shutdown_fd = std::array<fd_t, 2>{};
+    ::pipe(m_shutdown_fd.data());
+    m_io_notifier.watch(m_shutdown_fd[0], coro::poll_op::read, const_cast<void*>(m_shutdown_ptr), true);
 
-    e.data.ptr = const_cast<void*>(m_shutdown_ptr);
-    epoll_ctl(m_epoll_fd, EPOLL_CTL_ADD, m_shutdown_fd, &e);
+    m_schedule_fd = std::array<fd_t, 2>{};
+    ::pipe(m_schedule_fd.data());
+    m_io_notifier.watch(m_schedule_fd[0], coro::poll_op::read, const_cast<void*>(m_schedule_ptr), true);
 
-    e.data.ptr = const_cast<void*>(m_timer_ptr);
-    epoll_ctl(m_epoll_fd, EPOLL_CTL_ADD, m_timer_fd, &e);
-
-    e.data.ptr = const_cast<void*>(m_schedule_ptr);
-    epoll_ctl(m_epoll_fd, EPOLL_CTL_ADD, m_schedule_fd, &e);
+    m_recent_events.reserve(m_max_events);
 }
 
 auto io_scheduler::make_shared(options opts) -> std::shared_ptr<io_scheduler>
@@ -65,20 +58,26 @@ io_scheduler::~io_scheduler()
         m_io_thread.join();
     }
 
-    if (m_epoll_fd != -1)
+    if (m_shutdown_fd[0] != -1)
     {
-        close(m_epoll_fd);
-        m_epoll_fd = -1;
+        close(m_shutdown_fd[0]);
+        m_shutdown_fd[0] = -1;
     }
-    if (m_timer_fd != -1)
+    if (m_shutdown_fd[1] != -1)
     {
-        close(m_timer_fd);
-        m_timer_fd = -1;
+        close(m_shutdown_fd[1]);
+        m_shutdown_fd[1] = -1;
     }
-    if (m_schedule_fd != -1)
+
+    if (m_schedule_fd[0] != -1)
     {
-        close(m_schedule_fd);
-        m_schedule_fd = -1;
+        close(m_schedule_fd[0]);
+        m_schedule_fd[0] = -1;
+    }
+    if (m_schedule_fd[1] != -1)
+    {
+        close(m_schedule_fd[1]);
+        m_schedule_fd[1] = -1;
     }
 }
 
@@ -137,20 +136,16 @@ auto io_scheduler::poll(fd_t fd, coro::poll_op op, std::chrono::milliseconds tim
 
     bool timeout_requested = (timeout > 0ms);
 
-    detail::poll_info pi{};
-    pi.m_fd = fd;
+    auto pi = detail::poll_info{fd, op};
 
     if (timeout_requested)
     {
         pi.m_timer_pos = add_timer_token(clock::now() + timeout, pi);
     }
 
-    epoll_event e{};
-    e.events   = static_cast<uint32_t>(op) | EPOLLONESHOT | EPOLLRDHUP;
-    e.data.ptr = &pi;
-    if (epoll_ctl(m_epoll_fd, EPOLL_CTL_ADD, fd, &e) == -1)
+    if (!m_io_notifier.watch(pi))
     {
-        std::cerr << "epoll ctl error on fd " << fd << "\n";
+        std::cerr << "Failed to add " << fd << " to watch list\n";
     }
 
     // The event loop will 'clean-up' whichever event didn't win since the coroutine is scheduled
@@ -172,9 +167,8 @@ auto io_scheduler::shutdown() noexcept -> void
         }
 
         // Signal the event loop to stop asap, triggering the event fd is safe.
-        uint64_t value{1};
-        auto     written = ::write(m_shutdown_fd, &value, sizeof(value));
-        (void)written;
+        const int value{1};
+        ::write(m_shutdown_fd[1], reinterpret_cast<const void*>(&value), sizeof(value));
 
         if (m_io_thread.joinable())
         {
@@ -242,33 +236,30 @@ auto io_scheduler::process_events_dedicated_thread() -> void
 
 auto io_scheduler::process_events_execute(std::chrono::milliseconds timeout) -> void
 {
-    auto event_count = epoll_wait(m_epoll_fd, m_events.data(), m_max_events, timeout.count());
-    if (event_count > 0)
-    {
-        for (std::size_t i = 0; i < static_cast<std::size_t>(event_count); ++i)
-        {
-            epoll_event& event      = m_events[i];
-            void*        handle_ptr = event.data.ptr;
+    // Clear the recent events without decreasing the allocated capacity to reduce allocations
+    m_recent_events.clear();
+    m_io_notifier.next_events(m_recent_events, timeout);
 
-            if (handle_ptr == m_timer_ptr)
-            {
-                // Process all events that have timed out.
-                process_timeout_execute();
-            }
-            else if (handle_ptr == m_schedule_ptr)
-            {
-                // Process scheduled coroutines.
-                process_scheduled_execute_inline();
-            }
-            else if (handle_ptr == m_shutdown_ptr) [[unlikely]]
-            {
-                // Nothing to do , just needed to wake-up and smell the flowers
-            }
-            else
-            {
-                // Individual poll task wake-up.
-                process_event_execute(static_cast<detail::poll_info*>(handle_ptr), event_to_poll_status(event.events));
-            }
+    for (auto& [handle_ptr, poll_status] : m_recent_events)
+    {
+        if (handle_ptr == m_timer_ptr)
+        {
+            // Process all events that have timed out.
+            process_timeout_execute();
+        }
+        else if (handle_ptr == m_schedule_ptr)
+        {
+            // Process scheduled coroutines.
+            process_scheduled_execute_inline();
+        }
+        else if (handle_ptr == m_shutdown_ptr) [[unlikely]]
+        {
+            // Nothing to do, just needed to wake-up and smell the flowers
+        }
+        else
+        {
+            // Individual poll task wake-up.
+            process_event_execute(static_cast<detail::poll_info*>(handle_ptr), poll_status);
         }
     }
 
@@ -296,24 +287,6 @@ auto io_scheduler::process_events_execute(std::chrono::milliseconds timeout) -> 
     }
 }
 
-auto io_scheduler::event_to_poll_status(uint32_t events) -> poll_status
-{
-    if (events & EPOLLIN || events & EPOLLOUT)
-    {
-        return poll_status::event;
-    }
-    else if (events & EPOLLERR)
-    {
-        return poll_status::error;
-    }
-    else if (events & EPOLLRDHUP || events & EPOLLHUP)
-    {
-        return poll_status::closed;
-    }
-
-    throw std::runtime_error{"invalid epoll state"};
-}
-
 auto io_scheduler::process_scheduled_execute_inline() -> void
 {
     std::vector<std::coroutine_handle<>> tasks{};
@@ -323,8 +296,8 @@ auto io_scheduler::process_scheduled_execute_inline() -> void
         tasks.swap(m_scheduled_tasks);
 
         // Clear the schedule eventfd if this is a scheduled task.
-        eventfd_t value{0};
-        eventfd_read(m_schedule_fd, &value);
+        int control = 0;
+        ::read(m_schedule_fd[1], reinterpret_cast<void*>(&control), sizeof(control));
 
         // Clear the in memory flag to reduce eventfd_* calls on scheduling.
         m_schedule_fd_triggered.exchange(false, std::memory_order::release);
@@ -350,7 +323,7 @@ auto io_scheduler::process_event_execute(detail::poll_info* pi, poll_status stat
         // Given a valid fd always remove it from epoll so the next poll can blindly EPOLL_CTL_ADD.
         if (pi->m_fd != -1)
         {
-            epoll_ctl(m_epoll_fd, EPOLL_CTL_DEL, pi->m_fd, nullptr);
+            m_io_notifier.unwatch(*pi);
         }
 
         // Since this event triggered, remove its corresponding timeout if it has one.
@@ -405,13 +378,12 @@ auto io_scheduler::process_timeout_execute() -> void
             // Since this timed out, remove its corresponding event if it has one.
             if (pi->m_fd != -1)
             {
-                epoll_ctl(m_epoll_fd, EPOLL_CTL_DEL, pi->m_fd, nullptr);
+                m_io_notifier.unwatch(*pi);
             }
 
             while (pi->m_awaiting_coroutine == nullptr)
             {
                 std::atomic_thread_fence(std::memory_order::acquire);
-                // std::cerr << "process_event_execute() has a nullptr event\n";
             }
 
             m_handles_to_resume.emplace_back(pi->m_awaiting_coroutine);
@@ -464,42 +436,14 @@ auto io_scheduler::update_timeout(time_point now) -> void
 
         auto amount = tp - now;
 
-        auto seconds = std::chrono::duration_cast<std::chrono::seconds>(amount);
-        amount -= seconds;
-        auto nanoseconds = std::chrono::duration_cast<std::chrono::nanoseconds>(amount);
-
-        // As a safeguard if both values end up as zero (or negative) then trigger the timeout
-        // immediately as zero disarms timerfd according to the man pages and negative values
-        // will result in an error return value.
-        if (seconds <= 0s)
-        {
-            seconds = 0s;
-            if (nanoseconds <= 0ns)
-            {
-                // just trigger "immediately"!
-                nanoseconds = 1ns;
-            }
-        }
-
-        itimerspec ts{};
-        ts.it_value.tv_sec  = seconds.count();
-        ts.it_value.tv_nsec = nanoseconds.count();
-
-        if (timerfd_settime(m_timer_fd, 0, &ts, nullptr) == -1)
+        if (!m_io_notifier.watch_timer(m_timer, amount))
         {
             std::cerr << "Failed to set timerfd errorno=[" << std::string{strerror(errno)} << "].";
         }
     }
     else
     {
-        // Setting these values to zero disables the timer.
-        itimerspec ts{};
-        ts.it_value.tv_sec  = 0;
-        ts.it_value.tv_nsec = 0;
-        if (timerfd_settime(m_timer_fd, 0, &ts, nullptr) == -1)
-        {
-            std::cerr << "Failed to set timerfd errorno=[" << std::string{strerror(errno)} << "].";
-        }
+        m_io_notifier.unwatch_timer(m_timer);
     }
 }
 
