@@ -33,8 +33,10 @@
 
 /build/
 /Debug/
+/cmake-build-debug/
 /RelWithDebInfo/
 /Release/
 /Testing/
 
 /.vscode/
+/.idea/
