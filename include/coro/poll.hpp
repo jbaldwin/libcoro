@@ -7,6 +7,9 @@
 #if defined(__FreeBSD__) || defined(__APPLE__) || defined(__OpenBSD__) || defined(__NetBSD__)
     #include <sys/event.h>
 #endif
+#if defined(_WIN32) || defined(_WIN64)
+    #include <WinSock2.h>
+#endif
 
 namespace coro
 {
@@ -31,6 +34,17 @@ enum class poll_op : int64_t
     /// Poll for read and write operations.
     // read_write = EVFILT_READ | EVFILT_WRITE
     read_write = -5
+};
+#endif
+#if defined(_WIN32) || defined(_WIN64)
+enum class poll_op : uint32_t
+{
+    /// Poll for read operations.
+    read = FD_READ,
+    /// Poll for write operations.
+    write = FD_WRITE,
+    /// Poll for read and write operations.
+    read_write = FD_READ | FD_WRITE
 };
 #endif
 

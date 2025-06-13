@@ -1,8 +1,14 @@
 #include "coro/net/socket.hpp"
-#include <sys/socket.h>
+#if defined(_WIN32) || defined(_WIN64)
+    #include <Windows.h>
+    #include <WinSock2.h>
+#elif defined(__FreeBSD__) || defined(__APPLE__) || defined(__OpenBSD__) || defined(__NetBSD__) || defined(__linux__)
+    #include <sys/socket.h>
+#endif
 
 namespace coro::net
 {
+
 auto socket::type_to_os(type_t type) -> int
 {
     switch (type)
@@ -16,12 +22,15 @@ auto socket::type_to_os(type_t type) -> int
     }
 }
 
+    
+#if defined(__FreeBSD__) || defined(__APPLE__) || defined(__OpenBSD__) || defined(__NetBSD__) || defined(__linux__)
 auto socket::operator=(const socket& other) noexcept -> socket&
 {
     this->close();
     this->m_fd = dup(other.m_fd);
     return *this;
 }
+#endif
 
 auto socket::operator=(socket&& other) noexcept -> socket&
 {
@@ -40,6 +49,7 @@ auto socket::blocking(blocking_t block) -> bool
         return false;
     }
 
+#if defined(__FreeBSD__) || defined(__APPLE__) || defined(__OpenBSD__) || defined(__NetBSD__) || defined(__linux__)
     int flags = fcntl(m_fd, F_GETFL, 0);
     if (flags == -1)
     {
@@ -50,44 +60,70 @@ auto socket::blocking(blocking_t block) -> bool
     flags = (block == blocking_t::yes) ? flags & ~O_NONBLOCK : (flags | O_NONBLOCK);
 
     return (fcntl(m_fd, F_SETFL, flags) == 0);
+#elif defined(_WIN32) || defined(_WIN64)
+    u_long mode = (block == blocking_t::yes) ? 0 : 1;
+    return ioctlsocket(m_fd, FIONBIO, &mode) == 0;
+#endif
 }
 
 auto socket::shutdown(poll_op how) -> bool
 {
-    if (m_fd != -1)
+    if (m_fd == -1)
     {
-        int h{0};
-        switch (how)
-        {
-            case poll_op::read:
-                h = SHUT_RD;
-                break;
-            case poll_op::write:
-                h = SHUT_WR;
-                break;
-            case poll_op::read_write:
-                h = SHUT_RDWR;
-                break;
-        }
-
-        return (::shutdown(m_fd, h) == 0);
+        return false;
     }
-    return false;
+
+    int h = 0;
+#if defined(__FreeBSD__) || defined(__APPLE__) || defined(__OpenBSD__) || defined(__NetBSD__) || defined(__linux__)
+    // POSIX systems use SHUT_RD, SHUT_WR, SHUT_RDWR
+    switch (how)
+    {
+        case poll_op::read:
+            h = SHUT_RD;
+            break;
+        case poll_op::write:
+            h = SHUT_WR;
+            break;
+        case poll_op::read_write:
+            h = SHUT_RDWR;
+            break;
+    }
+#elif defined(_WIN32) || defined(_WIN64)
+    // WinSock uses SD_RECEIVE, SD_SEND, SD_BOTH
+    switch (how)
+    {
+        case poll_op::read:
+            h = SD_RECEIVE;
+            break;
+        case poll_op::write:
+            h = SD_SEND;
+            break;
+        case poll_op::read_write:
+            h = SD_BOTH;
+            break;
+    }
+#endif
+    return (::shutdown((SOCKET)m_fd, h) == 0);
 }
 
 auto socket::close() -> void
 {
     if (m_fd != -1)
     {
+        
+#if defined(__FreeBSD__) || defined(__APPLE__) || defined(__OpenBSD__) || defined(__NetBSD__) || defined(__linux__)
         ::close(m_fd);
-        m_fd = -1;
+#elif defined(_WIN32) || defined(_WIN64)
+        ::closesocket(m_fd);
+#endif
+        m_fd = socket::invalid_handle;
     }
 }
 
 auto make_socket(const socket::options& opts) -> socket
 {
     socket s{::socket(static_cast<int>(opts.domain), socket::type_to_os(opts.type), 0)};
-    if (s.native_handle() < 0)
+    if (s.native_handle() != socket::invalid_handle)
     {
         throw std::runtime_error{"Failed to create socket."};
     }
@@ -112,12 +148,17 @@ auto make_accept_socket(const socket::options& opts, const net::ip_address& addr
     // BSD and macOS use a different SO_REUSEPORT implementation than Linux that enables both duplicate address and port
     // bindings with a single flag.
 #if defined(__linux__)
-    int sock_opt_name = SO_REUSEADDR | SO_REUSEPORT;
+    int  sock_opt_name = SO_REUSEADDR | SO_REUSEPORT;
+    int& sock_opt_ptr  = &sock_opt;
 #elif defined(__FreeBSD__) || defined(__APPLE__) || defined(__OpenBSD__) || defined(__NetBSD__)
-    int sock_opt_name = SO_REUSEPORT;
+    int  sock_opt_name = SO_REUSEPORT;
+    int& sock_opt_ptr  = &sock_opt;
+#elif defined(_WIN32) || defined(_WIN64)
+    int  sock_opt_name = SO_REUSEADDR;
+    const char *sock_opt_ptr  = reinterpret_cast<const char*>(&sock_opt);
 #endif
 
-    if (setsockopt(s.native_handle(), SOL_SOCKET, sock_opt_name, &sock_opt, sizeof(sock_opt)) < 0)
+    if (setsockopt(s.native_handle(), SOL_SOCKET, sock_opt_name, sock_opt_ptr, sizeof(sock_opt)) < 0)
     {
         throw std::runtime_error{"Failed to setsockopt(SO_REUSEADDR | SO_REUSEPORT)"};
     }

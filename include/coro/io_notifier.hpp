@@ -4,6 +4,8 @@
     #include "coro/detail/io_notifier_kqueue.hpp"
 #elif defined(__linux__)
     #include "coro/detail/io_notifier_epoll.hpp"
+#elif defined(_WIN32) || defined(_WIN64)
+    #include "coro/detail/io_notifier_iocp.hpp"
 #endif
 
 namespace coro
@@ -13,6 +15,8 @@ namespace coro
 using io_notifier = detail::io_notifier_kqueue;
 #elif defined(__linux__)
 using io_notifier = detail::io_notifier_epoll;
+#elif defined(_WIN32) || defined(_WIN64)
+    using io_notifier = detail::io_notifier_iocp;
 #endif
 
 } // namespace coro

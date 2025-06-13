@@ -3,11 +3,14 @@
 #include "coro/net/ip_address.hpp"
 #include "coro/poll.hpp"
 
-#include <arpa/inet.h>
 #include <fcntl.h>
 #include <span>
-#include <unistd.h>
 #include <utility>
+
+#if defined(__FreeBSD__) || defined(__APPLE__) || defined(__OpenBSD__) || defined(__NetBSD__) || defined(__linux__)
+    #include <arpa/inet.h>
+    #include <unistd.h>
+#endif
 
 #include <iostream>
 
@@ -16,6 +19,14 @@ namespace coro::net
 class socket
 {
 public:
+#if defined(__FreeBSD__) || defined(__APPLE__) || defined(__OpenBSD__) || defined(__NetBSD__) || defined(__linux__)
+    using native_handle = int;
+    constexpr static native_handle invalid_handle = -1;
+#elif defined(_WIN32) || defined(_WIN64)
+    using native_handle_t                           = unsigned int;
+    constexpr static native_handle_t invalid_handle = ~0u;
+#endif
+
     enum class type_t
     {
         /// udp datagram socket
@@ -47,9 +58,16 @@ public:
     socket() = default;
     explicit socket(int fd) : m_fd(fd) {}
 
+    
+#if defined(__FreeBSD__) || defined(__APPLE__) || defined(__OpenBSD__) || defined(__NetBSD__) || defined(__linux__)
     socket(const socket& other) : m_fd(dup(other.m_fd)) {}
-    socket(socket&& other) : m_fd(std::exchange(other.m_fd, -1)) {}
     auto operator=(const socket& other) noexcept -> socket&;
+#elif defined(_WIN32) || defined(_WIN64)
+    socket(const socket& other) = delete;
+    auto operator=(const socket& other) noexcept = delete;
+#endif
+
+    socket(socket&& other) : m_fd(std::exchange(other.m_fd, -1)) {}
     auto operator=(socket&& other) noexcept -> socket&;
 
     ~socket() { close(); }
@@ -80,10 +98,10 @@ public:
     /**
      * @return The native handle (file descriptor) for this socket.
      */
-    auto native_handle() const -> int { return m_fd; }
+    auto native_handle() const -> native_handle_t { return m_fd; }
 
 private:
-    int m_fd{-1};
+    native_handle_t m_fd{invalid_handle};
 };
 
 /**

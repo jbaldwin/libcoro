@@ -45,7 +45,7 @@ if (LIBCORO_RUN_GITCONFIG)
     )
 endif()
 
-cmake_dependent_option(LIBCORO_FEATURE_NETWORKING "Include networking features, Default=ON." ON "NOT EMSCRIPTEN; NOT MSVC" OFF)
+cmake_dependent_option(LIBCORO_FEATURE_NETWORKING "Include networking features, Default=ON." ON "NOT EMSCRIPTEN" OFF)
 cmake_dependent_option(LIBCORO_FEATURE_TLS "Include TLS encryption features, Default=ON." ON "NOT EMSCRIPTEN; NOT MSVC" OFF)
 
 message("${PROJECT_NAME} LIBCORO_ENABLE_ASAN           = ${LIBCORO_ENABLE_ASAN}")
@@ -117,7 +117,6 @@ if(LIBCORO_FEATURE_NETWORKING)
         include/coro/detail/poll_info.hpp
         include/coro/detail/timer_handle.hpp src/detail/timer_handle.cpp
         include/coro/signal.hpp
-        include/coro/detail/signal_unix.hpp src/detail/signal_unix.cpp
 
         include/coro/fd.hpp
         include/coro/io_scheduler.hpp src/io_scheduler.cpp
@@ -128,26 +127,34 @@ if(LIBCORO_FEATURE_NETWORKING)
     if(LINUX)
         list(APPEND LIBCORO_SOURCE_FILES
             include/coro/detail/io_notifier_epoll.hpp src/detail/io_notifier_epoll.cpp
+            include/coro/detail/signal_unix.hpp src/detail/signal_unix.cpp
         )
     endif()
     if(MACOSX)
         list(APPEND LIBCORO_SOURCE_FILES
             include/coro/detail/io_notifier_kqueue.hpp src/detail/io_notifier_kqueue.cpp
+            include/coro/detail/signal_unix.hpp src/detail/signal_unix.cpp
+        )
+    endif()
+    if(WIN32)
+        list(APPEND LIBCORO_SOURCE_FILES
+            include/coro/detail/io_notifier_iocp.hpp src/detail/io_notifier_iocp.cpp
+            include/coro/detail/signal_win32.hpp src/detail/signal_win32.cpp
         )
     endif()
 
 
     list(APPEND LIBCORO_SOURCE_FILES
-        include/coro/net/dns/resolver.hpp src/net/dns/resolver.cpp
-        include/coro/net/connect.hpp src/net/connect.cpp
-        include/coro/net/hostname.hpp
-        include/coro/net/ip_address.hpp src/net/ip_address.cpp
+        #include/coro/net/dns/resolver.hpp src/net/dns/resolver.cpp
+        #include/coro/net/connect.hpp src/net/connect.cpp
+        #include/coro/net/hostname.hpp
+        #include/coro/net/ip_address.hpp src/net/ip_address.cpp
         include/coro/net/recv_status.hpp src/net/recv_status.cpp
         include/coro/net/send_status.hpp src/net/send_status.cpp
         include/coro/net/socket.hpp src/net/socket.cpp
-        include/coro/net/tcp/client.hpp src/net/tcp/client.cpp
-        include/coro/net/tcp/server.hpp src/net/tcp/server.cpp
-        include/coro/net/udp/peer.hpp src/net/udp/peer.cpp
+        #include/coro/net/tcp/client.hpp src/net/tcp/client.cpp
+        #include/coro/net/tcp/server.hpp src/net/tcp/server.cpp
+        #include/coro/net/udp/peer.hpp src/net/udp/peer.cpp
     )
 
     if(LIBCORO_FEATURE_TLS)
