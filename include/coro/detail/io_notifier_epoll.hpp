@@ -13,6 +13,7 @@
 #include "coro/detail/poll_info.hpp"
 #include "coro/fd.hpp"
 #include "coro/poll.hpp"
+#include "coro/signal.hpp"
 
 namespace coro::detail
 {
@@ -41,6 +42,8 @@ public:
     auto watch_timer(const detail::timer_handle& timer, std::chrono::nanoseconds duration) -> bool;
 
     auto watch(fd_t fd, coro::poll_op op, void* data, bool keep = false) -> bool;
+
+    auto watch(const signal& signal, void* data) -> bool;
 
     auto watch(detail::poll_info& pi) -> bool;
 

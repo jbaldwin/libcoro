@@ -61,6 +61,10 @@ auto io_notifier_epoll::watch(fd_t fd, coro::poll_op op, void* data, bool keep) 
     }
     return ::epoll_ctl(m_fd, EPOLL_CTL_ADD, fd, &event_data) != -1;
 }
+auto io_notifier_epoll::watch(const signal& signal, void* data) -> bool
+{
+    return watch(signal.read_fd(), coro::poll_op::read, data, true);
+}
 
 auto io_notifier_epoll::watch(detail::poll_info& pi) -> bool
 {

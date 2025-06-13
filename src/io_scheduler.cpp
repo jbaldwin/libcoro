@@ -23,13 +23,9 @@ io_scheduler::io_scheduler(options&& opts, private_constructor)
         m_thread_pool = thread_pool::make_shared(std::move(m_opts.pool));
     }
 
-    m_shutdown_fd = std::array<fd_t, 2>{};
-    ::pipe(m_shutdown_fd.data());
-    m_io_notifier.watch(m_shutdown_fd[0], coro::poll_op::read, const_cast<void*>(m_shutdown_ptr), true);
+    m_io_notifier.watch(m_shutdown_signal, const_cast<void*>(m_shutdown_ptr));
 
-    m_schedule_fd = std::array<fd_t, 2>{};
-    ::pipe(m_schedule_fd.data());
-    m_io_notifier.watch(m_schedule_fd[0], coro::poll_op::read, const_cast<void*>(m_schedule_ptr), true);
+    m_io_notifier.watch(m_schedule_signal, const_cast<void*>(m_schedule_ptr));
 
     m_recent_events.reserve(m_max_events);
 }
@@ -56,28 +52,6 @@ io_scheduler::~io_scheduler()
     if (m_io_thread.joinable())
     {
         m_io_thread.join();
-    }
-
-    if (m_shutdown_fd[0] != -1)
-    {
-        close(m_shutdown_fd[0]);
-        m_shutdown_fd[0] = -1;
-    }
-    if (m_shutdown_fd[1] != -1)
-    {
-        close(m_shutdown_fd[1]);
-        m_shutdown_fd[1] = -1;
-    }
-
-    if (m_schedule_fd[0] != -1)
-    {
-        close(m_schedule_fd[0]);
-        m_schedule_fd[0] = -1;
-    }
-    if (m_schedule_fd[1] != -1)
-    {
-        close(m_schedule_fd[1]);
-        m_schedule_fd[1] = -1;
     }
 }
 
@@ -167,8 +141,7 @@ auto io_scheduler::shutdown() noexcept -> void
         }
 
         // Signal the event loop to stop asap, triggering the event fd is safe.
-        const int value{1};
-        ::write(m_shutdown_fd[1], reinterpret_cast<const void*>(&value), sizeof(value));
+        m_shutdown_signal.set();
 
         if (m_io_thread.joinable())
         {
@@ -296,8 +269,7 @@ auto io_scheduler::process_scheduled_execute_inline() -> void
         tasks.swap(m_scheduled_tasks);
 
         // Clear the schedule eventfd if this is a scheduled task.
-        int control = 0;
-        ::read(m_schedule_fd[1], reinterpret_cast<void*>(&control), sizeof(control));
+        m_schedule_signal.unset();
 
         // Clear the in memory flag to reduce eventfd_* calls on scheduling.
         m_schedule_fd_triggered.exchange(false, std::memory_order::release);

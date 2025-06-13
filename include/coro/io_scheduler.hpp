@@ -13,6 +13,8 @@
     #include "coro/net/socket.hpp"
 #endif
 
+#include "signal.hpp"
+
 #include <chrono>
 #include <functional>
 #include <map>
@@ -155,8 +157,7 @@ public:
                 if (m_scheduler.m_schedule_fd_triggered.compare_exchange_strong(
                         expected, true, std::memory_order::release, std::memory_order::relaxed))
                 {
-                    const int control = 1;
-                    ::write(m_scheduler.m_schedule_fd[1], reinterpret_cast<const void*>(&control), sizeof(control));
+                    m_scheduler.m_schedule_signal.set();
                 }
             }
             else
@@ -373,8 +374,7 @@ public:
             if (m_schedule_fd_triggered.compare_exchange_strong(
                     expected, true, std::memory_order::release, std::memory_order::relaxed))
             {
-                const int value = 1;
-                ::write(m_schedule_fd[1], reinterpret_cast<const void*>(&value), sizeof(value));
+                m_schedule_signal.set();
             }
 
             return true;
@@ -419,10 +419,10 @@ private:
     io_notifier m_io_notifier;
     /// The timer handle for timed events, e.g. yield_for() or scheduler_after().
     detail::timer_handle m_timer;
-    /// The event loop fd to trigger a shutdown.
-    std::array<fd_t, 2> m_shutdown_fd{-1};
-    /// The schedule file descriptor if the scheduler is in inline processing mode.
-    std::array<fd_t, 2> m_schedule_fd{-1};
+    /// The event loop signal to trigger a shutdown.
+    signal m_shutdown_signal;
+    /// The schedule signal if the scheduler is in inline processing mode.
+    signal m_schedule_signal;
     std::atomic<bool>   m_schedule_fd_triggered{false};
 
     /// The number of tasks executing or awaiting events in this io scheduler.

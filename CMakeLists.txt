@@ -116,6 +116,8 @@ if(LIBCORO_FEATURE_NETWORKING)
     list(APPEND LIBCORO_SOURCE_FILES
         include/coro/detail/poll_info.hpp
         include/coro/detail/timer_handle.hpp src/detail/timer_handle.cpp
+        include/coro/signal.hpp
+        include/coro/detail/signal_unix.hpp src/detail/signal_unix.cpp
 
         include/coro/fd.hpp
         include/coro/io_scheduler.hpp src/io_scheduler.cpp
