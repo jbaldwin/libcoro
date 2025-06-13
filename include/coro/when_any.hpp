@@ -47,15 +47,19 @@ template<typename return_type, concepts::awaitable... awaitable_type>
     -> coro::detail::task_self_deleting
 {
     std::atomic<bool> first_completed{false};
-    co_await when_all(make_when_any_tuple_task(first_completed, notify, return_value, std::move(awaitables))...);
+    co_await coro::when_all(make_when_any_tuple_task(first_completed, notify, return_value, std::move(awaitables))...);
     co_return;
 }
 
 template<concepts::awaitable awaitable>
-static auto make_when_any_task_return_void(awaitable a, coro::event& notify) -> coro::task<void>
+static auto make_when_any_task_return_void(awaitable a, std::atomic<bool>& first_completed, coro::event& notify) -> coro::task<void>
 {
     co_await static_cast<awaitable&&>(a);
-    notify.set(); // This will trigger the controller task to wake up exactly once.
+    auto expected = false;
+    if (first_completed.compare_exchange_strong(expected, true, std::memory_order::acq_rel, std::memory_order::relaxed))
+    {
+        notify.set(); // This will trigger the controller task to wake up exactly once.
+    }
     co_return;
 }
 
@@ -81,6 +85,7 @@ template<std::ranges::range range_type, concepts::awaitable awaitable_type = std
 static auto make_when_any_controller_task_return_void(range_type awaitables, coro::event& notify)
     -> coro::detail::task_self_deleting
 {
+    std::atomic<bool> first_completed{false};
     std::vector<coro::task<void>> tasks{};
 
     if constexpr (std::ranges::sized_range<range_type>)
@@ -90,7 +95,7 @@ static auto make_when_any_controller_task_return_void(range_type awaitables, cor
 
     for (auto&& a : awaitables)
     {
-        tasks.emplace_back(make_when_any_task_return_void<awaitable_type>(std::move(a), notify));
+        tasks.emplace_back(make_when_any_task_return_void<awaitable_type>(std::move(a), first_completed, notify));
     }
 
     co_await coro::when_all(std::move(tasks));
@@ -196,7 +201,6 @@ template<
 
         co_await notify;
         stop_source.request_stop();
-
         co_return std::move(return_value.value());
     }
 }
@@ -228,7 +232,6 @@ template<
         controller_task.handle().resume();
 
         co_await notify;
-
         co_return std::move(return_value.value());
     }
 }
