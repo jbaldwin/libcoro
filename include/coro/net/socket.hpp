@@ -2,12 +2,13 @@
 
 #include "coro/net/ip_address.hpp"
 #include "coro/poll.hpp"
+#include "coro/platform.hpp"
 
 #include <fcntl.h>
 #include <span>
 #include <utility>
 
-#if defined(__FreeBSD__) || defined(__APPLE__) || defined(__OpenBSD__) || defined(__NetBSD__) || defined(__linux__)
+#if defined(CORO_PLATFORM_UNIX)
     #include <arpa/inet.h>
     #include <unistd.h>
 #endif
@@ -19,10 +20,10 @@ namespace coro::net
 class socket
 {
 public:
-#if defined(__FreeBSD__) || defined(__APPLE__) || defined(__OpenBSD__) || defined(__NetBSD__) || defined(__linux__)
+#if defined(CORO_PLATFORM_UNIX)
     using native_handle = int;
     constexpr static native_handle invalid_handle = -1;
-#elif defined(_WIN32) || defined(_WIN64)
+#elif defined(CORO_PLATFORM_WINDOWS)
     using native_handle_t                           = unsigned int;
     constexpr static native_handle_t invalid_handle = ~0u;
 #endif
@@ -59,10 +60,10 @@ public:
     explicit socket(int fd) : m_fd(fd) {}
 
     
-#if defined(__FreeBSD__) || defined(__APPLE__) || defined(__OpenBSD__) || defined(__NetBSD__) || defined(__linux__)
+#if defined(CORO_PLATFORM_UNIX)
     socket(const socket& other) : m_fd(dup(other.m_fd)) {}
     auto operator=(const socket& other) noexcept -> socket&;
-#elif defined(_WIN32) || defined(_WIN64)
+#elif defined(CORO_PLATFORM_WINDOWS)
     socket(const socket& other) = delete;
     auto operator=(const socket& other) noexcept = delete;
 #endif

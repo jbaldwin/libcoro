@@ -1,19 +1,20 @@
 #pragma once
 
 #include <string>
-#if defined(__linux__)
+#include "platform.hpp"
+#if defined(CORO_PLATFORM_LINUX)
     #include <sys/epoll.h>
 #endif
-#if defined(__FreeBSD__) || defined(__APPLE__) || defined(__OpenBSD__) || defined(__NetBSD__)
+#if defined(CORO_PLATFORM_BSD)
     #include <sys/event.h>
 #endif
-#if defined(_WIN32) || defined(_WIN64)
+#if defined(CORO_PLATFORM_WINDOWS)
     #include <WinSock2.h>
 #endif
 
 namespace coro
 {
-#if defined(__linux__)
+#if defined(CORO_PLATFORM_LINUX)
 enum class poll_op : uint64_t
 {
     /// Poll for read operations.
@@ -23,8 +24,7 @@ enum class poll_op : uint64_t
     /// Poll for read and write operations.
     read_write = EPOLLIN | EPOLLOUT
 };
-#endif
-#if defined(__FreeBSD__) || defined(__APPLE__) || defined(__OpenBSD__) || defined(__NetBSD__)
+#elif defined(CORO_PLATFORM_BSD)
 enum class poll_op : int64_t
 {
     /// Poll for read operations.
@@ -35,8 +35,7 @@ enum class poll_op : int64_t
     // read_write = EVFILT_READ | EVFILT_WRITE
     read_write = -5
 };
-#endif
-#if defined(_WIN32) || defined(_WIN64)
+#elif defined(CORO_PLATFORM_WINDOWS)
 enum class poll_op : uint32_t
 {
     /// Poll for read operations.

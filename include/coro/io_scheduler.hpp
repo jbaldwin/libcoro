@@ -7,7 +7,11 @@
 #include "coro/io_notifier.hpp"
 #include "coro/poll.hpp"
 #include "coro/thread_pool.hpp"
-#include <unistd.h>
+#include "coro/platform.hpp"
+
+#ifdef CORO_PLATFORM_UNIX
+    #include <unistd.h>
+#endif
 
 #ifdef LIBCORO_FEATURE_NETWORKING
     #include "coro/net/socket.hpp"

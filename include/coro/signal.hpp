@@ -1,17 +1,17 @@
 #pragma once
-#include "detail/signal_unix.hpp"
+#include "coro/platform.hpp"
 
-#if defined(__FreeBSD__) || defined(__APPLE__) || defined(__OpenBSD__) || defined(__NetBSD__) || defined(__linux__)
+#if defined(CORO_PLATFORM_UNIX)
     #include "detail/signal_unix.hpp"
-#elif defined(_WIN32) || defined(_WIN64)
+#elif defined(CORO_PLATFORM_WINDOWS)
     #include "detail/signal_win32.hpp"
 #endif
 
 namespace coro
 {
-#if defined(__FreeBSD__) || defined(__APPLE__) || defined(__OpenBSD__) || defined(__NetBSD__) || defined(__linux__)
+#if defined(CORO_PLATFORM_UNIX)
     using signal = detail::signal_unix;
-#elif defined(_WIN32) || defined(_WIN64)
+#elif defined(CORO_PLATFORM_WINDOWS)
     using signal = detail::signal_win32;
 #endif
 } // namespace coro

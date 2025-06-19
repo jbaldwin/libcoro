@@ -4,9 +4,12 @@
 #include "coro/net/socket.hpp"
 #include "coro/net/tcp/client.hpp"
 #include "coro/task.hpp"
+#include "coro/platform.hpp"
 
 #include <fcntl.h>
-#include <sys/socket.h>
+#if defined(CORO_PLATFORM_UNIX)
+    #include <sys/socket.h>
+#endif
 
 namespace coro
 {

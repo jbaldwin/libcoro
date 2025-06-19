@@ -1,12 +1,16 @@
 #include "coro/io_scheduler.hpp"
 #include "coro/detail/task_self_deleting.hpp"
+#include "coro/platform.hpp"
 
 #include <atomic>
 #include <cstring>
 #include <optional>
-#include <sys/socket.h>
 #include <sys/types.h>
-#include <unistd.h>
+
+#if defined(CORO_PLATFORM_UNIX)
+    #include <sys/socket.h>
+    #include <unistd.h>
+#endif
 
 using namespace std::chrono_literals;
 

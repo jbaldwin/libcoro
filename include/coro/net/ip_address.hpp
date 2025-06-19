@@ -1,12 +1,18 @@
 #pragma once
 
 #include <algorithm>
-#include <arpa/inet.h>
 #include <array>
 #include <cstring>
 #include <span>
 #include <stdexcept>
 #include <string>
+#include "coro/platform.hpp"
+
+#if defined(CORO_PLATFORM_UNIX)
+    #include <arpa/inet.h>
+#elif defined(CORO_PLATFORM_WINDOWS)
+    #include <ws2ipdef.h>
+#endif
 
 namespace coro::net
 {

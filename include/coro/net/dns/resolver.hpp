@@ -7,10 +7,15 @@
 #include "coro/net/ip_address.hpp"
 #include "coro/poll.hpp"
 #include "coro/task.hpp"
+#include "coro/platform.hpp"
 
 #include <ares.h>
+
+#if defined(CORO_PLATFORM_UNIX)
 #include <arpa/inet.h>
 #include <netdb.h>
+#elif defined(CORO_PLATFORM_WINDOWS)
+#endif
 
 #include <array>
 #include <chrono>
