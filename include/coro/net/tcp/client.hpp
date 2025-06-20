@@ -7,6 +7,7 @@
 #include "coro/net/recv_status.hpp"
 #include "coro/net/send_status.hpp"
 #include "coro/net/socket.hpp"
+#include "coro/platform.hpp"
 #include "coro/poll.hpp"
 #include "coro/task.hpp"
 
@@ -43,7 +44,7 @@ public:
                                   .port    = 8080,
         });
     client(const client& other);
-    client(client&& other);
+    client(client&& other) noexcept;
     auto operator=(const client& other) noexcept -> client&;
     auto operator=(client&& other) noexcept -> client&;
     ~client();
@@ -64,9 +65,11 @@ public:
      */
     auto connect(std::chrono::milliseconds timeout = std::chrono::milliseconds{0}) -> coro::task<net::connect_status>;
 
+#if defined(CORO_PLATFORM_UNIX)
     /**
      * Polls for the given operation on this client's tcp socket.  This should be done prior to
      * calling recv and after a send that doesn't send the entire buffer.
+     * @warning Unix only
      * @param op The poll operation to perform, use read for incoming data and write for outgoing.
      * @param timeout The amount of time to wait for the poll event to be ready.  Use zero for infinte timeout.
      * @return The status result of th poll operation.  When poll_status::event is returned then the
@@ -81,6 +84,7 @@ public:
     /**
      * Receives incoming data into the given buffer.  By default since all tcp client sockets are set
      * to non-blocking use co_await poll() to determine when data is ready to be received.
+     * @warning Unix only
      * @param buffer Received bytes are written into this buffer up to the buffers size.
      * @return The status of the recv call and a span of the bytes recevied (if any).  The span of
      *         bytes will be a subspan or full span of the given input buffer.
@@ -117,6 +121,7 @@ public:
      * to determine when the tcp client socket is ready to be written to again.  On partial writes
      * the status will be 'ok' and the span returned will be non-empty, it will contain the buffer
      * span data that was not written to the client's socket.
+     * @warning Unix only
      * @param buffer The data to write on the tcp socket.
      * @return The status of the send call and a span of any remaining bytes not sent.  If all bytes
      *         were successfully sent the status will be 'ok' and the remaining span will be empty.
@@ -142,6 +147,34 @@ public:
             return {static_cast<send_status>(errno), std::span<const char>{buffer.data(), buffer.size()}};
         }
     }
+#endif
+
+    /**
+     * Attempts to send the given data to the connected peer.
+     *
+     * If only part of the data is sent, the returned span will contain the remaining bytes.
+     * The operation may time out if the connection is not ready.
+     *
+     * @param buffer The data to send.
+     * @param timeout Maximum time to wait for the operation to complete. Zero means no timeout.
+     * @return A pair containing the status and a span of any unsent data. If successful, the span will be empty.
+     */
+    template<concepts::const_buffer buffer_type>
+    auto write(const buffer_type& buffer, std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
+        -> task<std::pair<send_status, std::span<const char>>>;
+
+    /**
+     * Attempts to receive data from the connected peer into the provided buffer.
+     *
+     * The operation may time out if no data is received within the given duration.
+     *
+     * @param buffer The buffer to fill with incoming data.
+     * @param timeout Maximum time to wait for the operation to complete. Zero means no timeout.
+     * @return A pair containing the status and a span of received bytes. The span may be empty.
+     */
+    template<concepts::mutable_buffer buffer_type>
+    auto read(buffer_type&& buffer, std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
+        -> std::pair<recv_status, std::span<char>>;
 
 private:
     /// The tcp::server creates already connected clients and provides a tcp socket pre-built.
@@ -157,5 +190,47 @@ private:
     /// Cache the status of the connect in the event the user calls connect() again.
     std::optional<net::connect_status> m_connect_status{std::nullopt};
 };
+
+#if defined(CORO_PLATFORM_UNIX)
+template<concepts::const_buffer buffer_type>
+auto client::write(const buffer_type& buffer, std::chrono::milliseconds timeout)
+    -> task<std::pair<send_status, std::span<const char>>>
+{
+    if (auto status = co_await poll(poll_op::write, timeout); status != poll_status::event)
+    {
+        switch (status)
+        {
+            case poll_status::closed:
+                co_return {send_status::closed, std::span<const char>{buffer.data(), buffer.size()}};
+            case poll_status::error:
+                co_return {static_cast<send_status>(errno), std::span<const char>{buffer.data(), buffer.size()}};
+            case poll_status::timeout:
+                // TODO
+                break;
+        }
+    }
+    co_return send(buffer);
+}
+
+template<concepts::mutable_buffer buffer_type>
+auto client::read(buffer_type&& buffer, std::chrono::milliseconds timeout) -> std::pair<recv_status, std::span<char>>
+{
+    if (auto status = co_await poll(poll_op::read, timeout); status != poll_status::event)
+    {
+        switch (status)
+        {
+            case poll_status::closed:
+                co_return {recv_status::closed, std::span<const char>{buffer.data(), buffer.size()}};
+            case poll_status::error:
+                co_return {static_cast<recv_status>(errno), std::span<const char>{buffer.data(), buffer.size()}};
+            case poll_status::timeout:
+                // TODO
+                break;
+        }
+    }
+    co_return recv(std::forward<buffer_type>(buffer));
+}
+#elif defined(CORO_PLATFORM_WINDOWS)
+#endif
 
 } // namespace coro::net::tcp
