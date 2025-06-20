@@ -15,8 +15,8 @@ public:
 
     void unset();
 
-    [[nodiscard]] fd_t read_fd() const noexcept { return m_pipe[0]; }
-    [[nodiscard]] fd_t write_fd() const noexcept { return m_pipe[1]; }
+    [[nodiscard]] auto read_fd() const noexcept -> fd_t { return m_pipe[0]; }
+    [[nodiscard]] auto write_fd() const noexcept -> fd_t { return m_pipe[1]; }
 
 private:
     std::array<fd_t, 2> m_pipe{-1};
