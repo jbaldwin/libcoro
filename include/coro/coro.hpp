@@ -30,8 +30,8 @@
 #endif
 
 #include "coro/condition_variable.hpp"
-#include "coro/event.hpp"
 #include "coro/default_executor.hpp"
+#include "coro/event.hpp"
 #include "coro/generator.hpp"
 #include "coro/latch.hpp"
 #include "coro/mutex.hpp"
@@ -40,6 +40,7 @@
 #include "coro/semaphore.hpp"
 #include "coro/shared_mutex.hpp"
 #include "coro/sync_wait.hpp"
+#include "coro/task_container.hpp"
 #include "coro/task.hpp"
 #include "coro/thread_pool.hpp"
 #include "coro/time.hpp"
