@@ -17,11 +17,13 @@ namespace ring_buffer_result
 enum class produce
 {
     produced,
+    notified,
     stopped
 };
 
 enum class consume
 {
+    notified,
     stopped
 };
 } // namespace ring_buffer_result
@@ -81,6 +83,7 @@ public:
             // Produce operations can only proceed if running.
             if (m_rb.m_running_state.load(std::memory_order::acquire) != running_state_t::running)
             {
+                m_result = ring_buffer_result::produce::stopped;
                 mutex.unlock();
                 return true; // Will be awoken with produce::stopped
             }
@@ -111,13 +114,13 @@ public:
          */
         auto await_resume() -> ring_buffer_result::produce
         {
-            return m_rb.m_running_state.load(std::memory_order::acquire) == running_state_t::running
-                    ? ring_buffer_result::produce::produced
-                    : ring_buffer_result::produce::stopped;
+            return m_result;
         }
 
         /// If the operation needs to suspend, the coroutine to resume when the element can be produced.
         std::coroutine_handle<> m_awaiting_coroutine;
+        /// The result that should be returned when this coroutine resumes.
+        ring_buffer_result::produce m_result{ring_buffer_result::produce::produced};
         /// Linked list of produce operations that are awaiting to produce their element.
         produce_operation* m_next{nullptr};
 
@@ -144,6 +147,7 @@ public:
             // Consume operations proceed until stopped.
             if (m_rb.m_running_state.load(std::memory_order::acquire) == running_state_t::stopped)
             {
+                m_result = ring_buffer_result::consume::stopped;
                 mutex.unlock();
                 return true;
             }
@@ -180,12 +184,14 @@ public:
             }
             else // state is stopped
             {
-                return unexpected<ring_buffer_result::consume>(ring_buffer_result::consume::stopped);
+                return unexpected<ring_buffer_result::consume>(m_result);
             }
         }
 
         /// If the operation needs to suspend, the coroutine to resume when the element can be consumed.
         std::coroutine_handle<> m_awaiting_coroutine;
+        /// The unexpected result this should return on resume
+        ring_buffer_result::consume m_result{ring_buffer_result::consume::stopped};
         /// Linked list of consume operations that are awaiting to consume an element.
         consume_operation* m_next{nullptr};
 
@@ -251,6 +257,60 @@ public:
     auto full() const -> bool { return size() == max_size(); }
 
     /**
+     * @brief Wakes up all currently awaiting producers.  Their await_resume() function
+     *        will return an expected produce result that producers have been notified.
+     */
+    auto notify_producers() -> coro::task<void>
+    {
+        auto expected = m_running_state.load(std::memory_order::acquire);
+        if (expected == running_state_t::stopped)
+        {
+            co_return;
+        }
+
+        co_await m_mutex.lock();
+        auto* produce_waiters = m_produce_waiters.exchange(nullptr, std::memory_order::acq_rel);
+        m_mutex.unlock();
+
+        while (produce_waiters != nullptr)
+        {
+            auto* next = produce_waiters->m_next;
+            produce_waiters->m_result = ring_buffer_result::produce::notified;
+            produce_waiters->m_awaiting_coroutine.resume();
+            produce_waiters = next;
+        }
+
+        co_return;
+    }
+
+    /**
+     * @brief Wakes up all currently awaiting consumers.  Their await_resume() function
+     *        will return an expected consume result that consumers have been notified.
+     */
+    auto notify_consumers() -> coro::task<void>
+    {
+        auto expected = m_running_state.load(std::memory_order::acquire);
+        if (expected == running_state_t::stopped)
+        {
+            co_return;
+        }
+
+        co_await m_mutex.lock();
+        auto* consume_waiters = m_consume_waiters.exchange(nullptr, std::memory_order::acq_rel);
+        m_mutex.unlock();
+
+        while (consume_waiters != nullptr)
+        {
+            auto* next = consume_waiters->m_next;
+            consume_waiters->m_result = ring_buffer_result::consume::notified;
+            consume_waiters->m_awaiting_coroutine.resume();
+            consume_waiters = next;
+        }
+
+        co_return;
+    }
+
+    /**
      * @brief Wakes up all currently awaiting producers and consumers.  Their await_resume() function
      *        will return an expected consume result that the ring buffer has stopped.
      */
@@ -279,6 +339,7 @@ public:
         while (produce_waiters != nullptr)
         {
             auto* next = produce_waiters->m_next;
+            produce_waiters->m_result = ring_buffer_result::produce::stopped;
             produce_waiters->m_awaiting_coroutine.resume();
             produce_waiters = next;
         }
@@ -286,6 +347,7 @@ public:
         while (consume_waiters != nullptr)
         {
             auto* next = consume_waiters->m_next;
+            consume_waiters->m_result = ring_buffer_result::consume::stopped;
             consume_waiters->m_awaiting_coroutine.resume();
             consume_waiters = next;
         }
