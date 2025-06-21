@@ -95,8 +95,8 @@ set(LIBCORO_SOURCE_FILES
     include/coro/attribute.hpp
     include/coro/condition_variable.hpp src/condition_variable.cpp
     include/coro/coro.hpp
-    include/coro/event.hpp src/event.cpp
     include/coro/default_executor.hpp src/default_executor.cpp
+    include/coro/event.hpp src/event.cpp
     include/coro/generator.hpp
     include/coro/latch.hpp
     include/coro/mutex.hpp src/mutex.cpp
@@ -105,6 +105,7 @@ set(LIBCORO_SOURCE_FILES
     include/coro/semaphore.hpp src/semaphore.cpp
     include/coro/shared_mutex.hpp
     include/coro/sync_wait.hpp src/sync_wait.cpp
+    include/coro/task_container.hpp
     include/coro/task.hpp
     include/coro/thread_pool.hpp src/thread_pool.cpp
     include/coro/time.hpp
