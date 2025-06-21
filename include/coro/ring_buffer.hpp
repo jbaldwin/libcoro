@@ -225,6 +225,14 @@ public:
     }
 
     /**
+     * @return The maximum number of elements the ring buffer can hold.
+     */
+    constexpr auto max_size() const noexcept -> size_t
+    {
+        return num_elements;
+    }
+
+    /**
      * @return The current number of elements contained in the ring buffer.
      */
     auto size() const -> size_t
@@ -236,6 +244,11 @@ public:
      * @return True if the ring buffer contains zero elements.
      */
     auto empty() const -> bool { return size() == 0; }
+
+    /**
+     * @return True if the ring buffer has no more space.
+     */
+    auto full() const -> bool { return size() == max_size(); }
 
     /**
      * @brief Wakes up all currently awaiting producers and consumers.  Their await_resume() function
