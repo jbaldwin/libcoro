@@ -50,6 +50,16 @@ public:
     ~peer()                                       = default;
 
     /**
+     * @return A reference to the underlying socket.
+     */
+    auto socket() noexcept -> net::socket& { return m_socket; }
+
+    /**
+     * @return A const reference to the underlying socket.
+     */
+    auto socket() const noexcept -> const net::socket& { return m_socket; }
+
+    /**
      * @param op The poll operation to perform on the udp socket.  Note that if this is a send only
      *           udp socket (did not bind) then polling for read will not work.
      * @param timeout The timeout for the poll operation to be ready.
