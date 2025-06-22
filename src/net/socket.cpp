@@ -1,8 +1,8 @@
 #include "coro/net/socket.hpp"
-#if defined(_WIN32) || defined(_WIN64)
+#if defined(CORO_PLATFORM_WINDOWS)
     #include <Windows.h>
     #include <WinSock2.h>
-#elif defined(__FreeBSD__) || defined(__APPLE__) || defined(__OpenBSD__) || defined(__NetBSD__) || defined(__linux__)
+#elif defined(CORO_PLATFORM_UNIX)
     #include <sys/socket.h>
 #endif
 
@@ -23,7 +23,7 @@ auto socket::type_to_os(type_t type) -> int
 }
 
     
-#if defined(__FreeBSD__) || defined(__APPLE__) || defined(__OpenBSD__) || defined(__NetBSD__) || defined(__linux__)
+#if defined(CORO_PLATFORM_UNIX)
 auto socket::operator=(const socket& other) noexcept -> socket&
 {
     this->close();
@@ -49,7 +49,7 @@ auto socket::blocking(blocking_t block) -> bool
         return false;
     }
 
-#if defined(__FreeBSD__) || defined(__APPLE__) || defined(__OpenBSD__) || defined(__NetBSD__) || defined(__linux__)
+#if defined(CORO_PLATFORM_UNIX)
     int flags = fcntl(m_fd, F_GETFL, 0);
     if (flags == -1)
     {
@@ -60,7 +60,7 @@ auto socket::blocking(blocking_t block) -> bool
     flags = (block == blocking_t::yes) ? flags & ~O_NONBLOCK : (flags | O_NONBLOCK);
 
     return (fcntl(m_fd, F_SETFL, flags) == 0);
-#elif defined(_WIN32) || defined(_WIN64)
+#elif defined(CORO_PLATFORM_WINDOWS)
     u_long mode = (block == blocking_t::yes) ? 0 : 1;
     return ioctlsocket(m_fd, FIONBIO, &mode) == 0;
 #endif
@@ -74,7 +74,7 @@ auto socket::shutdown(poll_op how) -> bool
     }
 
     int h = 0;
-#if defined(__FreeBSD__) || defined(__APPLE__) || defined(__OpenBSD__) || defined(__NetBSD__) || defined(__linux__)
+#if defined(CORO_PLATFORM_UNIX)
     // POSIX systems use SHUT_RD, SHUT_WR, SHUT_RDWR
     switch (how)
     {
@@ -103,7 +103,7 @@ auto socket::shutdown(poll_op how) -> bool
             break;
     }
 #endif
-    return (::shutdown(m_fd, h) == 0);
+    return (::shutdown((SOCKET)m_fd, h) == 0);
 }
 
 auto socket::close() -> void
@@ -111,9 +111,9 @@ auto socket::close() -> void
     if (m_fd != -1)
     {
         
-#if defined(__FreeBSD__) || defined(__APPLE__) || defined(__OpenBSD__) || defined(__NetBSD__) || defined(__linux__)
+#if defined(CORO_PLATFORM_UNIX)
         ::close(m_fd);
-#elif defined(_WIN32) || defined(_WIN64)
+#elif defined(CORO_PLATFORM_WINDOWS)
         ::closesocket(m_fd);
 #endif
         m_fd = socket::invalid_handle;
@@ -122,11 +122,19 @@ auto socket::close() -> void
 
 auto make_socket(const socket::options& opts) -> socket
 {
+#if defined(CORO_PLATFORM_UNIX)
     socket s{::socket(static_cast<int>(opts.domain), socket::type_to_os(opts.type), 0)};
-    if (s.native_handle() == socket::invalid_handle)
+    if (s.native_handle() != socket::invalid_handle)
     {
         throw std::runtime_error{"Failed to create socket."};
     }
+#elif defined(CORO_PLATFORM_WINDOWS)
+    socket s{::WSASocketA(static_cast<int>(opts.domain), socket::type_to_os(opts.type), 0, NULL, 0, WSA_FLAG_OVERLAPPED)};
+    if (s.native_handle() != INVALID_SOCKET)
+    {
+        throw std::runtime_error{"Failed to create socket."};
+    }
+#endif
 
     if (opts.blocking == socket::blocking_t::no)
     {
@@ -147,20 +155,20 @@ auto make_accept_socket(const socket::options& opts, const net::ip_address& addr
     int sock_opt{1};
     // BSD and macOS use a different SO_REUSEPORT implementation than Linux that enables both duplicate address and port
     // bindings with a single flag.
-#if defined(__linux__)
+#if defined(CORO_PLATFORM_LINUX)
     int  sock_opt_name = SO_REUSEADDR | SO_REUSEPORT;
     int* sock_opt_ptr  = &sock_opt;
-#elif defined(__FreeBSD__) || defined(__APPLE__) || defined(__OpenBSD__) || defined(__NetBSD__)
+#elif defined(CORO_PLATFORM_BSD)
     int  sock_opt_name = SO_REUSEPORT;
     int* sock_opt_ptr  = &sock_opt;
-#elif defined(_WIN32) || defined(_WIN64)
+#elif defined(CORO_PLATFORM_WINDOWS)
     int  sock_opt_name = SO_REUSEADDR;
     const char *sock_opt_ptr  = reinterpret_cast<const char*>(&sock_opt);
 #endif
 
     if (setsockopt(s.native_handle(), SOL_SOCKET, sock_opt_name, sock_opt_ptr, sizeof(sock_opt)) < 0)
     {
-        throw std::runtime_error{"Failed to setsockopt(SO_REUSEADDR | SO_REUSEPORT)"};
+        throw std::runtime_error{"Failed to setsockopt."};
     }
 
     sockaddr_in server{};
