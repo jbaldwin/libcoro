@@ -103,7 +103,7 @@ auto socket::shutdown(poll_op how) -> bool
             break;
     }
 #endif
-    return (::shutdown((SOCKET)m_fd, h) == 0);
+    return (::shutdown(m_fd, h) == 0);
 }
 
 auto socket::close() -> void
@@ -123,7 +123,7 @@ auto socket::close() -> void
 auto make_socket(const socket::options& opts) -> socket
 {
     socket s{::socket(static_cast<int>(opts.domain), socket::type_to_os(opts.type), 0)};
-    if (s.native_handle() != socket::invalid_handle)
+    if (s.native_handle() == socket::invalid_handle)
     {
         throw std::runtime_error{"Failed to create socket."};
     }
@@ -149,10 +149,10 @@ auto make_accept_socket(const socket::options& opts, const net::ip_address& addr
     // bindings with a single flag.
 #if defined(__linux__)
     int  sock_opt_name = SO_REUSEADDR | SO_REUSEPORT;
-    int& sock_opt_ptr  = &sock_opt;
+    int* sock_opt_ptr  = &sock_opt;
 #elif defined(__FreeBSD__) || defined(__APPLE__) || defined(__OpenBSD__) || defined(__NetBSD__)
     int  sock_opt_name = SO_REUSEPORT;
-    int& sock_opt_ptr  = &sock_opt;
+    int* sock_opt_ptr  = &sock_opt;
 #elif defined(_WIN32) || defined(_WIN64)
     int  sock_opt_name = SO_REUSEADDR;
     const char *sock_opt_ptr  = reinterpret_cast<const char*>(&sock_opt);

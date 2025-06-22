@@ -21,8 +21,8 @@ class socket
 {
 public:
 #if defined(CORO_PLATFORM_UNIX)
-    using native_handle = int;
-    constexpr static native_handle invalid_handle = -1;
+    using native_handle_t = int;
+    constexpr static native_handle_t invalid_handle = -1;
 #elif defined(CORO_PLATFORM_WINDOWS)
     using native_handle_t                           = unsigned int;
     constexpr static native_handle_t invalid_handle = ~0u;
