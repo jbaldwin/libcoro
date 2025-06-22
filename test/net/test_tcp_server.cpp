@@ -27,20 +27,15 @@ TEST_CASE("tcp_server ping server", "[tcp_server]")
 
         // Skip polling for write, should really only poll if the write is partial, shouldn't be
         // required for this test.
-        std::cerr << "client send()\n";
-        auto [sstatus, remaining] = client.send(client_msg);
-        REQUIRE(sstatus == coro::net::send_status::ok);
+        std::cerr << "client write()\n";
+        auto [sstatus, remaining] = co_await client.write(client_msg);
+        REQUIRE(sstatus == coro::net::write_status::ok);
         REQUIRE(remaining.empty());
 
-        // Poll for the server's response.
-        std::cerr << "client poll(read)\n";
-        auto pstatus = co_await client.poll(coro::poll_op::read);
-        REQUIRE(pstatus == coro::poll_status::event);
-
         std::string buffer(256, '\0');
-        std::cerr << "client recv()\n";
-        auto [rstatus, rspan] = client.recv(buffer);
-        REQUIRE(rstatus == coro::net::recv_status::ok);
+        std::cerr << "client read()\n";
+        auto [rstatus, rspan] = co_await client.read(buffer);
+        REQUIRE(rstatus == coro::net::read_status::ok);
         REQUIRE(rspan.size() == server_msg.length());
         buffer.resize(rspan.size());
         REQUIRE(buffer == server_msg);
@@ -64,23 +59,18 @@ TEST_CASE("tcp_server ping server", "[tcp_server]")
         auto client = server.accept();
         REQUIRE(client.socket().is_valid());
 
-        // Poll for client request.
-        std::cerr << "server poll(read)\n";
-        pstatus = co_await client.poll(coro::poll_op::read);
-        REQUIRE(pstatus == coro::poll_status::event);
-
         std::string buffer(256, '\0');
-        std::cerr << "server recv()\n";
-        auto [rstatus, rspan] = client.recv(buffer);
-        REQUIRE(rstatus == coro::net::recv_status::ok);
+        std::cerr << "server read()\n";
+        auto [rstatus, rspan] = co_await client.read(buffer);
+        REQUIRE(rstatus == coro::net::read_status::ok);
         REQUIRE(rspan.size() == client_msg.size());
         buffer.resize(rspan.size());
         REQUIRE(buffer == client_msg);
 
         // Respond to client.
         std::cerr << "server send()\n";
-        auto [sstatus, remaining] = client.send(server_msg);
-        REQUIRE(sstatus == coro::net::send_status::ok);
+        auto [sstatus, remaining] = co_await client.write(server_msg);
+        REQUIRE(sstatus == coro::net::write_status::ok);
         REQUIRE(remaining.empty());
 
         std::cerr << "server return\n";

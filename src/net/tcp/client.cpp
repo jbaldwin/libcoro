@@ -129,4 +129,11 @@ auto client::connect(std::chrono::milliseconds timeout) -> coro::task<connect_st
     co_return return_value(connect_status::error);
 }
 
+#if defined(CORO_PLATFORM_UNIX)
+auto client::poll(coro::poll_op op, std::chrono::milliseconds timeout) -> coro::task<poll_status>
+{
+    return m_io_scheduler->poll(m_socket, op, timeout);
+}
+#endif
+
 } // namespace coro::net::tcp

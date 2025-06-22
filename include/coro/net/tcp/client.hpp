@@ -4,9 +4,11 @@
 #include "coro/io_scheduler.hpp"
 #include "coro/net/connect.hpp"
 #include "coro/net/ip_address.hpp"
+#include "coro/net/read_status.hpp"
 #include "coro/net/recv_status.hpp"
 #include "coro/net/send_status.hpp"
 #include "coro/net/socket.hpp"
+#include "coro/net/write_status.hpp"
 #include "coro/platform.hpp"
 #include "coro/poll.hpp"
 #include "coro/task.hpp"
@@ -76,10 +78,7 @@ public:
      *         event operation is ready.
      */
     auto poll(coro::poll_op op, std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
-        -> coro::task<poll_status>
-    {
-        return m_io_scheduler->poll(m_socket, op, timeout);
-    }
+        -> coro::task<poll_status>;
 
     /**
      * Receives incoming data into the given buffer.  By default since all tcp client sockets are set
@@ -90,31 +89,7 @@ public:
      *         bytes will be a subspan or full span of the given input buffer.
      */
     template<concepts::mutable_buffer buffer_type>
-    auto recv(buffer_type&& buffer) -> std::pair<recv_status, std::span<char>>
-    {
-        // If the user requested zero bytes, just return.
-        if (buffer.empty())
-        {
-            return {recv_status::ok, std::span<char>{}};
-        }
-
-        auto bytes_recv = ::recv(m_socket.native_handle(), buffer.data(), buffer.size(), 0);
-        if (bytes_recv > 0)
-        {
-            // Ok, we've recieved some data.
-            return {recv_status::ok, std::span<char>{buffer.data(), static_cast<size_t>(bytes_recv)}};
-        }
-        else if (bytes_recv == 0)
-        {
-            // On TCP stream sockets 0 indicates the connection has been closed by the peer.
-            return {recv_status::closed, std::span<char>{}};
-        }
-        else
-        {
-            // Report the error to the user.
-            return {static_cast<recv_status>(errno), std::span<char>{}};
-        }
-    }
+    auto recv(buffer_type&& buffer) -> std::pair<recv_status, std::span<char>>;
 
     /**
      * Sends outgoing data from the given buffer.  If a partial write occurs then use co_await poll()
@@ -127,26 +102,7 @@ public:
      *         were successfully sent the status will be 'ok' and the remaining span will be empty.
      */
     template<concepts::const_buffer buffer_type>
-    auto send(const buffer_type& buffer) -> std::pair<send_status, std::span<const char>>
-    {
-        // If the user requested zero bytes, just return.
-        if (buffer.empty())
-        {
-            return {send_status::ok, std::span<const char>{buffer.data(), buffer.size()}};
-        }
-
-        auto bytes_sent = ::send(m_socket.native_handle(), buffer.data(), buffer.size(), 0);
-        if (bytes_sent >= 0)
-        {
-            // Some or all of the bytes were written.
-            return {send_status::ok, std::span<const char>{buffer.data() + bytes_sent, buffer.size() - bytes_sent}};
-        }
-        else
-        {
-            // Due to the error none of the bytes were written.
-            return {static_cast<send_status>(errno), std::span<const char>{buffer.data(), buffer.size()}};
-        }
-    }
+    auto send(const buffer_type& buffer) -> std::pair<send_status, std::span<const char>>;
 #endif
 
     /**
@@ -161,7 +117,7 @@ public:
      */
     template<concepts::const_buffer buffer_type>
     auto write(const buffer_type& buffer, std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
-        -> task<std::pair<send_status, std::span<const char>>>;
+        -> task<std::pair<write_status, std::span<const char>>>;
 
     /**
      * Attempts to receive data from the connected peer into the provided buffer.
@@ -174,7 +130,7 @@ public:
      */
     template<concepts::mutable_buffer buffer_type>
     auto read(buffer_type&& buffer, std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
-        -> std::pair<recv_status, std::span<char>>;
+        -> task<std::pair<read_status, std::span<char>>>;
 
 private:
     /// The tcp::server creates already connected clients and provides a tcp socket pre-built.
@@ -192,43 +148,110 @@ private:
 };
 
 #if defined(CORO_PLATFORM_UNIX)
+template<concepts::mutable_buffer buffer_type>
+auto client::recv(buffer_type&& buffer) -> std::pair<recv_status, std::span<char>>
+{
+    // If the user requested zero bytes, just return.
+    if (buffer.empty())
+    {
+        return {recv_status::ok, std::span<char>{}};
+    }
+
+    auto bytes_recv = ::recv(m_socket.native_handle(), buffer.data(), buffer.size(), 0);
+    if (bytes_recv > 0)
+    {
+        // Ok, we've recieved some data.
+        return {recv_status::ok, std::span<char>{buffer.data(), static_cast<size_t>(bytes_recv)}};
+    }
+    else if (bytes_recv == 0)
+    {
+        // On TCP stream sockets 0 indicates the connection has been closed by the peer.
+        return {recv_status::closed, std::span<char>{}};
+    }
+    else
+    {
+        // Report the error to the user.
+        return {static_cast<recv_status>(errno), std::span<char>{}};
+    }
+}
+
+template<concepts::const_buffer buffer_type>
+auto client::send(const buffer_type& buffer) -> std::pair<send_status, std::span<const char>>
+{
+    // If the user requested zero bytes, just return.
+    if (buffer.empty())
+    {
+        return {send_status::ok, std::span<const char>{buffer.data(), buffer.size()}};
+    }
+
+    auto bytes_sent = ::send(m_socket.native_handle(), buffer.data(), buffer.size(), 0);
+    if (bytes_sent >= 0)
+    {
+        // Some or all of the bytes were written.
+        return {send_status::ok, std::span<const char>{buffer.data() + bytes_sent, buffer.size() - bytes_sent}};
+    }
+    else
+    {
+        // Due to the error none of the bytes were written.
+        return {static_cast<send_status>(errno), std::span<const char>{buffer.data(), buffer.size()}};
+    }
+}
+
 template<concepts::const_buffer buffer_type>
 auto client::write(const buffer_type& buffer, std::chrono::milliseconds timeout)
-    -> task<std::pair<send_status, std::span<const char>>>
+    -> task<std::pair<write_status, std::span<const char>>>
 {
     if (auto status = co_await poll(poll_op::write, timeout); status != poll_status::event)
     {
         switch (status)
         {
             case poll_status::closed:
-                co_return {send_status::closed, std::span<const char>{buffer.data(), buffer.size()}};
+                co_return {write_status::closed, std::span<const char>{buffer.data(), buffer.size()}};
             case poll_status::error:
-                co_return {static_cast<send_status>(errno), std::span<const char>{buffer.data(), buffer.size()}};
+                co_return {write_status::error, std::span<const char>{buffer.data(), buffer.size()}};
             case poll_status::timeout:
-                // TODO
-                break;
+                co_return {write_status::timeout, std::span<const char>{buffer.data(), buffer.size()}};
+            default:
+                throw std::runtime_error("Unknown poll_status value.");
         }
     }
-    co_return send(buffer);
+    switch (auto &&[status, span] = send(std::forward<const buffer_type>(buffer)); status)
+    {
+        case send_status::ok:
+            co_return {write_status::ok, span};
+        case send_status::closed:
+            co_return {write_status::closed, span};
+        default:
+            co_return {write_status::error, span};
+    }
 }
 
 template<concepts::mutable_buffer buffer_type>
-auto client::read(buffer_type&& buffer, std::chrono::milliseconds timeout) -> std::pair<recv_status, std::span<char>>
+auto client::read(buffer_type&& buffer, std::chrono::milliseconds timeout) -> task<std::pair<read_status, std::span<char>>>
 {
     if (auto status = co_await poll(poll_op::read, timeout); status != poll_status::event)
     {
         switch (status)
         {
             case poll_status::closed:
-                co_return {recv_status::closed, std::span<const char>{buffer.data(), buffer.size()}};
+                co_return {read_status::closed, std::span<char>{}};
             case poll_status::error:
-                co_return {static_cast<recv_status>(errno), std::span<const char>{buffer.data(), buffer.size()}};
+                co_return {read_status::error, std::span<char>{}};
             case poll_status::timeout:
-                // TODO
-                break;
+                co_return {read_status::timeout, std::span<char>{}};
+            default:
+                throw std::runtime_error("Unknown poll_status value.");
         }
     }
-    co_return recv(std::forward<buffer_type>(buffer));
+    switch (auto&& [status, span] = recv(std::forward<buffer_type>(buffer)); status)
+    {
+        case recv_status::ok:
+            co_return {read_status::ok, span};
+        case recv_status::closed:
+            co_return {read_status::closed, span};
+        default:
+            co_return {read_status::error, span};
+    }
 }
 #elif defined(CORO_PLATFORM_WINDOWS)
 #endif
