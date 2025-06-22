@@ -25,7 +25,7 @@ public:
     constexpr static native_handle invalid_handle = -1;
 #elif defined(CORO_PLATFORM_WINDOWS)
     using native_handle_t                           = unsigned int;
-    constexpr static native_handle_t invalid_handle = ~0u;
+    constexpr static native_handle_t invalid_handle = ~0u; // ~0 = -1, but for unsigned
 #endif
 
     enum class type_t
