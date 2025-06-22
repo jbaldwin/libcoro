@@ -145,16 +145,16 @@ if(LIBCORO_FEATURE_NETWORKING)
 
 
     list(APPEND LIBCORO_SOURCE_FILES
-        #include/coro/net/dns/resolver.hpp src/net/dns/resolver.cpp
-        #include/coro/net/connect.hpp src/net/connect.cpp
-        #include/coro/net/hostname.hpp
-        #include/coro/net/ip_address.hpp src/net/ip_address.cpp
+        include/coro/net/dns/resolver.hpp src/net/dns/resolver.cpp
+        include/coro/net/connect.hpp src/net/connect.cpp
+        include/coro/net/hostname.hpp
+        include/coro/net/ip_address.hpp src/net/ip_address.cpp
         include/coro/net/recv_status.hpp src/net/recv_status.cpp
         include/coro/net/send_status.hpp src/net/send_status.cpp
         include/coro/net/socket.hpp src/net/socket.cpp
-        #include/coro/net/tcp/client.hpp src/net/tcp/client.cpp
-        #include/coro/net/tcp/server.hpp src/net/tcp/server.cpp
-        #include/coro/net/udp/peer.hpp src/net/udp/peer.cpp
+        include/coro/net/tcp/client.hpp src/net/tcp/client.cpp
+        include/coro/net/tcp/server.hpp src/net/tcp/server.cpp
+        include/coro/net/udp/peer.hpp src/net/udp/peer.cpp
     )
 
     if(LIBCORO_FEATURE_TLS)
