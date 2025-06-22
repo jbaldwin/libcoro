@@ -7,8 +7,9 @@ using namespace std::chrono_literals;
 client::client(std::shared_ptr<io_scheduler> scheduler, options opts)
     : m_io_scheduler(std::move(scheduler)),
       m_options(std::move(opts)),
-      m_socket(net::make_socket(
-          net::socket::options{m_options.address.domain(), net::socket::type_t::tcp, net::socket::blocking_t::no}))
+      m_socket(
+          net::make_socket(
+              net::socket::options{m_options.address.domain(), net::socket::type_t::tcp, net::socket::blocking_t::no}))
 {
     if (m_io_scheduler == nullptr)
     {
@@ -93,6 +94,7 @@ auto client::connect(std::chrono::milliseconds timeout) -> coro::task<connect_st
     server.sin_port   = htons(m_options.port);
     server.sin_addr   = *reinterpret_cast<const in_addr*>(m_options.address.data().data());
 
+#if defined(CORO_PLATFORM_UNIX)
     auto cret = ::connect(m_socket.native_handle(), reinterpret_cast<struct sockaddr*>(&server), sizeof(server));
     if (cret == 0)
     {
@@ -127,6 +129,9 @@ auto client::connect(std::chrono::milliseconds timeout) -> coro::task<connect_st
     }
 
     co_return return_value(connect_status::error);
+#elif defined(CORO_PLATFORM_WINDOWS)
+
+#endif
 }
 
 #if defined(CORO_PLATFORM_UNIX)
