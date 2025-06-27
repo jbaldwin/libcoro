@@ -29,6 +29,7 @@
     #include "coro/net/udp/peer.hpp"
 #endif
 
+#include "coro/async_thread_pool.hpp"
 #include "coro/condition_variable.hpp"
 #include "coro/default_executor.hpp"
 #include "coro/event.hpp"

@@ -92,6 +92,7 @@ set(LIBCORO_SOURCE_FILES
     include/coro/detail/task_self_deleting.hpp src/detail/task_self_deleting.cpp
     include/coro/detail/void_value.hpp
 
+    include/coro/async_thread_pool.hpp src/async_thread_pool.cpp
     include/coro/attribute.hpp
     include/coro/condition_variable.hpp src/condition_variable.cpp
     include/coro/coro.hpp
