@@ -20,9 +20,9 @@ namespace coro::concepts
 template<typename executor_type>
 concept executor = requires(executor_type e, std::coroutine_handle<> c)
 {
-    { e.schedule() } -> coro::concepts::awaiter;
+    { e.schedule() } -> coro::concepts::awaitable_void;
     { e.spawn(std::declval<coro::task<void>>()) } -> std::same_as<bool>;
-    { e.yield() } -> coro::concepts::awaiter;
+    { e.yield() } -> coro::concepts::awaitable_void;
     { e.resume(c) } -> std::same_as<bool>;
     { e.size() } -> std::same_as<std::size_t>;
     { e.empty() } -> std::same_as<bool>;
