@@ -20,7 +20,5 @@ private:
     mutable void*                  m_iocp{};
     mutable void*                  m_data{};
     std::unique_ptr<Event> m_event;
-
-    static constexpr const int signal_key = 1;
 };
 } // namespace coro::detail

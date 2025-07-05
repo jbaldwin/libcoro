@@ -322,6 +322,7 @@ public:
      */
     [[nodiscard]] auto yield_until(time_point time) -> coro::task<void>;
 
+#if defined(CORO_PLATFORM_UNIX)
     /**
      * Polls the given file descriptor for the given operations.
      * @param fd The file descriptor to poll for events.
@@ -333,7 +334,7 @@ public:
     [[nodiscard]] auto poll(fd_t fd, coro::poll_op op, std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
         -> coro::task<poll_status>;
 
-#ifdef LIBCORO_FEATURE_NETWORKING
+    #ifdef LIBCORO_FEATURE_NETWORKING
     /**
      * Polls the given coro::net::socket for the given operations.
      * @param sock The socket to poll for events on.
@@ -348,6 +349,10 @@ public:
     {
         return poll(sock.native_handle(), op, timeout);
     }
+    #endif
+#elif defined(CORO_PLATFORM_WINDOWS) && defined(LIBCORO_FEATURE_NETWORKING)
+    auto poll(detail::poll_info& pi, std::chrono::milliseconds timeout) -> coro::task<poll_status>;
+    auto bind_socket(const net::socket& sock) -> void;
 #endif
 
     /**

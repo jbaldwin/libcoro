@@ -102,6 +102,8 @@ auto io_scheduler::yield_until(time_point time) -> coro::task<void>
     co_return;
 }
 
+#if defined(CORO_PLATFORM_UNIX)
+
 auto io_scheduler::poll(fd_t fd, coro::poll_op op, std::chrono::milliseconds timeout) -> coro::task<poll_status>
 {
     // Because the size will drop when this coroutine suspends every poll needs to undo the subtraction
@@ -133,6 +135,35 @@ auto io_scheduler::poll(fd_t fd, coro::poll_op op, std::chrono::milliseconds tim
     m_size.fetch_sub(1, std::memory_order::release);
     co_return result;
 }
+
+#elif defined(CORO_PLATFORM_WINDOWS) && defined(LIBCORO_FEATURE_NETWORKING)
+auto io_scheduler::poll(detail::poll_info& pi, std::chrono::milliseconds timeout) -> coro::task<poll_status>
+{
+    m_size.fetch_add(1, std::memory_order::release);
+    bool timeout_requested = (timeout > 0ms);
+    
+    if (timeout_requested) 
+    {
+        pi.m_timer_pos = add_timer_token(clock::now() + timeout, pi);
+    }
+
+    auto result = co_await pi;
+
+    m_size.fetch_sub(1, std::memory_order::release);
+    co_return result;
+}
+auto io_scheduler::bind_socket(const net::socket& sock) -> void
+{
+    std::size_t concurrent_threads = m_thread_pool ? m_thread_pool->size() : 0;
+    HANDLE handle = CreateIoCompletionPort(
+        reinterpret_cast<HANDLE>(sock.native_handle()),
+        m_io_notifier.iocp(),
+        static_cast<ULONG_PTR>(io_notifier::completion_key::socket),
+        concurrent_threads
+    );
+    // TODO: check handle
+}
+#endif
 
 auto io_scheduler::shutdown() noexcept -> void
 {

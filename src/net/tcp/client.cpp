@@ -1,4 +1,6 @@
 #include "coro/net/tcp/client.hpp"
+#include <MSWSock.h>
+#include <coro/detail/iocp_overlapped.hpp>
 
 namespace coro::net::tcp
 {
@@ -15,6 +17,11 @@ client::client(std::shared_ptr<io_scheduler> scheduler, options opts)
     {
         throw std::runtime_error{"tcp::client cannot have nullptr io_scheduler"};
     }
+
+#if defined(CORO_PLATFORM_WINDOWS)
+    // Bind socket to IOCP
+    m_io_scheduler->bind_socket(m_socket);
+#endif
 }
 
 client::client(std::shared_ptr<io_scheduler> scheduler, net::socket socket, options opts)
@@ -29,14 +36,6 @@ client::client(std::shared_ptr<io_scheduler> scheduler, net::socket socket, opti
     m_socket.blocking(coro::net::socket::blocking_t::no);
 }
 
-client::client(const client& other)
-    : m_io_scheduler(other.m_io_scheduler),
-      m_options(other.m_options),
-      m_socket(other.m_socket),
-      m_connect_status(other.m_connect_status)
-{
-}
-
 client::client(client&& other) noexcept
     : m_io_scheduler(std::move(other.m_io_scheduler)),
       m_options(std::move(other.m_options)),
@@ -46,6 +45,28 @@ client::client(client&& other) noexcept
 }
 
 client::~client()
+{
+}
+
+auto client::operator=(client&& other) noexcept -> client&
+{
+    if (std::addressof(other) != this)
+    {
+        m_io_scheduler   = std::move(other.m_io_scheduler);
+        m_options        = std::move(other.m_options);
+        m_socket         = std::move(other.m_socket);
+        m_connect_status = std::exchange(other.m_connect_status, std::nullopt);
+    }
+    return *this;
+}
+
+
+#if defined(CORO_PLATFORM_UNIX)
+client::client(const client& other)
+    : m_io_scheduler(other.m_io_scheduler),
+      m_options(other.m_options),
+      m_socket(other.m_socket),
+      m_connect_status(other.m_connect_status)
 {
 }
 
@@ -60,18 +81,7 @@ auto client::operator=(const client& other) noexcept -> client&
     }
     return *this;
 }
-
-auto client::operator=(client&& other) noexcept -> client&
-{
-    if (std::addressof(other) != this)
-    {
-        m_io_scheduler   = std::move(other.m_io_scheduler);
-        m_options        = std::move(other.m_options);
-        m_socket         = std::move(other.m_socket);
-        m_connect_status = std::exchange(other.m_connect_status, std::nullopt);
-    }
-    return *this;
-}
+#endif
 
 auto client::connect(std::chrono::milliseconds timeout) -> coro::task<connect_status>
 {
@@ -130,7 +140,57 @@ auto client::connect(std::chrono::milliseconds timeout) -> coro::task<connect_st
 
     co_return return_value(connect_status::error);
 #elif defined(CORO_PLATFORM_WINDOWS)
+    static LPFN_CONNECTEX connect_ex_function;
+    static std::once_flag connect_ex_function_created;
+    std::call_once(connect_ex_function_created, [this] { 
+        DWORD num_bytes{};
+            GUID  guid    = WSAID_CONNECTEX;
+            int   success = ::WSAIoctl(
+                m_socket.native_handle(),
+                SIO_GET_EXTENSION_FUNCTION_POINTER,
+                &guid,
+                sizeof(guid),
+                &connect_ex_function,
+                sizeof(connect_ex_function),
+                &num_bytes,
+                NULL,
+                NULL);
 
+    });
+
+    detail::overlapped_io_operation ovpi{};
+
+    BOOL res = connect_ex_function(
+        m_socket.native_handle(), 
+        reinterpret_cast<sockaddr*>(&server), 
+        sizeof(server), 
+        nullptr, 
+        0, 
+        0,
+        &ovpi.ov
+    );
+
+    if (res) 
+    {
+        setsockopt(m_socket.native_handle(), SOL_SOCKET, SO_UPDATE_CONNECT_CONTEXT, nullptr, 0);
+        co_return return_value(connect_status::connected);
+    }
+
+    if (WSAGetLastError() == WSA_IO_PENDING) 
+    {
+        auto status = co_await m_io_scheduler->poll(ovpi.pi, timeout);
+        if (status == poll_status::event)
+        {
+            co_return return_value(connect_status::connected);
+        }
+        else if (status == poll_status::timeout)
+        {
+            CancelIoEx((HANDLE)m_socket.native_handle(), &ovpi.ov);
+            co_return return_value(connect_status::timeout);
+        }
+    }
+
+    co_return return_value(connect_status::error);
 #endif
 }
 
@@ -138,6 +198,76 @@ auto client::connect(std::chrono::milliseconds timeout) -> coro::task<connect_st
 auto client::poll(coro::poll_op op, std::chrono::milliseconds timeout) -> coro::task<poll_status>
 {
     return m_io_scheduler->poll(m_socket, op, timeout);
+}
+#elif defined(CORO_PLATFORM_WINDOWS)
+
+auto client::write(std::span<const char> buffer, std::chrono::milliseconds timeout)
+    -> task<std::pair<write_status, std::span<const char>>>
+{
+    detail::overlapped_io_operation ov{};
+    WSABUF                       buf;
+    buf.buf     = const_cast<char*>(buffer.data());
+    buf.len     = buffer.size();
+    DWORD flags = 0, bytes_sent = 0;
+
+    int r = WSASend(m_socket.native_handle(), &buf, 1, &bytes_sent, flags, &ov.ov, nullptr);
+    if (r == 0) // Data already sent
+    {
+        if (bytes_sent == 0)
+            co_return {write_status::closed, buffer};
+        co_return {write_status::ok, std::span<const char>{buffer.data() + bytes_sent, buffer.size() - bytes_sent}};
+    }
+    else if (WSAGetLastError() == WSA_IO_PENDING)
+    {
+        auto status = co_await m_io_scheduler->poll(ov.pi, timeout);
+        bytes_sent  = ov.bytes_transferred;
+        if (status == poll_status::event)
+        {
+            co_return {write_status::ok, std::span<const char>{buffer.data() + bytes_sent, buffer.size() - bytes_sent}};
+        }
+        else if (status == poll_status::timeout)
+        {
+            CancelIoEx((HANDLE)m_socket.native_handle(), &ov.ov);
+            co_return {write_status::timeout, buffer};
+        }
+    }
+    
+    
+    co_return {write_status::error, buffer};
+}
+
+auto client::read(std::span<char> buffer, std::chrono::milliseconds timeout)
+    -> task<std::pair<read_status, std::span<char>>>
+{
+    detail::overlapped_io_operation ov{};
+    WSABUF                       buf;
+    buf.buf     = buffer.data();
+    buf.len     = buffer.size();
+    DWORD flags = 0, bytes_recv = 0;
+
+    int r = WSARecv(m_socket.native_handle(), &buf, 1, &bytes_recv, &flags, &ov.ov, nullptr);
+    if (r == 0) // Data already read
+    {
+        if (bytes_recv == 0)
+            co_return {read_status::closed, buffer};
+        co_return {read_status::ok, std::span<char>{buffer.data(), bytes_recv}};
+    }
+    else if (WSAGetLastError() == WSA_IO_PENDING)
+    {
+        auto status = co_await m_io_scheduler->poll(ov.pi, timeout);
+        bytes_recv  = ov.bytes_transferred;
+        if (status == poll_status::event)
+        {
+            co_return {read_status::ok, std::span<char>{buffer.data(), bytes_recv}};
+        }
+        else if (status == poll_status::timeout)
+        {
+            CancelIoEx((HANDLE)m_socket.native_handle(), &ov.ov);
+            co_return {read_status::timeout, std::span<char>{}};
+        }
+    }
+
+    co_return {read_status::error, std::span<char>{}};
 }
 #endif
 

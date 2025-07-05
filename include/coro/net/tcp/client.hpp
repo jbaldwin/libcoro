@@ -45,11 +45,17 @@ public:
                                   .address = {net::ip_address::from_string("127.0.0.1")},
                                   .port    = 8080,
         });
-    client(const client& other);
     client(client&& other) noexcept;
-    auto operator=(const client& other) noexcept -> client&;
     auto operator=(client&& other) noexcept -> client&;
     ~client();
+
+#if defined(CORO_PLATFORM_UNIX)
+    client(const client& other);
+    auto operator=(const client& other) noexcept -> client&;
+#elif defined(CORO_PLATFORM_WINDOWS)
+    client(const client& other) = delete;
+    auto operator=(const client& other) noexcept -> client& = delete;
+#endif
 
     /**
      * @return The tcp socket this client is using.
@@ -103,6 +109,7 @@ public:
      */
     template<concepts::const_buffer buffer_type>
     auto send(const buffer_type& buffer) -> std::pair<send_status, std::span<const char>>;
+
 #endif
 
     /**
@@ -115,8 +122,7 @@ public:
      * @param timeout Maximum time to wait for the operation to complete. Zero means no timeout.
      * @return A pair containing the status and a span of any unsent data. If successful, the span will be empty.
      */
-    template<concepts::const_buffer buffer_type>
-    auto write(const buffer_type& buffer, std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
+    auto write(std::span<const char> buffer, std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
         -> task<std::pair<write_status, std::span<const char>>>;
 
     /**
@@ -128,8 +134,7 @@ public:
      * @param timeout Maximum time to wait for the operation to complete. Zero means no timeout.
      * @return A pair containing the status and a span of received bytes. The span may be empty.
      */
-    template<concepts::mutable_buffer buffer_type>
-    auto read(buffer_type&& buffer, std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
+    auto read(std::span<char> buffer, std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
         -> task<std::pair<read_status, std::span<char>>>;
 
 private:
@@ -148,7 +153,6 @@ private:
 };
 
 #if defined(CORO_PLATFORM_UNIX)
-template<concepts::mutable_buffer buffer_type>
 auto client::recv(buffer_type&& buffer) -> std::pair<recv_status, std::span<char>>
 {
     // If the user requested zero bytes, just return.
@@ -197,8 +201,7 @@ auto client::send(const buffer_type& buffer) -> std::pair<send_status, std::span
     }
 }
 
-template<concepts::const_buffer buffer_type>
-auto client::write(const buffer_type& buffer, std::chrono::milliseconds timeout)
+auto client::write(std::span<const char> buffer, std::chrono::milliseconds timeout)
     -> task<std::pair<write_status, std::span<const char>>>
 {
     if (auto status = co_await poll(poll_op::write, timeout); status != poll_status::event)
@@ -226,8 +229,7 @@ auto client::write(const buffer_type& buffer, std::chrono::milliseconds timeout)
     }
 }
 
-template<concepts::mutable_buffer buffer_type>
-auto client::read(buffer_type&& buffer, std::chrono::milliseconds timeout) -> task<std::pair<read_status, std::span<char>>>
+auto client::read(std::span<char> buffer, std::chrono::milliseconds timeout) -> task<std::pair<read_status, std::span<char>>>
 {
     if (auto status = co_await poll(poll_op::read, timeout); status != poll_status::event)
     {
@@ -253,7 +255,6 @@ auto client::read(buffer_type&& buffer, std::chrono::milliseconds timeout) -> ta
             co_return {read_status::error, span};
     }
 }
-#elif defined(CORO_PLATFORM_WINDOWS)
 #endif
 
 } // namespace coro::net::tcp
