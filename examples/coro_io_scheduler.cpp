@@ -34,7 +34,7 @@ int main()
         // how to specify the local address and port to bind to as well as enabling SSL/TLS.
         coro::net::tcp::server server{scheduler};
 
-        // Now scheduler this task onto the scheduler.
+        // Now schedule this task onto the scheduler.
         co_await scheduler->schedule();
 
         // Wait for an incoming connection and accept it.
