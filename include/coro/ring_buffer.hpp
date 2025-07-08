@@ -1,12 +1,16 @@
 #pragma once
 
+#include "coro/detail/awaiter_list.hpp"
+#include "coro/concepts/executor.hpp"
 #include "coro/expected.hpp"
 #include "coro/mutex.hpp"
 #include "coro/task.hpp"
+#include "coro/sync_wait.hpp"
 
 #include <array>
 #include <atomic>
 #include <coroutine>
+#include <memory>
 #include <mutex>
 #include <optional>
 
