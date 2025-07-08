@@ -17,13 +17,12 @@
     #include "coro/net/socket.hpp"
 #endif
 
-#include "signal.hpp"
+#include "coro/signal.hpp"
 
 #include <chrono>
 #include <functional>
 #include <map>
 #include <memory>
-#include <optional>
 #include <stop_token>
 #include <thread>
 #include <vector>

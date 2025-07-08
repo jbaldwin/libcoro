@@ -2,25 +2,20 @@
 
 #include <algorithm>
 #include <array>
-#include <cstring>
 #include <span>
 #include <stdexcept>
 #include <string>
-#include "coro/platform.hpp"
-
-#if defined(CORO_PLATFORM_UNIX)
-    #include <arpa/inet.h>
-#elif defined(CORO_PLATFORM_WINDOWS)
-    #include <ws2ipdef.h>
-#endif
 
 namespace coro::net
 {
+// TODO: convert to OS AF_INET, AF_INET6
 enum class domain_t : int
 {
-    ipv4 = AF_INET,
-    ipv6 = AF_INET6
+    ipv4,
+    ipv6
 };
+
+auto domain_to_os(domain_t domain) -> int;
 
 auto to_string(domain_t domain) -> const std::string&;
 
@@ -63,45 +58,9 @@ public:
         }
     }
 
-    static auto from_string(const std::string& address, domain_t domain = domain_t::ipv4) -> ip_address
-    {
-        ip_address addr{};
-        addr.m_domain = domain;
+    static auto from_string(const std::string& address, domain_t domain = domain_t::ipv4) -> ip_address;
 
-        auto success = inet_pton(static_cast<int>(addr.m_domain), address.data(), addr.m_data.data());
-        if (success != 1)
-        {
-            throw std::runtime_error{"coro::net::ip_address faild to convert from string"};
-        }
-
-        return addr;
-    }
-
-    auto to_string() const -> std::string
-    {
-        std::string output;
-        if (m_domain == domain_t::ipv4)
-        {
-            output.resize(INET_ADDRSTRLEN, '\0');
-        }
-        else
-        {
-            output.resize(INET6_ADDRSTRLEN, '\0');
-        }
-
-        auto success = inet_ntop(static_cast<int>(m_domain), m_data.data(), output.data(), output.length());
-        if (success != nullptr)
-        {
-            auto len = strnlen(success, output.length());
-            output.resize(len);
-        }
-        else
-        {
-            throw std::runtime_error{"coro::net::ip_address failed to convert to string representation"};
-        }
-
-        return output;
-    }
+    auto to_string() const -> std::string;
 
     auto operator<=>(const ip_address& other) const = default;
 

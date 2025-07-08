@@ -1,8 +1,8 @@
 #pragma once
 
 #include "coro/net/ip_address.hpp"
-#include "coro/poll.hpp"
 #include "coro/platform.hpp"
+#include "coro/poll.hpp"
 
 #include <fcntl.h>
 #include <span>
@@ -11,6 +11,8 @@
 #if defined(CORO_PLATFORM_UNIX)
     #include <arpa/inet.h>
     #include <unistd.h>
+#elif defined(CORO_PLATFORM_WINDOWS)
+    #include <coro/detail/winsock_handle.hpp>
 #endif
 
 #include <iostream>
@@ -21,11 +23,11 @@ class socket
 {
 public:
 #if defined(CORO_PLATFORM_UNIX)
-    using native_handle_t = int;
+    using native_handle_t                           = int;
     constexpr static native_handle_t invalid_handle = -1;
 #elif defined(CORO_PLATFORM_WINDOWS)
-    using native_handle_t                           = unsigned int;
-    constexpr static native_handle_t invalid_handle = ~0u; // ~0 = -1, but for unsigned
+    using native_handle_t                           = void*;
+    constexpr static native_handle_t invalid_handle = reinterpret_cast<void*>(~0ull); // ~0 = -1, but for unsigned
 #endif
 
     enum class type_t
@@ -57,18 +59,17 @@ public:
     static auto type_to_os(type_t type) -> int;
 
     socket() = default;
-    explicit socket(int fd) : m_fd(fd) {}
+    explicit socket(native_handle_t fd) : m_fd(fd) {}
 
-    
 #if defined(CORO_PLATFORM_UNIX)
     socket(const socket& other) : m_fd(dup(other.m_fd)) {}
     auto operator=(const socket& other) noexcept -> socket&;
 #elif defined(CORO_PLATFORM_WINDOWS)
-    socket(const socket& other) = delete;
+    socket(const socket& other)                  = delete;
     auto operator=(const socket& other) noexcept = delete;
 #endif
 
-    socket(socket&& other) : m_fd(std::exchange(other.m_fd, -1)) {}
+    socket(socket&& other) noexcept : m_fd(std::exchange(other.m_fd, invalid_handle)) {}
     auto operator=(socket&& other) noexcept -> socket&;
 
     ~socket() { close(); }
@@ -78,7 +79,7 @@ public:
      * not imply if the socket is still usable.
      * @return True if the socket file descriptor is > 0.
      */
-    auto is_valid() const -> bool { return m_fd != -1; }
+    auto is_valid() const -> bool { return m_fd != invalid_handle; }
 
     /**
      * @param block Sets the socket to the given blocking mode.
@@ -103,6 +104,9 @@ public:
 
 private:
     native_handle_t m_fd{invalid_handle};
+#if defined(CORO_PLATFORM_WINDOWS)
+    std::shared_ptr<detail::winsock_handle> m_winsock = detail::initialise_winsock();
+#endif
 };
 
 /**

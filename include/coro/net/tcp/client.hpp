@@ -147,7 +147,7 @@ private:
     /// Options for what server to connect to.
     options m_options{};
     /// The tcp socket.
-    net::socket m_socket{-1};
+    net::socket m_socket{};
     /// Cache the status of the connect in the event the user calls connect() again.
     std::optional<net::connect_status> m_connect_status{std::nullopt};
 };

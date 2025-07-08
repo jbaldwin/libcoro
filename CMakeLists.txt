@@ -141,6 +141,7 @@ if(LIBCORO_FEATURE_NETWORKING)
         list(APPEND LIBCORO_SOURCE_FILES
             include/coro/detail/io_notifier_iocp.hpp src/detail/io_notifier_iocp.cpp
             include/coro/detail/signal_win32.hpp src/detail/signal_win32.cpp
+            include/coro/detail/winsock_handle.hpp src/detail/winsock_handle.cpp
         )
     endif()
 
@@ -157,7 +158,7 @@ if(LIBCORO_FEATURE_NETWORKING)
         include/coro/net/socket.hpp src/net/socket.cpp
         include/coro/net/tcp/client.hpp src/net/tcp/client.cpp
         include/coro/net/tcp/server.hpp src/net/tcp/server.cpp
-        include/coro/net/udp/peer.hpp src/net/udp/peer.cpp
+       # include/coro/net/udp/peer.hpp src/net/udp/peer.cpp
     )
 
     if(LIBCORO_FEATURE_TLS)

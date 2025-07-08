@@ -10,19 +10,13 @@ auto main() -> int
 
             while (true)
             {
-                // Wait for data to be available to read.
-                co_await client.poll(coro::poll_op::read);
-                auto [rstatus, rspan] = client.recv(buf);
+                auto [rstatus, rspan] = co_await client.read(buf);
                 switch (rstatus)
                 {
-                    case coro::net::recv_status::ok:
-                        // Make sure the client socket can be written to.
-                        co_await client.poll(coro::poll_op::write);
-                        client.send(std::span<const char>{rspan});
+                    case coro::net::read_status::ok:
+                        co_await client.write(rspan);
                         break;
-                    case coro::net::recv_status::would_block:
-                        break;
-                    case coro::net::recv_status::closed:
+                    case coro::net::read_status::closed:
                     default:
                         co_return;
                 }
@@ -34,24 +28,14 @@ auto main() -> int
 
         while (true)
         {
-            // Wait for a new connection.
-            auto pstatus = co_await server.poll();
-            switch (pstatus)
+            auto client = co_await server.accept_client();
+            if (client && client->socket().is_valid())
             {
-                case coro::poll_status::event:
-                {
-                    auto client = server.accept();
-                    if (client.socket().is_valid())
-                    {
-                        scheduler->spawn(make_on_connection_task(std::move(client)));
-                    } // else report error or something if the socket was invalid or could not be accepted.
-                }
-                break;
-                case coro::poll_status::error:
-                case coro::poll_status::closed:
-                case coro::poll_status::timeout:
-                default:
-                    co_return;
+                scheduler->spawn(make_on_connection_task(std::move(*client)));
+            }
+            else
+            {
+                co_return;
             }
         }
 

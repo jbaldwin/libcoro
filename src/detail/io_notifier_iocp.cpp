@@ -1,21 +1,14 @@
 #include "coro/detail/io_notifier_iocp.hpp"
-#include <Windows.h>
-#include <iostream>
 #include "coro/detail/signal_win32.hpp"
 #include "coro/detail/timer_handle.hpp"
+#include <Windows.h>
 #include <coro/detail/iocp_overlapped.hpp>
 
 namespace coro::detail
 {
-struct signal_win32::Event
-{
-    void*      data;
-    bool       is_set;
-};
-
 io_notifier_iocp::io_notifier_iocp()
 {
-    std::size_t concurrent_threads = 0; // TODO
+    DWORD concurrent_threads = 0; // TODO
 
     m_iocp = CreateIoCompletionPort(INVALID_HANDLE_VALUE, NULL, 0, concurrent_threads);
 }
@@ -28,17 +21,22 @@ io_notifier_iocp::~io_notifier_iocp()
 static VOID CALLBACK onTimerFired(LPVOID timerPtr, DWORD, DWORD)
 {
     auto* handle = static_cast<detail::timer_handle*>(timerPtr);
-    
+
     // Completion key 3 means timer
-    PostQueuedCompletionStatus(handle->get_iocp(), 0, 3, static_cast<LPOVERLAPPED>(const_cast<void*>(handle->get_inner())));
+    PostQueuedCompletionStatus(
+        handle->get_iocp(),
+        0,
+        static_cast<int>(io_notifier::completion_key::timer),
+        static_cast<LPOVERLAPPED>(const_cast<void*>(handle->get_inner())));
 }
 
 auto io_notifier_iocp::watch_timer(const detail::timer_handle& timer, std::chrono::nanoseconds duration) -> bool
 {
-    if (timer.m_iocp == nullptr) {
+    if (timer.m_iocp == nullptr)
+    {
         timer.m_iocp = m_iocp;
     }
-    else if (timer.m_iocp != m_iocp) 
+    else if (timer.m_iocp != m_iocp)
     {
         throw std::runtime_error("Timer is already associated with a different IOCP handle. Cannot reassign.");
     }
@@ -72,111 +70,140 @@ auto io_notifier_iocp::watch(const coro::signal& signal, void* data) -> bool
 }
 
 auto io_notifier_iocp::next_events(
-    std::vector<std::pair<detail::poll_info*, coro::poll_status>>& ready_events, 
-    const std::chrono::milliseconds timeout
-) -> void
+    std::vector<std::pair<detail::poll_info*, coro::poll_status>>& ready_events,
+    const std::chrono::milliseconds                                timeout,
+    const size_t                                                  max_events) -> void
 {
-    DWORD        bytes_transferred = 0;
-    completion_key completion_key;
-    LPOVERLAPPED overlapped       = nullptr;
-    DWORD        timeoutMs        = (timeout.count() == -1) ? INFINITE : static_cast<DWORD>(timeout.count());
+    using namespace std::chrono;
 
+    // Лямбда разбора одного события
+    auto handle = [&](DWORD bytes, completion_key key, LPOVERLAPPED ov) {
+        switch (key) {
+            case completion_key::signal_set:
+            case completion_key::signal_unset:
+                if (ov) set_signal_active(reinterpret_cast<void*>(ov),
+                                          key == completion_key::signal_set);
+                break;
+            case completion_key::socket:
+                if (ov) {
+                    auto* info = reinterpret_cast<overlapped_io_operation*>(ov);
+                    info->bytes_transferred = bytes;
+                    coro::poll_status st = (bytes == 0 && !info->is_accept)
+                        ? coro::poll_status::closed
+                        : coro::poll_status::event;
+                    ready_events.emplace_back(&info->pi, st);
+                }
+                break;
+            case completion_key::timer:
+                if (ov)
+                    ready_events.emplace_back(
+                        reinterpret_cast<detail::poll_info*>(ov),
+                        coro::poll_status::event);
+                break;
+            default:
+                throw std::runtime_error("Unknown completion key");
+        }
+    };
+
+    // Сначала сигналы
     process_active_signals(ready_events);
 
-    while (true)
-    {
-        BOOL success = GetQueuedCompletionStatus(
-            m_iocp, &bytes_transferred, reinterpret_cast<PULONG_PTR>(std::addressof(completion_key)), &overlapped, timeoutMs);
+    // --- 1) Обработка с тайм‑аутом >= 0
+    if (timeout.count() >= 0) {
+        milliseconds remaining = timeout;
+        while (remaining.count() > 0 && ready_events.size() < max_events) {
+            // Засекаем время
+            auto t0 = steady_clock::now();
+            DWORD bytes = 0;
+            completion_key key{};
+            LPOVERLAPPED ov = nullptr;
 
-        if (!success && overlapped == nullptr)
-        {
-            // Timeout or critical error
-            return;
-        }
+            BOOL ok = GetQueuedCompletionStatus(
+                m_iocp, &bytes,
+                reinterpret_cast<PULONG_PTR>(&key),
+                &ov,
+                static_cast<DWORD>(remaining.count())
+            );
+            auto t1 = steady_clock::now();
 
-        switch (completion_key)
-        {
-            case completion_key::signal:
-            {
-                if (!overlapped)
-                    continue;
-
-                auto* event = reinterpret_cast<signal_win32::Event*>(overlapped);
-                set_signal_active(event->data, event->is_set);
-                if (event->is_set)
-                {
-                    // poll_status doesn't matter.
-                    ready_events.emplace_back(event->data, coro::poll_status::event);
-                }
-                continue;
-            }
-            case completion_key::socket:
-            {
-                auto* info = reinterpret_cast<overlapped_io_operation*>(overlapped);
-                if (!info)
-                    continue;
-
-                info->bytes_transferred = bytes_transferred;
-                
-                coro::poll_status status;
-
-                if (!success)
-                {
-                    DWORD err = GetLastError();
-                    if (err == ERROR_NETNAME_DELETED || err == ERROR_CONNECTION_ABORTED ||
-                        err == ERROR_OPERATION_ABORTED)
-                        status = coro::poll_status::closed;
-                    else
-                        status = coro::poll_status::error;
-                }
-                else if (bytes_transferred == 0)
-                {
-                    // The connection is closed normally
-                    status = coro::poll_status::closed;
-                }
-                else
-                {
-                    status = coro::poll_status::event;
-                }
-
-                ready_events.emplace_back(&info->pi, status);
-                continue;
-            }
-            case completion_key::timer: // timer
-            {
-                // Remember that it's not real poll_info, it's just a pointer to some random data
-                // io_scheduler must handle it.
-                // poll_status doesn't matter.
-                auto* handle_ptr = reinterpret_cast<detail::poll_info*>(overlapped);
-                ready_events.emplace_back(handle_ptr, coro::poll_status::event);
+            // Тайм‑аут без событий — выходим в drain
+            if (!ok && ov == nullptr) {
                 break;
             }
-            default:
-            {
-                throw std::runtime_error("Received unknown completion key.");
-            }
-        }
 
+            // Обрабатываем найденное событие
+            handle(bytes, key, ov);
+
+            // Вычитаем потраченное время
+            auto took = duration_cast<milliseconds>(t1 - t0);
+            if (took < remaining)
+                remaining -= took;
+            else
+                break;  // время вышло
+        }
+    }
+    // --- 2) Или первый бесконечный wait, если timeout < 0
+    else {
+        DWORD bytes = 0;
+        completion_key key{};
+        LPOVERLAPPED ov = nullptr;
+        BOOL ok = GetQueuedCompletionStatus(
+            m_iocp, &bytes,
+            reinterpret_cast<PULONG_PTR>(&key),
+            &ov,
+            INFINITE
+        );
+        if (ok || ov) {
+            handle(bytes, key, ov);
+        }
+        // Любая ошибка без ov — просто выходим
+        if (!ok && ov == nullptr) {
+            return;
+        }
+    }
+
+    // --- 3) Дренч‑цикл: вычитываем всё доступное без ожидания
+    while (ready_events.size() < max_events) {
+        DWORD bytes = 0;
+        completion_key key{};
+        LPOVERLAPPED ov = nullptr;
+        BOOL ok = GetQueuedCompletionStatus(
+            m_iocp, &bytes,
+            reinterpret_cast<PULONG_PTR>(&key),
+            &ov,
+            0  // non-blocking
+        );
+        if (!ok && ov == nullptr)
+            break;
+        handle(bytes, key, ov);
     }
 }
+
+
+
+
+
 void io_notifier_iocp::set_signal_active(void* data, bool active)
 {
     std::scoped_lock lk{m_active_signals_mutex};
-    if (active) {
+    if (active)
+    {
         m_active_signals.emplace_back(data);
     }
-    else {
-        m_active_signals.erase(std::remove(std::begin(m_active_signals), std::end(m_active_signals), data));
+    else if (auto it = std::find(m_active_signals.begin(), m_active_signals.end(), data); it != m_active_signals.end())
+    {
+        // Fast erase
+        std::swap(m_active_signals.back(), *it);
+        m_active_signals.pop_back();
     }
 }
 void io_notifier_iocp::process_active_signals(
-    std::vector<std::pair<detail::poll_info*, coro::poll_status>>& ready_events
-)
+    std::vector<std::pair<detail::poll_info*, coro::poll_status>>& ready_events)
 {
     for (void* data : m_active_signals)
     {
         // poll_status doesn't matter.
-        ready_events.emplace_back(data, poll_status::event);
+        ready_events.emplace_back(static_cast<poll_info*>(data), poll_status::event);
     }
 }
-}
+} // namespace coro::detail

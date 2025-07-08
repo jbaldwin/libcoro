@@ -10,6 +10,8 @@
 #if defined(CORO_PLATFORM_UNIX)
     #include <sys/socket.h>
     #include <unistd.h>
+#elif defined(CORO_PLATFORM_WINDOWS)
+    #include <Windows.h>
 #endif
 
 using namespace std::chrono_literals;
@@ -141,8 +143,8 @@ auto io_scheduler::poll(detail::poll_info& pi, std::chrono::milliseconds timeout
 {
     m_size.fetch_add(1, std::memory_order::release);
     bool timeout_requested = (timeout > 0ms);
-    
-    if (timeout_requested) 
+
+    if (timeout_requested)
     {
         pi.m_timer_pos = add_timer_token(clock::now() + timeout, pi);
     }
@@ -154,13 +156,13 @@ auto io_scheduler::poll(detail::poll_info& pi, std::chrono::milliseconds timeout
 }
 auto io_scheduler::bind_socket(const net::socket& sock) -> void
 {
-    std::size_t concurrent_threads = m_thread_pool ? m_thread_pool->size() : 0;
+    int concurrent_threads = m_thread_pool ? m_thread_pool->size() : 0;
+
     HANDLE handle = CreateIoCompletionPort(
-        reinterpret_cast<HANDLE>(sock.native_handle()),
+        (HANDLE)(sock.native_handle()),
         m_io_notifier.iocp(),
         static_cast<ULONG_PTR>(io_notifier::completion_key::socket),
-        concurrent_threads
-    );
+        concurrent_threads);
     // TODO: check handle
 }
 #endif
@@ -327,11 +329,13 @@ auto io_scheduler::process_event_execute(detail::poll_info* pi, poll_status stat
         // is ever processed, the other is discarded.
         pi->m_processed = true;
 
+#if defined(CORO_PLATFORM_UNIX)
         // Given a valid fd always remove it from epoll so the next poll can blindly EPOLL_CTL_ADD.
         if (pi->m_fd != -1)
         {
             m_io_notifier.unwatch(*pi);
         }
+#endif
 
         // Since this event triggered, remove its corresponding timeout if it has one.
         if (pi->m_timer_pos.has_value())
@@ -382,11 +386,13 @@ auto io_scheduler::process_timeout_execute() -> void
             // is ever processed, the other is discarded.
             pi->m_processed = true;
 
+#if defined(CORO_PLATFORM_UNIX)
             // Since this timed out, remove its corresponding event if it has one.
             if (pi->m_fd != -1)
             {
                 m_io_notifier.unwatch(*pi);
             }
+#endif
 
             while (pi->m_awaiting_coroutine == nullptr)
             {
@@ -445,7 +451,7 @@ auto io_scheduler::update_timeout(time_point now) -> void
 
         if (!m_io_notifier.watch_timer(m_timer, amount))
         {
-            std::cerr << "Failed to set timerfd errorno=[" << std::string{strerror(errno)} << "].";
+            std::cerr << "Failed to set timer errorno=[" << std::string{strerror(errno)} << "].";
         }
     }
     else

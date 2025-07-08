@@ -1,15 +1,12 @@
 #pragma once
 
-#include <string>
 #include "platform.hpp"
+#include <string>
 #if defined(CORO_PLATFORM_LINUX)
     #include <sys/epoll.h>
 #endif
 #if defined(CORO_PLATFORM_BSD)
     #include <sys/event.h>
-#endif
-#if defined(CORO_PLATFORM_WINDOWS)
-    #include <WinSock2.h>
 #endif
 
 namespace coro
@@ -36,14 +33,12 @@ enum class poll_op : int64_t
     read_write = -5
 };
 #elif defined(CORO_PLATFORM_WINDOWS)
+// Windows doesn't have polling, so we don't use it.
 enum class poll_op : uint32_t
 {
-    /// Poll for read operations.
-    read = FD_READ,
-    /// Poll for write operations.
-    write = FD_WRITE,
-    /// Poll for read and write operations.
-    read_write = FD_READ | FD_WRITE
+    read,
+    write,
+    read_write
 };
 #endif
 

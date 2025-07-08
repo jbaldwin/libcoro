@@ -1,7 +1,7 @@
 #include "coro/net/socket.hpp"
 #if defined(CORO_PLATFORM_WINDOWS)
-    #include <Windows.h>
     #include <WinSock2.h>
+    #include <Windows.h>
 #elif defined(CORO_PLATFORM_UNIX)
     #include <sys/socket.h>
 #endif
@@ -22,7 +22,6 @@ auto socket::type_to_os(type_t type) -> int
     }
 }
 
-    
 #if defined(CORO_PLATFORM_UNIX)
 auto socket::operator=(const socket& other) noexcept -> socket&
 {
@@ -36,7 +35,7 @@ auto socket::operator=(socket&& other) noexcept -> socket&
 {
     if (std::addressof(other) != this)
     {
-        m_fd = std::exchange(other.m_fd, -1);
+        m_fd = std::exchange(other.m_fd, invalid_handle);
     }
 
     return *this;
@@ -44,7 +43,7 @@ auto socket::operator=(socket&& other) noexcept -> socket&
 
 auto socket::blocking(blocking_t block) -> bool
 {
-    if (m_fd < 0)
+    if (!is_valid())
     {
         return false;
     }
@@ -62,13 +61,13 @@ auto socket::blocking(blocking_t block) -> bool
     return (fcntl(m_fd, F_SETFL, flags) == 0);
 #elif defined(CORO_PLATFORM_WINDOWS)
     u_long mode = (block == blocking_t::yes) ? 0 : 1;
-    return ioctlsocket(m_fd, FIONBIO, &mode) == 0;
+    return ioctlsocket((SOCKET)m_fd, FIONBIO, &mode) == 0;
 #endif
 }
 
 auto socket::shutdown(poll_op how) -> bool
 {
-    if (m_fd == -1)
+    if (!is_valid())
     {
         return false;
     }
@@ -109,13 +108,12 @@ auto socket::shutdown(poll_op how) -> bool
 
 auto socket::close() -> void
 {
-    if (m_fd != -1)
+    if (is_valid())
     {
-        
 #if defined(CORO_PLATFORM_UNIX)
         ::close(m_fd);
 #elif defined(CORO_PLATFORM_WINDOWS)
-        ::closesocket(m_fd);
+        ::closesocket((SOCKET)m_fd);
 #endif
         m_fd = socket::invalid_handle;
     }
@@ -124,14 +122,16 @@ auto socket::close() -> void
 auto make_socket(const socket::options& opts) -> socket
 {
 #if defined(CORO_PLATFORM_UNIX)
-    socket s{::socket(static_cast<int>(opts.domain), socket::type_to_os(opts.type), 0)};
-    if (s.native_handle() != socket::invalid_handle)
+    socket s{::socket(domain_to_os(opts.domain), socket::type_to_os(opts.type), 0)};
+    if (!s.is_valid())
     {
         throw std::runtime_error{"Failed to create socket."};
     }
 #elif defined(CORO_PLATFORM_WINDOWS)
-    socket s{::WSASocketA(static_cast<int>(opts.domain), socket::type_to_os(opts.type), 0, NULL, 0, WSA_FLAG_OVERLAPPED)};
-    if (s.native_handle() != INVALID_SOCKET)
+    auto   winsock = detail::initialise_winsock();
+    socket s{reinterpret_cast<socket::native_handle_t>(::WSASocketW(
+        domain_to_os(opts.domain), socket::type_to_os(opts.type), 0, nullptr, 0, WSA_FLAG_OVERLAPPED))};
+    if (!s.is_valid())
     {
         throw std::runtime_error{"Failed to create socket."};
     }
@@ -163,28 +163,28 @@ auto make_accept_socket(const socket::options& opts, const net::ip_address& addr
     int  sock_opt_name = SO_REUSEPORT;
     int* sock_opt_ptr  = &sock_opt;
 #elif defined(CORO_PLATFORM_WINDOWS)
-    int  sock_opt_name = SO_REUSEADDR;
-    const char *sock_opt_ptr  = reinterpret_cast<const char*>(&sock_opt);
+    int         sock_opt_name = SO_REUSEADDR;
+    const char* sock_opt_ptr  = reinterpret_cast<const char*>(&sock_opt);
 #endif
 
-    if (setsockopt(s.native_handle(), SOL_SOCKET, sock_opt_name, sock_opt_ptr, sizeof(sock_opt)) < 0)
+    if (setsockopt((SOCKET)s.native_handle(), SOL_SOCKET, sock_opt_name, sock_opt_ptr, sizeof(sock_opt)) < 0)
     {
         throw std::runtime_error{"Failed to setsockopt."};
     }
 
     sockaddr_in server{};
-    server.sin_family = static_cast<int>(opts.domain);
+    server.sin_family = domain_to_os(opts.domain);
     server.sin_port   = htons(port);
     server.sin_addr   = *reinterpret_cast<const in_addr*>(address.data().data());
 
-    if (bind(s.native_handle(), reinterpret_cast<sockaddr*>(&server), sizeof(server)) < 0)
+    if (bind((SOCKET)s.native_handle(), reinterpret_cast<sockaddr*>(&server), sizeof(server)) < 0)
     {
         throw std::runtime_error{"Failed to bind."};
     }
 
     if (opts.type == socket::type_t::tcp)
     {
-        if (listen(s.native_handle(), backlog) < 0)
+        if (listen((SOCKET)s.native_handle(), backlog) < 0)
         {
             throw std::runtime_error{"Failed to listen."};
         }

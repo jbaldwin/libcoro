@@ -26,7 +26,7 @@
     #include "coro/net/recv_status.hpp"
     #include "coro/net/send_status.hpp"
     #include "coro/net/socket.hpp"
-    #include "coro/net/udp/peer.hpp"
+//    #include "coro/net/udp/peer.hpp"
 #endif
 
 #include "coro/condition_variable.hpp"

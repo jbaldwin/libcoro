@@ -1,4 +1,5 @@
 #pragma once
+#include <atomic>
 #include <memory>
 
 namespace coro::detail
@@ -15,10 +16,8 @@ public:
     void set();
     void unset();
 
-
 private:
-    mutable void*                  m_iocp{};
-    mutable void*                  m_data{};
-    std::unique_ptr<Event> m_event;
+    mutable void* m_iocp{};
+    mutable void* m_data{};
 };
 } // namespace coro::detail

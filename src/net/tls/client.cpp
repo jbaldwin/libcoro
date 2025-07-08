@@ -100,7 +100,7 @@ auto client::connect(std::chrono::milliseconds timeout) -> coro::task<connection
     };
 
     sockaddr_in server{};
-    server.sin_family = static_cast<int>(m_options.address.domain());
+    server.sin_family = domain_to_os(m_options.address.domain());
     server.sin_port   = htons(m_options.port);
     server.sin_addr   = *reinterpret_cast<const in_addr*>(m_options.address.data().data());
 

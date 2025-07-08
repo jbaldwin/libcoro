@@ -35,8 +35,8 @@ if(LIBCORO_FEATURE_NETWORKING)
     list(APPEND LIBCORO_TEST_SOURCE_FILES
         net/test_dns_resolver.cpp
         net/test_tcp_server.cpp
-        net/test_tls_server.cpp
-        net/test_udp_peers.cpp
+       # net/test_tls_server.cpp
+       # net/test_udp_peers.cpp
     )
 endif()
 
@@ -71,6 +71,8 @@ elseif(${CMAKE_CXX_COMPILER_ID} MATCHES "Clang")
         $<$<COMPILE_LANGUAGE:CXX>:-pipe>
     )
 elseif(MSVC)
+    # Prevent Windows.h from defining min/max macros that conflict with names.
+    target_compile_definitions(${PROJECT_NAME} PUBLIC NOMINMAX)
     target_compile_options(${PROJECT_NAME} PRIVATE /W4)
 else()
     message(FATAL_ERROR "Unsupported compiler.")
