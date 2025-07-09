@@ -2,13 +2,15 @@
 
 #include "coro/io_scheduler.hpp"
 
-// The order of includes matters
-// clang-format off
+#if defined(CORO_PLATFORM_WINDOWS)
+    // The order of includes matters
+    // clang-format off
 #define WIN32_LEAN_AND_MEAN
 #include <winsock2.h>
 #include <ws2ipdef.h>
 #include <MSWSock.h>
 #include "coro/detail/iocp_overlapped.hpp"
+#endif
 
 // clang-format on
 
@@ -53,13 +55,13 @@ auto server::operator=(server&& other) -> server&
 }
 
 #if defined(CORO_PLATFORM_UNIX)
-auto server::accept() -> coro::net::tcp::client
+auto server::accept() const -> coro::net::tcp::client
 {
     sockaddr_in         client{};
     constexpr const int len = sizeof(struct sockaddr_in);
 
     net::socket s{reinterpret_cast<socket::native_handle_t>(::accept(
-        reinterpret_cast<SOCKET>(m_accept_socket.native_handle()),
+        m_accept_socket.native_handle(),
         reinterpret_cast<struct sockaddr*>(&client),
         const_cast<socklen_t*>(reinterpret_cast<const socklen_t*>(&len))))};
 
@@ -79,6 +81,16 @@ auto server::accept() -> coro::net::tcp::client
 
 auto server::accept_client() -> coro::task<std::optional<coro::net::tcp::client>>
 {
+    switch (co_await poll())
+    {
+        case poll_status::event:
+            break; // ignoring
+        case poll_status::closed:
+        case poll_status::error:
+        case poll_status::timeout:
+            co_return std::nullopt;
+    }
+    co_return accept();
 }
 #elif defined(CORO_PLATFORM_WINDOWS)
 auto server::accept_client(const std::chrono::milliseconds timeout) -> coro::task<std::optional<coro::net::tcp::client>>

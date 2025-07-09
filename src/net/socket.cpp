@@ -173,17 +173,20 @@ auto make_accept_socket(const socket::options& opts, const net::ip_address& addr
     // BSD and macOS use a different SO_REUSEPORT implementation than Linux that enables both duplicate address and port
     // bindings with a single flag.
 #if defined(CORO_PLATFORM_LINUX)
+    using socket_t = decltype(s.native_handle());
     int  sock_opt_name = SO_REUSEADDR | SO_REUSEPORT;
     int* sock_opt_ptr  = &sock_opt;
 #elif defined(CORO_PLATFORM_BSD)
+    using socket_t = decltype(s.native_handle());
     int  sock_opt_name = SO_REUSEPORT;
     int* sock_opt_ptr  = &sock_opt;
 #elif defined(CORO_PLATFORM_WINDOWS)
+    using socket_t = SOCKET;
     int         sock_opt_name = SO_REUSEADDR;
     const char* sock_opt_ptr  = reinterpret_cast<const char*>(&sock_opt);
 #endif
 
-    if (setsockopt((SOCKET)s.native_handle(), SOL_SOCKET, sock_opt_name, sock_opt_ptr, sizeof(sock_opt)) < 0)
+    if (setsockopt(reinterpret_cast<socket_t>(s.native_handle()), SOL_SOCKET, sock_opt_name, sock_opt_ptr, sizeof(sock_opt)) < 0)
     {
         throw std::runtime_error{"Failed to setsockopt."};
     }
@@ -192,14 +195,14 @@ auto make_accept_socket(const socket::options& opts, const net::ip_address& addr
     std::size_t server_len{};
     address.to_os(port, server, server_len);
 
-    if (bind(reinterpret_cast<SOCKET>(s.native_handle()), reinterpret_cast<sockaddr*>(&server), server_len) < 0)
+    if (bind(reinterpret_cast<socket_t>(s.native_handle()), reinterpret_cast<sockaddr*>(&server), server_len) < 0)
     {
         throw std::runtime_error{"Failed to bind."};
     }
 
     if (opts.type == socket::type_t::tcp)
     {
-        if (listen(reinterpret_cast<SOCKET>(s.native_handle()), backlog) < 0)
+        if (listen(reinterpret_cast<socket_t>(s.native_handle()), backlog) < 0)
         {
             throw std::runtime_error{"Failed to listen."};
         }

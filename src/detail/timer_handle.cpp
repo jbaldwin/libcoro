@@ -1,7 +1,9 @@
 #include "coro/detail/timer_handle.hpp"
 
 #include "coro/io_notifier.hpp"
+#if defined(CORO_PLATFORM_WINDOWS)
 #include <Windows.h>
+#endif
 
 namespace coro::detail
 {

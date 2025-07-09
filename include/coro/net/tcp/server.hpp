@@ -65,7 +65,7 @@ public:
      * @return The newly connected tcp client connection.
      * @note Unix only
      */
-    auto accept() -> coro::net::tcp::client;
+    auto accept() const -> coro::net::tcp::client;
 #endif
 
     /**
@@ -75,7 +75,7 @@ public:
      * @return A task resolving to an optional TCP client connection. The value will be set if a client was
      *         successfully accepted, or std::nullopt if the operation timed out or was cancelled.
      */
-    auto accept_client(std::chrono::milliseconds timeout = std::chrono::milliseconds{0}) -> coro::task<std::optional<coro::net::tcp::client>>;
+    auto accept_client() -> coro::task<std::optional<coro::net::tcp::client>>;
 
 private:
     friend client;

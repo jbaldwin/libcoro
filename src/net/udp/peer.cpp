@@ -1,12 +1,14 @@
 #include "coro/net/udp/peer.hpp"
 
-// The order of includes matters
-// clang-format off
+#if defined(CORO_PLATFORM_WINDOWS)
+    // The order of includes matters
+    // clang-format off
 #include <WinSock2.h>
 #include <WS2tcpip.h>
 #include <MSWSock.h>
 #include "coro/detail/iocp_overlapped.hpp"
 // clang-format on
+#endif
 
 namespace coro::net::udp
 {
@@ -34,6 +36,8 @@ peer::peer(std::shared_ptr<io_scheduler> scheduler, const info& bind_info)
     m_io_scheduler->bind_socket(m_socket);
 #endif
 }
+
+#if defined(CORO_PLATFORM_WINDOWS)
 auto peer::write_to(const info& peer_info, std::span<const char> buffer, std::chrono::milliseconds timeout)
     -> coro::task<std::pair<write_status, std::span<const char>>>
 {
@@ -179,5 +183,6 @@ auto peer::read_from(std::span<char> buffer, std::chrono::milliseconds timeout)
 
     co_return {read_status::error, peer::info{}, std::span<char>{}};
 }
+#endif
 
 } // namespace coro::net::udp

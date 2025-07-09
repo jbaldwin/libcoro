@@ -152,6 +152,7 @@ private:
     std::optional<net::connect_status> m_connect_status{std::nullopt};
 };
 
+template<concepts::mutable_buffer buffer_type>
 #if defined(CORO_PLATFORM_UNIX)
 auto client::recv(buffer_type&& buffer) -> std::pair<recv_status, std::span<char>>
 {
@@ -201,7 +202,7 @@ auto client::send(const buffer_type& buffer) -> std::pair<send_status, std::span
     }
 }
 
-auto client::write(std::span<const char> buffer, std::chrono::milliseconds timeout)
+inline auto client::write(std::span<const char> buffer, std::chrono::milliseconds timeout)
     -> task<std::pair<write_status, std::span<const char>>>
 {
     if (auto status = co_await poll(poll_op::write, timeout); status != poll_status::event)
@@ -218,7 +219,7 @@ auto client::write(std::span<const char> buffer, std::chrono::milliseconds timeo
                 throw std::runtime_error("Unknown poll_status value.");
         }
     }
-    switch (auto &&[status, span] = send(std::forward<const buffer_type>(buffer)); status)
+    switch (auto &&[status, span] = send(std::move(buffer)); status)
     {
         case send_status::ok:
             co_return {write_status::ok, span};
@@ -229,7 +230,7 @@ auto client::write(std::span<const char> buffer, std::chrono::milliseconds timeo
     }
 }
 
-auto client::read(std::span<char> buffer, std::chrono::milliseconds timeout) -> task<std::pair<read_status, std::span<char>>>
+inline auto client::read(std::span<char> buffer, std::chrono::milliseconds timeout) -> task<std::pair<read_status, std::span<char>>>
 {
     if (auto status = co_await poll(poll_op::read, timeout); status != poll_status::event)
     {
@@ -245,7 +246,7 @@ auto client::read(std::span<char> buffer, std::chrono::milliseconds timeout) -> 
                 throw std::runtime_error("Unknown poll_status value.");
         }
     }
-    switch (auto&& [status, span] = recv(std::forward<buffer_type>(buffer)); status)
+    switch (auto&& [status, span] = recv(std::move(buffer)); status)
     {
         case recv_status::ok:
             co_return {read_status::ok, span};

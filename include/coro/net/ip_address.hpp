@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstdint>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -66,7 +67,8 @@ public:
 
     auto operator<=>(const ip_address& other) const = default;
 
-    auto to_os(std::uint16_t port, sockaddr_storage& storage, std::size_t& len) const -> void;
+    auto        to_os(std::uint16_t port, sockaddr_storage& storage, std::size_t& len) const -> void;
+    static auto from_os(const sockaddr_storage& storage, std::size_t len) -> std::pair<ip_address, std::uint16_t>;
 
     static auto get_any_address(domain_t domain) -> ip_address;
 

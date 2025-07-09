@@ -1,5 +1,6 @@
 #include "coro/net/ip_address.hpp"
 #include <coro/platform.hpp>
+#include <cstring>
 
 #if defined(CORO_PLATFORM_UNIX)
     #include <arpa/inet.h>
@@ -103,6 +104,24 @@ auto ip_address::to_os(const std::uint16_t port, sockaddr_storage& storage, std:
         }
         default:
             throw std::runtime_error{"coro::net::ip_address unknown domain"};
+    }
+}
+auto ip_address::from_os(const sockaddr_storage& storage, std::size_t len) -> std::pair<ip_address, std::uint16_t>
+{
+    if (storage.ss_family == AF_INET)
+    {
+        auto&           addr = reinterpret_cast<const sockaddr_in&>(storage);
+        const std::span ip_addr_view{
+            reinterpret_cast<const std::uint8_t*>(&addr.sin_addr.s_addr), sizeof(addr.sin_addr.s_addr)};
+
+        return {ip_address{ip_addr_view, domain_t::ipv4}, ntohs(addr.sin_port)};
+    }
+    else
+    {
+        auto&           addr = reinterpret_cast<const sockaddr_in6&>(storage);
+        const std::span ip_addr_view{reinterpret_cast<const std::uint8_t*>(&addr.sin6_addr), sizeof(addr.sin6_addr)};
+
+        return {ip_address{ip_addr_view, domain_t::ipv6}, ntohs(addr.sin6_port)};
     }
 }
 auto ip_address::get_any_address(domain_t domain) -> ip_address

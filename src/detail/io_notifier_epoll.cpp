@@ -47,7 +47,7 @@ auto io_notifier_epoll::watch_timer(const detail::timer_handle& timer, std::chro
     itimerspec ts{};
     ts.it_value.tv_sec  = seconds.count();
     ts.it_value.tv_nsec = nanoseconds.count();
-    return ::timerfd_settime(timer.get_fd(), 0, &ts, nullptr) != -1;
+    return ::timerfd_settime(timer.get_native_handle(), 0, &ts, nullptr) != -1;
 }
 
 auto io_notifier_epoll::watch(fd_t fd, coro::poll_op op, void* data, bool keep) -> bool
@@ -85,7 +85,7 @@ auto io_notifier_epoll::unwatch_timer(const detail::timer_handle& timer) -> bool
     itimerspec ts{};
     ts.it_value.tv_sec  = 0;
     ts.it_value.tv_nsec = 0;
-    return ::timerfd_settime(timer.get_fd(), 0, &ts, nullptr) != -1;
+    return ::timerfd_settime(timer.get_native_handle(), 0, &ts, nullptr) != -1;
 }
 
 auto io_notifier_epoll::next_events(

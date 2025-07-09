@@ -1,4 +1,6 @@
 #include "coro/net/tcp/client.hpp"
+
+#if defined(CORO_PLATFORM_WINDOWS)
 // The order of includes matters
 // clang-format off
 #include <WinSock2.h>
@@ -6,6 +8,7 @@
 #include <MSWSock.h>
 #include <coro/detail/iocp_overlapped.hpp>
 // clang-format on
+#endif
 
 namespace coro::net::tcp
 {
