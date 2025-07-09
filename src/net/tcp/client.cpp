@@ -2,9 +2,10 @@
 // The order of includes matters
 // clang-format off
 #include <WinSock2.h>
+#include <WS2tcpip.h>
 #include <MSWSock.h>
-// clang-format on
 #include <coro/detail/iocp_overlapped.hpp>
+// clang-format on
 
 namespace coro::net::tcp
 {
@@ -38,6 +39,11 @@ client::client(std::shared_ptr<io_scheduler> scheduler, net::socket socket, opti
 
     // Force the socket to be non-blocking.
     m_socket.blocking(coro::net::socket::blocking_t::no);
+
+#if defined(CORO_PLATFORM_WINDOWS)
+    // Bind socket to IOCP
+    m_io_scheduler->bind_socket(m_socket);
+#endif
 }
 
 client::client(client&& other) noexcept
@@ -95,20 +101,19 @@ auto client::connect(std::chrono::milliseconds timeout) -> coro::task<connect_st
         co_return m_connect_status.value();
     }
 
-    // This enforces the connection status is aways set on the client object upon returning.
+    // This enforces the connection status is always set on the client object upon returning.
     auto return_value = [this](connect_status s) -> connect_status
     {
         m_connect_status = s;
         return s;
     };
 
-    sockaddr_in server{};
-    server.sin_family = domain_to_os(m_options.address.domain());
-    server.sin_port   = htons(m_options.port);
-    server.sin_addr   = *reinterpret_cast<const in_addr*>(m_options.address.data().data());
+    sockaddr_storage server_storage{};
+    std::size_t      server_length{};
+    m_options.address.to_os(m_options.port, server_storage, server_length);
 
 #if defined(CORO_PLATFORM_UNIX)
-    auto cret = ::connect(m_socket.native_handle(), reinterpret_cast<struct sockaddr*>(&server), sizeof(server));
+    auto cret = ::connect(m_socket.native_handle(), reinterpret_cast<struct sockaddr*>(&server_storage), server_length);
     if (cret == 0)
     {
         co_return return_value(connect_status::connected);
@@ -163,38 +168,70 @@ auto client::connect(std::chrono::milliseconds timeout) -> coro::task<connect_st
                 &num_bytes,
                 NULL,
                 NULL);
+
+            if (success != 0 || !connect_ex_function)
+                throw std::runtime_error("Failed to retrieve GetAcceptExSockaddrs function pointer");
         });
 
     detail::overlapped_io_operation ovpi{};
+    ovpi.is_accept = true;
 
-    BOOL res = connect_ex_function(
+    // Bind socket first to local address
+    sockaddr_storage local_addr_storage{};
+    std::size_t      local_addr_length{};
+    ip_address::get_any_address(m_options.address.domain()).to_os(0, local_addr_storage, local_addr_length);
+
+    if (bind(
+            reinterpret_cast<SOCKET>(m_socket.native_handle()),
+            reinterpret_cast<struct sockaddr*>(&local_addr_storage),
+            local_addr_length) == SOCKET_ERROR)
+    {
+        co_return return_value(connect_status::error);
+    }
+
+    // Now connect
+    BOOL result = connect_ex_function(
         reinterpret_cast<SOCKET>(m_socket.native_handle()),
-        reinterpret_cast<sockaddr*>(&server),
-        sizeof(server),
+        reinterpret_cast<sockaddr*>(&server_storage),
+        server_length,
         nullptr,
         0,
-        0,
+        nullptr,
         &ovpi.ov);
 
-    if (res)
+    if (!result)
     {
+        const DWORD err = ::WSAGetLastError();
+        if (err != WSA_IO_PENDING)
+        {
+            co_return return_value(connect_status::error);
+        }
+    }
+
+    auto status = result ? poll_status::event : co_await m_io_scheduler->poll(ovpi.pi, timeout);
+
+    if (status == poll_status::event)
+    {
+        int error     = 0;
+        int error_len = sizeof(error);
+        if (getsockopt(
+                reinterpret_cast<SOCKET>(m_socket.native_handle()),
+                SOL_SOCKET,
+                SO_ERROR,
+                reinterpret_cast<char*>(&error),
+                &error_len) != 0 ||
+            error != 0)
+        {
+            co_return return_value(connect_status::error);
+        }
         setsockopt(
             reinterpret_cast<SOCKET>(m_socket.native_handle()), SOL_SOCKET, SO_UPDATE_CONNECT_CONTEXT, nullptr, 0);
         co_return return_value(connect_status::connected);
     }
-
-    if (WSAGetLastError() == WSA_IO_PENDING)
+    else if (status == poll_status::timeout)
     {
-        auto status = co_await m_io_scheduler->poll(ovpi.pi, timeout);
-        if (status == poll_status::event)
-        {
-            co_return return_value(connect_status::connected);
-        }
-        else if (status == poll_status::timeout)
-        {
-            CancelIoEx((HANDLE)m_socket.native_handle(), &ovpi.ov);
-            co_return return_value(connect_status::timeout);
-        }
+        CancelIoEx((HANDLE)m_socket.native_handle(), &ovpi.ov);
+        co_return return_value(connect_status::timeout);
     }
 
     co_return return_value(connect_status::error);
@@ -227,14 +264,27 @@ auto client::write(std::span<const char> buffer, std::chrono::milliseconds timeo
     else if (WSAGetLastError() == WSA_IO_PENDING)
     {
         auto status = co_await m_io_scheduler->poll(ov.pi, timeout);
-        bytes_sent  = ov.bytes_transferred;
         if (status == poll_status::event)
         {
-            co_return {write_status::ok, std::span<const char>{buffer.data() + bytes_sent, buffer.size() - bytes_sent}};
+            co_return {
+                write_status::ok,
+                std::span<const char>{buffer.data() + ov.bytes_transferred, buffer.size() - ov.bytes_transferred}};
         }
         else if (status == poll_status::timeout)
         {
-            CancelIoEx(static_cast<HANDLE>(m_socket.native_handle()), &ov.ov);
+            BOOL success = CancelIoEx(static_cast<HANDLE>(m_socket.native_handle()), &ov.ov);
+            if (!success)
+            {
+                int err = GetLastError();
+                if (err == ERROR_NOT_FOUND)
+                {
+                    // Operation has been completed
+                    co_return {
+                        write_status::ok,
+                        std::span<const char>{
+                            buffer.data() + ov.bytes_transferred, buffer.size() - ov.bytes_transferred}};
+                }
+            }
             co_return {write_status::timeout, buffer};
         }
     }
@@ -261,14 +311,22 @@ auto client::read(std::span<char> buffer, std::chrono::milliseconds timeout)
     else if (WSAGetLastError() == WSA_IO_PENDING)
     {
         auto status = co_await m_io_scheduler->poll(ov.pi, timeout);
-        bytes_recv  = ov.bytes_transferred;
         if (status == poll_status::event)
         {
-            co_return {read_status::ok, std::span<char>{buffer.data(), bytes_recv}};
+            co_return {read_status::ok, std::span<char>{buffer.data(), ov.bytes_transferred}};
         }
         else if (status == poll_status::timeout)
         {
-            CancelIoEx(reinterpret_cast<HANDLE>(m_socket.native_handle()), &ov.ov);
+            BOOL success = CancelIoEx(reinterpret_cast<HANDLE>(m_socket.native_handle()), &ov.ov);
+            if (!success)
+            {
+                int err = GetLastError();
+                if (err == ERROR_NOT_FOUND)
+                {
+                    // Operation has been completed
+                    co_return {read_status::ok, std::span<char>{buffer.data(), ov.bytes_transferred}};
+                }
+            }
             co_return {read_status::timeout, std::span<char>{}};
         }
     }

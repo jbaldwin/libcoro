@@ -1,6 +1,6 @@
+#include <Windows.h>
 #include <coro/detail/signal_win32.hpp>
 #include <coro/io_notifier.hpp>
-#include <Windows.h>
 
 namespace coro::detail
 {
@@ -14,7 +14,6 @@ signal_win32::~signal_win32()
 }
 void signal_win32::set()
 {
-    printf("Set signal %p\n", m_data);
     PostQueuedCompletionStatus(
         m_iocp, 
         0, 
@@ -24,7 +23,6 @@ void signal_win32::set()
 }
 void signal_win32::unset()
 {
-    printf("Unset signal %p\n", m_data);
     PostQueuedCompletionStatus(
         m_iocp, 
         0, 

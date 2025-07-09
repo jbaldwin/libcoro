@@ -206,7 +206,7 @@ private:
         std::vector<coro::task<void>> poll_tasks{};
         for (size_t i = 0; i < new_sockets; ++i)
         {
-            auto fd = static_cast<fd_t>(ares_sockets[i]);
+            auto fd = reinterpret_cast<fd_t>(ares_sockets[i]);
 
             // If this socket is not currently actively polling, start polling!
             if (m_active_sockets.emplace(fd).second)

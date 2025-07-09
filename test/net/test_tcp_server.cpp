@@ -25,8 +25,6 @@ TEST_CASE("tcp_server ping server", "[tcp_server]")
         auto cstatus = co_await client.connect();
         REQUIRE(cstatus == coro::net::connect_status::connected);
 
-        // Skip polling for write, should really only poll if the write is partial, shouldn't be
-        // required for this test.
         std::cerr << "client write()\n";
         auto [sstatus, remaining] = co_await client.write(client_msg);
         REQUIRE(sstatus == coro::net::write_status::ok);
@@ -45,23 +43,20 @@ TEST_CASE("tcp_server ping server", "[tcp_server]")
     };
 
     auto make_server_task = [](std::shared_ptr<coro::io_scheduler> scheduler,
-                               const std::string&                   client_msg,
-                               const std::string&                   server_msg) -> coro::task<void>
+                               const std::string&                  client_msg,
+                               const std::string&                  server_msg) -> coro::task<void>
     {
         co_await scheduler->schedule();
         coro::net::tcp::server server{scheduler};
 
-        // Poll for client connection.
-        std::cerr << "server poll(accept)\n";
-        auto pstatus = co_await server.poll();
-        REQUIRE(pstatus == coro::poll_status::event);
-        std::cerr << "server accept()\n";
-        auto client = server.accept();
-        REQUIRE(client.socket().is_valid());
+        std::cerr << "server accept_client()\n";
+        auto client = co_await server.accept_client();
+        REQUIRE(client);
+        REQUIRE(client->socket().is_valid());
 
         std::string buffer(256, '\0');
         std::cerr << "server read()\n";
-        auto [rstatus, rspan] = co_await client.read(buffer);
+        auto [rstatus, rspan] = co_await client->read(buffer);
         REQUIRE(rstatus == coro::net::read_status::ok);
         REQUIRE(rspan.size() == client_msg.size());
         buffer.resize(rspan.size());
@@ -69,7 +64,7 @@ TEST_CASE("tcp_server ping server", "[tcp_server]")
 
         // Respond to client.
         std::cerr << "server send()\n";
-        auto [sstatus, remaining] = co_await client.write(server_msg);
+        auto [sstatus, remaining] = co_await client->write(server_msg);
         REQUIRE(sstatus == coro::net::write_status::ok);
         REQUIRE(remaining.empty());
 
@@ -77,17 +72,20 @@ TEST_CASE("tcp_server ping server", "[tcp_server]")
         co_return;
     };
 
-    coro::sync_wait(coro::when_all(
-        make_server_task(scheduler, client_msg, server_msg), make_client_task(scheduler, client_msg, server_msg)));
+    coro::sync_wait(
+        coro::when_all(
+            make_server_task(scheduler, client_msg, server_msg), make_client_task(scheduler, client_msg, server_msg)));
 }
 
+    #if defined(CORO_PLATFORM_UNIX)
 TEST_CASE("tcp_server concurrent polling on the same socket", "[tcp_server]")
 {
     // Issue 224: This test duplicates a client and issues two different poll operations per coroutine.
 
     using namespace std::chrono_literals;
-    auto scheduler = coro::io_scheduler::make_shared(coro::io_scheduler::options{
-        .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
+    auto scheduler = coro::io_scheduler::make_shared(
+        coro::io_scheduler::options{
+            .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
 
     auto make_server_task = [](std::shared_ptr<coro::io_scheduler> scheduler) -> coro::task<std::string>
     {
@@ -164,5 +162,6 @@ TEST_CASE("tcp_server concurrent polling on the same socket", "[tcp_server]")
 
     REQUIRE(request == response);
 }
+    #endif // CORO_PLATFORM_UNIX
 
 #endif // LIBCORO_FEATURE_NETWORKING

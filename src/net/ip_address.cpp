@@ -77,5 +77,45 @@ auto ip_address::to_string() const -> std::string
 
     return output;
 }
+auto ip_address::to_os(const std::uint16_t port, sockaddr_storage& storage, std::size_t& len) const -> void
+{
+    switch (domain())
+    {
+        case domain_t::ipv4:
+        {
+            auto& addr      = reinterpret_cast<sockaddr_in&>(storage);
+            addr.sin_family = domain_to_os(domain());
+            addr.sin_addr   = *reinterpret_cast<const in_addr*>(data().data());
+            addr.sin_port   = htons(port);
+            len             = sizeof(sockaddr_in);
+            return;
+        }
+        case domain_t::ipv6:
+        {
+            auto& addr         = reinterpret_cast<sockaddr_in6&>(storage);
+            addr.sin6_family   = domain_to_os(domain());
+            addr.sin6_addr     = *reinterpret_cast<const in6_addr*>(data().data());
+            addr.sin6_port     = htons(port);
+            addr.sin6_flowinfo = 0;
+            addr.sin6_scope_id = 0;
+            len                = sizeof(sockaddr_in6);
+            return;
+        }
+        default:
+            throw std::runtime_error{"coro::net::ip_address unknown domain"};
+    }
+}
+auto ip_address::get_any_address(domain_t domain) -> ip_address
+{
+    switch (domain)
+    {
+        case domain_t::ipv4:
+            return from_string("0.0.0.0", domain);
+        case domain_t::ipv6:
+            return from_string("::", domain);
+        default:
+            throw std::runtime_error{"coro::net::ip_address unknown domain"};
+    }
+}
 
 } // namespace coro::net

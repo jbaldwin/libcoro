@@ -5,13 +5,16 @@
 
 #include <atomic>
 #include <chrono>
-#include <thread>
 #include <iostream>
+#include <thread>
 
 #include <cstring>
-#include <sys/socket.h>
-#include <sys/types.h>
-#include <unistd.h>
+
+#if defined(CORO_PLATFORM_UNIX)
+    #include <sys/socket.h>
+    #include <sys/types.h>
+    #include <unistd.h>
+#endif // CORO_PLATFORM_UNIX
 
 TEST_CASE("io_scheduler", "[io_scheduler]")
 {
@@ -113,6 +116,7 @@ TEST_CASE("io_scheduler task with multiple events", "[io_scheduler]")
     REQUIRE(s->empty());
 }
 
+#if defined(CORO_PLATFORM_UNIX)
 TEST_CASE("io_scheduler task with read poll", "[io_scheduler]")
 {
     auto trigger_fds = std::array<fd_t, 2>{};
@@ -207,6 +211,7 @@ TEST_CASE("io_scheduler task with read poll timeout", "[io_scheduler]")
     close(trigger_fds[0]);
     close(trigger_fds[1]);
 }
+#endif // CORO_PLATFORM_UNIX
 
 TEST_CASE("io_scheduler separate thread resume", "[io_scheduler]")
 {
@@ -652,6 +657,7 @@ TEST_CASE("io_scheduler self generating coroutine (stack overflow check)", "[io_
     REQUIRE(s->empty());
 }
 
+#if defined(CORO_PLATFORM_UNIX)
 TEST_CASE("io_scheduler manual process events thread pool", "[io_scheduler]")
 {
     auto trigger_fds = std::array<fd_t, 2>{};
@@ -769,6 +775,7 @@ TEST_CASE("io_scheduler manual process events inline", "[io_scheduler]")
     close(trigger_fds[0]);
     close(trigger_fds[1]);
 }
+#endif // CORO_PLATFORM_UNIX
 
 TEST_CASE("io_scheduler task throws", "[io_scheduler]")
 {

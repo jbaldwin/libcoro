@@ -12,8 +12,10 @@ struct test_setup_networking
 {
     test_setup_networking()
     {
+    #if defined(CORO_PLATFORM_UNIX)
         // Ignore SIGPIPE, the library should be handling these gracefully.
         signal(SIGPIPE, SIG_IGN);
+    #endif
 
     #ifdef LIBCORO_FEATURE_TLS
         // For SSL/TLS tests create a localhost cert.pem and key.pem, tests expected these files

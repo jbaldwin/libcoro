@@ -6,6 +6,8 @@
 #include <stdexcept>
 #include <string>
 
+struct sockaddr_storage;
+
 namespace coro::net
 {
 // TODO: convert to OS AF_INET, AF_INET6
@@ -63,6 +65,10 @@ public:
     auto to_string() const -> std::string;
 
     auto operator<=>(const ip_address& other) const = default;
+
+    auto to_os(std::uint16_t port, sockaddr_storage& storage, std::size_t& len) const -> void;
+
+    static auto get_any_address(domain_t domain) -> ip_address;
 
 private:
     domain_t                      m_domain{domain_t::ipv4};

@@ -72,116 +72,99 @@ auto io_notifier_iocp::watch(const coro::signal& signal, void* data) -> bool
 auto io_notifier_iocp::next_events(
     std::vector<std::pair<detail::poll_info*, coro::poll_status>>& ready_events,
     const std::chrono::milliseconds                                timeout,
-    const size_t                                                  max_events) -> void
+    const size_t                                                   max_events) -> void
 {
     using namespace std::chrono;
 
-    // Лямбда разбора одного события
-    auto handle = [&](DWORD bytes, completion_key key, LPOVERLAPPED ov) {
-        switch (key) {
+    auto handle = [&](const DWORD bytes, const completion_key key, const LPOVERLAPPED ov)
+    {
+        switch (key)
+        {
             case completion_key::signal_set:
             case completion_key::signal_unset:
-                if (ov) set_signal_active(reinterpret_cast<void*>(ov),
-                                          key == completion_key::signal_set);
+                if (ov)
+                    set_signal_active(ov, key == completion_key::signal_set);
                 break;
             case completion_key::socket:
-                if (ov) {
-                    auto* info = reinterpret_cast<overlapped_io_operation*>(ov);
+                if (ov)
+                {
+                    auto* info              = reinterpret_cast<overlapped_io_operation*>(ov);
                     info->bytes_transferred = bytes;
-                    coro::poll_status st = (bytes == 0 && !info->is_accept)
-                        ? coro::poll_status::closed
-                        : coro::poll_status::event;
+                    coro::poll_status st =
+                        (bytes == 0 && !info->is_accept) ? coro::poll_status::closed : coro::poll_status::event;
                     ready_events.emplace_back(&info->pi, st);
                 }
                 break;
             case completion_key::timer:
                 if (ov)
-                    ready_events.emplace_back(
-                        reinterpret_cast<detail::poll_info*>(ov),
-                        coro::poll_status::event);
+                    ready_events.emplace_back(reinterpret_cast<detail::poll_info*>(ov), coro::poll_status::event);
                 break;
             default:
                 throw std::runtime_error("Unknown completion key");
         }
     };
 
-    // Сначала сигналы
     process_active_signals(ready_events);
 
-    // --- 1) Обработка с тайм‑аутом >= 0
-    if (timeout.count() >= 0) {
+    if (timeout.count() >= 0)
+    {
         milliseconds remaining = timeout;
-        while (remaining.count() > 0 && ready_events.size() < max_events) {
-            // Засекаем время
-            auto t0 = steady_clock::now();
-            DWORD bytes = 0;
+        while (remaining.count() > 0 && ready_events.size() < max_events)
+        {
+            auto           t0    = steady_clock::now();
+            DWORD          bytes = 0;
             completion_key key{};
-            LPOVERLAPPED ov = nullptr;
+            LPOVERLAPPED   ov = nullptr;
 
             BOOL ok = GetQueuedCompletionStatus(
-                m_iocp, &bytes,
-                reinterpret_cast<PULONG_PTR>(&key),
-                &ov,
-                static_cast<DWORD>(remaining.count())
-            );
+                m_iocp, &bytes, reinterpret_cast<PULONG_PTR>(&key), &ov, static_cast<DWORD>(remaining.count()));
             auto t1 = steady_clock::now();
 
-            // Тайм‑аут без событий — выходим в drain
-            if (!ok && ov == nullptr) {
+            if (!ok && ov == nullptr)
+            {
                 break;
             }
 
-            // Обрабатываем найденное событие
             handle(bytes, key, ov);
 
-            // Вычитаем потраченное время
             auto took = duration_cast<milliseconds>(t1 - t0);
             if (took < remaining)
                 remaining -= took;
             else
-                break;  // время вышло
+                break;
         }
     }
-    // --- 2) Или первый бесконечный wait, если timeout < 0
-    else {
-        DWORD bytes = 0;
+    else
+    {
+        DWORD          bytes = 0;
         completion_key key{};
-        LPOVERLAPPED ov = nullptr;
-        BOOL ok = GetQueuedCompletionStatus(
-            m_iocp, &bytes,
-            reinterpret_cast<PULONG_PTR>(&key),
-            &ov,
-            INFINITE
-        );
-        if (ok || ov) {
-            handle(bytes, key, ov);
-        }
-        // Любая ошибка без ov — просто выходим
-        if (!ok && ov == nullptr) {
+        LPOVERLAPPED   ov = nullptr;
+        BOOL ok = GetQueuedCompletionStatus(m_iocp, &bytes, reinterpret_cast<PULONG_PTR>(&key), &ov, INFINITE);
+
+        if (!ok && ov == nullptr)
+        {
             return;
         }
+        handle(bytes, key, ov);
     }
 
-    // --- 3) Дренч‑цикл: вычитываем всё доступное без ожидания
-    while (ready_events.size() < max_events) {
-        DWORD bytes = 0;
+    while (ready_events.size() < max_events)
+    {
+        DWORD          bytes = 0;
         completion_key key{};
-        LPOVERLAPPED ov = nullptr;
-        BOOL ok = GetQueuedCompletionStatus(
-            m_iocp, &bytes,
+        LPOVERLAPPED   ov = nullptr;
+        BOOL           ok = GetQueuedCompletionStatus(
+            m_iocp,
+            &bytes,
             reinterpret_cast<PULONG_PTR>(&key),
             &ov,
-            0  // non-blocking
+            0 // non-blocking
         );
         if (!ok && ov == nullptr)
             break;
         handle(bytes, key, ov);
     }
 }
-
-
-
-
 
 void io_notifier_iocp::set_signal_active(void* data, bool active)
 {

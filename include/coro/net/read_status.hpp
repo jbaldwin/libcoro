@@ -7,6 +7,8 @@ enum class read_status
     ok,
     closed,
     timeout,
-    error
+    error,
+
+    udp_not_bound
 };
 }

@@ -3,9 +3,13 @@
 #include "coro/concepts/awaitable.hpp"
 #include "coro/fd.hpp"
 #include "coro/task.hpp"
+#include "coro/platform.hpp"
 
 #ifdef LIBCORO_FEATURE_NETWORKING
     #include "coro/poll.hpp"
+#if defined(CORO_PLATFORM_WINDOWS)
+    #include "coro/detail/poll_info.hpp"
+#endif
 #endif // #ifdef LIBCORO_FEATURE_NETWORKING
 
 #include <chrono>
@@ -30,11 +34,19 @@ concept executor = requires(executor_type e, std::coroutine_handle<> c)
 };
 
 #ifdef LIBCORO_FEATURE_NETWORKING
+#if defined(CORO_PLATFORM_UNIX)
 template<typename executor_type>
 concept io_executor = executor<executor_type> and requires(executor_type e, std::coroutine_handle<> c, fd_t fd, coro::poll_op op, std::chrono::milliseconds timeout)
 {
     { e.poll(fd, op, timeout) } -> std::same_as<coro::task<poll_status>>;
 };
+#elif defined(CORO_PLATFORM_WINDOWS)
+template<typename executor_type>
+concept io_executor = executor<executor_type> and requires(executor_type e, coro::detail::poll_info pi, std::chrono::milliseconds timeout)
+{
+    { e.poll(pi, timeout) } -> std::same_as<coro::task<poll_status>>;
+};
+#endif
 #endif // #ifdef LIBCORO_FEATURE_NETWORKING
 
 // clang-format on
