@@ -1,6 +1,8 @@
 #include "coro/net/socket.hpp"
+
 #if defined(CORO_PLATFORM_WINDOWS)
     #include <WinSock2.h>
+    #include <WS2tcpip.h>
     #include <Windows.h>
 #elif defined(CORO_PLATFORM_UNIX)
     #include <sys/socket.h>
@@ -129,11 +131,25 @@ auto make_socket(const socket::options& opts) -> socket
     }
 #elif defined(CORO_PLATFORM_WINDOWS)
     auto   winsock = detail::initialise_winsock();
-    socket s{reinterpret_cast<socket::native_handle_t>(::WSASocketW(
-        domain_to_os(opts.domain), socket::type_to_os(opts.type), 0, nullptr, 0, WSA_FLAG_OVERLAPPED))};
+    socket s{reinterpret_cast<socket::native_handle_t>(
+        ::WSASocketW(domain_to_os(opts.domain), socket::type_to_os(opts.type), 0, nullptr, 0, WSA_FLAG_OVERLAPPED))};
     if (!s.is_valid())
     {
         throw std::runtime_error{"Failed to create socket."};
+    }
+
+    // FILE_SKIP_COMPLETION_PORT_ON_SUCCESS:
+    //   Prevents completion packets from being queued to the IOCP if the operation completes synchronously,
+    //   reducing unnecessary overhead for fast operations.
+    // FILE_SKIP_SET_EVENT_ON_HANDLE:
+    //   Prevents the system from setting the event in OVERLAPPED.hEvent upon operation completion,
+    //   which is unnecessary when using IOCP and can improve performance by avoiding extra kernel event signals.
+    const BOOL success = SetFileCompletionNotificationModes(
+        reinterpret_cast<HANDLE>(s.native_handle()),
+        FILE_SKIP_COMPLETION_PORT_ON_SUCCESS | FILE_SKIP_SET_EVENT_ON_HANDLE);
+    if (!success)
+    {
+        throw std::runtime_error{"SetFileCompletionNotificationModes failed."};
     }
 #endif
 
@@ -172,19 +188,18 @@ auto make_accept_socket(const socket::options& opts, const net::ip_address& addr
         throw std::runtime_error{"Failed to setsockopt."};
     }
 
-    sockaddr_in server{};
-    server.sin_family = domain_to_os(opts.domain);
-    server.sin_port   = htons(port);
-    server.sin_addr   = *reinterpret_cast<const in_addr*>(address.data().data());
+    sockaddr_storage server{};
+    std::size_t server_len{};
+    address.to_os(port, server, server_len);
 
-    if (bind((SOCKET)s.native_handle(), reinterpret_cast<sockaddr*>(&server), sizeof(server)) < 0)
+    if (bind(reinterpret_cast<SOCKET>(s.native_handle()), reinterpret_cast<sockaddr*>(&server), server_len) < 0)
     {
         throw std::runtime_error{"Failed to bind."};
     }
 
     if (opts.type == socket::type_t::tcp)
     {
-        if (listen((SOCKET)s.native_handle(), backlog) < 0)
+        if (listen(reinterpret_cast<SOCKET>(s.native_handle()), backlog) < 0)
         {
             throw std::runtime_error{"Failed to listen."};
         }
