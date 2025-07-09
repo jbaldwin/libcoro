@@ -9,7 +9,6 @@ namespace coro::detail
 {
 class timer_handle;
 
-
 class io_notifier_iocp
 {
 public:
@@ -39,8 +38,7 @@ public:
 
     auto next_events(
         std::vector<std::pair<detail::poll_info*, coro::poll_status>>& ready_events,
-        std::chrono::milliseconds                                      timeout,
-        size_t                                                         max_events = 16) -> void;
+        std::chrono::milliseconds                                      timeout) -> void;
 
     // static auto event_to_poll_status(const event_t& event) -> poll_status;
 
@@ -54,5 +52,7 @@ private:
 
     std::mutex         m_active_signals_mutex;
     std::vector<void*> m_active_signals;
+
+    static constexpr std::size_t max_events = 16;
 };
 } // namespace coro::detail

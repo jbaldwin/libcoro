@@ -1,7 +1,9 @@
 #include "coro/detail/io_notifier_iocp.hpp"
 #include "coro/detail/signal_win32.hpp"
 #include "coro/detail/timer_handle.hpp"
+
 #include <Windows.h>
+#include <array>
 #include <coro/detail/iocp_overlapped.hpp>
 
 namespace coro::detail
@@ -107,14 +109,10 @@ auto io_notifier_iocp::watch(const coro::signal& signal, void* data) -> bool
  *       Since it's our own event we don't have to pass a valid OVERLAPPED structure,
  *       we just pass a pointer to the timer data and then emplace it into `ready_events`.
  *
- *  **The cycle itself**
- *  Rewrite to GetQueuedCompletionStatusEx
- *
  */
 auto io_notifier_iocp::next_events(
     std::vector<std::pair<detail::poll_info*, coro::poll_status>>& ready_events,
-    const std::chrono::milliseconds                                timeout,
-    const size_t                                                   max_events) -> void
+    const std::chrono::milliseconds                                timeout) -> void
 {
     using namespace std::chrono;
 
@@ -148,62 +146,31 @@ auto io_notifier_iocp::next_events(
 
     process_active_signals(ready_events);
 
-    if (timeout.count() >= 0)
+    std::array<OVERLAPPED_ENTRY, max_events> entries{};
+    ULONG                                    number_of_events{};
+    const DWORD dword_timeout = (timeout <= 0ms) ? INFINITE : static_cast<DWORD>(timeout.count());
+
+    if (BOOL ok = GetQueuedCompletionStatusEx(
+            m_iocp, entries.data(), entries.size(), &number_of_events, dword_timeout, FALSE);
+        !ok)
     {
-        milliseconds remaining = timeout;
-        while (remaining.count() > 0 && ready_events.size() < max_events)
+        const DWORD err = GetLastError();
+        if (err == WAIT_TIMEOUT)
         {
-            auto           t0    = steady_clock::now();
-            DWORD          bytes = 0;
-            completion_key key{};
-            LPOVERLAPPED   ov = nullptr;
-
-            BOOL ok = GetQueuedCompletionStatus(
-                m_iocp, &bytes, reinterpret_cast<PULONG_PTR>(&key), &ov, static_cast<DWORD>(remaining.count()));
-            auto t1 = steady_clock::now();
-
-            if (!ok && ov == nullptr)
-            {
-                break;
-            }
-
-            handle(bytes, key, ov);
-
-            auto took = duration_cast<milliseconds>(t1 - t0);
-            if (took < remaining)
-                remaining -= took;
-            else
-                break;
-        }
-    }
-    else
-    {
-        DWORD          bytes = 0;
-        completion_key key{};
-        LPOVERLAPPED   ov = nullptr;
-        BOOL ok = GetQueuedCompletionStatus(m_iocp, &bytes, reinterpret_cast<PULONG_PTR>(&key), &ov, INFINITE);
-
-        if (!ok && ov == nullptr)
-        {
+            // No events available
             return;
         }
-        handle(bytes, key, ov);
+
+        throw std::system_error(static_cast<int>(err), std::system_category(), "GetQueuedCompletionStatusEx failed.");
     }
 
-    while (ready_events.size() < max_events)
+    for (ULONG i = 0; i < number_of_events; ++i)
     {
-        DWORD          bytes = 0;
-        completion_key key{};
-        LPOVERLAPPED   ov = nullptr;
-        BOOL           ok = GetQueuedCompletionStatus(
-            m_iocp,
-            &bytes,
-            reinterpret_cast<PULONG_PTR>(&key),
-            &ov,
-            0 // non-blocking
-        );
-        if (!ok && ov == nullptr)
-            break;
+        const auto& e     = entries[i];
+        const auto  key   = static_cast<completion_key>(e.lpCompletionKey);
+        const auto  ov    = e.lpOverlapped;
+        const auto  bytes = e.dwNumberOfBytesTransferred;
+
         handle(bytes, key, ov);
     }
 }

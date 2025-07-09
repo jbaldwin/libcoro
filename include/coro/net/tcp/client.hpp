@@ -152,8 +152,8 @@ private:
     std::optional<net::connect_status> m_connect_status{std::nullopt};
 };
 
-template<concepts::mutable_buffer buffer_type>
 #if defined(CORO_PLATFORM_UNIX)
+template<concepts::mutable_buffer buffer_type>
 auto client::recv(buffer_type&& buffer) -> std::pair<recv_status, std::span<char>>
 {
     // If the user requested zero bytes, just return.

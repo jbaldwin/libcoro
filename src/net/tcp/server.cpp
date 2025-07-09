@@ -48,7 +48,7 @@ auto server::operator=(server&& other) -> server&
     if (std::addressof(other) != this)
     {
         m_io_scheduler  = std::move(other.m_io_scheduler);
-        m_options       = std::move(other.m_options);
+        m_options       = other.m_options;
         m_accept_socket = std::move(other.m_accept_socket);
     }
     return *this;
@@ -79,9 +79,9 @@ auto server::accept() const -> coro::net::tcp::client
         }};
 };
 
-auto server::accept_client() -> coro::task<std::optional<coro::net::tcp::client>>
+auto server::accept_client(const std::chrono::milliseconds timeout) -> coro::task<std::optional<coro::net::tcp::client>>
 {
-    switch (co_await poll())
+    switch (co_await poll(timeout))
     {
         case poll_status::event:
             break; // ignoring
