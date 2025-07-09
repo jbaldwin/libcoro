@@ -35,13 +35,13 @@ public:
     };
 
     /**
-     * Creates a udp peer that can send packets but not receive them.  This udp peer will not explicitly
+     * Creates an udp peer that can send packets but not receive them.  This udp peer will not explicitly
      * bind to a local ip+port.
      */
     explicit peer(std::shared_ptr<io_scheduler> scheduler, net::domain_t domain = net::domain_t::ipv4);
 
     /**
-     * Creates a udp peer that can send and receive packets.  This peer will bind to the given ip_port.
+     * Creates an udp peer that can send and receive packets.  This peer will bind to the given ip_port.
      */
     explicit peer(std::shared_ptr<io_scheduler> scheduler, const info& bind_info);
 
@@ -57,6 +57,7 @@ public:
      *           udp socket (did not bind) then polling for read will not work.
      * @param timeout The timeout for the poll operation to be ready.
      * @return The result status of the poll operation.
+     * @note Unix only
      */
     auto poll(poll_op op, std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
         -> coro::task<coro::poll_status>
@@ -69,40 +70,46 @@ public:
      * @param buffer The data to send.
      * @return The status of send call and a span view of any data that wasn't sent.  This data if
      *         un-sent will correspond to bytes at the end of the given buffer.
+     * @note Unix only
      */
     template<concepts::const_buffer buffer_type>
     auto sendto(const info& peer_info, const buffer_type& buffer) -> std::pair<send_status, std::span<const char>>;
 
     /**
      * @param buffer The buffer to receive data into.
-     * @return The receive status, if ok then also the peer who sent the data and the data.
+     * @return The reception status, if OK then also the peer who sent the data and the data.
      *         The span view of the data will be set to the size of the received data, this will
-     *         always start at the beggining of the buffer but depending on how large the data was
+     *         always start at the beginning of the buffer but depending on how large the data was
      *         it might not fill the entire buffer.
+     * @note Unix only
      */
     template<concepts::mutable_buffer buffer_type>
     auto recvfrom(buffer_type&& buffer) -> std::tuple<recv_status, peer::info, std::span<char>>;
-
-    auto write_to(
-        const info&               peer_info,
-        std::span<const char>     buffer,
-        std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
-        -> coro::task<std::pair<write_status, std::span<const char>>>;
-
-    auto read_from(std::span<char> buffer, std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
-        -> coro::task<std::tuple<read_status, peer::info, std::span<char>>>;
-#elif defined(CORO_PLATFORM_WINDOWS)
-
-    auto write_to(
-        const info&               peer_info,
-        std::span<const char>     buffer,
-        std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
-        -> coro::task<std::pair<write_status, std::span<const char>>>;
-
-    auto read_from(std::span<char> buffer, std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
-        -> coro::task<std::tuple<read_status, peer::info, std::span<char>>>;
-
 #endif
+
+    /**
+     * @param peer_info The peer to send the data to.
+     * @param buffer The data to send.
+     * @param timeout The timeout for the operation to be ready.
+     * @return The status of write call and a span view of any data that wasn't sent. This data if
+     *         un-sent will correspond to bytes at the end of the given buffer.
+     */
+    auto write_to(
+        const info&               peer_info,
+        std::span<const char>     buffer,
+        std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
+        -> coro::task<std::pair<write_status, std::span<const char>>>;
+
+    /**
+     * @param buffer The buffer to receive data into.
+     * @param timeout The timeout for the operation to be ready.
+     * @return The reception status, if OK then also the peer who sent the data and the data.
+     *         The span view of the data will be set to the size of the received data, this will
+     *         always start at the beginning of the buffer but depending on how large the data was
+     *         it might not fill the entire buffer.
+     */
+    auto read_from(std::span<char> buffer, std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
+        -> coro::task<std::tuple<read_status, peer::info, std::span<char>>>;
 
 private:
     /// The scheduler that will drive this udp client.
@@ -165,10 +172,7 @@ auto peer::recvfrom(buffer_type&& buffer) -> std::tuple<recv_status, peer::info,
 
     return {
         recv_status::ok,
-        peer::info{
-            .address = std::move(address),
-            .port    = port
-        },
+        peer::info{.address = std::move(address), .port = port},
         std::span<char>{buffer.data(), static_cast<size_t>(bytes_read)}};
 }
 inline auto peer::write_to(const info& peer_info, std::span<const char> buffer, std::chrono::milliseconds timeout)

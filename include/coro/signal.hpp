@@ -1,3 +1,8 @@
+/**
+* When the signal is active, it will post its data to the io_notifier
+* every next_events call.
+ */
+
 #pragma once
 #include "coro/platform.hpp"
 
@@ -10,8 +15,8 @@
 namespace coro
 {
 #if defined(CORO_PLATFORM_UNIX)
-    using signal = detail::signal_unix;
+using signal = detail::signal_unix;
 #elif defined(CORO_PLATFORM_WINDOWS)
-    using signal = detail::signal_win32;
+using signal = detail::signal_win32;
 #endif
 } // namespace coro

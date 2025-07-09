@@ -69,6 +69,48 @@ auto io_notifier_iocp::watch(const coro::signal& signal, void* data) -> bool
     return true;
 }
 
+/**
+ * I think this cycle needs a little explanation.
+ *
+ *  == Completion keys ==
+ *
+ *  1. **Signals**
+ *      IOCP is not like epoll or kqueue, it works only with file-related events.
+ *      To emulate signals io_scheduler uses (previously a pipe, now abstracted into signals)
+ *      I use an array that tracks all active signals and dispatches them on every call.
+ *
+ *      Because of this, we need a pointer to the IOCP handle inside `@ref coro::signal`.
+ *
+ *  2. **Sockets**
+ *      It's nothing special. We just get the pointer to poll_info through `@ref coro::detail::overlapped_poll_info`.
+ *      The overlapped structure is stored inside the coroutine, so as long as coroutine lives everything will be fine.
+ *      But if the coroutine dies, it's UB. I see no point in using heap, since if we have no coroutine, what should
+ *      we dispatch?
+ *
+ *      **Important**
+ *      All sockets **must** have the following flags set using `SetFileCompletionNotificationModes`:
+ *
+ *      - `FILE_SKIP_COMPLETION_PORT_ON_SUCCESS`:
+ *          Prevents IOCP from enqueuing completions if the operation completes synchronously.
+ *          If disabled, IOCP might try to access an `OVERLAPPED` structure from a coroutine that has already died.
+ *          This can cause undefined behavior if the coroutine is dead and its memory is invalid.
+ *          If it's still alive - you got lucky.
+ *
+ *      - `FILE_SKIP_SET_EVENT_ON_HANDLE`:
+ *          Prevents the system from setting a WinAPI event on the socket handle.
+ *          We don’t use system events, so this is safe and gives a small performance boost.
+ *
+ *  3. Timers
+ *       IOCP doesn’t support timers directly - Windows has no `timerfd` like Unix.
+ *       We use waitable timers (see `timer_handle.cpp`) to emulate this.
+ *       When the timer fires, it triggers `@ref onTimerFired`, which posts an event to the IOCP queue.
+ *       Since it's our own event we don't have to pass a valid OVERLAPPED structure,
+ *       we just pass a pointer to the timer data and then emplace it into `ready_events`.
+ *
+ *  **The cycle itself**
+ *  Rewrite to GetQueuedCompletionStatusEx
+ *
+ */
 auto io_notifier_iocp::next_events(
     std::vector<std::pair<detail::poll_info*, coro::poll_status>>& ready_events,
     const std::chrono::milliseconds                                timeout,
