@@ -3,9 +3,11 @@
 #include "coro/concepts/buffer.hpp"
 #include "coro/io_scheduler.hpp"
 #include "coro/net/ip_address.hpp"
+#include "coro/net/read_status.hpp"
 #include "coro/net/recv_status.hpp"
 #include "coro/net/send_status.hpp"
 #include "coro/net/socket.hpp"
+#include "coro/net/write_status.hpp"
 #include "coro/task.hpp"
 
 #include <chrono>
@@ -49,6 +51,7 @@ public:
     auto operator=(peer&&) noexcept -> peer&      = default;
     ~peer()                                       = default;
 
+#if defined(CORO_PLATFORM_UNIX)
     /**
      * @param op The poll operation to perform on the udp socket.  Note that if this is a send only
      *           udp socket (did not bind) then polling for read will not work.
@@ -68,32 +71,7 @@ public:
      *         un-sent will correspond to bytes at the end of the given buffer.
      */
     template<concepts::const_buffer buffer_type>
-    auto sendto(const info& peer_info, const buffer_type& buffer) -> std::pair<send_status, std::span<const char>>
-    {
-        if (buffer.empty())
-        {
-            return {send_status::ok, std::span<const char>{}};
-        }
-
-        sockaddr_in peer{};
-        peer.sin_family = static_cast<int>(peer_info.address.domain());
-        peer.sin_port   = htons(peer_info.port);
-        peer.sin_addr   = *reinterpret_cast<const in_addr*>(peer_info.address.data().data());
-
-        socklen_t peer_len{sizeof(peer)};
-
-        auto bytes_sent = ::sendto(
-            m_socket.native_handle(), buffer.data(), buffer.size(), 0, reinterpret_cast<sockaddr*>(&peer), peer_len);
-
-        if (bytes_sent >= 0)
-        {
-            return {send_status::ok, std::span<const char>{buffer.data() + bytes_sent, buffer.size() - bytes_sent}};
-        }
-        else
-        {
-            return {static_cast<send_status>(errno), std::span<const char>{}};
-        }
-    }
+    auto sendto(const info& peer_info, const buffer_type& buffer) -> std::pair<send_status, std::span<const char>>;
 
     /**
      * @param buffer The buffer to receive data into.
@@ -103,45 +81,162 @@ public:
      *         it might not fill the entire buffer.
      */
     template<concepts::mutable_buffer buffer_type>
-    auto recvfrom(buffer_type&& buffer) -> std::tuple<recv_status, peer::info, std::span<char>>
-    {
-        // The user must bind locally to be able to receive packets.
-        if (!m_bound)
-        {
-            return {recv_status::udp_not_bound, peer::info{}, std::span<char>{}};
-        }
+    auto recvfrom(buffer_type&& buffer) -> std::tuple<recv_status, peer::info, std::span<char>>;
 
-        sockaddr_in peer{};
-        socklen_t   peer_len{sizeof(peer)};
+    auto write_to(
+        const info&               peer_info,
+        std::span<const char>     buffer,
+        std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
+        -> coro::task<std::pair<write_status, std::span<const char>>>;
 
-        auto bytes_read = ::recvfrom(
-            m_socket.native_handle(), buffer.data(), buffer.size(), 0, reinterpret_cast<sockaddr*>(&peer), &peer_len);
+    auto read_from(std::span<char> buffer, std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
+        -> coro::task<std::tuple<read_status, peer::info, std::span<char>>>;
+#elif defined(CORO_PLATFORM_WINDOWS)
 
-        if (bytes_read < 0)
-        {
-            return {static_cast<recv_status>(errno), peer::info{}, std::span<char>{}};
-        }
+    auto write_to(
+        const info&               peer_info,
+        std::span<const char>     buffer,
+        std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
+        -> coro::task<std::pair<write_status, std::span<const char>>>;
 
-        std::span<const uint8_t> ip_addr_view{
-            reinterpret_cast<uint8_t*>(&peer.sin_addr.s_addr),
-            sizeof(peer.sin_addr.s_addr),
-        };
+    auto read_from(std::span<char> buffer, std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
+        -> coro::task<std::tuple<read_status, peer::info, std::span<char>>>;
 
-        return {
-            recv_status::ok,
-            peer::info{
-                .address = net::ip_address{ip_addr_view, static_cast<net::domain_t>(peer.sin_family)},
-                .port    = ntohs(peer.sin_port)},
-            std::span<char>{buffer.data(), static_cast<size_t>(bytes_read)}};
-    }
+#endif
 
 private:
     /// The scheduler that will drive this udp client.
     std::shared_ptr<io_scheduler> m_io_scheduler;
     /// The udp socket.
-    net::socket m_socket{-1};
+    net::socket m_socket{net::socket::invalid_handle};
     /// Did the user request this udp socket is bound locally to receive packets?
     bool m_bound{false};
 };
+
+#if defined(CORO_PLATFORM_UNIX)
+template<concepts::const_buffer buffer_type>
+auto peer::sendto(const info& peer_info, const buffer_type& buffer) -> std::pair<send_status, std::span<const char>>
+{
+    if (buffer.empty())
+    {
+        return {send_status::ok, std::span<const char>{}};
+    }
+
+    sockaddr_in peer{};
+    peer.sin_family = static_cast<int>(peer_info.address.domain());
+    peer.sin_port   = htons(peer_info.port);
+    peer.sin_addr   = *reinterpret_cast<const in_addr*>(peer_info.address.data().data());
+
+    socklen_t peer_len{sizeof(peer)};
+
+    auto bytes_sent = ::sendto(
+        m_socket.native_handle(), buffer.data(), buffer.size(), 0, reinterpret_cast<sockaddr*>(&peer), peer_len);
+
+    if (bytes_sent >= 0)
+    {
+        return {send_status::ok, std::span<const char>{buffer.data() + bytes_sent, buffer.size() - bytes_sent}};
+    }
+    else
+    {
+        return {static_cast<send_status>(errno), std::span<const char>{}};
+    }
+}
+template<concepts::mutable_buffer buffer_type>
+auto peer::recvfrom(buffer_type&& buffer) -> std::tuple<recv_status, peer::info, std::span<char>>
+{
+    // The user must bind locally to be able to receive packets.
+    if (!m_bound)
+    {
+        return {recv_status::udp_not_bound, peer::info{}, std::span<char>{}};
+    }
+
+    sockaddr_in peer{};
+    socklen_t   peer_len{sizeof(peer)};
+
+    auto bytes_read = ::recvfrom(
+        m_socket.native_handle(), buffer.data(), buffer.size(), 0, reinterpret_cast<sockaddr*>(&peer), &peer_len);
+
+    if (bytes_read < 0)
+    {
+        return {static_cast<recv_status>(errno), peer::info{}, std::span<char>{}};
+    }
+
+    std::span<const uint8_t> ip_addr_view{
+        reinterpret_cast<uint8_t*>(&peer.sin_addr.s_addr),
+        sizeof(peer.sin_addr.s_addr),
+    };
+
+    return {
+        recv_status::ok,
+        peer::info{
+            .address = net::ip_address{ip_addr_view, static_cast<net::domain_t>(peer.sin_family)},
+            .port    = ntohs(peer.sin_port)},
+        std::span<char>{buffer.data(), static_cast<size_t>(bytes_read)}};
+}
+auto peer::write_to(
+    const info&               peer_info,
+    std::span<const char>     buffer,
+    std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
+    -> coro::task<std::pair<write_status, std::span<const char>>>;
+{
+    if (auto status = co_await poll(poll_op::write, timeout))
+    {
+        switch (status)
+        {
+            case poll_status::closed:
+                co_return {write_status::closed, std::span<const char>{buffer.data(), buffer.size()}};
+                ;
+            case poll_status::error:
+                co_return {write_status::error, std::span<const char>{buffer.data(), buffer.size()}};
+            case poll_status::timeout:
+                co_return {write_status::timeout, std::span<const char>{buffer.data(), buffer.size()}};
+            default:
+                throw std::runtime_error("Unknown poll_status value.");
+        }
+    }
+    switch (auto&& [status, span] = sendto(peer_info, std::forward<const buffer_type>(buffer)); status)
+    {
+        case send_status::ok:
+            co_return {write_status::ok, span};
+        case send_status::closed:
+            co_return {write_status::closed, span};
+        default:
+            co_return {write_status::error, span};
+    }
+}
+
+auto peer::read_from(std::span<char> buffer, std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
+    -> coro::task<std::tuple<read_status, peer::info, std::span<char>>>
+{
+    if (!m_bound)
+    {
+        return {recv_status::udp_not_bound, peer::info{}, std::span<char>{}};
+    }
+
+    if (auto status = co_await poll(poll_op::read, timeout); status != poll_status::event)
+    {
+        switch (status)
+        {
+            case poll_status::closed:
+                co_return {read_status::closed, std::span<char>{}};
+            case poll_status::error:
+                co_return {read_status::error, std::span<char>{}};
+            case poll_status::timeout:
+                co_return {read_status::timeout, std::span<char>{}};
+            default:
+                throw std::runtime_error("Unknown poll_status value.");
+        }
+    }
+    switch (auto&& [status, info, span] = recvfrom(std::forward<buffer_type>(buffer)); status)
+    {
+        case recv_status::ok:
+            co_return {read_status::ok, std::move(info), span};
+        case recv_status::closed:
+            co_return {read_status::closed, std::move(info), span};
+        default:
+            co_return {read_status::error, std::move(info), span};
+    }
+}
+#endif
 
 } // namespace coro::net::udp
