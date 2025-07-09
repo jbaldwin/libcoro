@@ -108,9 +108,8 @@ auto server::accept_client(const std::chrono::milliseconds timeout) -> coro::tas
                 throw std::runtime_error("Failed to retrieve AcceptEx function pointer");
         });
 
-
-    static LPFN_GETACCEPTEXSOCKADDRS  get_accept_ex_sock_addrs_function;
-    static std::once_flag get_accept_ex_sock_addrs_created;
+    static LPFN_GETACCEPTEXSOCKADDRS get_accept_ex_sock_addrs_function;
+    static std::once_flag            get_accept_ex_sock_addrs_created;
     std::call_once(
         get_accept_ex_sock_addrs_created,
         [this]
@@ -166,7 +165,6 @@ auto server::accept_client(const std::chrono::milliseconds timeout) -> coro::tas
 
     if (status == poll_status::event)
     {
-        // 1) Обновляем контекст принятого сокета
         SOCKET listen_handle = reinterpret_cast<SOCKET>(m_accept_socket.native_handle());
         ::setsockopt(
             reinterpret_cast<SOCKET>(client.native_handle()),
@@ -175,7 +173,6 @@ auto server::accept_client(const std::chrono::milliseconds timeout) -> coro::tas
             reinterpret_cast<const char*>(&listen_handle),
             sizeof(listen_handle));
 
-        // 2) Забираем адреса из accept_buffer
         SOCKADDR* local_addr  = nullptr;
         SOCKADDR* remote_addr = nullptr;
         int       local_len   = 0;
@@ -191,7 +188,6 @@ auto server::accept_client(const std::chrono::milliseconds timeout) -> coro::tas
             &remote_addr,
             &remote_len);
 
-        // 3) Распаковываем remote_addr → ip + порт
         auto            domain = remote_addr->sa_family == AF_INET ? domain_t::ipv4 : domain_t::ipv6;
         net::ip_address address;
         uint16_t        port;
@@ -212,6 +208,11 @@ auto server::accept_client(const std::chrono::milliseconds timeout) -> coro::tas
         }
 
         co_return coro::net::tcp::client{m_io_scheduler, std::move(client), client::options{address, port}};
+    }
+    else if (status == poll_status::timeout)
+    {
+        CancelIoEx(reinterpret_cast<HANDLE>(m_accept_socket.native_handle()), &ovpi.ov);
+        co_return std::nullopt;
     }
 
     co_return std::nullopt;
