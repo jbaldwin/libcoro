@@ -177,7 +177,7 @@ auto client::connect(std::chrono::milliseconds timeout) -> coro::task<connect_st
         });
 
     detail::overlapped_io_operation ovpi{};
-    ovpi.is_accept = true;
+    ovpi.socket = reinterpret_cast<SOCKET>(m_socket.native_handle());
 
     // Bind socket first to local address
     sockaddr_storage local_addr_storage{};
@@ -251,90 +251,24 @@ auto client::poll(coro::poll_op op, std::chrono::milliseconds timeout) -> coro::
 auto client::write(std::span<const char> buffer, std::chrono::milliseconds timeout)
     -> task<std::pair<write_status, std::span<const char>>>
 {
-    detail::overlapped_io_operation ov{};
-    WSABUF                          buf;
-    buf.buf     = const_cast<char*>(buffer.data());
-    buf.len     = buffer.size();
-    DWORD flags = 0, bytes_sent = 0;
+    static constexpr auto send_fn = [](SOCKET s, detail::overlapped_io_operation& ov, WSABUF& buf)
+    { return WSASend(s, &buf, 1, &ov.bytes_transferred, 0, &ov.ov, nullptr); };
 
-    int r = WSASend(reinterpret_cast<SOCKET>(m_socket.native_handle()), &buf, 1, &bytes_sent, flags, &ov.ov, nullptr);
-    if (r == 0) // Data already sent
-    {
-        if (bytes_sent == 0)
-            co_return {write_status::closed, buffer};
-        co_return {write_status::ok, std::span<const char>{buffer.data() + bytes_sent, buffer.size() - bytes_sent}};
-    }
-    else if (WSAGetLastError() == WSA_IO_PENDING)
-    {
-        auto status = co_await m_io_scheduler->poll(ov.pi, timeout);
-        if (status == poll_status::event)
-        {
-            co_return {
-                write_status::ok,
-                std::span<const char>{buffer.data() + ov.bytes_transferred, buffer.size() - ov.bytes_transferred}};
-        }
-        else if (status == poll_status::timeout)
-        {
-            BOOL success = CancelIoEx(static_cast<HANDLE>(m_socket.native_handle()), &ov.ov);
-            if (!success)
-            {
-                int err = GetLastError();
-                if (err == ERROR_NOT_FOUND)
-                {
-                    // Operation has been completed
-                    co_return {
-                        write_status::ok,
-                        std::span<const char>{
-                            buffer.data() + ov.bytes_transferred, buffer.size() - ov.bytes_transferred}};
-                }
-            }
-            co_return {write_status::timeout, buffer};
-        }
-    }
-
-    co_return {write_status::error, buffer};
+    co_return co_await detail::perform_write_read_operation<write_status, std::span<const char>, false>(
+        m_io_scheduler, reinterpret_cast<SOCKET>(m_socket.native_handle()), send_fn, buffer, timeout);
 }
 
 auto client::read(std::span<char> buffer, std::chrono::milliseconds timeout)
     -> task<std::pair<read_status, std::span<char>>>
 {
-    detail::overlapped_io_operation ov{};
-    WSABUF                          buf;
-    buf.buf     = buffer.data();
-    buf.len     = buffer.size();
-    DWORD flags = 0, bytes_recv = 0;
-
-    int r = WSARecv(reinterpret_cast<SOCKET>(m_socket.native_handle()), &buf, 1, &bytes_recv, &flags, &ov.ov, nullptr);
-    if (r == 0) // Data already read
+    static constexpr auto recv_fn = [](SOCKET s, detail::overlapped_io_operation& ov, WSABUF& buf)
     {
-        if (bytes_recv == 0)
-            co_return {read_status::closed, buffer};
-        co_return {read_status::ok, std::span<char>{buffer.data(), bytes_recv}};
-    }
-    else if (WSAGetLastError() == WSA_IO_PENDING)
-    {
-        auto status = co_await m_io_scheduler->poll(ov.pi, timeout);
-        if (status == poll_status::event)
-        {
-            co_return {read_status::ok, std::span<char>{buffer.data(), ov.bytes_transferred}};
-        }
-        else if (status == poll_status::timeout)
-        {
-            BOOL success = CancelIoEx(reinterpret_cast<HANDLE>(m_socket.native_handle()), &ov.ov);
-            if (!success)
-            {
-                int err = GetLastError();
-                if (err == ERROR_NOT_FOUND)
-                {
-                    // Operation has been completed
-                    co_return {read_status::ok, std::span<char>{buffer.data(), ov.bytes_transferred}};
-                }
-            }
-            co_return {read_status::timeout, std::span<char>{}};
-        }
-    }
+        DWORD flags{};
+        return WSARecv(s, &buf, 1, &ov.bytes_transferred, &flags, &ov.ov, nullptr);
+    };
 
-    co_return {read_status::error, std::span<char>{}};
+    co_return co_await detail::perform_write_read_operation<read_status, std::span<char>, true>(
+        m_io_scheduler, reinterpret_cast<SOCKET>(m_socket.native_handle()), recv_fn, buffer, timeout);
 }
 #endif
 

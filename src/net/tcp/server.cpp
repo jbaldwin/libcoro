@@ -144,7 +144,8 @@ auto server::accept_client(const std::chrono::milliseconds timeout) -> coro::tas
                 throw std::runtime_error("Failed to retrieve GetAcceptExSockaddrs function pointer");
         });
 
-    detail::overlapped_io_operation ovpi{.is_accept = true};
+    detail::overlapped_io_operation ovpi{
+        .socket = reinterpret_cast<SOCKET>(m_accept_socket.native_handle())};
 
     auto client = net::make_socket(
         socket::options{

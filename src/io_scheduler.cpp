@@ -200,7 +200,7 @@ auto io_scheduler::yield_for_internal(std::chrono::nanoseconds amount) -> coro::
         // for the scheduled task there.
         m_size.fetch_add(1, std::memory_order::release);
 
-        // Yielding does not requiring setting the timer position on the poll info since
+        // Yielding does not require setting the timer position on the poll info since
         // it doesn't have a corresponding 'event' that can trigger, it always waits for
         // the timeout to occur before resuming.
 

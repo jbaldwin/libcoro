@@ -2,7 +2,6 @@
 #include "coro/detail/signal_win32.hpp"
 #include "coro/detail/timer_handle.hpp"
 
-#include <Windows.h>
 #include <array>
 #include <coro/detail/iocp_overlapped.hpp>
 
@@ -147,9 +146,7 @@ auto io_notifier_iocp::next_events(
                 {
                     auto* info              = reinterpret_cast<overlapped_io_operation*>(ov);
                     info->bytes_transferred = bytes;
-                    coro::poll_status st =
-                        (bytes == 0 && !info->is_accept) ? coro::poll_status::closed : coro::poll_status::event;
-                    ready_events.emplace_back(&info->pi, st);
+                    ready_events.emplace_back(&info->pi, coro::poll_status::event);
                 }
                 break;
             case completion_key::timer:
