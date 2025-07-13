@@ -20,19 +20,7 @@ io_notifier_iocp::~io_notifier_iocp()
     CloseHandle(m_iocp);
 }
 
-static VOID CALLBACK onTimerFired(LPVOID timerPtr, DWORD, DWORD)
-{
-    auto* handle = static_cast<detail::timer_handle*>(timerPtr);
-
-    // Completion key 3 means timer
-    PostQueuedCompletionStatus(
-        handle->get_iocp(),
-        0,
-        static_cast<int>(io_notifier::completion_key::timer),
-        static_cast<LPOVERLAPPED>(const_cast<void*>(handle->get_inner())));
-}
-
-auto io_notifier_iocp::watch_timer(const detail::timer_handle& timer, std::chrono::nanoseconds duration) -> bool
+auto io_notifier_iocp::watch_timer(detail::timer_handle& timer, std::chrono::nanoseconds duration) -> bool
 {
     if (timer.m_iocp == nullptr)
     {
@@ -44,8 +32,7 @@ auto io_notifier_iocp::watch_timer(const detail::timer_handle& timer, std::chron
     }
 
     LARGE_INTEGER dueTime{};
-    // time in 100ns intervals, negative for relative
-    dueTime.QuadPart = -duration.count() / 100;
+    dueTime.QuadPart = -duration.count() / 100; // time in 100ns intervals, negative for relative
 
     // `timer_handle` must remain alive until the timer fires.
     // This is guaranteed by `io_scheduler`, which owns the timer lifetime.
@@ -56,12 +43,42 @@ auto io_notifier_iocp::watch_timer(const detail::timer_handle& timer, std::chron
     //
     // Therefore, we directly pass a pointer to `timer_handle` as the APC context.
     // This avoids allocations and should be safe (I hope) under our scheduler's lifetime guarantees.
-    return SetWaitableTimer(timer.get_native_handle(), &dueTime, 0, &onTimerFired, (void*)std::addressof(timer), FALSE);
+
+    if (timer.m_wait_handle != nullptr)
+    {
+        unwatch_timer(timer);
+    }
+
+    BOOL ok = SetWaitableTimer(timer.get_native_handle(), &dueTime, 0, nullptr, nullptr, false);
+
+    if (!ok)
+        return false;
+
+    ok = RegisterWaitForSingleObject(
+        &timer.m_wait_handle,
+        timer.get_native_handle(),
+        [](PVOID timer_ptr, BOOLEAN)
+        {
+            const auto timer = static_cast<detail::timer_handle*>(timer_ptr);
+            PostQueuedCompletionStatus(
+                timer->get_iocp(), 0, static_cast<int>(completion_key::timer), reinterpret_cast<LPOVERLAPPED>(timer));
+        },
+        &timer,
+        INFINITE,
+        WT_EXECUTEONLYONCE | WT_EXECUTELONGFUNCTION);
+    return ok;
 }
 
-auto io_notifier_iocp::unwatch_timer(const detail::timer_handle& timer) -> bool
+auto io_notifier_iocp::unwatch_timer(detail::timer_handle& timer) -> bool
 {
-    return CancelWaitableTimer(timer.get_native_handle());
+    if (timer.m_wait_handle == nullptr)
+    {
+        return false;
+    }
+    CancelWaitableTimer(timer.get_native_handle());
+    UnregisterWaitEx(timer.m_wait_handle, INVALID_HANDLE_VALUE);
+    timer.m_wait_handle = nullptr;
+    return true;
 }
 
 auto io_notifier_iocp::watch(const coro::signal& signal, void* data) -> bool
@@ -137,7 +154,16 @@ auto io_notifier_iocp::next_events(
                 break;
             case completion_key::timer:
                 if (ov)
-                    ready_events.emplace_back(reinterpret_cast<detail::poll_info*>(ov), coro::poll_status::event);
+                {
+                    auto timer = reinterpret_cast<detail::timer_handle*>(ov);
+                    ready_events.emplace_back(
+                        static_cast<detail::poll_info*>(const_cast<void*>(timer->get_inner())),
+                        coro::poll_status::event);
+
+                    UnregisterWaitEx(timer->m_wait_handle, INVALID_HANDLE_VALUE);
+                    timer->m_wait_handle = nullptr;
+                    std::atomic_thread_fence(std::memory_order::release);
+                }
                 break;
             default:
                 throw std::runtime_error("Unknown completion key");
@@ -150,7 +176,7 @@ auto io_notifier_iocp::next_events(
     ULONG                                    number_of_events{};
     const DWORD dword_timeout = (timeout <= 0ms) ? INFINITE : static_cast<DWORD>(timeout.count());
 
-    if (BOOL ok = GetQueuedCompletionStatusEx(
+    if (const BOOL ok = GetQueuedCompletionStatusEx(
             m_iocp, entries.data(), entries.size(), &number_of_events, dword_timeout, FALSE);
         !ok)
     {

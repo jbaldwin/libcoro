@@ -30,11 +30,11 @@ public:
 
     ~io_notifier_iocp();
 
-    auto watch_timer(const detail::timer_handle& timer, std::chrono::nanoseconds duration) -> bool;
+    auto watch_timer(detail::timer_handle& timer, std::chrono::nanoseconds duration) -> bool;
 
     auto watch(const coro::signal& signal, void* data) -> bool;
 
-    auto unwatch_timer(const detail::timer_handle& timer) -> bool;
+    auto unwatch_timer(detail::timer_handle& timer) -> bool;
 
     auto next_events(
         std::vector<std::pair<detail::poll_info*, coro::poll_status>>& ready_events,

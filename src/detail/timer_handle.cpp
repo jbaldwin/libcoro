@@ -2,7 +2,7 @@
 
 #include "coro/io_notifier.hpp"
 #if defined(CORO_PLATFORM_WINDOWS)
-#include <Windows.h>
+    #include <Windows.h>
 #endif
 
 namespace coro::detail
@@ -37,13 +37,15 @@ timer_handle::~timer_handle()
 #elif defined(CORO_PLATFORM_WINDOWS)
 
 timer_handle::timer_handle(const void* timer_handle_ptr, io_notifier& notifier)
-    : m_timer_handle_ptr(timer_handle_ptr),
-      m_native_handle(CreateWaitableTimer(NULL, FALSE, NULL))
+    : m_native_handle(CreateWaitableTimerW(nullptr, FALSE, nullptr)),
+      m_timer_handle_ptr(timer_handle_ptr)
 {
-    if (m_native_handle == NULL)
+    if (m_native_handle == nullptr)
     {
-        throw std::runtime_error("Failed to CreateWaitableTimer");
+        throw std::system_error(
+            static_cast<int>(GetLastError()), std::system_category(), "Failed to CreateWaitableTimer");
     }
+    (void)notifier;
 }
 timer_handle::~timer_handle()
 {
