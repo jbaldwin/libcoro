@@ -850,6 +850,19 @@ TEST_CASE("io_scheduler::schedule(task)", "[thread_pool]")
     REQUIRE(main_tid != coroutine_tid);
 }
 
+TEST_CASE("io_scheduler shutdown with background yielding task", "[thread_pool]")
+{
+    auto scheduler = coro::io_scheduler::make_shared(
+        coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
+
+    auto background_task = [](coro::io_scheduler* scheduler) -> coro::task<void>
+    { co_await scheduler->yield_for(20ms); };
+    scheduler->spawn(background_task(scheduler.get()));
+
+    // std::this_thread::sleep_for(21ms);  //! Required to avoid hang at `yield_for`
+    scheduler->shutdown();
+}
+
 TEST_CASE("~io_scheduler", "[io_scheduler]")
 {
     std::cerr << "[~io_scheduler]\n\n";
