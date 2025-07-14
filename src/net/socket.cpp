@@ -90,7 +90,7 @@ auto socket::shutdown(poll_op how) -> bool
             break;
     }
     return (::shutdown(m_fd, h) == 0);
-#elif defined(_WIN32) || defined(_WIN64)
+#elif defined(CORO_PLATFORM_WINDOWS)
     // WinSock uses SD_RECEIVE, SD_SEND, SD_BOTH
     switch (how)
     {
@@ -106,6 +106,8 @@ auto socket::shutdown(poll_op how) -> bool
     }
     return (::shutdown((SOCKET)m_fd, h) == 0);
 #endif
+
+    (void) h;
 }
 
 auto socket::close() -> void

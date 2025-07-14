@@ -17,7 +17,7 @@ public:
     void unset();
 
 private:
-    mutable void* m_iocp{};
-    mutable void* m_data{};
+    void* m_iocp{};
+    void* m_data{};
 };
 } // namespace coro::detail

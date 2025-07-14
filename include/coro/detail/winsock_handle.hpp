@@ -22,7 +22,7 @@ class winsock_handle
     };
 
 public:
-    winsock_handle(private_constructor);
+    explicit winsock_handle(private_constructor);
     ~winsock_handle();
 
     winsock_handle(const winsock_handle&)                    = delete;

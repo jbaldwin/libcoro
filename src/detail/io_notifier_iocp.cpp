@@ -80,7 +80,7 @@ auto io_notifier_iocp::unwatch_timer(detail::timer_handle& timer) -> bool
     return true;
 }
 
-auto io_notifier_iocp::watch(const coro::signal& signal, void* data) -> bool
+auto io_notifier_iocp::watch(coro::signal& signal, void* data) -> bool
 {
     signal.m_iocp = m_iocp;
     signal.m_data = data;

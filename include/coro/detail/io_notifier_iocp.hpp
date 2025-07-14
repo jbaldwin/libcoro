@@ -32,7 +32,7 @@ public:
 
     auto watch_timer(detail::timer_handle& timer, std::chrono::nanoseconds duration) -> bool;
 
-    auto watch(const coro::signal& signal, void* data) -> bool;
+    auto watch(coro::signal& signal, void* data) -> bool;
 
     auto unwatch_timer(detail::timer_handle& timer) -> bool;
 
