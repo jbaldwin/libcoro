@@ -161,10 +161,6 @@ auto io_scheduler::shutdown() noexcept -> void
     // Only allow shutdown to occur once.
     if (m_shutdown_requested.exchange(true, std::memory_order::acq_rel) == false)
     {
-        if (m_thread_pool != nullptr)
-        {
-            m_thread_pool->shutdown();
-        }
 
         // Signal the event loop to stop asap, triggering the event fd is safe.
         const int value{1};
@@ -173,6 +169,11 @@ auto io_scheduler::shutdown() noexcept -> void
         if (m_io_thread.joinable())
         {
             m_io_thread.join();
+        }
+
+        if (m_thread_pool != nullptr)
+        {
+            m_thread_pool->shutdown();
         }
     }
 }
