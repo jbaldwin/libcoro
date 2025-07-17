@@ -30,8 +30,8 @@
 * Executors
     - [coro::thread_pool](#thread_pool) for coroutine cooperative multitasking
     - [coro::io_scheduler](#io_scheduler) for driving i/o events
-        - Can use `coro::thread_pool` for latency sensitive or long lived tasks.
-        - Can use inline task processing for thread per core or short lived tasks.
+        - Can use `coro::thread_pool` for latency sensitive or long-lived tasks.
+        - Can use inline task processing for thread per core or short-lived tasks.
         - Requires `LIBCORO_FEATURE_NETWORKING` to be supported.
     - coro::task_container for dynamic task lifetimes, used in conjunction of an executor.
 * Coroutine Networking
@@ -53,7 +53,7 @@
 ## Usage
 
 ### A note on co_await and threads
-It's important to note with coroutines that _any_ `co_await` has the potential to switch the underyling thread that is executing the currently executing coroutine if the scheduler used has more than 1 thread. In general this shouldn't affect the way any user of the library would write code except for `thread_local`. Usage of `thread_local` should be extremely careful and _never_ used across any `co_await` boundary do to thread switching and work stealing on libcoro's schedulers. The only way this is safe is by using a `coro::thread_pool` with 1 thread or an inline `io_scheduler` which also only has 1 thread.
+It's important to note with coroutines that _any_ `co_await` has the potential to switch the underlying thread that is executing the currently executing coroutine if the scheduler used has more than 1 thread. In general this shouldn't affect the way any user of the library would write code except for `thread_local`. Usage of `thread_local` should be extremely careful and _never_ used across any `co_await` boundary do to thread switching and work stealing on libcoro's schedulers. The only way this is safe is by using a `coro::thread_pool` with 1 thread or an inline `io_scheduler` which also only has 1 thread.
 
 ### A note on lambda captures (do not use them!)
 [C++ Core Guidelines - CP.51: Do no use capturing lambdas that are coroutines](https://isocpp.github.io/CppCoreGuidelines/CppCoreGuidelines#Rcoro-capture)
@@ -61,7 +61,7 @@ It's important to note with coroutines that _any_ `co_await` has the potential t
 The recommendation is to not use lambda captures and instead pass any data into the coroutine via its function arguments to guarantee the argument lifetimes. Lambda captures will be destroyed at the coroutines first suspension point so if they are used past that point it will result in a use after free bug.
 
 ### sync_wait
-The `sync_wait` construct is meant to be used outside of a coroutine context to block the calling thread until the coroutine has completed. The coroutine can be executed on the calling thread or scheduled on one of libcoro's schedulers.
+The `sync_wait` construct is meant to be used outside a coroutine context to block the calling thread until the coroutine has completed. The coroutine can be executed on the calling thread or scheduled on one of libcoro's schedulers.
 
 ```C++
 ${EXAMPLE_CORO_SYNC_WAIT}
@@ -590,7 +590,7 @@ If you require TLS, provide OpenSSL for the target ABI (static or shared) and se
 
 ### Requirements
     C++20 Compiler with coroutine support
-        g++ [10.2.1, 10.3.1, 11, 12, 13]
+        g++ [11, 12, 13]
         clang++ [16, 17]
         MSVC Windows 2022 CL
             Does not currently support:

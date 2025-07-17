@@ -803,38 +803,50 @@ TEST_CASE("notify_all(executor)", "[condition_variable]")
     auto s = coro::io_scheduler::make_unique();
     coro::condition_variable cv{};
     coro::mutex m{};
+    coro::latch ready{10};
 
-    auto make_waiter = [](coro::condition_variable& cv, coro::mutex& m, uint64_t id) -> coro::task<int64_t>
+    auto make_waiter = [](std::unique_ptr<coro::io_scheduler>& s, coro::condition_variable& cv, coro::mutex& m, coro::latch& ready, uint64_t id) -> coro::task<int64_t>
     {
         {
             auto lk = co_await m.scoped_lock();
+            ready.count_down(s); // schedule on the executor so this coroutine doesn't transfer directly to the notifier.
+            std::cerr << "waiter" << id << " waiting\n";
             co_await cv.wait(lk);
             std::cerr << "waiter" << id << " notified\n";
         }
         co_return id;
     };
 
-    auto make_notifier = [](std::unique_ptr<coro::io_scheduler> &s, coro::condition_variable& cv) -> coro::task<int64_t>
+    auto make_notifier = [](std::unique_ptr<coro::io_scheduler>& s, coro::condition_variable& cv, coro::mutex& m, coro::latch& ready) -> coro::task<int64_t>
     {
-        // Make sure all waiters are waiting.
-        co_await s->yield_for(std::chrono::milliseconds{50});
+        // Make sure all waiters have acquired the mutex and are waiting on the condition variable.
+        // The latch isn't quite enough to guarantee it, but its close, the lock is acquired as it will be
+        // released by the final waiter in the co_await cv.wait() call
+        co_await ready;
+        std::cerr << "notifier ready\n";
+        {
+            // Acquire the lock to guarantee all waiters are waiting on the condition variable before proceeding.
+            auto lk = co_await m.scoped_lock();
+            std::cerr << "notified acquired lock\n";
+        }
+
         std::cerr << "notify_all(s)\n";
         cv.notify_all(s);
         co_return 0;
     };
 
     auto results = coro::sync_wait(coro::when_all(
-        make_waiter(cv, m, 1),
-        make_waiter(cv, m, 2),
-        make_waiter(cv, m, 3),
-        make_waiter(cv, m, 4),
-        make_waiter(cv, m, 5),
-        make_waiter(cv, m, 6),
-        make_waiter(cv, m, 7),
-        make_waiter(cv, m, 8),
-        make_waiter(cv, m, 9),
-        make_waiter(cv, m, 10),
-        make_notifier(s, cv)
+        make_waiter(s, cv, m, ready, 1),
+        make_waiter(s, cv, m, ready, 2),
+        make_waiter(s, cv, m, ready, 3),
+        make_waiter(s, cv, m, ready, 4),
+        make_waiter(s, cv, m, ready, 5),
+        make_waiter(s,cv, m, ready, 6),
+        make_waiter(s, cv , m, ready, 7),
+        make_waiter(s, cv , m, ready, 8),
+        make_waiter(s, cv, m, ready, 9),
+        make_waiter(s, cv, m, ready, 10),
+        make_notifier(s, cv, m, ready)
     ));
 
     uint64_t counter{0};

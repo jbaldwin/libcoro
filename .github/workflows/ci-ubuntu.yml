@@ -8,7 +8,7 @@ jobs:
         runs-on: ubuntu-latest
         strategy:
             matrix:
-                gplusplus_version: [10]
+                gplusplus_version: [11]
                 cxx_standard: [20]
                 libcoro_feature_networking: [ {enabled: ON, tls: ON}, {enabled: ON, tls: OFF}, {enabled: OFF, tls: OFF} ]
                 libcoro_build_shared_libs: [OFF, ON]

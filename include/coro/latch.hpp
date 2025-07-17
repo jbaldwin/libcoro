@@ -61,7 +61,7 @@ public:
      * @param n The number of tasks to complete towards the latch, defaults to 1.
      */
     template<concepts::executor executor_type>
-    auto count_down(executor_type& executor, std::int64_t n = 1) noexcept -> void
+    auto count_down(std::unique_ptr<executor_type>& executor, std::int64_t n = 1) noexcept -> void
     {
         if (m_count.fetch_sub(n, std::memory_order::acq_rel) <= n)
         {

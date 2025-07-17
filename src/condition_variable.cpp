@@ -37,7 +37,7 @@ auto condition_variable::awaiter::await_suspend(std::coroutine_handle<> awaiting
 
 auto condition_variable::awaiter::on_notify() -> coro::task<condition_variable::notify_status_t>
 {
-    // Re-lock, the waiter is no responsible for unlocking.
+    // Re-lock, the waiter is now responsible for unlocking.
     co_await m_lock.m_mutex->lock();
     m_awaiting_coroutine.resume();
     co_return notify_status_t::ready;
@@ -226,12 +226,11 @@ auto condition_variable::notify_one() -> coro::task<void>
 auto condition_variable::notify_all() -> coro::task<void>
 {
     auto* waiter = detail::awaiter_list_pop_all(m_awaiters);
-    awaiter_base* next;
 
     while (waiter != nullptr)
     {
         // Need to grab next before notifying since the notifier will self destruct after completing.
-        next = waiter->m_next;
+        awaiter_base* next = waiter->m_next;
 
         switch (co_await waiter->on_notify())
         {
