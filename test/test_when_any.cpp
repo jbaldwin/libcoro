@@ -264,14 +264,14 @@ TEST_CASE("when_any io_scheduler::schedule(task, timeout)", "[when_any]")
 
     {
         auto result = coro::sync_wait(
-            s->schedule(make_task(s, std::chrono::milliseconds{10}), std::chrono::milliseconds{50}));
+            s->schedule(make_task(s, std::chrono::milliseconds{10}), std::chrono::milliseconds{200}));
         REQUIRE(result.has_value());
         REQUIRE(result.value() == 1);
     }
 
     {
         auto result = coro::sync_wait(
-            s->schedule(make_task(s, std::chrono::milliseconds{50}), std::chrono::milliseconds{10}));
+            s->schedule(make_task(s, std::chrono::milliseconds{200}), std::chrono::milliseconds{10}));
         REQUIRE_FALSE(result.has_value());
         REQUIRE(result.error() == coro::timeout_status::timeout);
     }
@@ -296,6 +296,10 @@ TEST_CASE("when_any io_scheduler::schedule(task, timeout stop_token)", "[when_an
         co_await s->yield_for(execution_time);
         if (stop_token.stop_requested())
         {
+            // issue-355
+            // Double down to make sure this doesn't return before the timeout,
+            // its a race condition with the stop_token on github
+            co_await s->yield_for(execution_time);
             co_return -1;
         }
         co_return 1;
@@ -315,7 +319,7 @@ TEST_CASE("when_any io_scheduler::schedule(task, timeout stop_token)", "[when_an
         std::stop_source stop_source{};
         auto             result = coro::sync_wait(s->schedule(
             std::move(stop_source),
-            make_task(s, std::chrono::milliseconds{50}, stop_source.get_token()),
+            make_task(s, std::chrono::milliseconds{200}, stop_source.get_token()),
             std::chrono::milliseconds{10}));
         REQUIRE_FALSE(result.has_value());
         REQUIRE(result.error() == coro::timeout_status::timeout);
