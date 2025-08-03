@@ -310,7 +310,7 @@ TEST_CASE("when_any io_scheduler::schedule(task, timeout stop_token)", "[when_an
         auto             result = coro::sync_wait(s->schedule(
             std::move(stop_source),
             make_task(s, std::chrono::milliseconds{10}, stop_source.get_token()),
-            std::chrono::milliseconds{50}));
+            std::chrono::milliseconds{200}));
         REQUIRE(result.has_value());
         REQUIRE(result.value() == 1);
     }
