@@ -53,7 +53,7 @@ struct lock_operation : public lock_operation_base
     {
         if constexpr (std::is_same_v<scoped_lock, return_type>)
         {
-            return scoped_lock{m_mutex};
+            return scoped_lock{this->m_mutex};
         }
         else
         {
@@ -92,7 +92,7 @@ public:
     ~scoped_lock();
 
     scoped_lock(const scoped_lock&) = delete;
-    scoped_lock(scoped_lock&& other)
+    scoped_lock(scoped_lock&& other) noexcept
         : m_mutex(std::exchange(other.m_mutex, nullptr)) {}
     auto operator=(const scoped_lock&) -> scoped_lock& = delete;
     auto operator=(scoped_lock&& other) noexcept -> scoped_lock&
