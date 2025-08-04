@@ -25,6 +25,16 @@ TEST_CASE("when_any two tasks", "[when_any]")
     REQUIRE(result == 1);
 }
 
+TEST_CASE("when_any two tasks as tuple", "[when_any]")
+{
+    std::cerr << "BEGIN when_any two tasks as tuple\n";
+    auto make_task = [](uint64_t amount) -> coro::task<uint64_t> { co_return amount; };
+
+    auto result = coro::sync_wait(coro::when_any(make_task(1), make_task(2)));
+    REQUIRE(result.index() == 0);
+    REQUIRE(std::get<0>(result) == 1);
+}
+
 TEST_CASE("when_any return void", "[when_any]")
 {
     std::cerr << "BEGIN when_any return void\n";

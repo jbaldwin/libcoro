@@ -14,8 +14,8 @@
     #include <atomic>
     #include <cassert>
     #include <coroutine>
-    #include <stop_token>
     #include <optional>
+    #include <stop_token>
     #include <utility>
     #include <vector>
 
@@ -25,7 +25,7 @@ namespace coro
 namespace detail
 {
 
-template<typename return_type, concepts::awaitable awaitable>
+template<size_t index, typename return_type, concepts::awaitable awaitable>
 auto make_when_any_tuple_task(
     std::atomic<bool>& first_completed, coro::event& notify, std::optional<return_type>& return_value, awaitable a)
     -> coro::task<void>
@@ -34,10 +34,9 @@ auto make_when_any_tuple_task(
     auto result   = co_await static_cast<awaitable&&>(a);
     if (first_completed.compare_exchange_strong(expected, true, std::memory_order::acq_rel, std::memory_order::relaxed))
     {
-        return_value = std::move(result);
+        return_value.emplace(std::in_place_index_t<index>{}, std::move(result));
         notify.set();
     }
-
     co_return;
 }
 
@@ -47,12 +46,19 @@ template<typename return_type, concepts::awaitable... awaitable_type>
     -> coro::detail::task_self_deleting
 {
     std::atomic<bool> first_completed{false};
-    co_await coro::when_all(make_when_any_tuple_task(first_completed, notify, return_value, std::move(awaitables))...);
+    auto indexed_when_any_tuple_task_builder = [&]<size_t... I>(std::index_sequence<I...>)
+    {
+        return coro::when_all(
+            make_when_any_tuple_task<I>(first_completed, notify, return_value, std::move(awaitables))...);
+    };
+    co_await indexed_when_any_tuple_task_builder(std::index_sequence_for<awaitable_type...>{});
+
     co_return;
 }
 
 template<concepts::awaitable awaitable>
-static auto make_when_any_task_return_void(awaitable a, std::atomic<bool>& first_completed, coro::event& notify) -> coro::task<void>
+static auto make_when_any_task_return_void(awaitable a, std::atomic<bool>& first_completed, coro::event& notify)
+    -> coro::task<void>
 {
     co_await static_cast<awaitable&&>(a);
     auto expected = false;
@@ -85,7 +91,7 @@ template<std::ranges::range range_type, concepts::awaitable awaitable_type = std
 static auto make_when_any_controller_task_return_void(range_type awaitables, coro::event& notify)
     -> coro::detail::task_self_deleting
 {
-    std::atomic<bool> first_completed{false};
+    std::atomic<bool>             first_completed{false};
     std::vector<coro::task<void>> tasks{};
 
     if constexpr (std::ranges::sized_range<range_type>)
