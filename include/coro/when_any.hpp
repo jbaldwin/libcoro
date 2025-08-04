@@ -48,7 +48,7 @@ auto make_when_any_tuple_task(
         if (first_completed.compare_exchange_strong(
                 expected, true, std::memory_order::acq_rel, std::memory_order::relaxed))
         {
-            return_value.emplace(std::in_place_index_t<index>{}, std::monostate{});
+            return_value.emplace(std::in_place_index<index>, std::monostate{});
             notify.set();
         }
     }
@@ -58,7 +58,7 @@ auto make_when_any_tuple_task(
         if (first_completed.compare_exchange_strong(
                 expected, true, std::memory_order::acq_rel, std::memory_order::relaxed))
         {
-            return_value.emplace(std::in_place_index_t<index>{}, std::move(result));
+            return_value.emplace(std::in_place_index<index>, std::move(result));
             notify.set();
         }
     }
