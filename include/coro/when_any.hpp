@@ -24,6 +24,17 @@ namespace coro
 
 namespace detail
 {
+template<typename T>
+struct when_any_variant_traits
+{
+    using type = T;
+};
+
+template<>
+struct when_any_variant_traits<void>
+{
+    using type = std::monostate;
+};
 
 template<size_t index, typename return_type, concepts::awaitable awaitable>
 auto make_when_any_tuple_task(
@@ -31,11 +42,25 @@ auto make_when_any_tuple_task(
     -> coro::task<void>
 {
     auto expected = false;
-    auto result   = co_await static_cast<awaitable&&>(a);
-    if (first_completed.compare_exchange_strong(expected, true, std::memory_order::acq_rel, std::memory_order::relaxed))
+    if constexpr (concepts::awaitable_void<awaitable>)
     {
-        return_value.emplace(std::in_place_index_t<index>{}, std::move(result));
-        notify.set();
+        co_await static_cast<awaitable&&>(a);
+        if (first_completed.compare_exchange_strong(
+                expected, true, std::memory_order::acq_rel, std::memory_order::relaxed))
+        {
+            return_value.emplace(std::in_place_index_t<index>{}, std::monostate{});
+            notify.set();
+        }
+    }
+    else
+    {
+        auto result = co_await static_cast<awaitable&&>(a);
+        if (first_completed.compare_exchange_strong(
+                expected, true, std::memory_order::acq_rel, std::memory_order::relaxed))
+        {
+            return_value.emplace(std::in_place_index_t<index>{}, std::move(result));
+            notify.set();
+        }
     }
     co_return;
 }
@@ -46,6 +71,7 @@ template<typename return_type, concepts::awaitable... awaitable_type>
     -> coro::detail::task_self_deleting
 {
     std::atomic<bool> first_completed{false};
+
     auto indexed_when_any_tuple_task_builder = [&]<size_t... I>(std::index_sequence<I...>)
     {
         return coro::when_all(
@@ -143,11 +169,12 @@ static auto make_when_any_controller_task(
 } // namespace detail
 
 template<concepts::awaitable... awaitable_type>
-[[nodiscard]] auto when_any(std::stop_source stop_source, awaitable_type... awaitables) -> coro::task<
-    std::variant<std::remove_reference_t<typename concepts::awaitable_traits<awaitable_type>::awaiter_return_type>...>>
+[[nodiscard]] auto when_any(std::stop_source stop_source, awaitable_type... awaitables)
+    -> coro::task<std::variant<typename detail::when_any_variant_traits<
+        std::remove_reference_t<typename concepts::awaitable_traits<awaitable_type>::awaiter_return_type>>::type...>>
 {
-    using return_type = std::variant<
-        std::remove_reference_t<typename concepts::awaitable_traits<awaitable_type>::awaiter_return_type>...>;
+    using return_type = std::variant<typename detail::when_any_variant_traits<
+        std::remove_reference_t<typename concepts::awaitable_traits<awaitable_type>::awaiter_return_type>>::type...>;
 
     coro::event                notify{};
     std::optional<return_type> return_value{std::nullopt};
@@ -161,11 +188,12 @@ template<concepts::awaitable... awaitable_type>
 }
 
 template<concepts::awaitable... awaitable_type>
-[[nodiscard]] auto when_any(awaitable_type... awaitables) -> coro::task<
-    std::variant<std::remove_reference_t<typename concepts::awaitable_traits<awaitable_type>::awaiter_return_type>...>>
+[[nodiscard]] auto when_any(awaitable_type... awaitables)
+    -> coro::task<std::variant<typename detail::when_any_variant_traits<
+        std::remove_reference_t<typename concepts::awaitable_traits<awaitable_type>::awaiter_return_type>>::type...>>
 {
-    using return_type = std::variant<
-        std::remove_reference_t<typename concepts::awaitable_traits<awaitable_type>::awaiter_return_type>...>;
+    using return_type = std::variant<typename detail::when_any_variant_traits<
+        std::remove_reference_t<typename concepts::awaitable_traits<awaitable_type>::awaiter_return_type>>::type...>;
 
     coro::event                notify{};
     std::optional<return_type> return_value{std::nullopt};
