@@ -25,6 +25,16 @@ TEST_CASE("when_any two tasks", "[when_any]")
     REQUIRE(result == 1);
 }
 
+TEST_CASE("when_any two tasks as tuple", "[when_any]")
+{
+    std::cerr << "BEGIN when_any two tasks as tuple\n";
+    auto make_task = [](uint64_t amount) -> coro::task<uint64_t> { co_return amount; };
+
+    auto result = coro::sync_wait(coro::when_any(make_task(1), make_task(2)));
+    REQUIRE(result.index() == 0);
+    REQUIRE(std::get<0>(result) == 1);
+}
+
 TEST_CASE("when_any return void", "[when_any]")
 {
     std::cerr << "BEGIN when_any return void\n";
@@ -55,9 +65,9 @@ TEST_CASE("when_any return void", "[when_any]")
     }
 }
 
-TEST_CASE("when_any tuple return void (monostate)", "[when_any]")
+TEST_CASE("when_any tuple return void", "[when_any]")
 {
-    std::cerr << "BEGIN when_any tuple return void (monostate)\n";
+    std::cerr << "BEGIN when_any tuple return void\n";
 
     // This test needs to use a mutex to guarantee that the task that sets the counter
     // is the first task to complete, otherwise there is a race condition if counter is atomic
@@ -68,7 +78,7 @@ TEST_CASE("when_any tuple return void (monostate)", "[when_any]")
     std::atomic<uint64_t>          counter{0};
 
     auto make_task_return_void =
-        [](std::shared_ptr<coro::thread_pool> tp, coro::event& can_return, std::atomic<uint64_t>& counter, uint64_t i) -> coro::task<std::monostate>
+        [](std::shared_ptr<coro::thread_pool> tp, coro::event& can_return, std::atomic<uint64_t>& counter, uint64_t i) -> coro::task<void>
     {
         co_await tp->schedule();
 
@@ -78,8 +88,6 @@ TEST_CASE("when_any tuple return void (monostate)", "[when_any]")
             REQUIRE_THREAD_SAFE(counter.load(std::memory_order::acquire) == 2);
             co_await can_return;
         }
-
-        co_return std::monostate{};
     };
 
     auto make_task = [](std::shared_ptr<coro::thread_pool> tp, coro::event& can_return, std::atomic<uint64_t>& counter, uint64_t i) -> coro::task<uint64_t>
