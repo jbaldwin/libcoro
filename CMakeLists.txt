@@ -220,7 +220,8 @@ target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_20)
 target_include_directories(${PROJECT_NAME} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include PUBLIC ${CMAKE_CURRENT_BINARY_DIR}/include)
 generate_export_header(${PROJECT_NAME} BASE_NAME CORO EXPORT_FILE_NAME include/coro/export.hpp)
 
-if(UNIX)
+if(UNIX AND NOT ANDROID)
+    # On Android, pthread is built into libc; there is no separate libpthread, so using -lpthread results in an error.
     target_link_libraries(${PROJECT_NAME} PUBLIC pthread)
 endif()
 
