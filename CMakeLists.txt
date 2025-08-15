@@ -169,7 +169,11 @@ if(LIBCORO_FEATURE_NETWORKING)
     )
 
     if(LIBCORO_FEATURE_TLS)
-        find_package(OpenSSL REQUIRED)
+        # Android embedding: if caller already defined imported targets OpenSSL::SSL and OpenSSL::Crypto
+        # (e.g. prebuilt static libs), skip find_package to avoid accidentally picking host libs.
+        if (NOT (TARGET OpenSSL::SSL AND TARGET OpenSSL::Crypto))
+            find_package(OpenSSL REQUIRED)
+        endif()
         list(APPEND LIBCORO_SOURCE_FILES
             include/coro/net/tls/client.hpp src/net/tls/client.cpp
             include/coro/net/tls/connection_status.hpp src/net/tls/connection_status.cpp
