@@ -1,0 +1,139 @@
+name: ci-android
+
+on: [pull_request, workflow_dispatch]
+
+jobs:
+  build-libcoro-android:
+    name: Build libcoro (arm64-v8a + OpenSSL)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK packages
+        shell: bash
+        run: |
+          sdkmanager --install \
+            "platform-tools" \
+            "platforms;android-34" \
+            "build-tools;34.0.0"
+          # Accept licenses; suppress Broken pipe when nothing to accept
+          yes | sdkmanager --licenses > /dev/null || true
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y perl rsync curl cmake
+
+      - name: Install NDK 29.0.13846066
+        run: |
+          sdkmanager --install "ndk;29.0.13846066"
+          yes | sdkmanager --licenses > /dev/null || true
+
+      - name: Export NDK env vars
+        run: |
+          echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/29.0.13846066" >> $GITHUB_ENV
+          echo "ANDROID_NDK_ROOT=$ANDROID_SDK_ROOT/ndk/29.0.13846066" >> $GITHUB_ENV
+
+      - name: Build OpenSSL prebuilts (arm64-v8a)
+        shell: bash
+        run: |
+          set -euo pipefail
+          OPENSSL_VERSION="${OPENSSL_VERSION:-3.5.0}"
+          MIN_API_LEVEL=24
+          ABI="arm64-v8a"
+          ROOT_DIR="${GITHUB_WORKSPACE}"
+          CACHE_DIR="$ROOT_DIR/.openssl_build"
+          SRC_DIR="$CACHE_DIR/src"
+          BUILD_ROOT="$CACHE_DIR/build"
+          INSTALL_ROOT="$ROOT_DIR/external/openssl"
+          TARBALL="openssl-${OPENSSL_VERSION}.tar.gz"
+
+          mkdir -p "$SRC_DIR" "$BUILD_ROOT" "$INSTALL_ROOT"
+          pushd "$CACHE_DIR" >/dev/null
+          if [[ ! -f "$TARBALL" ]]; then
+            echo "[INFO] Downloading OpenSSL $OPENSSL_VERSION"
+            for u in \
+              "https://github.com/openssl/openssl/releases/download/openssl-${OPENSSL_VERSION}/openssl-${OPENSSL_VERSION}.tar.gz" \
+              "https://www.openssl.org/source/openssl-${OPENSSL_VERSION}.tar.gz" \
+              "https://ftp.openssl.org/source/openssl-${OPENSSL_VERSION}.tar.gz" \
+              "https://mirror.yandex.ru/pub/OpenSSL/openssl-${OPENSSL_VERSION}.tar.gz"; do
+              echo " -> $u"
+              if curl -fsSL "$u" -o "$TARBALL.tmp"; then mv "$TARBALL.tmp" "$TARBALL"; break; fi
+            done
+            [[ -f "$TARBALL" ]] || { echo "[ERR ] Failed to download OpenSSL"; exit 1; }
+          fi
+          popd >/dev/null
+
+          if [[ ! -d "$SRC_DIR/openssl-${OPENSSL_VERSION}" ]]; then
+            tar -xf "$CACHE_DIR/$TARBALL" -C "$SRC_DIR"
+          fi
+
+          case "$ABI" in
+            arm64-v8a) TGT=android-arm64;;
+            *) echo "[ERR ] Unsupported ABI $ABI"; exit 1;;
+          esac
+
+          BUILD_DIR="$BUILD_ROOT/$ABI"
+          INSTALL_DIR="$INSTALL_ROOT/$ABI"
+          rm -rf "$BUILD_DIR" "$INSTALL_DIR"; mkdir -p "$BUILD_DIR" "$INSTALL_DIR"
+          rsync -a --delete "$SRC_DIR/openssl-${OPENSSL_VERSION}/" "$BUILD_DIR/"
+
+          pushd "$BUILD_DIR" >/dev/null
+          export ANDROID_NDK_ROOT="$ANDROID_NDK_HOME"
+          export ANDROID_NDK_HOME="$ANDROID_NDK_HOME"
+          export PATH="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
+          perl ./Configure "$TGT" -D__ANDROID_API__=$MIN_API_LEVEL \
+            --prefix="$INSTALL_DIR" --openssldir="$INSTALL_DIR" \
+            no-shared no-tests no-apps no-docs
+          [[ -f Makefile ]] || { echo "[ERR ] Configure failed"; exit 1; }
+          make -j"$(nproc)" build_libs
+          make install_dev
+          [[ -f "$INSTALL_DIR/lib/libssl.a" && -f "$INSTALL_DIR/lib/libcrypto.a" ]] || { echo "[ERR ] Missing libs"; exit 1; }
+          popd >/dev/null
+
+          echo "OpenSSL installed to: $INSTALL_DIR"
+
+      - name: Configure libcoro (CMake Android toolchain)
+        run: |
+          ANDROID_ABI="arm64-v8a"
+          OPENSSL_DIR="${{ github.workspace }}/external/openssl/$ANDROID_ABI"
+          cmake -S . -B build-android-arm64 \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake" \
+            -DCMAKE_PREFIX_PATH="$OPENSSL_DIR" \
+            -DANDROID_ABI=$ANDROID_ABI \
+            -DANDROID_PLATFORM=24 \
+            -DANDROID_STL=c++_static \
+            -DLIBCORO_BUILD_TESTS=OFF \
+            -DLIBCORO_BUILD_EXAMPLES=OFF \
+            -DOPENSSL_ROOT_DIR="$OPENSSL_DIR" \
+            -DOPENSSL_USE_STATIC_LIBS=ON \
+            -DOPENSSL_INCLUDE_DIR="$OPENSSL_DIR/include" \
+            -DOPENSSL_CRYPTO_LIBRARY="$OPENSSL_DIR/lib/libcrypto.a" \
+            -DOPENSSL_SSL_LIBRARY="$OPENSSL_DIR/lib/libssl.a" \
+            -DOPENSSL_LIBRARIES="$OPENSSL_DIR/lib/libssl.a;$OPENSSL_DIR/lib/libcrypto.a" \
+            -DCARES_STATIC_PIC=ON \
+            -DCARES_BUILD_TOOLS=OFF
+
+      - name: Build libcoro
+        run: |
+          cmake --build build-android-arm64 --config Release -j
+          file build-android-arm64/libcoro.a || true
+          ls -lah build-android-arm64 || true
+
+      - name: Upload libcoro static lib
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: libcoro-android-arm64
+          path: |
+            build-android-arm64/**/*.a
