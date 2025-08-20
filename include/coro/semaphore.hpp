@@ -110,7 +110,7 @@ public:
                 {
                     return;
                 }
-            } while (m_counter.compare_exchange_weak(current, current + 1, std::memory_order::acq_rel, std::memory_order::acquire));
+            } while (!m_counter.compare_exchange_weak(current, current + 1, std::memory_order::acq_rel, std::memory_order::acquire));
         }
     }
 

@@ -215,6 +215,7 @@ TEST_CASE("semaphore 1 producers and many consumers", "[semaphore]")
         [](std::shared_ptr<coro::thread_pool> tp, coro::semaphore<50>& s, std::atomic<uint64_t>& value, uint64_t id) -> coro::task<void>
     {
         co_await tp->schedule();
+        std::cerr << "consumer " << id << " starting\n";
 
         while (true)
         {
