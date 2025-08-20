@@ -109,17 +109,18 @@ auto make_accept_socket(const socket::options& opts, const net::ip_address& addr
     socket s = make_socket(opts);
 
     int sock_opt{1};
-    // BSD and macOS use a different SO_REUSEPORT implementation than Linux that enables both duplicate address and port
-    // bindings with a single flag.
+
 #if defined(__linux__)
-    int sock_opt_name = SO_REUSEADDR | SO_REUSEPORT;
-#elif defined(__FreeBSD__) || defined(__APPLE__) || defined(__OpenBSD__) || defined(__NetBSD__)
-    int sock_opt_name = SO_REUSEPORT;
+    // On Linux the address and port should be marked for reuse.
+    if (setsockopt(s.native_handle(), SOL_SOCKET, SO_REUSEADDR, &sock_opt, sizeof(sock_opt)) < 0)
+    {
+        throw std::runtime_error{"Failed to setsockopt(SO_REUSEADDR)"};
+    }
 #endif
 
-    if (setsockopt(s.native_handle(), SOL_SOCKET, sock_opt_name, &sock_opt, sizeof(sock_opt)) < 0)
+    if (setsockopt(s.native_handle(), SOL_SOCKET, SO_REUSEPORT, &sock_opt, sizeof(sock_opt)) < 0)
     {
-        throw std::runtime_error{"Failed to setsockopt(SO_REUSEADDR | SO_REUSEPORT)"};
+        throw std::runtime_error{"Failed to setsockopt(SO_REUSEPORT)"};
     }
 
     sockaddr_in server{};
