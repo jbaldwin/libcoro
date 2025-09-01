@@ -235,7 +235,7 @@ public:
     /**
      * @return True if the ring buffer contains zero elements.
      */
-    auto empty() const -> bool { return size() == 0; }
+    [[nodiscard]] auto empty() const -> bool { return size() == 0; }
 
     /**
      * @brief Wakes up all currently awaiting producers and consumers.  Their await_resume() function
@@ -309,6 +309,12 @@ public:
         co_await shutdown();
         co_return;
     }
+
+    /**
+     * Returns true if shutdown() or shutdown_drain() have been called on this coro::ring_buffer.
+     * @return True if the coro::ring_buffer has been shutdown.
+     */
+    [[nodiscard]] auto is_shutdown() const -> bool { return m_running_state.load(std::memory_order::acquire) != running_state_t::running; }
 
 private:
     friend produce_operation;

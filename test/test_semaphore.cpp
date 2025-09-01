@@ -217,7 +217,7 @@ TEST_CASE("semaphore 1 producers and many consumers", "[semaphore]")
         co_await tp->schedule();
         std::cerr << "consumer " << id << " starting\n";
 
-        while (true)
+        while (!s.is_shutdown())
         {
             // std::cerr << "consumer " << id << "s.acquire()\n";
             auto result = co_await s.acquire();
