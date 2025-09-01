@@ -411,6 +411,8 @@ public:
      */
     auto shutdown() noexcept -> void;
 
+    [[nodiscard]] auto is_shutdown() const -> bool { return m_shutdown_requested.load(std::memory_order::acquire); }
+
 private:
     /// The configuration options.
     options m_opts;

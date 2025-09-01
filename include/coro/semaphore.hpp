@@ -141,12 +141,12 @@ public:
     /**
      * @return The maximum number of resources the semaphore can contain.
      */
-    constexpr auto max() const noexcept -> std::ptrdiff_t { return max_value; }
+    [[nodiscard]] constexpr auto max() const noexcept -> std::ptrdiff_t { return max_value; }
 
     /**
      * The current number of resources available in this semaphore.
      */
-    auto value() const noexcept -> std::ptrdiff_t { return m_counter.load(std::memory_order::acquire); }
+    [[nodiscard]] auto value() const noexcept -> std::ptrdiff_t { return m_counter.load(std::memory_order::acquire); }
 
     /**
      * Stops the semaphore and will notify all release/acquire waiters to wake up in a failed state.
@@ -166,6 +166,8 @@ public:
             }
         }
     }
+
+    [[nodiscard]] auto is_shutdown() const -> bool { return m_shutdown.load(std::memory_order::acquire); }
 
 private:
     friend class detail::acquire_operation<max_value>;

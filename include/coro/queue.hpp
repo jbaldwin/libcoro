@@ -385,6 +385,12 @@ public:
         co_return co_await shutdown();
     }
 
+    /**
+     * Returns true if shutdown() or shutdown_drain() have been called on this coro::queue.
+     * @return True if the coro::queue has been shutdown.
+     */
+    [[nodiscard]] auto is_shutdown() const -> bool { return m_running_state.load(std::memory_order::acquire) != running_state_t::running; }
+
 private:
     friend awaiter;
     /// @brief The list of pop() awaiters.

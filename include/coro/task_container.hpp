@@ -25,7 +25,6 @@ public:
     /**
      * @param e Tasks started in the container are scheduled onto this executor.  For tasks created
      *           from a coro::io_scheduler, this would usually be that coro::io_scheduler instance.
-     * @param opts Task container options.
      */
     explicit task_container(std::shared_ptr<executor_type> e) : m_executor(std::move(e))
     {
@@ -67,15 +66,15 @@ public:
     /**
      * @return The number of active tasks in the container.
      */
-    auto size() const -> std::size_t { return m_size.load(std::memory_order::acquire); }
+    [[nodiscard]] auto size() const -> std::size_t { return m_size.load(std::memory_order::acquire); }
 
     /**
      * @return True if there are no active tasks in the container.
      */
-    auto empty() const -> bool { return size() == 0; }
+    [[nodiscard]] auto empty() const -> bool { return size() == 0; }
 
     /**
-     * Will continue to garbage collect and yield until all tasks are complete.  This method can be
+     * Will continue to yield until all tasks are complete.  This method can be
      * co_await'ed to make it easier to wait for the task container to have all its tasks complete.
      *
      * This does not shut down the task container, but can be used when shutting down, or if your
@@ -90,7 +89,7 @@ public:
     }
 
 private:
-    auto make_self_deleting_task(task<void> user_task) -> detail::task_self_deleting
+    static auto make_self_deleting_task(task<void> user_task) -> detail::task_self_deleting
     {
         co_await user_task;
         co_return;

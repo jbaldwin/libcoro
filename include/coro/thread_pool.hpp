@@ -149,7 +149,7 @@ public:
     /**
      * Schedules the set of coroutine handles that are ready to be resumed.
      * @param handles The coroutine handles to schedule.
-     * @param uint64_t The number of tasks resumed, if any where null they are discarded.
+     * @param uint64_t The number of tasks resumed, if any are null they are discarded.
      */
     template<coro::concepts::range_of<std::coroutine_handle<>> range_type>
     auto resume(const range_type& handles) noexcept -> uint64_t
@@ -203,11 +203,13 @@ public:
     [[nodiscard]] auto yield() -> schedule_operation { return schedule(); }
 
     /**
-     * Shutsdown the thread pool.  This will finish any tasks scheduled prior to calling this
+     * Shuts down the thread pool.  This will finish any tasks scheduled prior to calling this
      * function but will prevent the thread pool from scheduling any new tasks.  This call is
-     * blocking and will wait until all inflight tasks are completed before returnin.
+     * blocking and will wait until all inflight tasks are completed before returning.
      */
     auto shutdown() noexcept -> void;
+
+    [[nodiscard]] auto is_shutdown() const -> bool { return m_shutdown_requested.load(std::memory_order::acquire); }
 
     /**
      * @return The number of tasks waiting in the task queue + the executing tasks.
