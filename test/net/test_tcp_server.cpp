@@ -175,4 +175,30 @@ TEST_CASE("tcp_server concurrent polling on the same socket", "[tcp_server]")
     REQUIRE(request == response);
 }
 
+TEST_CASE("tcp_server graceful shutdown via socket", "[tcp_server]")
+{
+    auto scheduler = coro::io_scheduler::make_shared(coro::io_scheduler::options{
+        .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
+    coro::net::tcp::server server{scheduler};
+
+    auto make_accept_task = [](coro::net::tcp::server& server) -> coro::task<void>
+    {
+        std::cerr << "make accept task start\n";
+        auto poll_result = co_await server.poll(std::chrono::seconds{3});
+        REQUIRE(poll_result == coro::poll_status::closed);
+        auto client = server.accept();
+        REQUIRE_FALSE(client.socket().is_valid());
+        std::cerr << "make accept task completed\n";
+    };
+
+    scheduler->spawn(make_accept_task(server));
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+    server.accept_socket().shutdown(coro::poll_op::read_write);
+
+    scheduler->shutdown();
+}
+
 #endif // LIBCORO_FEATURE_NETWORKING
+
