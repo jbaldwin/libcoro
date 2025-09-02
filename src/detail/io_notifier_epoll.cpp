@@ -65,7 +65,7 @@ auto io_notifier_epoll::watch(fd_t fd, coro::poll_op op, void* data, bool keep) 
 auto io_notifier_epoll::watch(detail::poll_info& pi) -> bool
 {
     auto event_data     = event_t{};
-    event_data.events   = static_cast<uint32_t>(pi.m_op) | EPOLLONESHOT | EPOLLRDHUP;
+    event_data.events   = static_cast<uint32_t>(pi.m_op) | EPOLLONESHOT | EPOLLRDHUP | EPOLLHUP;
     event_data.data.ptr = static_cast<void*>(&pi);
     return ::epoll_ctl(m_fd, EPOLL_CTL_ADD, pi.m_fd, &event_data) != -1;
 }
