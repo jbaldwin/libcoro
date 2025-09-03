@@ -40,3 +40,14 @@
 
 /.vscode/
 /.idea/
+
+# Android / Gradle build artifacts
+test/android/.gradle/
+test/android/.cxx/
+test/android/build/
+test/android/build-*/
+test/android/**/build/
+*.apk
+local.properties
+**/.gradle/
+**/.cxx/

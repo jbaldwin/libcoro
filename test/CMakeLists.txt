@@ -48,10 +48,15 @@ if(LIBCORO_FEATURE_NETWORKING)
     )
 endif()
 
-add_executable(${PROJECT_NAME} main.cpp ${LIBCORO_TEST_SOURCE_FILES})
-target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_20)
-target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(${PROJECT_NAME} PRIVATE libcoro)
+if(LIBCORO_COLLECT_TEST_SOURCES_ONLY)
+    # When collecting sources for an external harness (e.g. Android JNI shared lib),
+    # just expose list and skip adding executable & tests.
+    # Variables are already in parent scope because of include(); nothing more needed.
+else()
+    add_executable(${PROJECT_NAME} main.cpp ${LIBCORO_TEST_SOURCE_FILES})
+    target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_20)
+    target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_link_libraries(${PROJECT_NAME} PRIVATE libcoro)
 
 if(${CMAKE_CXX_COMPILER_ID} MATCHES "GNU")
     target_compile_options(${PROJECT_NAME} PRIVATE
@@ -82,5 +87,6 @@ if(LIBCORO_CODE_COVERAGE)
     target_compile_options(${PROJECT_NAME} PRIVATE --coverage)
 endif()
 
-add_test(NAME libcoro_tests COMMAND ${PROJECT_NAME})
-set_tests_properties(libcoro_tests PROPERTIES ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<$<BOOL:${WIN32}>:$<TARGET_FILE_DIR:libcoro>>")
+    add_test(NAME libcoro_tests COMMAND ${PROJECT_NAME})
+    set_tests_properties(libcoro_tests PROPERTIES ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<$<BOOL:${WIN32}>:$<TARGET_FILE_DIR:libcoro>>")
+endif()
