@@ -150,7 +150,11 @@ if(LIBCORO_FEATURE_NETWORKING)
     )
 
     if(LIBCORO_FEATURE_TLS)
-        find_package(OpenSSL REQUIRED)
+        # Android embedding: if caller already defined imported targets OpenSSL::SSL and OpenSSL::Crypto
+        # (e.g. prebuilt static libs), skip find_package to avoid accidentally picking host libs.
+        if (NOT (TARGET OpenSSL::SSL AND TARGET OpenSSL::Crypto))
+            find_package(OpenSSL REQUIRED)
+        endif()
         list(APPEND LIBCORO_SOURCE_FILES
             include/coro/net/tls/client.hpp src/net/tls/client.cpp
             include/coro/net/tls/connection_status.hpp src/net/tls/connection_status.cpp
@@ -201,7 +205,8 @@ target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_20)
 target_include_directories(${PROJECT_NAME} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include PUBLIC ${CMAKE_CURRENT_BINARY_DIR}/include)
 generate_export_header(${PROJECT_NAME} BASE_NAME CORO EXPORT_FILE_NAME include/coro/export.hpp)
 
-if(UNIX)
+if(UNIX AND NOT ANDROID)
+    # On Android, pthread is built into libc; there is no separate libpthread, so using -lpthread results in an error.
     target_link_libraries(${PROJECT_NAME} PUBLIC pthread)
 endif()
 
