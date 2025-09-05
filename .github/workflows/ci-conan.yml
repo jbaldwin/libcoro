@@ -42,6 +42,11 @@ jobs:
                     conan profile detect
             -   name: Checkout
                 uses: actions/checkout@v4
+                with:
+                    fetch-depth: 0
+                    fetch-tags: true
+            -   name: Mark repository as safe
+                run: git config --global --add safe.directory "*"
             -   name: Install Conan Dependencies
                 run: |
                     conan install -r conancenter \
