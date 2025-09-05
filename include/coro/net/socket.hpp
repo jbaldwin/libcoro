@@ -68,7 +68,7 @@ public:
 
     /**
      * @param how Shuts the socket down with the given operations.
-     * @param Returns true if the sockets given operations were shutdown.
+     * @return Returns true if the sockets given operations were shutdown.
      */
     auto shutdown(poll_op how = poll_op::read_write) -> bool;
 
