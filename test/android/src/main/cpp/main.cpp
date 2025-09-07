@@ -304,7 +304,7 @@ static int run_all_tests_with_output(const std::string& files_dir) noexcept
         }
 
         // Determine global timeout
-        constexpr auto       kDefaultGlobalTimeout = std::chrono::seconds(600); // 10 minutes for emulator
+        constexpr auto       kDefaultGlobalTimeout = std::chrono::seconds(1200); // 20 minutes for emulator
         std::chrono::seconds global_timeout        = kDefaultGlobalTimeout;
         if (!props["timeout"].empty())
         {
