@@ -9,8 +9,6 @@ execute_process(
     OUTPUT_VARIABLE GIT_VERSION
     OUTPUT_STRIP_TRAILING_WHITESPACE)
 
-## ERROR_QUIET
-
 message(STATUS "git describe last release tag: ${GIT_VERSION}")
 
 # The git describe tag is in the format of "vN.N.N-<hash>[-dirty]"
