@@ -1,10 +1,29 @@
 cmake_minimum_required(VERSION 3.15)
 include(CMakeDependentOption)
+find_package(Git)
+
+# Define the libcoro version string based on `git describe` command for the latest tagged release.
+execute_process(
+    COMMAND "${GIT_EXECUTABLE}" describe --match v[0-9]* --always --tags --dirty=-dirty
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+    OUTPUT_VARIABLE GIT_VERSION
+    OUTPUT_STRIP_TRAILING_WHITESPACE)
+
+message(STATUS "git describe last release tag: ${GIT_VERSION}")
+
+# The git describe tag is in the format of "vN.N.N-<hash>[-dirty]"
+# The cmake project VERSION parameter requires a semver, strip the v and the suffix.
+string(FIND ${GIT_VERSION} "-" GIT_VERSION_DASH_POSITION)
+math(EXPR GIT_VERSION_END "${GIT_VERSION_DASH_POSITION} - 1")
+string(SUBSTRING ${GIT_VERSION} 1 ${GIT_VERSION_END} PROJECT_VERSION)
+
 project(libcoro
-    VERSION 0.11.1
+    VERSION ${PROJECT_VERSION}
     LANGUAGES CXX
     DESCRIPTION "C++20 coroutine library"
 )
+
+message(STATUS "${PROJECT_NAME} version: ${PROJECT_VERSION}")
 
 if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
     set(MACOSX TRUE)
@@ -48,18 +67,18 @@ endif()
 cmake_dependent_option(LIBCORO_FEATURE_NETWORKING "Include networking features, Default=ON." ON "NOT EMSCRIPTEN; NOT MSVC" OFF)
 cmake_dependent_option(LIBCORO_FEATURE_TLS "Include TLS encryption features, Default=ON." ON "NOT EMSCRIPTEN; NOT MSVC" OFF)
 
-message("${PROJECT_NAME} LIBCORO_ENABLE_ASAN           = ${LIBCORO_ENABLE_ASAN}")
-message("${PROJECT_NAME} LIBCORO_ENABLE_MSAN           = ${LIBCORO_ENABLE_MSAN}")
-message("${PROJECT_NAME} LIBCORO_ENABLE_TSAN           = ${LIBCORO_ENABLE_TSAN}")
-message("${PROJECT_NAME} LIBCORO_ENABLE_USAN           = ${LIBCORO_ENABLE_USAN}")
-message("${PROJECT_NAME} LIBCORO_EXTERNAL_DEPENDENCIES = ${LIBCORO_EXTERNAL_DEPENDENCIES}")
-message("${PROJECT_NAME} LIBCORO_BUILD_TESTS           = ${LIBCORO_BUILD_TESTS}")
-message("${PROJECT_NAME} LIBCORO_CODE_COVERAGE         = ${LIBCORO_CODE_COVERAGE}")
-message("${PROJECT_NAME} LIBCORO_BUILD_EXAMPLES        = ${LIBCORO_BUILD_EXAMPLES}")
-message("${PROJECT_NAME} LIBCORO_FEATURE_NETWORKING    = ${LIBCORO_FEATURE_NETWORKING}")
-message("${PROJECT_NAME} LIBCORO_FEATURE_TLS           = ${LIBCORO_FEATURE_TLS}")
-message("${PROJECT_NAME} LIBCORO_RUN_GITCONFIG         = ${LIBCORO_RUN_GITCONFIG}")
-message("${PROJECT_NAME} LIBCORO_BUILD_SHARED_LIBS     = ${LIBCORO_BUILD_SHARED_LIBS}")
+message(STATUS "LIBCORO_ENABLE_ASAN           = ${LIBCORO_ENABLE_ASAN}")
+message(STATUS "LIBCORO_ENABLE_MSAN           = ${LIBCORO_ENABLE_MSAN}")
+message(STATUS "LIBCORO_ENABLE_TSAN           = ${LIBCORO_ENABLE_TSAN}")
+message(STATUS "LIBCORO_ENABLE_USAN           = ${LIBCORO_ENABLE_USAN}")
+message(STATUS "LIBCORO_EXTERNAL_DEPENDENCIES = ${LIBCORO_EXTERNAL_DEPENDENCIES}")
+message(STATUS "LIBCORO_BUILD_TESTS           = ${LIBCORO_BUILD_TESTS}")
+message(STATUS "LIBCORO_CODE_COVERAGE         = ${LIBCORO_CODE_COVERAGE}")
+message(STATUS "LIBCORO_BUILD_EXAMPLES        = ${LIBCORO_BUILD_EXAMPLES}")
+message(STATUS "LIBCORO_FEATURE_NETWORKING    = ${LIBCORO_FEATURE_NETWORKING}")
+message(STATUS "LIBCORO_FEATURE_TLS           = ${LIBCORO_FEATURE_TLS}")
+message(STATUS "LIBCORO_RUN_GITCONFIG         = ${LIBCORO_RUN_GITCONFIG}")
+message(STATUS "LIBCORO_BUILD_SHARED_LIBS     = ${LIBCORO_BUILD_SHARED_LIBS}")
 
 if(LIBCORO_EXTERNAL_DEPENDENCIES)
     if(LIBCORO_FEATURE_NETWORKING)
