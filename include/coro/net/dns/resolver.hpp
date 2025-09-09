@@ -100,7 +100,7 @@ public:
             ++detail::m_ares_count;
         }
 
-        auto channel_init_status = ares_init(&m_ares_channel);
+        auto channel_init_status = ares_init_options(&m_ares_channel, nullptr, 0);
         if (channel_init_status != ARES_SUCCESS)
         {
             throw std::runtime_error{ares_strerror(channel_init_status)};
