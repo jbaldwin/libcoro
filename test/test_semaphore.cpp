@@ -275,6 +275,18 @@ TEST_CASE("semaphore 1 producers and many consumers", "[semaphore]")
     std::cerr << "END semaphore 1 producers and many consumers\n";
 }
 
+TEST_CASE("semaphore max()", "[semaphore]")
+{
+    std::cerr << "BEGIN semaphore max()\n";
+
+    coro::semaphore<64> s{32};
+
+    REQUIRE(s.max() == 64);
+    REQUIRE(s.value() == 32);
+
+    std::cerr << "END semaphore max()\n";
+}
+
 TEST_CASE("~semaphore", "[semaphore]")
 {
     std::cerr << "[~semaphore]\n\n";

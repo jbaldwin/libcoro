@@ -141,7 +141,7 @@ public:
     /**
      * @return The maximum number of resources the semaphore can contain.
      */
-    [[nodiscard]] constexpr auto max() const noexcept -> std::ptrdiff_t { return max_value; }
+    [[nodiscard]] static constexpr auto max() noexcept -> std::ptrdiff_t { return max_value; }
 
     /**
      * The current number of resources available in this semaphore.
