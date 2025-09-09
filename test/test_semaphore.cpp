@@ -28,12 +28,12 @@ TEST_CASE("semaphore binary", "[semaphore]")
         output.emplace_back(1);
         std::cerr << "coroutine done with resource, releasing\n";
         REQUIRE(s.value() == 0);
-        s.release();
+        co_await s.release();
 
         REQUIRE(s.value() == 1);
 
         REQUIRE(s.try_acquire());
-        s.release();
+        co_await s.release();
 
         co_return;
     };
@@ -43,7 +43,7 @@ TEST_CASE("semaphore binary", "[semaphore]")
     REQUIRE(s.value() == 1);
     REQUIRE(s.try_acquire());
     REQUIRE(s.value() == 0);
-    s.release();
+    coro::sync_wait(s.release());
     REQUIRE(s.value() == 1);
 
     REQUIRE(output.size() == 1);
@@ -71,7 +71,7 @@ TEST_CASE("semaphore binary many waiters until event", "[semaphore]")
         std::cerr << "id = " << id << " semaphore acquired\n";
         value.fetch_add(1, std::memory_order::relaxed);
         std::cerr << "id = " << id << " semaphore release\n";
-        s.release();
+        co_await s.release();
         co_return;
     };
 
@@ -83,7 +83,7 @@ TEST_CASE("semaphore binary many waiters until event", "[semaphore]")
         std::cerr << "block task acquired semaphore, waiting on event\n";
         co_await e;
         std::cerr << "block task releasing semaphore\n";
-        s.release();
+        co_await s.release();
         co_return;
     };
 
@@ -113,11 +113,11 @@ TEST_CASE("semaphore binary many waiters until event", "[semaphore]")
 TEST_CASE("semaphore release over max", "[semaphore]")
 {
     coro::semaphore<2> s{0};
-    s.release();
+    coro::sync_wait(s.release());
     REQUIRE(s.value() == 1);
-    s.release();
+    coro::sync_wait(s.release());
     REQUIRE(s.value() == 2);
-    s.release();
+    coro::sync_wait(s.release());
     REQUIRE(s.value() == 2);
 }
 
@@ -132,10 +132,9 @@ TEST_CASE("semaphore try_acquire", "[semaphore]")
 TEST_CASE("semaphore produce consume", "[semaphore]")
 {
     std::cerr << "BEGIN semaphore produce consume\n";
-    const std::size_t iterations = 10;
+    constexpr std::size_t iterations = 10;
 
-    // This test is run in the context of a thread pool so the producer task can yield.  Otherwise
-    // the producer will just run wild!
+    // This test is run in the context of a thread pool so the producer task can yield. Otherwise, the producer will just run wild!
     auto tp = coro::thread_pool::make_shared(coro::thread_pool::options{.thread_count = 1});
     std::atomic<uint64_t>         value{0};
     std::vector<coro::task<void>> tasks;
@@ -156,7 +155,6 @@ TEST_CASE("semaphore produce consume", "[semaphore]")
                 std::cerr << "id = " << id << " semaphore acquired, consuming value\n";
 
                 value.fetch_add(1, std::memory_order::release);
-                // In the ringbfuffer acquire is 'consuming', we never release back into the buffer
             }
             else
             {
@@ -180,7 +178,7 @@ TEST_CASE("semaphore produce consume", "[semaphore]")
             co_await tp->yield();
 
             std::cerr << "producer: releasing\n";
-            s.release();
+            co_await s.release();
             std::cerr << "producer: produced\n";
         }
 
@@ -201,9 +199,9 @@ TEST_CASE("semaphore produce consume", "[semaphore]")
 TEST_CASE("semaphore 1 producers and many consumers", "[semaphore]")
 {
     std::cerr << "BEGIN semaphore 1 producers and many consumers\n";
-    const std::size_t consumers  = 16;
-    const std::size_t producers  = 1;
-    const std::size_t iterations = 100'000;
+    constexpr std::size_t consumers  = 16;
+    constexpr std::size_t producers  = 1;
+    constexpr std::size_t iterations = 100'000;
 
     std::atomic<uint64_t> value{0};
 
@@ -243,8 +241,7 @@ TEST_CASE("semaphore 1 producers and many consumers", "[semaphore]")
 
         for (size_t i = 0; i < iterations; ++i)
         {
-            // std::cerr << "producer " << id << " s.release()\n";
-            s.release();
+            co_await s.release();
             co_await tp->yield();
         }
 
