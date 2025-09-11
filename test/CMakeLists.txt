@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.12)
 project(libcoro_test)
 
 set(LIBCORO_TEST_SOURCE_FILES
+    concepts/test_concepts.cpp
+
     test_condition_variable.cpp
     test_event.cpp
     test_generator.cpp
