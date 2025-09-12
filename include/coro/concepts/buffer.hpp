@@ -22,6 +22,12 @@ concept const_buffer = requires(const type t)
     { t.data() } -> std::same_as<const typename std::remove_pointer_t<decltype(t.data())>*>;
 };
 
+template<const_buffer buffer_type>
+struct const_buffer_traits
+{
+    using element_type = std::add_const_t<std::remove_pointer_t<decltype(std::declval<buffer_type>().data())>>;
+};
+
 template<typename type>
 concept mutable_buffer = requires(type t)
 {
@@ -36,6 +42,13 @@ concept mutable_buffer = requires(type t)
     // We check the return type of `data()` to be a non-const pointer to the underlying type
     { t.data() } -> std::same_as<typename std::remove_pointer_t<decltype(t.data())>*>;
 };
+
+template<mutable_buffer buffer_type>
+struct mutable_buffer_traits
+{
+    using element_type = std::remove_pointer_t<decltype(std::declval<buffer_type>().data())>;
+};
+
 // clang-format on
 
 } // namespace coro::concepts

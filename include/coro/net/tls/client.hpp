@@ -34,7 +34,7 @@ public:
     };
 
     /**
-     * Creates a new tls client that can connect to an ip address + port.  By default the socket
+     * Creates a new tls client that can connect to an ip address + port. By default, the socket
      * created will be in non-blocking mode, meaning that any sending or receiving of data should
      * be polled for event readiness prior.
      * @param scheduler The io scheduler to drive the tls client.
@@ -49,7 +49,7 @@ public:
                                   .port    = 8080,
         });
     client(const client&) = delete;
-    client(client&& other);
+    client(client&& other) noexcept;
     auto operator=(const client&) noexcept -> client& = delete;
     auto operator=(client&& other) noexcept -> client&;
     ~client();
@@ -58,8 +58,8 @@ public:
      * @return The tcp socket this client is using.
      * @{
      **/
-    auto socket() -> net::socket& { return m_socket; }
-    auto socket() const -> const net::socket& { return m_socket; }
+    [[nodiscard]] auto socket() -> net::socket& { return m_socket; }
+    [[nodiscard]] auto socket() const -> const net::socket& { return m_socket; }
     /** @} */
 
     /**
@@ -77,13 +77,13 @@ public:
      * @return The status of the recv call and a span of the bytes received (if any). The span of
      *         bytes will be a subspan or full span of the given input buffer.
      */
-    template<concepts::mutable_buffer buffer_type>
+    template<concepts::mutable_buffer buffer_type, typename element_type = typename concepts::mutable_buffer_traits<buffer_type>::element_type>
     auto recv(buffer_type& buffer, std::optional<std::chrono::milliseconds> timeout = std::nullopt)
-        -> coro::task<std::pair<recv_status, std::span<char>>>
+        -> coro::task<std::pair<recv_status, std::span<element_type>>>
     {
         if (buffer.empty())
         {
-            co_return {recv_status::buffer_is_empty, std::span<char>{}};
+            co_return {recv_status::buffer_is_empty, std::span<element_type>{}};
         }
 
         auto* tls = m_tls_info.m_tls_ptr.get();
@@ -105,7 +105,7 @@ public:
                     t -= duration;
                     if (t <= std::chrono::microseconds{0})
                     {
-                        co_return {recv_status::timeout, std::span<char>{}};
+                        co_return {recv_status::timeout, std::span<element_type>{}};
                     }
                 }
 
@@ -119,11 +119,11 @@ public:
                 case poll_status::event:
                     break;
                 case poll_status::timeout:
-                    co_return {recv_status::timeout, std::span<char>{}};
+                    co_return {recv_status::timeout, std::span<element_type>{}};
                 case poll_status::error:
-                    co_return {recv_status::error, std::span<char>{}};
+                    co_return {recv_status::error, std::span<element_type>{}};
                 case poll_status::closed:
-                    co_return {recv_status::closed, std::span<char>{}};
+                    co_return {recv_status::closed, std::span<element_type>{}};
             }
 
             size_t bytes_recv{0};
@@ -148,32 +148,32 @@ public:
                 }
                 else
                 {
-                    co_return {static_cast<recv_status>(err), std::span<char>{}};
+                    co_return {static_cast<recv_status>(err), std::span<element_type>{}};
                 }
             }
             else
             {
-                co_return {recv_status::ok, std::span<char>{buffer.data(), static_cast<size_t>(bytes_recv)}};
+                co_return {recv_status::ok, std::span<element_type>{buffer.data(), static_cast<size_t>(bytes_recv)}};
             }
         }
     }
 
     /**
      * Sends outgoing data from the given buffer. If a partial write occurs then the returned span will
-     * contain a view into the unsent bytes. This function will automatically call for writeability on the socket.
+     * contain a view into the unsent bytes. This function will automatically call for write-ability on the socket.
      * @param buffer The data to write on the tls socket.
      * @param timeout The amount of time to send the data before timing out.
      * @return The status of the send call and a span of any remaining bytes not sent. If all bytes
      *         were successfully sent the status will be 'ok' and the remaining span will be empty.
      */
-    template<concepts::const_buffer buffer_type>
+    template<concepts::const_buffer buffer_type, typename element_type = typename concepts::const_buffer_traits<buffer_type>::element_type>
     auto send(const buffer_type& buffer, std::optional<std::chrono::milliseconds> timeout = std::nullopt)
-        -> coro::task<std::pair<send_status, std::span<const char>>>
+        -> coro::task<std::pair<send_status, std::span<element_type>>>
     {
         // Make sure there is data to send.
         if (buffer.empty())
         {
-            co_return {send_status::buffer_is_empty, std::span<const char>{buffer.data(), buffer.size()}};
+            co_return {send_status::buffer_is_empty, std::span<element_type>{buffer.data(), buffer.size()}};
         }
 
         auto* tls = m_tls_info.m_tls_ptr.get();
@@ -195,7 +195,7 @@ public:
                     t -= duration;
                     if (t <= std::chrono::microseconds{0})
                     {
-                        co_return {send_status::timeout, std::span<char>{}};
+                        co_return {send_status::timeout, std::span<element_type>{}};
                     }
                 }
 
@@ -209,11 +209,11 @@ public:
                 case poll_status::event:
                     break;
                 case poll_status::timeout:
-                    co_return {send_status::timeout, std::span<char>{}};
+                    co_return {send_status::timeout, std::span<element_type>{}};
                 case poll_status::error:
-                    co_return {send_status::error, std::span<char>{}};
+                    co_return {send_status::error, std::span<element_type>{}};
                 case poll_status::closed:
-                    co_return {send_status::closed, std::span<char>{}};
+                    co_return {send_status::closed, std::span<element_type>{}};
             }
 
             size_t bytes_sent{0};
@@ -239,13 +239,13 @@ public:
                 }
                 else
                 {
-                    co_return {static_cast<send_status>(err), std::span<char>{}};
+                    co_return {static_cast<send_status>(err), std::span<element_type>{}};
                 }
             }
             else
             {
                 co_return {
-                    send_status::ok, std::span<const char>{buffer.data() + bytes_sent, buffer.size() - bytes_sent}};
+                    send_status::ok, std::span<element_type>{buffer.data() + bytes_sent, buffer.size() - bytes_sent}};
             }
         }
     }

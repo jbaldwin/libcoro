@@ -40,7 +40,7 @@ client::client(
     m_socket.blocking(coro::net::socket::blocking_t::no);
 }
 
-client::client(client&& other)
+client::client(client&& other) noexcept
     : m_io_scheduler(std::move(other.m_io_scheduler)),
       m_tls_ctx(std::move(other.m_tls_ctx)),
       m_options(std::move(other.m_options)),
