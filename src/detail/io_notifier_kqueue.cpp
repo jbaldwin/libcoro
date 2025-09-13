@@ -156,18 +156,21 @@ auto io_notifier_kqueue::next_events(
 
 auto io_notifier_kqueue::event_to_poll_status(const event_t& event) -> poll_status
 {
+    if (event.flags & EV_EOF)
+    {
+        return poll_status::closed;
+    }
+
+    if (event.flags & EV_ERROR)
+    {
+        return poll_status::error;
+    }
+
     if (event.filter & EVFILT_READ || event.filter & EVFILT_WRITE)
     {
         return poll_status::event;
     }
-    else if (event.flags & EV_ERROR)
-    {
-        return poll_status::error;
-    }
-    else if (event.flags & EV_EOF)
-    {
-        return poll_status::closed;
-    }
+
     throw std::runtime_error{"invalid kqueue state"};
 }
 

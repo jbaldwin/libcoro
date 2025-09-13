@@ -184,6 +184,10 @@ TEST_CASE("tcp_server concurrent polling on the same socket", "[tcp_server]")
     std::cerr << "END tcp_server concurrent polling on the same socket\n";
 }
 
+#ifndef __APPLE__
+// This test is known to not work on kqueue style systems (e.g. apple) because the socket shutdown()
+// call does not properly trigger an EV_EOF flag on the accept socket.
+
 TEST_CASE("tcp_server graceful shutdown via socket", "[tcp_server]")
 {
     std::cerr << "BEGIN tcp_server graceful shutdown via socket\n";
@@ -214,6 +218,8 @@ TEST_CASE("tcp_server graceful shutdown via socket", "[tcp_server]")
     scheduler->shutdown();
     std::cerr << "END tcp_server graceful shutdown via socket\n";
 }
+
+#endif
 
 TEST_CASE("~tcp_server", "[tcp_server]")
 {
