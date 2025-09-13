@@ -1,0 +1,61 @@
+plugins {
+    id 'com.android.application'
+}
+
+// Allow CI to override output build directory: -PcustomBuildDir=build-x86_64
+def customBuildDir = project.findProperty('customBuildDir')
+if (customBuildDir) {
+    buildDir = file(customBuildDir)
+    println "[android-ci] Using custom buildDir=${buildDir}"
+}
+
+// Allow CI to restrict build to a single ABI: -PciAbi=x86_64
+def ciAbi = project.findProperty('ciAbi')
+
+android {
+    namespace "com.example.libcorotest"
+    compileSdk = 34
+    defaultConfig {
+        applicationId "com.example.libcorotest"
+        minSdk = 24
+        targetSdk = 34
+        versionCode 1
+        versionName "1.0"
+        externalNativeBuild {
+            cmake {
+                cppFlags "-std=c++20"
+            }
+        }
+        ndk {
+            if (ciAbi) {
+                abiFilters ciAbi
+                println "[android-ci] Restricting ABI to ${ciAbi}"
+            } else {
+                // Default multi-ABI build when not on CI single-ABI matrix
+                abiFilters 'arm64-v8a', 'armeabi-v7a', 'x86_64', 'x86'
+            }
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+    externalNativeBuild {
+        cmake {
+            path "src/main/cpp/CMakeLists.txt"
+            version "3.22.1"
+        }
+    }
+    // Build a single APK that includes all filtered ABIs
+    splits {
+        abi {
+            enable false
+        }
+    }
+    // Explicitly pin latest installed NDK version for reproducible builds
+    ndkVersion "29.0.13846066"
+}
+dependencies {
+}
