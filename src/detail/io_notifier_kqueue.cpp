@@ -51,7 +51,7 @@ auto io_notifier_kqueue::watch_timer(const detail::timer_handle& timer, std::chr
 auto io_notifier_kqueue::watch(fd_t fd, coro::poll_op op, void* data, bool keep) -> bool
 {
     auto event_data = event_t{};
-    auto mode       = EV_ADD | EV_ENABLE;
+    auto mode       = EV_ADD | EV_ENABLE | EV_EOF;
     if (!keep)
     {
         mode |= EV_ONESHOT;
@@ -71,7 +71,7 @@ auto io_notifier_kqueue::watch(detail::poll_info& pi) -> bool
             &event_data,
             pi.m_fd,
             static_cast<int16_t>(coro::poll_op::read),
-            EV_ADD | EV_ONESHOT | EV_ENABLE,
+            EV_ADD | EV_ONESHOT | EV_ENABLE | EV_EOF,
             0,
             0,
             static_cast<void*>(&pi));
@@ -81,7 +81,7 @@ auto io_notifier_kqueue::watch(detail::poll_info& pi) -> bool
             &event_data,
             pi.m_fd,
             static_cast<int16_t>(coro::poll_op::write),
-            EV_ADD | EV_ONESHOT | EV_ENABLE,
+            EV_ADD | EV_ONESHOT | EV_ENABLE | EV_EOF,
             0,
             0,
             static_cast<void*>(&pi));
@@ -96,7 +96,7 @@ auto io_notifier_kqueue::watch(detail::poll_info& pi) -> bool
             &event_data,
             pi.m_fd,
             static_cast<int16_t>(pi.m_op),
-            EV_ADD | EV_ONESHOT | EV_ENABLE,
+            EV_ADD | EV_ONESHOT | EV_ENABLE | EV_EOF,
             0,
             0,
             static_cast<void*>(&pi));

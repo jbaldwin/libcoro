@@ -58,8 +58,8 @@ public:
      * @return The tcp socket this client is using.
      * @{
      **/
-    auto socket() -> net::socket& { return m_socket; }
-    auto socket() const -> const net::socket& { return m_socket; }
+    [[nodiscard]] auto socket() -> net::socket& { return m_socket; }
+    [[nodiscard]] auto socket() const -> const net::socket& { return m_socket; }
     /** @} */
 
     /**
