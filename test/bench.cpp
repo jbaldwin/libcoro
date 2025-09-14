@@ -404,6 +404,13 @@ TEST_CASE("benchmark tcp::server echo server thread pool", "[benchmark]")
             while (true)
             {
                 auto pstatus = co_await client.poll(coro::poll_op::read);
+                if (pstatus != coro::poll_status::event)
+                {
+                    REQUIRE_THREAD_SAFE(pstatus == coro::poll_status::closed);
+                    // the socket has been closed
+                    break;
+                }
+
                 REQUIRE_THREAD_SAFE(pstatus == coro::poll_status::event);
 
                 auto [rstatus, rspan] = client.recv(in);
@@ -597,6 +604,13 @@ TEST_CASE("benchmark tcp::server echo server inline", "[benchmark]")
             while (true)
             {
                 auto pstatus = co_await client.poll(coro::poll_op::read);
+                if (pstatus != coro::poll_status::event)
+                {
+                    REQUIRE_THREAD_SAFE(pstatus == coro::poll_status::closed);
+                    // the socket has been closed
+                    break;
+                }
+
                 REQUIRE_THREAD_SAFE(pstatus == coro::poll_status::event);
 
                 auto [rstatus, rspan] = client.recv(in);
