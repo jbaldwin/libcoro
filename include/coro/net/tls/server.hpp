@@ -66,6 +66,14 @@ public:
      */
     auto accept(std::chrono::milliseconds timeout = std::chrono::seconds{30}) -> coro::task<coro::net::tls::client>;
 
+    /**
+     * @return The tcp accept socket this server is using.
+     * @{
+     **/
+    [[nodiscard]] auto accept_socket() -> net::socket& { return m_accept_socket; }
+    [[nodiscard]] auto accept_socket() const -> const net::socket& { return m_accept_socket; }
+    /** @} */
+
 private:
     /// The io scheduler for awaiting new connections.
     std::shared_ptr<io_scheduler> m_io_scheduler{nullptr};
