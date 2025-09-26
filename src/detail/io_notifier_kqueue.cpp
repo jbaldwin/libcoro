@@ -3,7 +3,9 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <bitset>
 #include <chrono>
+#include <iostream>
 #include <stdexcept>
 
 #include "coro/detail/timer_handle.hpp"
@@ -40,7 +42,7 @@ auto io_notifier_kqueue::watch_timer(const detail::timer_handle& timer, std::chr
         &event_data,
         timer.get_fd(),
         EVFILT_TIMER,
-        EV_ADD | EV_ONESHOT,
+        EV_ADD | EV_CLEAR | EV_ONESHOT,
         NOTE_NSECONDS,
         duration.count(),
         const_cast<void*>(timer.get_inner()));
@@ -51,7 +53,7 @@ auto io_notifier_kqueue::watch_timer(const detail::timer_handle& timer, std::chr
 auto io_notifier_kqueue::watch(fd_t fd, coro::poll_op op, void* data, bool keep) -> bool
 {
     auto event_data = event_t{};
-    auto mode       = EV_ADD | EV_ENABLE;
+    auto mode       = EV_ADD | EV_CLEAR | EV_ENABLE;
     if (!keep)
     {
         mode |= EV_ONESHOT;
@@ -76,7 +78,7 @@ auto io_notifier_kqueue::watch(detail::poll_info& pi) -> bool
             &event_data,
             pi.m_fd,
             static_cast<int16_t>(coro::poll_op::read),
-            EV_ADD | EV_ONESHOT | EV_ENABLE,
+            EV_ADD | EV_CLEAR | EV_ONESHOT | EV_ENABLE,
             0,
             0,
             static_cast<void*>(&pi));
@@ -86,7 +88,7 @@ auto io_notifier_kqueue::watch(detail::poll_info& pi) -> bool
             &event_data,
             pi.m_fd,
             static_cast<int16_t>(coro::poll_op::write),
-            EV_ADD | EV_ONESHOT | EV_ENABLE,
+            EV_ADD | EV_CLEAR | EV_ONESHOT | EV_ENABLE,
             0,
             0,
             static_cast<void*>(&pi));
@@ -101,7 +103,7 @@ auto io_notifier_kqueue::watch(detail::poll_info& pi) -> bool
             &event_data,
             pi.m_fd,
             static_cast<int16_t>(pi.m_op),
-            EV_ADD | EV_ONESHOT | EV_ENABLE,
+            EV_ADD | EV_CLEAR | EV_ONESHOT | EV_ENABLE,
             0,
             0,
             static_cast<void*>(&pi));
@@ -149,7 +151,7 @@ auto io_notifier_kqueue::next_events(
                  .tv_sec  = timeout_as_secs.count(),
                  .tv_nsec = std::chrono::duration_cast<std::chrono::nanoseconds>(timeout - timeout_as_secs).count(),
     };
-    const std::size_t num_ready = ::kevent(
+    const int num_ready = ::kevent(
         m_fd, nullptr, 0, ready_set.data(), std::min(ready_set.size(), ready_events.capacity()), &timeout_spec);
     for (std::size_t i = 0; i < num_ready; i++)
     {
@@ -161,19 +163,29 @@ auto io_notifier_kqueue::next_events(
 
 auto io_notifier_kqueue::event_to_poll_status(const event_t& event) -> poll_status
 {
-    if (event.filter & EVFILT_READ || event.filter & EVFILT_WRITE)
-    {
-        return poll_status::event;
-    }
-
-    if (event.flags & EV_EOF)
+    if ((event.filter == EVFILT_READ || event.filter == EVFILT_WRITE || event.filter == EVFILT_TIMER) &&
+        event.flags & EV_EOF)
     {
         return poll_status::closed;
     }
-
-    if (event.flags & EV_ERROR)
+    else if (
+        (event.filter == EVFILT_READ || event.filter == EVFILT_WRITE || event.filter == EVFILT_TIMER) &&
+        event.flags & EV_ERROR)
     {
         return poll_status::error;
+    }
+    else if (event.filter == EVFILT_READ)
+    {
+        return poll_status::read;
+    }
+    else if (event.filter == EVFILT_WRITE)
+    {
+        return poll_status::write;
+    }
+    else if (event.filter == EVFILT_TIMER)
+    {
+        // Due timer is handled like a read event by the lib
+        return poll_status::read;
     }
 
     throw std::runtime_error{"invalid kqueue state"};

@@ -105,9 +105,13 @@ auto io_notifier_epoll::next_events(
 
 auto io_notifier_epoll::event_to_poll_status(const event_t& event) -> poll_status
 {
-    if (event.events & static_cast<uint32_t>(poll_op::read) || event.events & static_cast<uint32_t>(poll_op::write))
+    if (event.events & static_cast<uint32_t>(poll_op::read))
     {
-        return poll_status::event;
+        return poll_status::read;
+    }
+    if (event.events & static_cast<uint32_t>(poll_op::write))
+    {
+        return poll_status::write;
     }
     else if (event.events & EPOLLERR)
     {

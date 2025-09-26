@@ -183,7 +183,6 @@ auto io_scheduler::shutdown() noexcept -> void
     // Only allow shutdown to occur once.
     if (m_shutdown_requested.exchange(true, std::memory_order::acq_rel) == false)
     {
-
         // Signal the event loop to stop asap.
         const int value{1};
         ::write(m_shutdown_pipe.write_fd(), reinterpret_cast<const void*>(&value), sizeof(value));
@@ -321,10 +320,11 @@ auto io_scheduler::process_scheduled_execute_inline() -> void
         // Clear the notification by reading until the pipe is cleared.
         while (true)
         {
-            constexpr std::size_t READ_COUNT{4};
-            constexpr ssize_t READ_COUNT_BYTES = READ_COUNT * sizeof(int);
+            constexpr std::size_t       READ_COUNT{4};
+            constexpr ssize_t           READ_COUNT_BYTES = READ_COUNT * sizeof(int);
             std::array<int, READ_COUNT> control{};
-            const ssize_t result = ::read(m_schedule_pipe.read_fd(), reinterpret_cast<void*>(control.data()), READ_COUNT_BYTES);
+            const ssize_t               result =
+                ::read(m_schedule_pipe.read_fd(), reinterpret_cast<void*>(control.data()), READ_COUNT_BYTES);
             if (result == READ_COUNT_BYTES)
             {
                 continue;
@@ -343,7 +343,8 @@ auto io_scheduler::process_scheduled_execute_inline() -> void
             }
 
             // Not much we can do here, we're in a very bad state, lets report to stderr.
-            std::cerr << "::read(m_schedule_pipe.read_fd()) error[" << errno << "] " << ::strerror(errno) << " fd=[" << m_schedule_pipe.read_fd() << "]" << std::endl;
+            std::cerr << "::read(m_schedule_pipe.read_fd()) error[" << errno << "] " << ::strerror(errno) << " fd=["
+                      << m_schedule_pipe.read_fd() << "]" << std::endl;
             break;
         }
 

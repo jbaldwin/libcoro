@@ -11,8 +11,9 @@ client::client(std::unique_ptr<coro::io_scheduler>& scheduler, std::shared_ptr<c
     : m_io_scheduler(scheduler.get()),
       m_tls_ctx(std::move(tls_ctx)),
       m_options(std::move(opts)),
-      m_socket(net::make_socket(
-          net::socket::options{m_options.address.domain(), net::socket::type_t::tcp, net::socket::blocking_t::no}))
+      m_socket(
+          net::make_socket(
+              net::socket::options{m_options.address.domain(), net::socket::type_t::tcp, net::socket::blocking_t::no}))
 {
     if (m_io_scheduler == nullptr)
     {
@@ -113,7 +114,7 @@ auto client::connect(std::chrono::milliseconds timeout) -> coro::task<connection
         if (errno == EAGAIN || errno == EINPROGRESS)
         {
             auto pstatus = co_await m_io_scheduler->poll(m_socket, poll_op::write, timeout);
-            if (pstatus == poll_status::event)
+            if (pstatus == poll_status::write)
             {
                 int       result{0};
                 socklen_t result_length{sizeof(result)};

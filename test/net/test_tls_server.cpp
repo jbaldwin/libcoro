@@ -1,4 +1,5 @@
 #include "catch_amalgamated.hpp"
+#include "catch_extensions.hpp"
 
 #ifdef LIBCORO_FEATURE_NETWORKING
     #ifdef LIBCORO_FEATURE_TLS
@@ -39,6 +40,12 @@ TEST_CASE("tls_server hello world server", "[tls_server]")
 
         std::cerr << "client.recv()\n";
         auto [rstatus, rspan] = co_await client.recv(response);
+        if (rstatus != coro::net::tls::recv_status::ok)
+        {
+            REQUIRE_THREAD_SAFE(rstatus == coro::net::tls::recv_status::closed);
+            // the socket has been closed
+            co_return;
+        }
         REQUIRE(rstatus == coro::net::tls::recv_status::ok);
         REQUIRE(rspan.size() == server_msg.size());
         response.resize(rspan.size());
@@ -64,7 +71,13 @@ TEST_CASE("tls_server hello world server", "[tls_server]")
 
         std::cerr << "server.poll()\n";
         auto pstatus = co_await server.poll();
-        REQUIRE(pstatus == coro::poll_status::event);
+        if (pstatus != coro::poll_status::read)
+        {
+            REQUIRE(pstatus == coro::poll_status::closed);
+            // the socket has been closed
+            co_return;
+        }
+        REQUIRE(pstatus == coro::poll_status::read);
 
         std::cerr << "server.accept()\n";
         auto client = co_await server.accept();
@@ -90,8 +103,9 @@ TEST_CASE("tls_server hello world server", "[tls_server]")
         co_return;
     };
 
-    coro::sync_wait(coro::when_all(
-        make_server_task(scheduler, client_msg, server_msg), make_client_task(scheduler, client_msg, server_msg)));
+    coro::sync_wait(
+        coro::when_all(
+            make_server_task(scheduler, client_msg, server_msg), make_client_task(scheduler, client_msg, server_msg)));
 }
 
     #endif // LIBCORO_FEATURE_TLS
