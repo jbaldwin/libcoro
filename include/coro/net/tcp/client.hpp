@@ -69,8 +69,8 @@ public:
      * calling recv and after a send call that doesn't send the entire buffer.
      * @param op The poll operation to perform, use read for incoming data and write for outgoing.
      * @param timeout The amount of time to wait for the poll event to be ready.  Use zero for infinte timeout.
-     * @return The status result of th poll operation.  When poll_status::event is returned then the
-     *         event operation is ready.
+     * @return The status result of th poll operation.  When poll_status::read or poll_status::write is returned then
+     *         this specific event operation is ready.
      */
     auto poll(const coro::poll_op op, const std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
         -> coro::task<poll_status>
@@ -85,7 +85,9 @@ public:
      * @return The status of the recv call and a span of the bytes received (if any). The span of
      *         bytes will be a subspan or full span of the given input buffer.
      */
-    template<concepts::mutable_buffer buffer_type, typename element_type = typename concepts::mutable_buffer_traits<buffer_type>::element_type>
+    template<
+        concepts::mutable_buffer buffer_type,
+        typename element_type = typename concepts::mutable_buffer_traits<buffer_type>::element_type>
     auto recv(buffer_type&& buffer) -> std::pair<recv_status, std::span<element_type>>
     {
         // If the user requested zero bytes, just return.
@@ -120,7 +122,9 @@ public:
      * @return The status of the send call and a span of any remaining bytes not sent.  If all bytes
      *         were successfully sent the status will be 'ok' and the remaining span will be empty.
      */
-    template<concepts::const_buffer buffer_type, typename element_type = typename concepts::const_buffer_traits<buffer_type>::element_type>
+    template<
+        concepts::const_buffer buffer_type,
+        typename element_type = typename concepts::const_buffer_traits<buffer_type>::element_type>
     auto send(const buffer_type& buffer) -> std::pair<send_status, std::span<element_type>>
     {
         // If the user requested zero bytes, just return.

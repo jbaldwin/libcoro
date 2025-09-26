@@ -77,7 +77,9 @@ public:
      * @return The status of the recv call and a span of the bytes received (if any). The span of
      *         bytes will be a subspan or full span of the given input buffer.
      */
-    template<concepts::mutable_buffer buffer_type, typename element_type = typename concepts::mutable_buffer_traits<buffer_type>::element_type>
+    template<
+        concepts::mutable_buffer buffer_type,
+        typename element_type = typename concepts::mutable_buffer_traits<buffer_type>::element_type>
     auto recv(buffer_type& buffer, std::optional<std::chrono::milliseconds> timeout = std::nullopt)
         -> coro::task<std::pair<recv_status, std::span<element_type>>>
     {
@@ -116,8 +118,10 @@ public:
             auto pstatus = co_await poll(op, timeout.value_or(std::chrono::milliseconds{0}));
             switch (pstatus)
             {
-                case poll_status::event:
+                case poll_status::read:
                     break;
+                case poll_status::write:
+                    continue;
                 case poll_status::timeout:
                     co_return {recv_status::timeout, std::span<element_type>{}};
                 case poll_status::error:
@@ -166,7 +170,9 @@ public:
      * @return The status of the send call and a span of any remaining bytes not sent. If all bytes
      *         were successfully sent the status will be 'ok' and the remaining span will be empty.
      */
-    template<concepts::const_buffer buffer_type, typename element_type = typename concepts::const_buffer_traits<buffer_type>::element_type>
+    template<
+        concepts::const_buffer buffer_type,
+        typename element_type = typename concepts::const_buffer_traits<buffer_type>::element_type>
     auto send(const buffer_type& buffer, std::optional<std::chrono::milliseconds> timeout = std::nullopt)
         -> coro::task<std::pair<send_status, std::span<element_type>>>
     {
@@ -206,8 +212,10 @@ public:
             auto pstatus = co_await poll(op, timeout.value_or(std::chrono::milliseconds{0}));
             switch (pstatus)
             {
-                case poll_status::event:
+                case poll_status::write:
                     break;
+                case poll_status::read:
+                    continue;
                 case poll_status::timeout:
                     co_return {send_status::timeout, std::span<element_type>{}};
                 case poll_status::error:
@@ -292,8 +300,8 @@ private:
      * calling recv and after a send that doesn't send the entire buffer.
      * @param op The poll operation to perform, use read for incoming data and write for outgoing.
      * @param timeout The amount of time to wait for the poll event to be ready.  Use zero for infinte timeout.
-     * @return The status result of th poll operation.  When poll_status::event is returned then the
-     *         event operation is ready.
+     * @return The status result of th poll operation.  When poll_status::read or poll_status::write is returned then
+     *         this specific event operation is ready.
      */
     auto poll(coro::poll_op op, std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
         -> coro::task<poll_status>

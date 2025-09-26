@@ -24,7 +24,8 @@ auto to_string(poll_op op) -> const std::string&
     }
 }
 
-static const std::string poll_status_event{"event"};
+static const std::string poll_status_read{"read"};
+static const std::string poll_status_write{"write"};
 static const std::string poll_status_timeout{"timeout"};
 static const std::string poll_status_error{"error"};
 static const std::string poll_status_closed{"closed"};
@@ -33,8 +34,10 @@ auto to_string(poll_status status) -> const std::string&
 {
     switch (status)
     {
-        case poll_status::event:
-            return poll_status_event;
+        case poll_status::read:
+            return poll_status_read;
+        case poll_status::write:
+            return poll_status_write;
         case poll_status::timeout:
             return poll_status_timeout;
         case poll_status::error:
