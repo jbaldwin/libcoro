@@ -5,8 +5,9 @@
 
 #include <atomic>
 #include <chrono>
-#include <thread>
 #include <iostream>
+#include <memory>
+#include <thread>
 
 #include <cstring>
 #include <sys/socket.h>
@@ -861,6 +862,35 @@ TEST_CASE("io_scheduler shutdown with background yielding task", "[thread_pool]"
 
     // std::this_thread::sleep_for(21ms);  //! Required to avoid hang at `yield_for`
     scheduler->shutdown();
+}
+
+TEST_CASE("io_scheduler destruction no io thread", "[io_scheduler]")
+{
+    std::weak_ptr<coro::io_scheduler> weakref;
+    {
+        auto scheduler = coro::io_scheduler::make_shared(
+            coro::io_scheduler::options{
+                .thread_strategy    = coro::io_scheduler::thread_strategy_t::manual,
+                .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
+        weakref = scheduler;
+        REQUIRE(weakref.lock() != nullptr);
+    }
+    REQUIRE(weakref.lock() == nullptr);
+}
+
+TEST_CASE("io_scheduler destruction with io thread", "[io_scheduler]")
+{
+    std::weak_ptr<coro::io_scheduler> weakref;
+    {
+        auto scheduler = coro::io_scheduler::make_shared(
+            coro::io_scheduler::options{
+                .thread_strategy    = coro::io_scheduler::thread_strategy_t::spawn,
+                .pool               = coro::thread_pool::options{.thread_count = 1},
+                .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
+        weakref = scheduler;
+        REQUIRE(weakref.lock() != nullptr);
+    }
+    REQUIRE_FALSE(weakref.lock() == nullptr);
 }
 
 TEST_CASE("~io_scheduler", "[io_scheduler]")
