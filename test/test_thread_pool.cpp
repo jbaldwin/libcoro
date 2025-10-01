@@ -282,7 +282,7 @@ TEST_CASE("thread_pool destruction", "[thread_pool]")
         weakref = tp;
         REQUIRE(weakref.lock() != nullptr);
     }
-    REQUIRE_FALSE(weakref.lock() == nullptr);
+    REQUIRE(weakref.lock() == nullptr);
 }
 
 TEST_CASE("~thread_pool", "[thread_pool]")

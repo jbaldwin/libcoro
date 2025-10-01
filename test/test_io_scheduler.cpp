@@ -890,7 +890,7 @@ TEST_CASE("io_scheduler destruction with io thread", "[io_scheduler]")
         weakref = scheduler;
         REQUIRE(weakref.lock() != nullptr);
     }
-    REQUIRE_FALSE(weakref.lock() == nullptr);
+    REQUIRE(weakref.lock() == nullptr);
 }
 
 TEST_CASE("~io_scheduler", "[io_scheduler]")

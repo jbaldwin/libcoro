@@ -26,7 +26,8 @@ auto thread_pool::make_shared(options opts) -> std::shared_ptr<thread_pool>
     // the background threads.
     for (uint32_t i = 0; i < tp->m_opts.thread_count; ++i)
     {
-        tp->m_threads.emplace_back([tp, i]() { tp->executor(i); });
+        // Threads capture a raw pointer to avoid reference cycles
+        tp->m_threads.emplace_back([tp = tp.get(), i]() { tp->executor(i); });
     }
 
     return tp;

@@ -42,7 +42,8 @@ auto io_scheduler::make_shared(options opts) -> std::shared_ptr<io_scheduler>
     // the background thread.
     if (s->m_opts.thread_strategy == thread_strategy_t::spawn)
     {
-        s->m_io_thread = std::thread([s]() { s->process_events_dedicated_thread(); });
+        // IO thread captures a raw pointer to avoid reference cycles
+        s->m_io_thread = std::thread([s = s.get()]() { s->process_events_dedicated_thread(); });
     }
     // else manual mode, the user must call process_events.
 
