@@ -33,7 +33,7 @@ public:
     };
 
     explicit server(
-        std::shared_ptr<io_scheduler> scheduler,
+        std::shared_ptr<io_scheduler>& scheduler,
         std::shared_ptr<context>      tls_ctx,
         options                       opts = options{
                                   .address = net::ip_address::from_string("0.0.0.0"),
@@ -76,7 +76,7 @@ public:
 
 private:
     /// The io scheduler for awaiting new connections.
-    std::shared_ptr<io_scheduler> m_io_scheduler{nullptr};
+    std::shared_ptr<io_scheduler>& m_io_scheduler;
     // The tls context.
     std::shared_ptr<context> m_tls_ctx{nullptr};
     /// The bind and listen options for this server.

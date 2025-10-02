@@ -42,11 +42,11 @@ public:
      * @param opts See tls::client::options for more information.
      */
     explicit client(
-        std::shared_ptr<io_scheduler> scheduler,
-        std::shared_ptr<context>      tls_ctx,
-        options                       opts = options{
-                                  .address = {net::ip_address::from_string("127.0.0.1")},
-                                  .port    = 8080,
+        std::shared_ptr<io_scheduler>& scheduler,
+        std::shared_ptr<context>       tls_ctx,
+        options                        opts = options{
+                                   .address = {net::ip_address::from_string("127.0.0.1")},
+                                   .port    = 8080,
         });
     client(const client&) = delete;
     client(client&& other) noexcept;
@@ -325,10 +325,10 @@ private:
 
     /// The tls::server creates already connected clients and provides a tcp socket pre-built.
     friend server;
-    client(std::shared_ptr<io_scheduler> scheduler, std::shared_ptr<context> tls_ctx, net::socket socket, options opts);
+    client(std::shared_ptr<io_scheduler>& scheduler, std::shared_ptr<context> tls_ctx, net::socket socket, options opts);
 
     /// The scheduler that will drive this tcp client.
-    std::shared_ptr<io_scheduler> m_io_scheduler{nullptr};
+    std::shared_ptr<io_scheduler>& m_io_scheduler;
     // The tls context.
     std::shared_ptr<context> m_tls_ctx{nullptr};
     /// Options for what server to connect to.
@@ -341,10 +341,10 @@ private:
     tls_info m_tls_info{};
 
     static auto tls_shutdown_and_free(
-        std::shared_ptr<io_scheduler> io_scheduler,
-        net::socket                   s,
-        tls_unique_ptr                tls_ptr,
-        std::chrono::milliseconds     timeout = std::chrono::milliseconds{0}) -> coro::task<void>;
+        std::shared_ptr<io_scheduler>& io_scheduler,
+        net::socket                    s,
+        tls_unique_ptr                 tls_ptr,
+        std::chrono::milliseconds      timeout = std::chrono::milliseconds{0}) -> coro::task<void>;
 };
 
 } // namespace coro::net::tls

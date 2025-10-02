@@ -1,3 +1,5 @@
+#include "coro/io_scheduler.hpp"
+#include <memory>
 #ifdef LIBCORO_FEATURE_TLS
 
     #include "coro/net/tls/client.hpp"
@@ -6,8 +8,8 @@ namespace coro::net::tls
 {
 using namespace std::chrono_literals;
 
-client::client(std::shared_ptr<io_scheduler> scheduler, std::shared_ptr<context> tls_ctx, options opts)
-    : m_io_scheduler(std::move(scheduler)),
+client::client(std::shared_ptr<io_scheduler>& scheduler, std::shared_ptr<context> tls_ctx, options opts)
+    : m_io_scheduler(scheduler),
       m_tls_ctx(std::move(tls_ctx)),
       m_options(std::move(opts)),
       m_socket(net::make_socket(
@@ -25,15 +27,18 @@ client::client(std::shared_ptr<io_scheduler> scheduler, std::shared_ptr<context>
 }
 
 client::client(
-    std::shared_ptr<io_scheduler> scheduler, std::shared_ptr<context> tls_ctx, net::socket socket, options opts)
-    : m_io_scheduler(std::move(scheduler)),
+    std::shared_ptr<io_scheduler>& scheduler, std::shared_ptr<context> tls_ctx, net::socket socket, options opts)
+    : m_io_scheduler(scheduler),
       m_tls_ctx(std::move(tls_ctx)),
       m_options(std::move(opts)),
       m_socket(std::move(socket)),
       m_connect_status(connection_status::connected),
       m_tls_info(tls_connection_type::accept)
 {
-    // io_scheduler is assumed good since it comes from a tls::server.
+    if (m_io_scheduler == nullptr)
+    {
+        throw std::runtime_error{"tls::client from tls::server cannot have nullptr io_scheduler"};
+    }
     // tls_ctx is assumed good since it comes from a tls::server.
 
     // Force the socket to be non-blocking.
@@ -41,7 +46,7 @@ client::client(
 }
 
 client::client(client&& other) noexcept
-    : m_io_scheduler(std::move(other.m_io_scheduler)),
+    : m_io_scheduler(other.m_io_scheduler),
       m_tls_ctx(std::move(other.m_tls_ctx)),
       m_options(std::move(other.m_options)),
       m_socket(std::move(other.m_socket)),
@@ -207,10 +212,10 @@ auto client::handshake(std::chrono::milliseconds timeout) -> coro::task<connecti
 }
 
 auto client::tls_shutdown_and_free(
-    std::shared_ptr<io_scheduler> io_scheduler,
-    net::socket                   s,
-    tls_unique_ptr                tls_ptr,
-    std::chrono::milliseconds     timeout) -> coro::task<void>
+    std::shared_ptr<io_scheduler>& io_scheduler,
+    net::socket                    s,
+    tls_unique_ptr                 tls_ptr,
+    std::chrono::milliseconds      timeout) -> coro::task<void>
 {
     while (true)
     {
