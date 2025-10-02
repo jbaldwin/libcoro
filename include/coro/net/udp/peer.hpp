@@ -36,17 +36,17 @@ public:
      * Creates a udp peer that can send packets but not receive them.  This udp peer will not explicitly
      * bind to a local ip+port.
      */
-    explicit peer(std::shared_ptr<io_scheduler> scheduler, net::domain_t domain = net::domain_t::ipv4);
+    explicit peer(std::shared_ptr<io_scheduler>& scheduler, net::domain_t domain = net::domain_t::ipv4);
 
     /**
      * Creates a udp peer that can send and receive packets.  This peer will bind to the given ip_port.
      */
-    explicit peer(std::shared_ptr<io_scheduler> scheduler, const info& bind_info);
+    explicit peer(std::shared_ptr<io_scheduler>& scheduler, const info& bind_info);
 
     peer(const peer&)                             = default;
     peer(peer&&)                                  = default;
-    auto operator=(const peer&) noexcept -> peer& = default;
-    auto operator=(peer&&) noexcept -> peer&      = default;
+    auto operator=(const peer&) noexcept -> peer&;
+    auto operator=(peer&&) noexcept -> peer&;
     ~peer()                                       = default;
 
     /**
@@ -147,7 +147,7 @@ public:
 
 private:
     /// The scheduler that will drive this udp client.
-    std::shared_ptr<io_scheduler> m_io_scheduler;
+    std::shared_ptr<io_scheduler>& m_io_scheduler;
     /// The udp socket.
     net::socket m_socket{-1};
     /// Did the user request this udp socket is bound locally to receive packets?
