@@ -50,6 +50,10 @@ public:
           m_resume(resume),
           m_pending_dns_requests(pending_dns_requests)
     {
+        if (m_executor == nullptr)
+        {
+            throw std::runtime_error("dns result cannot have nullptr executor");
+        }
     }
     ~result() = default;
 
@@ -78,8 +82,8 @@ template<concepts::io_executor executor_type>
 class resolver
 {
 public:
-    explicit resolver(std::shared_ptr<executor_type> executor, std::chrono::milliseconds timeout)
-        : m_executor(std::move(executor)),
+    explicit resolver(std::shared_ptr<executor_type>& executor, std::chrono::milliseconds timeout)
+        : m_executor(executor),
           m_timeout(timeout)
     {
         if (m_executor == nullptr)
@@ -151,7 +155,7 @@ public:
 
 private:
     /// The executor to drive the events for dns lookups.
-    std::shared_ptr<executor_type> m_executor;
+    std::shared_ptr<executor_type>& m_executor;
 
     /// The global timeout per dns lookup request.
     std::chrono::milliseconds m_timeout{0};
