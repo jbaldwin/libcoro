@@ -37,10 +37,10 @@ public:
      * @param opts See client::options for more information.
      */
     explicit client(
-        std::shared_ptr<io_scheduler> scheduler,
-        options                       opts = options{
-                                  .address = {net::ip_address::from_string("127.0.0.1")},
-                                  .port    = 8080,
+        std::shared_ptr<io_scheduler>& scheduler,
+        options                     opts = options{
+                                .address = {net::ip_address::from_string("127.0.0.1")},
+                                .port    = 8080,
         });
     client(const client& other);
     client(client&& other) noexcept;
@@ -75,7 +75,7 @@ public:
     auto poll(const coro::poll_op op, const std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
         -> coro::task<poll_status>
     {
-        return m_io_scheduler->poll(m_socket, op, timeout);
+        return std::shared_ptr<io_scheduler>(m_io_scheduler)->poll(m_socket, op, timeout);
     }
 
     /**
@@ -143,10 +143,11 @@ public:
 private:
     /// The tcp::server creates already connected clients and provides a tcp socket pre-built.
     friend server;
-    client(std::shared_ptr<io_scheduler> scheduler, net::socket socket, options opts);
+    client(std::shared_ptr<io_scheduler>& scheduler, net::socket socket, options opts);
 
-    /// The scheduler that will drive this tcp client.
-    std::shared_ptr<io_scheduler> m_io_scheduler{nullptr};
+    /// The scheduler that will drive this tcp client. Must be kept alive for the lifetime of this client by the
+    /// client's user.
+    std::shared_ptr<io_scheduler>& m_io_scheduler;
     /// Options for what server to connect to.
     options m_options{};
     /// The tcp socket.

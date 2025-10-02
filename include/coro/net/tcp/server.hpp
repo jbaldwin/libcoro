@@ -30,11 +30,11 @@ public:
     };
 
     explicit server(
-        std::shared_ptr<io_scheduler> scheduler,
-        options                       opts = options{
-                                  .address = net::ip_address::from_string("0.0.0.0"),
-                                  .port    = 8080,
-                                  .backlog = 128,
+        std::shared_ptr<io_scheduler>& scheduler,
+        options                     opts = options{
+                                .address = net::ip_address::from_string("0.0.0.0"),
+                                .port    = 8080,
+                                .backlog = 128,
         });
 
     server(const server&) = delete;
@@ -71,8 +71,9 @@ public:
 
 private:
     friend client;
-    /// The io scheduler for awaiting new connections.
-    std::shared_ptr<io_scheduler> m_io_scheduler{nullptr};
+    /// The io scheduler for awaiting new connections. Must be kept alive for the lifetime of this server by the
+    /// server's user.
+    std::shared_ptr<io_scheduler>& m_io_scheduler;
     /// The bind and listen options for this server.
     options m_options;
     /// The socket for accepting new tcp connections on.

@@ -4,8 +4,8 @@ namespace coro::net::tcp
 {
 using namespace std::chrono_literals;
 
-client::client(std::shared_ptr<io_scheduler> scheduler, options opts)
-    : m_io_scheduler(std::move(scheduler)),
+client::client(std::shared_ptr<io_scheduler>& scheduler, options opts)
+    : m_io_scheduler(scheduler),
       m_options(std::move(opts)),
       m_socket(net::make_socket(
           net::socket::options{m_options.address.domain(), net::socket::type_t::tcp, net::socket::blocking_t::no}))
@@ -16,13 +16,16 @@ client::client(std::shared_ptr<io_scheduler> scheduler, options opts)
     }
 }
 
-client::client(std::shared_ptr<io_scheduler> scheduler, net::socket socket, options opts)
-    : m_io_scheduler(std::move(scheduler)),
+client::client(std::shared_ptr<io_scheduler>& scheduler, net::socket socket, options opts)
+    : m_io_scheduler(scheduler),
       m_options(std::move(opts)),
       m_socket(std::move(socket)),
       m_connect_status(connect_status::connected)
 {
-    // io_scheduler is assumed good since it comes from a tcp::server.
+    if (m_io_scheduler == nullptr)
+    {
+        throw std::runtime_error{"tcp::client created from tcp::server cannot have nullptr io_scheduler"};
+    }
 
     // Force the socket to be non-blocking.
     m_socket.blocking(coro::net::socket::blocking_t::no);
@@ -37,7 +40,7 @@ client::client(const client& other)
 }
 
 client::client(client&& other) noexcept
-    : m_io_scheduler(std::move(other.m_io_scheduler)),
+    : m_io_scheduler(other.m_io_scheduler),
       m_options(std::move(other.m_options)),
       m_socket(std::move(other.m_socket)),
       m_connect_status(std::exchange(other.m_connect_status, std::nullopt))
