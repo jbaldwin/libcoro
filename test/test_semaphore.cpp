@@ -183,7 +183,7 @@ TEST_CASE("semaphore produce consume", "[semaphore]")
         }
 
         std::cerr << "producer exiting\n";
-        s.shutdown();
+        co_await s.shutdown();
         co_return;
     };
 
@@ -252,7 +252,7 @@ TEST_CASE("semaphore 1 producers and many consumers", "[semaphore]")
         }
 
         std::cerr << "producer " << id << " exiting\n";
-        s.shutdown();
+        co_await s.shutdown();
         co_return;
     };
 
