@@ -170,6 +170,9 @@ public:
      */
     [[nodiscard]] auto shutdown() noexcept -> coro::task<void>
     {
+        if (is_shutdown()) {
+            co_return;
+        }
         auto lock = co_await m_mutex.scoped_lock();
         bool expected{false};
         if (m_shutdown.compare_exchange_strong(expected, true, std::memory_order::release, std::memory_order::relaxed))
