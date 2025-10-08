@@ -13,7 +13,7 @@ TEST_CASE("shared_mutex", "[shared_mutex]")
 
 TEST_CASE("mutex single waiter not locked exclusive", "[shared_mutex]")
 {
-    auto                  tp = coro::thread_pool::make_shared(coro::thread_pool::options{.thread_count = 1});
+    auto                  tp = coro::thread_pool::make_unique(coro::thread_pool::options{.thread_count = 1});
     std::vector<uint64_t> output;
 
     coro::shared_mutex<coro::thread_pool> m{tp};
@@ -36,7 +36,7 @@ TEST_CASE("mutex single waiter not locked exclusive", "[shared_mutex]")
         // scoped locks spawn the unlock() into the thread pool so it doesn't block.
         while (!m.try_lock())
         {
-            co_await m.executor()->yield();
+            co_await m.executor().yield();
         }
         co_await m.unlock();
 
@@ -57,7 +57,7 @@ TEST_CASE("mutex single waiter not locked exclusive", "[shared_mutex]")
 
 TEST_CASE("mutex single waiter not locked exclusive with shared scoped lock", "[shared_mutex]")
 {
-    auto                  tp = coro::thread_pool::make_shared(coro::thread_pool::options{.thread_count = 1});
+    auto                  tp = coro::thread_pool::make_unique(coro::thread_pool::options{.thread_count = 1});
     std::vector<uint64_t> output;
 
     coro::shared_mutex<coro::thread_pool> m{tp};
@@ -82,7 +82,7 @@ TEST_CASE("mutex single waiter not locked exclusive with shared scoped lock", "[
         // scoped locks spawn the unlock() into the thread pool so it doesn't block.
         while (!m.try_lock())
         {
-            co_await m.executor()->yield();
+            co_await m.executor().yield();
         }
         co_await m.unlock();
 
@@ -103,7 +103,7 @@ TEST_CASE("mutex single waiter not locked exclusive with shared scoped lock", "[
 
 TEST_CASE("mutex single waiter not locked shared", "[shared_mutex]")
 {
-    auto                  tp = coro::thread_pool::make_shared(coro::thread_pool::options{.thread_count = 1});
+    auto                  tp = coro::thread_pool::make_unique(coro::thread_pool::options{.thread_count = 1});
     std::vector<uint64_t> values{1, 2, 3};
 
     coro::shared_mutex<coro::thread_pool> m{tp};
@@ -130,7 +130,7 @@ TEST_CASE("mutex single waiter not locked shared", "[shared_mutex]")
         // The scoped lock will release the lock upon destructing.
         while (!m.try_lock())
         {
-            co_await m.executor()->yield();
+            co_await m.executor().yield();
         }
         co_await m.unlock();
 
@@ -150,7 +150,7 @@ TEST_CASE("mutex single waiter not locked shared", "[shared_mutex]")
 
 TEST_CASE("mutex single waiter not locked shared shared scope lock", "[shared_mutex]")
 {
-    auto                  tp = coro::thread_pool::make_shared(coro::thread_pool::options{.thread_count = 1});
+    auto                  tp = coro::thread_pool::make_unique(coro::thread_pool::options{.thread_count = 1});
     std::vector<uint64_t> values{1, 2, 3};
 
     coro::shared_mutex<coro::thread_pool> m{tp};
@@ -175,7 +175,7 @@ TEST_CASE("mutex single waiter not locked shared shared scope lock", "[shared_mu
         // The scoped lock will release the lock upon destructing.
         while (!m.try_lock())
         {
-            co_await m.executor()->yield();
+            co_await m.executor().yield();
         }
         co_await m.unlock();
 
@@ -196,13 +196,13 @@ TEST_CASE("mutex single waiter not locked shared shared scope lock", "[shared_mu
 #ifdef LIBCORO_FEATURE_NETWORKING
 TEST_CASE("mutex many shared and exclusive waiters interleaved", "[shared_mutex]")
 {
-    auto s = coro::io_scheduler::make_shared(
+    auto s = coro::io_scheduler::make_unique(
         coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 8}});
     coro::shared_mutex<coro::io_scheduler> m{s};
 
     std::atomic<bool> read_value{false};
 
-    auto make_exclusive_task = [](std::shared_ptr<coro::io_scheduler>     s,
+    auto make_exclusive_task = [](std::unique_ptr<coro::io_scheduler> &    s,
                                   coro::shared_mutex<coro::io_scheduler>& m,
                                   std::atomic<bool>&                      read_value) -> coro::task<void>
     {
@@ -223,11 +223,11 @@ TEST_CASE("mutex many shared and exclusive waiters interleaved", "[shared_mutex]
         co_return;
     };
 
-    auto make_shared_tasks_task = [](std::shared_ptr<coro::io_scheduler>     s,
+    auto make_shared_tasks_task = [](std::unique_ptr<coro::io_scheduler> &    s,
                                      coro::shared_mutex<coro::io_scheduler>& m,
                                      std::atomic<bool>&                      read_value) -> coro::task<void>
     {
-        auto make_shared_task = [](std::shared_ptr<coro::io_scheduler>     s,
+        auto make_shared_task = [](std::unique_ptr<coro::io_scheduler> &    s,
                                    coro::shared_mutex<coro::io_scheduler>& m,
                                    std::atomic<bool>&                      read_value) -> coro::task<bool>
         {

@@ -101,7 +101,7 @@ public:
      *          each shared waiter will be scheduled to immediately run on this executor in
      *          parallel.
      */
-    explicit shared_mutex(std::shared_ptr<executor_type> e) : m_executor(std::move(e))
+    explicit shared_mutex(std::unique_ptr<executor_type>& e) : m_executor(e.get())
     {
         if (m_executor == nullptr)
         {
@@ -255,11 +255,11 @@ public:
     /**
      * @brief Gets the executor that drives the shared mutex.
      *
-     * @return std::shared_ptr<executor_type>
-     */
-    [[nodiscard]] auto executor() -> std::shared_ptr<executor_type>
+     * @return executor_type>&
+     * */
+    [[nodiscard]] auto executor() -> executor_type&
     {
-        return m_executor;
+        return *m_executor;
     }
 
 private:
@@ -276,7 +276,7 @@ private:
     };
 
     /// @brief This executor is for resuming multiple shared waiters.
-    std::shared_ptr<executor_type> m_executor{nullptr};
+    executor_type* m_executor{nullptr};
     /// @brief Exclusive access for mutating the shared mutex's state.
     coro::mutex m_mutex;
     /// @brief The current state of the shared mutex.

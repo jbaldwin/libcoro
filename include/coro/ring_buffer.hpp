@@ -281,7 +281,7 @@ public:
     }
 
     template<coro::concepts::executor executor_type>
-    [[nodiscard]] auto shutdown_drain(std::shared_ptr<executor_type> e) -> coro::task<void>
+    [[nodiscard]] auto shutdown_drain(std::unique_ptr<executor_type>& e) -> coro::task<void>
     {
         auto lk = co_await m_mutex.scoped_lock();
         // Do not allow any more produces, the state must be in running to drain.

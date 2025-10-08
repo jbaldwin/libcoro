@@ -5,14 +5,14 @@ int main()
 {
     const size_t                    iterations = 100;
     const size_t                    consumers  = 4;
-    auto                            tp = coro::thread_pool::make_shared(coro::thread_pool::options{.thread_count = 4});
+    auto                            tp = coro::thread_pool::make_unique(coro::thread_pool::options{.thread_count = 4});
     coro::ring_buffer<uint64_t, 16> rb{};
     coro::mutex                     m{};
 
     std::vector<coro::task<void>> tasks{};
 
     auto make_producer_task =
-        [](std::shared_ptr<coro::thread_pool> tp, coro::ring_buffer<uint64_t, 16>& rb, coro::mutex& m) -> coro::task<void>
+        [](std::unique_ptr<coro::thread_pool>& tp, coro::ring_buffer<uint64_t, 16>& rb, coro::mutex& m) -> coro::task<void>
     {
         co_await tp->schedule();
 
@@ -32,7 +32,7 @@ int main()
     };
 
     auto make_consumer_task =
-        [](std::shared_ptr<coro::thread_pool> tp, coro::ring_buffer<uint64_t, 16>& rb, coro::mutex& m, size_t id) -> coro::task<void>
+        [](std::unique_ptr<coro::thread_pool>& tp, coro::ring_buffer<uint64_t, 16>& rb, coro::mutex& m, size_t id) -> coro::task<void>
     {
         co_await tp->schedule();
 

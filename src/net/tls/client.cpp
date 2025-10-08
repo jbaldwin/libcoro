@@ -7,8 +7,8 @@ namespace coro::net::tls
 {
 using namespace std::chrono_literals;
 
-client::client(std::shared_ptr<io_scheduler>& scheduler, std::shared_ptr<context> tls_ctx, options opts)
-    : m_io_scheduler(scheduler),
+client::client(std::unique_ptr<coro::io_scheduler>& scheduler, std::shared_ptr<context> tls_ctx, options opts)
+    : m_io_scheduler(scheduler.get()),
       m_tls_ctx(std::move(tls_ctx)),
       m_options(std::move(opts)),
       m_socket(net::make_socket(
@@ -26,7 +26,7 @@ client::client(std::shared_ptr<io_scheduler>& scheduler, std::shared_ptr<context
 }
 
 client::client(
-    std::shared_ptr<io_scheduler>& scheduler, std::shared_ptr<context> tls_ctx, net::socket socket, options opts)
+    coro::io_scheduler* scheduler, std::shared_ptr<context> tls_ctx, net::socket socket, options opts)
     : m_io_scheduler(scheduler),
       m_tls_ctx(std::move(tls_ctx)),
       m_options(std::move(opts)),
@@ -42,7 +42,7 @@ client::client(
 }
 
 client::client(client&& other) noexcept
-    : m_io_scheduler(other.m_io_scheduler),
+    : m_io_scheduler(std::exchange(other.m_io_scheduler, nullptr)),
       m_tls_ctx(std::move(other.m_tls_ctx)),
       m_options(std::move(other.m_options)),
       m_socket(std::move(other.m_socket)),
@@ -64,7 +64,7 @@ auto client::operator=(client&& other) noexcept -> client&
 {
     if (std::addressof(other) != this)
     {
-        m_io_scheduler   = other.m_io_scheduler;
+        m_io_scheduler   = std::exchange(other.m_io_scheduler, nullptr);
         m_tls_ctx        = std::move(other.m_tls_ctx);
         m_options        = std::move(other.m_options);
         m_socket         = std::move(other.m_socket);

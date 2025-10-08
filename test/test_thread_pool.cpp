@@ -11,9 +11,9 @@ TEST_CASE("thread_pool", "[thread_pool]")
 
 TEST_CASE("thread_pool one worker one task", "[thread_pool]")
 {
-    auto tp = coro::thread_pool::make_shared(coro::thread_pool::options{1});
+    auto tp = coro::thread_pool::make_unique(coro::thread_pool::options{1});
 
-    auto func = [](std::shared_ptr<coro::thread_pool> tp) -> coro::task<uint64_t>
+    auto func = [](std::unique_ptr<coro::thread_pool>& tp) -> coro::task<uint64_t>
     {
         co_await tp->schedule(); // Schedule this coroutine on the scheduler.
         co_return 42;
@@ -25,9 +25,9 @@ TEST_CASE("thread_pool one worker one task", "[thread_pool]")
 
 TEST_CASE("thread_pool one worker many tasks tuple", "[thread_pool]")
 {
-    auto tp = coro::thread_pool::make_shared(coro::thread_pool::options{1});
+    auto tp = coro::thread_pool::make_unique(coro::thread_pool::options{1});
 
-    auto f = [](std::shared_ptr<coro::thread_pool> tp) -> coro::task<uint64_t>
+    auto f = [](std::unique_ptr<coro::thread_pool>& tp) -> coro::task<uint64_t>
     {
         co_await tp->schedule(); // Schedule this coroutine on the scheduler.
         co_return 50;
@@ -44,9 +44,9 @@ TEST_CASE("thread_pool one worker many tasks tuple", "[thread_pool]")
 
 TEST_CASE("thread_pool one worker many tasks vector", "[thread_pool]")
 {
-    auto tp = coro::thread_pool::make_shared(coro::thread_pool::options{1});
+    auto tp = coro::thread_pool::make_unique(coro::thread_pool::options{1});
 
-    auto f = [](std::shared_ptr<coro::thread_pool> tp) -> coro::task<uint64_t>
+    auto f = [](std::unique_ptr<coro::thread_pool>& tp) -> coro::task<uint64_t>
     {
         co_await tp->schedule(); // Schedule this coroutine on the scheduler.
         co_return 50;
@@ -73,9 +73,9 @@ TEST_CASE("thread_pool one worker many tasks vector", "[thread_pool]")
 TEST_CASE("thread_pool N workers 100k tasks", "[thread_pool]")
 {
     constexpr const std::size_t iterations = 100'000;
-    auto tp = coro::thread_pool::make_shared();
+    auto tp = coro::thread_pool::make_unique();
 
-    auto make_task = [](std::shared_ptr<coro::thread_pool> tp) -> coro::task<uint64_t>
+    auto make_task = [](std::unique_ptr<coro::thread_pool>& tp) -> coro::task<uint64_t>
     {
         co_await tp->schedule();
         co_return 1;
@@ -102,13 +102,13 @@ TEST_CASE("thread_pool N workers 100k tasks", "[thread_pool]")
 
 TEST_CASE("thread_pool 1 worker task spawns another task", "[thread_pool]")
 {
-    auto tp = coro::thread_pool::make_shared(coro::thread_pool::options{1});
+    auto tp = coro::thread_pool::make_unique(coro::thread_pool::options{1});
 
-    auto f1 = [](std::shared_ptr<coro::thread_pool> tp) -> coro::task<uint64_t>
+    auto f1 = [](std::unique_ptr<coro::thread_pool>& tp) -> coro::task<uint64_t>
     {
         co_await tp->schedule();
 
-        auto f2 = [](std::shared_ptr<coro::thread_pool> tp) -> coro::task<uint64_t>
+        auto f2 = [](std::unique_ptr<coro::thread_pool>& tp) -> coro::task<uint64_t>
         {
             co_await tp->schedule();
             co_return 5;
@@ -122,9 +122,9 @@ TEST_CASE("thread_pool 1 worker task spawns another task", "[thread_pool]")
 
 TEST_CASE("thread_pool shutdown", "[thread_pool]")
 {
-    auto tp = coro::thread_pool::make_shared(coro::thread_pool::options{1});
+    auto tp = coro::thread_pool::make_unique(coro::thread_pool::options{1});
 
-    auto f = [](std::shared_ptr<coro::thread_pool> tp) -> coro::task<bool>
+    auto f = [](std::unique_ptr<coro::thread_pool>& tp) -> coro::task<bool>
     {
         try
         {
@@ -146,12 +146,12 @@ TEST_CASE("thread_pool event jump threads", "[thread_pool]")
 {
     // This test verifies that the thread that sets the event ends up executing every waiter on the event
 
-    auto tp1 = coro::thread_pool::make_shared(coro::thread_pool::options{.thread_count = 1});
-    auto tp2 = coro::thread_pool::make_shared(coro::thread_pool::options{.thread_count = 1});
+    auto tp1 = coro::thread_pool::make_unique(coro::thread_pool::options{.thread_count = 1});
+    auto tp2 = coro::thread_pool::make_unique(coro::thread_pool::options{.thread_count = 1});
 
     coro::event e{};
 
-    auto make_tp1_task = [](std::shared_ptr<coro::thread_pool> tp1, coro::event& e) -> coro::task<void>
+    auto make_tp1_task = [](std::unique_ptr<coro::thread_pool>& tp1, coro::event& e) -> coro::task<void>
     {
         co_await tp1->schedule();
         auto before_thread_id = std::this_thread::get_id();
@@ -165,7 +165,7 @@ TEST_CASE("thread_pool event jump threads", "[thread_pool]")
         co_return;
     };
 
-    auto make_tp2_task = [](std::shared_ptr<coro::thread_pool> tp2, coro::event& e) -> coro::task<void>
+    auto make_tp2_task = [](std::unique_ptr<coro::thread_pool>& tp2, coro::event& e) -> coro::task<void>
     {
         co_await tp2->schedule();
         std::this_thread::sleep_for(std::chrono::milliseconds{10});
@@ -186,7 +186,7 @@ TEST_CASE("thread_pool high cpu usage when threadcount is greater than the numbe
     // This was due to using m_size instead of m_queue.size() causing the threads
     // that had no work to go into a spin trying to acquire work.
 
-    auto wait_for_task = [](std::shared_ptr<coro::thread_pool> tp, std::chrono::seconds delay) -> coro::task<>
+    auto wait_for_task = [](std::unique_ptr<coro::thread_pool>& tp, std::chrono::seconds delay) -> coro::task<>
     {
         auto sleep_for_task = [](std::chrono::seconds duration) -> coro::task<int64_t>
         {
@@ -204,7 +204,7 @@ TEST_CASE("thread_pool high cpu usage when threadcount is greater than the numbe
         co_return;
     };
 
-    auto tp = coro::thread_pool::make_shared(coro::thread_pool::options{.thread_count = 3});
+    auto tp = coro::thread_pool::make_unique(coro::thread_pool::options{.thread_count = 3});
     coro::sync_wait(
         coro::when_all(wait_for_task(tp, std::chrono::seconds{1}), wait_for_task(tp, std::chrono::seconds{3})));
 }
@@ -214,7 +214,7 @@ TEST_CASE("issue-287", "[thread_pool]")
     const int ITERATIONS = 200000;
 
     std::atomic<uint32_t> g_count = 0;
-    auto tp              = coro::thread_pool::make_shared(coro::thread_pool::options{.thread_count = 1});
+    auto tp              = coro::thread_pool::make_unique(coro::thread_pool::options{.thread_count = 1});
 
     auto task = [](std::atomic<uint32_t>& count) -> coro::task<void>
     {
@@ -235,7 +235,7 @@ TEST_CASE("issue-287", "[thread_pool]")
 
 TEST_CASE("thread_pool::spawn", "[thread_pool]")
 {
-    auto tp = coro::thread_pool::make_shared(coro::thread_pool::options{.thread_count = 2});
+    auto tp = coro::thread_pool::make_unique(coro::thread_pool::options{.thread_count = 2});
     std::atomic<uint64_t> counter{0};
 
     auto make_task = [](std::atomic<uint64_t>& counter, uint64_t amount) -> coro::task<void>
@@ -255,7 +255,7 @@ TEST_CASE("thread_pool::spawn", "[thread_pool]")
 
 TEST_CASE("thread_pool::schedule(task)", "[thread_pool]")
 {
-    auto tp = coro::thread_pool::make_shared(coro::thread_pool::options{.thread_count = 1});
+    auto tp = coro::thread_pool::make_unique(coro::thread_pool::options{.thread_count = 1});
     uint64_t          counter{0};
     std::thread::id   coroutine_tid;
 
@@ -273,16 +273,16 @@ TEST_CASE("thread_pool::schedule(task)", "[thread_pool]")
     REQUIRE(main_tid != coroutine_tid);
 }
 
-TEST_CASE("thread_pool destruction", "[thread_pool]")
-{
-    std::weak_ptr<coro::thread_pool> weakref;
-    {
-        auto tp = coro::thread_pool::make_shared(coro::thread_pool::options{.thread_count = 1});
-        weakref = tp;
-        REQUIRE(weakref.lock() != nullptr);
-    }
-    REQUIRE(weakref.lock() == nullptr);
-}
+// TEST_CASE("thread_pool destruction", "[thread_pool]")
+// {
+//     std::weak_ptr<coro::thread_pool> weakref;
+//     {
+//         auto tp = coro::thread_pool::make_unique(coro::thread_pool::options{.thread_count = 1});
+//         weakref = tp;
+//         REQUIRE(weakref.lock() != nullptr);
+//     }
+//     REQUIRE(weakref.lock() == nullptr);
+// }
 
 TEST_CASE("~thread_pool", "[thread_pool]")
 {

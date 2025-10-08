@@ -61,7 +61,7 @@ TEST_CASE("ring_buffer many elements many producers many consumers", "[ring_buff
     const size_t producers  = 100;
 
     coro::ring_buffer<uint64_t, 64> rb{};
-    auto tp = coro::thread_pool::make_shared(coro::thread_pool::options{.thread_count = 4});
+    auto tp = coro::thread_pool::make_unique(coro::thread_pool::options{.thread_count = 4});
     coro::latch                     wait{producers};
     std::atomic<uint64_t> counter{0};
     std::atomic<uint64_t> initated_consumes{0};
@@ -69,7 +69,7 @@ TEST_CASE("ring_buffer many elements many producers many consumers", "[ring_buff
     std::atomic<uint64_t> producer_counter{0};
 
     auto make_producer_task =
-        [](std::shared_ptr<coro::thread_pool> tp, coro::ring_buffer<uint64_t, 64>& rb, coro::latch& w, std::atomic<uint64_t>& producer_counter) -> coro::task<void>
+        [](std::unique_ptr<coro::thread_pool>& tp, coro::ring_buffer<uint64_t, 64>& rb, coro::latch& w, std::atomic<uint64_t>& producer_counter) -> coro::task<void>
     {
         co_await tp->schedule();
         auto to_produce = iterations / producers;
@@ -91,7 +91,7 @@ TEST_CASE("ring_buffer many elements many producers many consumers", "[ring_buff
     };
 
     auto make_shutdown_task =
-        [](std::shared_ptr<coro::thread_pool> tp, coro::ring_buffer<uint64_t, 64>& rb, coro::latch& w) -> coro::task<void>
+        [](std::unique_ptr<coro::thread_pool>& tp, coro::ring_buffer<uint64_t, 64>& rb, coro::latch& w) -> coro::task<void>
     {
         // Wait for all producers to complete before signally shutdown with drain.
         co_await tp->schedule();
@@ -106,7 +106,7 @@ TEST_CASE("ring_buffer many elements many producers many consumers", "[ring_buff
         co_return;
     };
 
-    auto make_consumer_task = [](std::shared_ptr<coro::thread_pool> tp, coro::ring_buffer<uint64_t, 64>& rb, std::atomic<uint64_t>& counter, std::atomic<uint64_t>& successful_consumes, std::atomic<uint64_t>& initated_consumes) -> coro::task<void>
+    auto make_consumer_task = [](std::unique_ptr<coro::thread_pool>& tp, coro::ring_buffer<uint64_t, 64>& rb, std::atomic<uint64_t>& counter, std::atomic<uint64_t>& successful_consumes, std::atomic<uint64_t>& initated_consumes) -> coro::task<void>
     {
         co_await tp->schedule();
 
@@ -167,10 +167,10 @@ TEST_CASE("ring_buffer producer consumer separate threads", "[ring_buffer]")
     coro::ring_buffer<uint64_t, 2> rb{};
 
     // We'll use an io schedule so we can use yield_for on shutdown since its two threads.
-    auto producer_tp = coro::thread_pool::make_shared(coro::thread_pool::options{.thread_count = 1});
-    auto consumer_tp = coro::thread_pool::make_shared(coro::thread_pool::options{.thread_count = 1});
+    auto producer_tp = coro::thread_pool::make_unique(coro::thread_pool::options{.thread_count = 1});
+    auto consumer_tp = coro::thread_pool::make_unique(coro::thread_pool::options{.thread_count = 1});
 
-    auto make_producer_task = [](std::shared_ptr<coro::thread_pool> producer_tp, coro::ring_buffer<uint64_t, 2>& rb) -> coro::task<void>
+    auto make_producer_task = [](std::unique_ptr<coro::thread_pool>& producer_tp, coro::ring_buffer<uint64_t, 2>& rb) -> coro::task<void>
     {
         for (size_t i = 0; i < iterations; ++i)
         {
@@ -184,7 +184,7 @@ TEST_CASE("ring_buffer producer consumer separate threads", "[ring_buffer]")
         co_return;
     };
 
-    auto make_consumer_task = [](std::shared_ptr<coro::thread_pool> consumer_tp, coro::ring_buffer<uint64_t, 2>& rb) -> coro::task<void>
+    auto make_consumer_task = [](std::unique_ptr<coro::thread_pool>& consumer_tp, coro::ring_buffer<uint64_t, 2>& rb) -> coro::task<void>
     {
         while (true)
         {

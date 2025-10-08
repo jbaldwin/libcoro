@@ -4,8 +4,8 @@ namespace coro::net::tcp
 {
 using namespace std::chrono_literals;
 
-client::client(std::shared_ptr<io_scheduler>& scheduler, options opts)
-    : m_io_scheduler(scheduler),
+client::client(std::unique_ptr<coro::io_scheduler>& scheduler, options opts)
+    : m_io_scheduler(scheduler.get()),
       m_options(std::move(opts)),
       m_socket(net::make_socket(
           net::socket::options{m_options.address.domain(), net::socket::type_t::tcp, net::socket::blocking_t::no}))
@@ -16,7 +16,7 @@ client::client(std::shared_ptr<io_scheduler>& scheduler, options opts)
     }
 }
 
-client::client(std::shared_ptr<io_scheduler> scheduler, net::socket socket, options opts)
+client::client(coro::io_scheduler* scheduler, net::socket socket, options opts)
     : m_io_scheduler(scheduler),
       m_options(std::move(opts)),
       m_socket(std::move(socket)),
@@ -64,7 +64,7 @@ auto client::operator=(client&& other) noexcept -> client&
 {
     if (std::addressof(other) != this)
     {
-        m_io_scheduler   = other.m_io_scheduler;
+        m_io_scheduler   = std::exchange(other.m_io_scheduler, nullptr);
         m_options        = std::move(other.m_options);
         m_socket         = std::move(other.m_socket);
         m_connect_status = std::exchange(other.m_connect_status, std::nullopt);

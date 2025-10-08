@@ -136,10 +136,10 @@ TEST_CASE("benchmark thread_pool{1} counter task", "[benchmark]")
 {
     constexpr std::size_t iterations = default_iterations;
 
-    auto                  tp = coro::thread_pool::make_shared(coro::thread_pool::options{1});
+    auto                  tp = coro::thread_pool::make_unique(coro::thread_pool::options{1});
     std::atomic<uint64_t> counter{0};
 
-    auto make_task = [](std::shared_ptr<coro::thread_pool> tp, std::atomic<uint64_t>& c) -> coro::task<void>
+    auto make_task = [](std::unique_ptr<coro::thread_pool>& tp, std::atomic<uint64_t>& c) -> coro::task<void>
     {
         co_await tp->schedule();
         c.fetch_add(1, std::memory_order::relaxed);
@@ -172,10 +172,10 @@ TEST_CASE("benchmark thread_pool{2} counter task", "[benchmark]")
 {
     constexpr std::size_t iterations = default_iterations;
 
-    auto                  tp = coro::thread_pool::make_shared(coro::thread_pool::options{2});
+    auto                  tp = coro::thread_pool::make_unique(coro::thread_pool::options{2});
     std::atomic<uint64_t> counter{0};
 
-    auto make_task = [](std::shared_ptr<coro::thread_pool> tp, std::atomic<uint64_t>& c) -> coro::task<void>
+    auto make_task = [](std::unique_ptr<coro::thread_pool>& tp, std::atomic<uint64_t>& c) -> coro::task<void>
     {
         co_await tp->schedule();
         c.fetch_add(1, std::memory_order::relaxed);
@@ -208,10 +208,10 @@ TEST_CASE("benchmark thread_pool{N} counter task", "[benchmark]")
 {
     constexpr std::size_t iterations = default_iterations;
 
-    auto                  tp = coro::thread_pool::make_shared();
+    auto                  tp = coro::thread_pool::make_unique();
     std::atomic<uint64_t> counter{0};
 
-    auto make_task = [](std::shared_ptr<coro::thread_pool> tp, std::atomic<uint64_t>& c) -> coro::task<void>
+    auto make_task = [](std::unique_ptr<coro::thread_pool>& tp, std::atomic<uint64_t>& c) -> coro::task<void>
     {
         co_await tp->schedule();
         c.fetch_add(1, std::memory_order::relaxed);
@@ -245,14 +245,14 @@ TEST_CASE("benchmark counter task scheduler{1} yield", "[benchmark]")
     constexpr std::size_t iterations = default_iterations;
     constexpr std::size_t ops        = iterations * 2; // the external resume is still a resume op
 
-    auto s = coro::io_scheduler::make_shared(
+    auto s = coro::io_scheduler::make_unique(
         coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
 
     std::atomic<uint64_t>         counter{0};
     std::vector<coro::task<void>> tasks{};
     tasks.reserve(iterations);
 
-    auto make_task = [](std::shared_ptr<coro::io_scheduler> s, std::atomic<uint64_t>& counter) -> coro::task<void>
+    auto make_task = [](std::unique_ptr<coro::io_scheduler>& s, std::atomic<uint64_t>& counter) -> coro::task<void>
     {
         co_await s->schedule();
         co_await s->yield();
@@ -280,14 +280,14 @@ TEST_CASE("benchmark counter task scheduler{1} yield_for", "[benchmark]")
     constexpr std::size_t iterations = default_iterations;
     constexpr std::size_t ops        = iterations * 2; // the external resume is still a resume op
 
-    auto s = coro::io_scheduler::make_shared(
+    auto s = coro::io_scheduler::make_unique(
         coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
 
     std::atomic<uint64_t>         counter{0};
     std::vector<coro::task<void>> tasks{};
     tasks.reserve(iterations);
 
-    auto make_task = [](std::shared_ptr<coro::io_scheduler> s, std::atomic<uint64_t>& counter) -> coro::task<void>
+    auto make_task = [](std::unique_ptr<coro::io_scheduler>& s, std::atomic<uint64_t>& counter) -> coro::task<void>
     {
         co_await s->schedule();
         co_await s->yield_for(std::chrono::milliseconds{5});
@@ -317,7 +317,7 @@ TEST_CASE("benchmark counter task scheduler await event from another coroutine",
     constexpr std::size_t iterations = default_iterations;
     constexpr std::size_t ops        = iterations * 3; // two tasks + event resume
 
-    auto s = coro::io_scheduler::make_shared(
+    auto s = coro::io_scheduler::make_unique(
         coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
 
     std::vector<std::unique_ptr<coro::event>> events{};
@@ -332,7 +332,7 @@ TEST_CASE("benchmark counter task scheduler await event from another coroutine",
 
     std::atomic<uint64_t> counter{0};
 
-    auto wait_func = [](std::shared_ptr<coro::io_scheduler>        s,
+    auto wait_func = [](std::unique_ptr<coro::io_scheduler>&        s,
                         std::vector<std::unique_ptr<coro::event>>& events,
                         std::atomic<uint64_t>&                     counter,
                         std::size_t                                index) -> coro::task<void>
@@ -343,7 +343,7 @@ TEST_CASE("benchmark counter task scheduler await event from another coroutine",
         co_return;
     };
 
-    auto resume_func = [](std::shared_ptr<coro::io_scheduler>        s,
+    auto resume_func = [](std::unique_ptr<coro::io_scheduler>&        s,
                           std::vector<std::unique_ptr<coro::event>>& events,
                           std::size_t                                index) -> coro::task<void>
     {
@@ -387,11 +387,11 @@ TEST_CASE("benchmark tcp::server echo server thread pool", "[benchmark]")
     std::atomic<uint64_t> accepted{0};
     std::atomic<uint64_t> clients_completed{0};
 
-    auto server_scheduler = coro::io_scheduler::make_shared(
+    auto server_scheduler = coro::io_scheduler::make_unique(
         coro::io_scheduler::options{
             .pool               = coro::thread_pool::options{},
             .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_on_thread_pool});
-    auto make_server_task = [](std::shared_ptr<coro::io_scheduler> server_scheduler,
+    auto make_server_task = [](std::unique_ptr<coro::io_scheduler>& server_scheduler,
                                std::atomic<uint64_t>&              listening,
                                std::atomic<uint64_t>&              accepted) -> coro::task<void>
     {
@@ -463,11 +463,11 @@ TEST_CASE("benchmark tcp::server echo server thread pool", "[benchmark]")
     std::mutex                                    g_histogram_mutex;
     std::map<std::chrono::milliseconds, uint64_t> g_histogram;
 
-    auto client_scheduler = coro::io_scheduler::make_shared(
+    auto client_scheduler = coro::io_scheduler::make_unique(
         coro::io_scheduler::options{
             .pool               = coro::thread_pool::options{},
             .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_on_thread_pool});
-    auto make_client_task = [](std::shared_ptr<coro::io_scheduler>            client_scheduler,
+    auto make_client_task = [](std::unique_ptr<coro::io_scheduler>&            client_scheduler,
                                const std::string&                             msg,
                                std::atomic<uint64_t>&                         clients_completed,
                                std::map<std::chrono::milliseconds, uint64_t>& g_histogram,
@@ -577,7 +577,7 @@ TEST_CASE("benchmark tcp::server echo server inline", "[benchmark]")
     struct server
     {
         uint16_t                            id;
-        std::shared_ptr<coro::io_scheduler> scheduler{coro::io_scheduler::make_shared(
+        std::unique_ptr<coro::io_scheduler> scheduler{coro::io_scheduler::make_unique(
             coro::io_scheduler::options{.execution_strategy = estrat::process_tasks_inline})};
         uint64_t                            live_clients{0};
         coro::event                         wait_for_clients{};
@@ -586,7 +586,7 @@ TEST_CASE("benchmark tcp::server echo server inline", "[benchmark]")
     struct client
     {
         uint16_t                            id;
-        std::shared_ptr<coro::io_scheduler> scheduler{coro::io_scheduler::make_shared(
+        std::unique_ptr<coro::io_scheduler> scheduler{coro::io_scheduler::make_unique(
             coro::io_scheduler::options{.execution_strategy = estrat::process_tasks_inline})};
         std::vector<coro::task<void>>       tasks{};
     };
@@ -811,11 +811,11 @@ TEST_CASE("benchmark tls::server echo server thread pool", "[benchmark]")
     std::atomic<uint64_t> accepted{0};
     std::atomic<uint64_t> clients_completed{0};
 
-    auto server_scheduler = coro::io_scheduler::make_shared(
+    auto server_scheduler = coro::io_scheduler::make_unique(
         coro::io_scheduler::options{
             .pool               = coro::thread_pool::options{},
             .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_on_thread_pool});
-    auto make_server_task = [](std::shared_ptr<coro::io_scheduler> server_scheduler,
+    auto make_server_task = [](std::unique_ptr<coro::io_scheduler>& server_scheduler,
                                std::atomic<uint64_t>&              listening,
                                std::atomic<uint64_t>&              accepted) -> coro::task<void>
     {
@@ -910,11 +910,11 @@ TEST_CASE("benchmark tls::server echo server thread pool", "[benchmark]")
     coro::mutex                                   histogram_mutex;
     std::map<std::chrono::milliseconds, uint64_t> g_histogram;
 
-    auto client_scheduler = coro::io_scheduler::make_shared(
+    auto client_scheduler = coro::io_scheduler::make_unique(
         coro::io_scheduler::options{
             .pool               = coro::thread_pool::options{},
             .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_on_thread_pool});
-    auto make_client_task = [](std::shared_ptr<coro::io_scheduler>            client_scheduler,
+    auto make_client_task = [](std::unique_ptr<coro::io_scheduler>&            client_scheduler,
                                const std::string&                             msg,
                                std::atomic<uint64_t>&                         clients_completed,
                                std::map<std::chrono::milliseconds, uint64_t>& g_histogram,
