@@ -60,7 +60,7 @@ public:
     auto socket() const noexcept -> const net::socket& { return m_socket; }
 
     /**
-     * @param op The poll operation to perform on the udp socket.  Note that if this is a send only
+     * @param op The poll operation to perform on the udp socket. Note that if this is a send call only
      *           udp socket (did not bind) then polling for read will not work.
      * @param timeout The timeout for the poll operation to be ready.
      * @return The result status of the poll operation.
@@ -77,12 +77,12 @@ public:
      * @return The status of send call and a span view of any data that wasn't sent.  This data if
      *         un-sent will correspond to bytes at the end of the given buffer.
      */
-    template<concepts::const_buffer buffer_type>
-    auto sendto(const info& peer_info, const buffer_type& buffer) -> std::pair<send_status, std::span<const char>>
+    template<concepts::const_buffer buffer_type, typename element_type = typename concepts::const_buffer_traits<buffer_type>::element_type>
+    auto sendto(const info& peer_info, const buffer_type& buffer) -> std::pair<send_status, std::span<element_type>>
     {
         if (buffer.empty())
         {
-            return {send_status::ok, std::span<const char>{}};
+            return {send_status::ok, std::span<element_type>{}};
         }
 
         sockaddr_in peer{};
@@ -97,11 +97,11 @@ public:
 
         if (bytes_sent >= 0)
         {
-            return {send_status::ok, std::span<const char>{buffer.data() + bytes_sent, buffer.size() - bytes_sent}};
+            return {send_status::ok, std::span<element_type>{buffer.data() + bytes_sent, buffer.size() - bytes_sent}};
         }
         else
         {
-            return {static_cast<send_status>(errno), std::span<const char>{}};
+            return {static_cast<send_status>(errno), std::span<element_type>{}};
         }
     }
 
@@ -112,13 +112,13 @@ public:
      *         always start at the beggining of the buffer but depending on how large the data was
      *         it might not fill the entire buffer.
      */
-    template<concepts::mutable_buffer buffer_type>
-    auto recvfrom(buffer_type&& buffer) -> std::tuple<recv_status, peer::info, std::span<char>>
+    template<concepts::mutable_buffer buffer_type, typename element_type = typename concepts::mutable_buffer_traits<buffer_type>::element_type>
+    auto recvfrom(buffer_type&& buffer) -> std::tuple<recv_status, peer::info, std::span<element_type>>
     {
         // The user must bind locally to be able to receive packets.
         if (!m_bound)
         {
-            return {recv_status::udp_not_bound, peer::info{}, std::span<char>{}};
+            return {recv_status::udp_not_bound, peer::info{}, std::span<element_type>{}};
         }
 
         sockaddr_in peer{};
@@ -129,7 +129,7 @@ public:
 
         if (bytes_read < 0)
         {
-            return {static_cast<recv_status>(errno), peer::info{}, std::span<char>{}};
+            return {static_cast<recv_status>(errno), peer::info{}, std::span<element_type>{}};
         }
 
         std::span<const uint8_t> ip_addr_view{
@@ -142,7 +142,7 @@ public:
             peer::info{
                 .address = net::ip_address{ip_addr_view, static_cast<net::domain_t>(peer.sin_family)},
                 .port    = ntohs(peer.sin_port)},
-            std::span<char>{buffer.data(), static_cast<size_t>(bytes_read)}};
+            std::span<element_type>{buffer.data(), static_cast<size_t>(bytes_read)}};
     }
 
 private:

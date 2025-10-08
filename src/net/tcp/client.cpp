@@ -36,7 +36,7 @@ client::client(const client& other)
 {
 }
 
-client::client(client&& other)
+client::client(client&& other) noexcept
     : m_io_scheduler(std::move(other.m_io_scheduler)),
       m_options(std::move(other.m_options)),
       m_socket(std::move(other.m_socket)),

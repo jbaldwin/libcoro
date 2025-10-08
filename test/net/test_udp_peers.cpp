@@ -4,7 +4,7 @@
 
     #include <coro/coro.hpp>
 
-TEST_CASE("udp one way")
+TEST_CASE("udp one way", "[udp]")
 {
     const std::string msg{"aaaaaaaaaaaaaaaaaaaaabbbbbbbbbbbbbbbbbcccccccccccccccccc"};
 
@@ -49,7 +49,7 @@ TEST_CASE("udp one way")
     coro::sync_wait(coro::when_all(make_recv_task(scheduler, msg), make_send_task(scheduler, msg)));
 }
 
-TEST_CASE("udp echo peers")
+TEST_CASE("udp echo peers", "[udp]")
 {
     const std::string peer1_msg{"Hello from peer1!"};
     const std::string peer2_msg{"Hello from peer2!!"};

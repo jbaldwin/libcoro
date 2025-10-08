@@ -56,10 +56,18 @@ public:
 
     /**
      * Accepts an incoming tcp client connection.  On failure the tls clients socket will be set to
-     * and invalid state, use the socket.is_value() to verify the client was correctly accepted.
+     * and invalid state, use the socket.is_valid() to verify the client was correctly accepted.
      * @return The newly connected tcp client connection.
      */
     auto accept() -> coro::net::tcp::client;
+
+    /**
+     * @return The tcp accept socket this server is using.
+     * @{
+     **/
+    [[nodiscard]] auto accept_socket() -> net::socket& { return m_accept_socket; }
+    [[nodiscard]] auto accept_socket() const -> const net::socket& { return m_accept_socket; }
+    /** @} */
 
 private:
     friend client;
