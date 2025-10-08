@@ -47,6 +47,7 @@ TEST_CASE("tls_server hello world server", "[tls_server]")
         std::cerr << "client received message: " << response << "\n";
 
         std::cerr << "client finished\n";
+        co_await client.shutdown();
         co_return;
     };
 
@@ -83,6 +84,7 @@ TEST_CASE("tls_server hello world server", "[tls_server]")
         auto [sstatus, remaining] = co_await client.send(server_msg);
         REQUIRE(sstatus == coro::net::tls::send_status::ok);
         REQUIRE(remaining.empty());
+        co_await client.shutdown();
 
         std::cerr << "server finished\n";
         co_return;

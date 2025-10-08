@@ -273,6 +273,17 @@ TEST_CASE("thread_pool::schedule(task)", "[thread_pool]")
     REQUIRE(main_tid != coroutine_tid);
 }
 
+TEST_CASE("thread_pool destruction", "[thread_pool]")
+{
+    std::weak_ptr<coro::thread_pool> weakref;
+    {
+        auto tp = coro::thread_pool::make_shared(coro::thread_pool::options{.thread_count = 1});
+        weakref = tp;
+        REQUIRE(weakref.lock() != nullptr);
+    }
+    REQUIRE(weakref.lock() == nullptr);
+}
+
 TEST_CASE("~thread_pool", "[thread_pool]")
 {
     std::cerr << "[~thread_pool]\n\n";

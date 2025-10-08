@@ -863,6 +863,50 @@ TEST_CASE("io_scheduler shutdown with background yielding task", "[thread_pool]"
     scheduler->shutdown();
 }
 
+TEST_CASE("io_scheduler destruction manual with process tasks inline", "[io_scheduler]")
+{
+    std::weak_ptr<coro::io_scheduler> weakref;
+    {
+        auto scheduler = coro::io_scheduler::make_shared(
+            coro::io_scheduler::options{
+                .thread_strategy    = coro::io_scheduler::thread_strategy_t::manual,
+                .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
+        scheduler->process_events();
+        weakref = scheduler;
+        REQUIRE(weakref.lock() != nullptr);
+    }
+    REQUIRE(weakref.lock() == nullptr);
+}
+
+TEST_CASE("io_scheduler destruction spawn with process tasks inline", "[io_scheduler]")
+{
+    std::weak_ptr<coro::io_scheduler> weakref;
+    {
+        auto scheduler = coro::io_scheduler::make_shared(
+            coro::io_scheduler::options{
+                .thread_strategy    = coro::io_scheduler::thread_strategy_t::spawn,
+                .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
+        weakref = scheduler;
+        REQUIRE(weakref.lock() != nullptr);
+    }
+    REQUIRE(weakref.lock() == nullptr);
+}
+
+TEST_CASE("io_scheduler destruction spawn with process tasks on thread pool", "[io_scheduler]")
+{
+    std::weak_ptr<coro::io_scheduler> weakref;
+    {
+        auto scheduler = coro::io_scheduler::make_shared(
+            coro::io_scheduler::options{
+                .thread_strategy    = coro::io_scheduler::thread_strategy_t::spawn,
+                .pool               = coro::thread_pool::options{.thread_count = 1},
+                .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_on_thread_pool});
+        weakref = scheduler;
+        REQUIRE(weakref.lock() != nullptr);
+    }
+    REQUIRE(weakref.lock() == nullptr);
+}
+
 TEST_CASE("~io_scheduler", "[io_scheduler]")
 {
     std::cerr << "[~io_scheduler]\n\n";

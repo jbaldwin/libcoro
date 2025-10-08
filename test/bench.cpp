@@ -871,6 +871,7 @@ TEST_CASE("benchmark tls::server echo server thread pool", "[benchmark]")
                 // std::cerr << "SERVER CONNECTION: send() -> " << data << "\n";
             }
 
+            co_await client.shutdown();
             wait_for_clients.count_down();
             // std::cerr << "SERVER CONNECTION: wait_for_clients.count_down(1) -> " << wait_for_clients.remaining() <<
             // "\n";
@@ -996,6 +997,7 @@ TEST_CASE("benchmark tls::server echo server thread pool", "[benchmark]")
                 }
             }
 
+            co_await client.shutdown();
             auto cc = clients_completed.fetch_add(1);
             std::cerr << "CLIENT: clients_completed: " << (cc + 1) << "\n";
         }
