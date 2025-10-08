@@ -4,8 +4,8 @@
 
 namespace coro::net::tcp
 {
-server::server(std::shared_ptr<io_scheduler> scheduler, options opts)
-    : m_io_scheduler(std::move(scheduler)),
+server::server(std::shared_ptr<io_scheduler>& scheduler, options opts)
+    : m_io_scheduler(scheduler),
       m_options(std::move(opts)),
       m_accept_socket(
           net::make_accept_socket(
@@ -21,7 +21,7 @@ server::server(std::shared_ptr<io_scheduler> scheduler, options opts)
 }
 
 server::server(server&& other)
-    : m_io_scheduler(std::move(other.m_io_scheduler)),
+    : m_io_scheduler(other.m_io_scheduler),
       m_options(std::move(other.m_options)),
       m_accept_socket(std::move(other.m_accept_socket))
 {
@@ -31,7 +31,7 @@ auto server::operator=(server&& other) -> server&
 {
     if (std::addressof(other) != this)
     {
-        m_io_scheduler  = std::move(other.m_io_scheduler);
+        m_io_scheduler  = other.m_io_scheduler;
         m_options       = std::move(other.m_options);
         m_accept_socket = std::move(other.m_accept_socket);
     }

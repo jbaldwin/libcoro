@@ -7,8 +7,8 @@ namespace coro::net::tls
 {
 using namespace std::chrono_literals;
 
-client::client(std::shared_ptr<io_scheduler> scheduler, std::shared_ptr<context> tls_ctx, options opts)
-    : m_io_scheduler(std::move(scheduler)),
+client::client(std::shared_ptr<io_scheduler>& scheduler, std::shared_ptr<context> tls_ctx, options opts)
+    : m_io_scheduler(scheduler),
       m_tls_ctx(std::move(tls_ctx)),
       m_options(std::move(opts)),
       m_socket(net::make_socket(
@@ -26,8 +26,8 @@ client::client(std::shared_ptr<io_scheduler> scheduler, std::shared_ptr<context>
 }
 
 client::client(
-    std::shared_ptr<io_scheduler> scheduler, std::shared_ptr<context> tls_ctx, net::socket socket, options opts)
-    : m_io_scheduler(std::move(scheduler)),
+    std::shared_ptr<io_scheduler>& scheduler, std::shared_ptr<context> tls_ctx, net::socket socket, options opts)
+    : m_io_scheduler(scheduler),
       m_tls_ctx(std::move(tls_ctx)),
       m_options(std::move(opts)),
       m_socket(std::move(socket)),
@@ -42,7 +42,7 @@ client::client(
 }
 
 client::client(client&& other) noexcept
-    : m_io_scheduler(std::move(other.m_io_scheduler)),
+    : m_io_scheduler(other.m_io_scheduler),
       m_tls_ctx(std::move(other.m_tls_ctx)),
       m_options(std::move(other.m_options)),
       m_socket(std::move(other.m_socket)),
@@ -53,7 +53,7 @@ client::client(client&& other) noexcept
 
 client::~client()
 {
-    // If the user didn't shutdown the client block on shutting down to cleanup resources.
+    // If the user didn't shutdown the client block on shutting down to clean up resources.
     if (!m_shutdown.load(std::memory_order::acquire))
     {
         coro::sync_wait(shutdown(std::chrono::seconds{30}));
@@ -64,7 +64,7 @@ auto client::operator=(client&& other) noexcept -> client&
 {
     if (std::addressof(other) != this)
     {
-        m_io_scheduler   = std::move(other.m_io_scheduler);
+        m_io_scheduler   = other.m_io_scheduler;
         m_tls_ctx        = std::move(other.m_tls_ctx);
         m_options        = std::move(other.m_options);
         m_socket         = std::move(other.m_socket);
