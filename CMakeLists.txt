@@ -2,20 +2,27 @@ cmake_minimum_required(VERSION 3.15)
 include(CMakeDependentOption)
 find_package(Git)
 
-# Define the libcoro version string based on `git describe` command for the latest tagged release.
-execute_process(
-    COMMAND "${GIT_EXECUTABLE}" describe --match v[0-9]* --always --tags --dirty=-dirty
-    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-    OUTPUT_VARIABLE GIT_VERSION
-    OUTPUT_STRIP_TRAILING_WHITESPACE)
+# Determine version from `git describe` when git is available and a matching tag exists.
+set(PROJECT_VERSION "0.0.0")
+set(GIT_VERSION "")
+if(Git_FOUND)
+    execute_process(
+        COMMAND "${GIT_EXECUTABLE}" describe --match v[0-9]* --always --tags --dirty=-dirty
+        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+        RESULT_VARIABLE GIT_DESCRIBE_RESULT
+        OUTPUT_VARIABLE GIT_VERSION
+        ERROR_QUIET
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+    if(GIT_DESCRIBE_RESULT EQUAL 0)
+    # Expected forms: vN.N.N, vN.N.N-..., vN.N.N-dirty
+        if(GIT_VERSION MATCHES "^v([0-9]+\\.[0-9]+\\.[0-9]+)")
+            string(REGEX REPLACE "^v([0-9]+\\.[0-9]+\\.[0-9]+).*" "\\1" PROJECT_VERSION "${GIT_VERSION}")
+        endif()
+    endif()
+endif()
 
 message(STATUS "git describe last release tag: ${GIT_VERSION}")
-
-# The git describe tag is in the format of "vN.N.N-<hash>[-dirty]"
-# The cmake project VERSION parameter requires a semver, strip the v and the suffix.
-string(FIND ${GIT_VERSION} "-" GIT_VERSION_DASH_POSITION)
-math(EXPR GIT_VERSION_END "${GIT_VERSION_DASH_POSITION} - 1")
-string(SUBSTRING ${GIT_VERSION} 1 ${GIT_VERSION_END} PROJECT_VERSION)
 
 project(libcoro
     VERSION ${PROJECT_VERSION}
@@ -169,7 +176,11 @@ if(LIBCORO_FEATURE_NETWORKING)
     )
 
     if(LIBCORO_FEATURE_TLS)
-        find_package(OpenSSL REQUIRED)
+        # Android embedding: if caller already defined imported targets OpenSSL::SSL and OpenSSL::Crypto
+        # (e.g. prebuilt static libs), skip find_package to avoid accidentally picking host libs.
+        if (NOT (TARGET OpenSSL::SSL AND TARGET OpenSSL::Crypto))
+            find_package(OpenSSL REQUIRED)
+        endif()
         list(APPEND LIBCORO_SOURCE_FILES
             include/coro/net/tls/client.hpp src/net/tls/client.cpp
             include/coro/net/tls/connection_status.hpp src/net/tls/connection_status.cpp
@@ -220,7 +231,8 @@ target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_20)
 target_include_directories(${PROJECT_NAME} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include PUBLIC ${CMAKE_CURRENT_BINARY_DIR}/include)
 generate_export_header(${PROJECT_NAME} BASE_NAME CORO EXPORT_FILE_NAME include/coro/export.hpp)
 
-if(UNIX)
+if(UNIX AND NOT ANDROID)
+    # On Android, pthread is built into libc; there is no separate libpthread, so using -lpthread results in an error.
     target_link_libraries(${PROJECT_NAME} PUBLIC pthread)
 endif()
 
