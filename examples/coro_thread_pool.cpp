@@ -4,7 +4,7 @@
 
 int main()
 {
-    auto tp = coro::thread_pool::make_shared(coro::thread_pool::options{
+    auto tp = coro::thread_pool::make_unique(coro::thread_pool::options{
         // By default all thread pools will create its thread count with the
         // std::thread::hardware_concurrency() as the number of worker threads in the pool,
         // but this can be changed via this thread_count option.  This example will use 4.
@@ -19,9 +19,9 @@ int main()
         .on_thread_stop_functor = [](std::size_t worker_idx) -> void
         { std::cout << "thread pool worker " << worker_idx << " is shutting down.\n"; }});
 
-    auto primary_task = [](std::shared_ptr<coro::thread_pool> tp) -> coro::task<uint64_t>
+    auto primary_task = [](std::unique_ptr<coro::thread_pool>& tp) -> coro::task<uint64_t>
     {
-        auto offload_task = [](std::shared_ptr<coro::thread_pool> tp, uint64_t child_idx) -> coro::task<uint64_t>
+        auto offload_task = [](std::unique_ptr<coro::thread_pool>& tp, uint64_t child_idx) -> coro::task<uint64_t>
         {
             // Start by scheduling this offload worker task onto the thread pool.
             co_await tp->schedule();

@@ -117,14 +117,14 @@ TEST_CASE("when_all multple task withs list container", "[when_all]")
 
 TEST_CASE("when_all inside coroutine", "[when_all]")
 {
-    auto tp = coro::thread_pool::make_shared();
-    auto              make_task = [](std::shared_ptr<coro::thread_pool> tp, uint64_t amount) -> coro::task<uint64_t>
+    auto tp = coro::thread_pool::make_unique();
+    auto              make_task = [](std::unique_ptr<coro::thread_pool>& tp, uint64_t amount) -> coro::task<uint64_t>
     {
         co_await tp->schedule();
         co_return amount;
     };
 
-    auto runner_task = [](std::shared_ptr<coro::thread_pool> tp, auto make_task) -> coro::task<uint64_t>
+    auto runner_task = [](std::unique_ptr<coro::thread_pool>& tp, auto make_task) -> coro::task<uint64_t>
     {
         std::list<coro::task<uint64_t>> tasks;
         tasks.emplace_back(make_task(tp, 1));
@@ -148,11 +148,11 @@ TEST_CASE("when_all inside coroutine", "[when_all]")
 
 TEST_CASE("when_all use std::ranges::view", "[when_all]")
 {
-    auto tp = coro::thread_pool::make_shared();
+    auto tp = coro::thread_pool::make_unique();
 
-    auto make_runner_task = [](std::shared_ptr<coro::thread_pool> tp) -> coro::task<uint64_t>
+    auto make_runner_task = [](std::unique_ptr<coro::thread_pool>& tp) -> coro::task<uint64_t>
     {
-        auto make_task = [](std::shared_ptr<coro::thread_pool> tp, uint64_t amount) -> coro::task<uint64_t>
+        auto make_task = [](std::unique_ptr<coro::thread_pool>& tp, uint64_t amount) -> coro::task<uint64_t>
         {
             co_await tp->schedule();
             co_return amount;
@@ -178,9 +178,9 @@ TEST_CASE("when_all use std::ranges::view", "[when_all]")
 
 TEST_CASE("when_all each task throws", "[when_all]")
 {
-    auto tp = coro::thread_pool::make_shared();
+    auto tp = coro::thread_pool::make_unique();
 
-    auto make_task = [](std::shared_ptr<coro::thread_pool> tp, uint64_t i) -> coro::task<uint64_t>
+    auto make_task = [](std::unique_ptr<coro::thread_pool>& tp, uint64_t i) -> coro::task<uint64_t>
     {
         co_await tp->schedule();
         if (i % 2 == 0)
@@ -213,10 +213,10 @@ TEST_CASE("when_all each task throws", "[when_all]")
 
 TEST_CASE("when_all return void", "[when_all]")
 {
-    auto tp = coro::thread_pool::make_shared();
+    auto tp = coro::thread_pool::make_unique();
     std::atomic<uint64_t> counter{0};
 
-    auto make_task = [](std::shared_ptr<coro::thread_pool> tp, std::atomic<uint64_t>& counter, uint64_t i) -> coro::task<void>
+    auto make_task = [](std::unique_ptr<coro::thread_pool>& tp, std::atomic<uint64_t>& counter, uint64_t i) -> coro::task<void>
     {
         co_await tp->schedule();
         counter += i;

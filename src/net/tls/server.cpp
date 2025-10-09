@@ -6,8 +6,8 @@
 
 namespace coro::net::tls
 {
-server::server(std::shared_ptr<io_scheduler> scheduler, std::shared_ptr<context> tls_ctx, options opts)
-    : m_io_scheduler(std::move(scheduler)),
+server::server(std::unique_ptr<coro::io_scheduler>& scheduler, std::shared_ptr<context> tls_ctx, options opts)
+    : m_io_scheduler(scheduler.get()),
       m_tls_ctx(std::move(tls_ctx)),
       m_options(std::move(opts)),
       m_accept_socket(net::make_accept_socket(
@@ -28,7 +28,7 @@ server::server(std::shared_ptr<io_scheduler> scheduler, std::shared_ptr<context>
 }
 
 server::server(server&& other)
-    : m_io_scheduler(std::move(other.m_io_scheduler)),
+    : m_io_scheduler(std::exchange(other.m_io_scheduler, nullptr)),
       m_tls_ctx(std::move(other.m_tls_ctx)),
       m_options(std::move(other.m_options)),
       m_accept_socket(std::move(other.m_accept_socket))
@@ -39,7 +39,7 @@ auto server::operator=(server&& other) -> server&
 {
     if (std::addressof(other) != this)
     {
-        m_io_scheduler  = std::move(other.m_io_scheduler);
+        m_io_scheduler  = std::exchange(other.m_io_scheduler, nullptr);
         m_tls_ctx       = std::move(other.m_tls_ctx);
         m_options       = std::move(other.m_options);
         m_accept_socket = std::move(other.m_accept_socket);

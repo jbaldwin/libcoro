@@ -9,13 +9,13 @@
 
 TEST_CASE("tls_server hello world server", "[tls_server]")
 {
-    auto scheduler = coro::io_scheduler::make_shared(
+    auto scheduler = coro::io_scheduler::make_unique(
         coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
 
     const std::string client_msg = "Hello world from TLS client!";
     const std::string server_msg = "Hello world from TLS server!!";
 
-    auto make_client_task = [](std::shared_ptr<coro::io_scheduler> scheduler,
+    auto make_client_task = [](std::unique_ptr<coro::io_scheduler>& scheduler,
                                const std::string&                  client_msg,
                                const std::string&                  server_msg) -> coro::task<void>
     {
@@ -47,10 +47,11 @@ TEST_CASE("tls_server hello world server", "[tls_server]")
         std::cerr << "client received message: " << response << "\n";
 
         std::cerr << "client finished\n";
+        co_await client.shutdown();
         co_return;
     };
 
-    auto make_server_task = [](std::shared_ptr<coro::io_scheduler> scheduler,
+    auto make_server_task = [](std::unique_ptr<coro::io_scheduler>& scheduler,
                                const std::string&                  client_msg,
                                const std::string&                  server_msg) -> coro::task<void>
     {
@@ -83,6 +84,7 @@ TEST_CASE("tls_server hello world server", "[tls_server]")
         auto [sstatus, remaining] = co_await client.send(server_msg);
         REQUIRE(sstatus == coro::net::tls::send_status::ok);
         REQUIRE(remaining.empty());
+        co_await client.shutdown();
 
         std::cerr << "server finished\n";
         co_return;

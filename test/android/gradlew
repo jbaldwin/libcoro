@@ -1,0 +1,14 @@
+#!/usr/bin/env sh
+
+# Minimal Gradle wrapper script (simplified) - if full wrapper needed, regenerate via `gradle wrapper` locally.
+
+APP_BASE_NAME="gradlew"
+DIR="`dirname "$0"`"
+GRADLE_WRAPPER_JAR="$DIR/gradle/wrapper/gradle-wrapper.jar"
+
+if [ ! -f "$GRADLE_WRAPPER_JAR" ]; then
+  echo "gradle-wrapper.jar missing; please run 'gradle wrapper' locally to generate full wrapper." >&2
+  exec gradle "$@"
+else
+  exec java -jar "$GRADLE_WRAPPER_JAR" "$@"
+fi

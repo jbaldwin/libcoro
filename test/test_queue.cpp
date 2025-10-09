@@ -85,9 +85,9 @@ TEST_CASE("queue produce consume direct", "[queue]")
 {
     const uint64_t        ITERATIONS = 10;
     coro::queue<uint64_t> q{};
-    auto tp = coro::thread_pool::make_shared();
+    auto tp = coro::thread_pool::make_unique();
 
-    auto make_producer_task = [](std::shared_ptr<coro::thread_pool> tp, coro::queue<uint64_t>& q) -> coro::task<uint64_t>
+    auto make_producer_task = [](std::unique_ptr<coro::thread_pool>& tp, coro::queue<uint64_t>& q) -> coro::task<uint64_t>
     {
         co_await tp->schedule();
         for (uint64_t i = 0; i < ITERATIONS; ++i)
@@ -101,7 +101,7 @@ TEST_CASE("queue produce consume direct", "[queue]")
         co_return 0;
     };
 
-    auto make_consumer_task = [](std::shared_ptr<coro::thread_pool> tp, coro::queue<uint64_t>& q) -> coro::task<uint64_t>
+    auto make_consumer_task = [](std::unique_ptr<coro::thread_pool>& tp, coro::queue<uint64_t>& q) -> coro::task<uint64_t>
     {
         co_await tp->schedule();
 
@@ -130,12 +130,12 @@ TEST_CASE("queue multithreaded produce consume", "[queue]")
     const uint64_t        WORKERS    = 3;
     const uint64_t        ITERATIONS = 100;
     coro::queue<uint64_t> q{};
-    auto tp = coro::thread_pool::make_shared();
+    auto tp = coro::thread_pool::make_unique();
     std::atomic<uint64_t> counter{0};
     coro::latch           wait{WORKERS};
 
     auto make_producer_task =
-        [](std::shared_ptr<coro::thread_pool> tp, coro::queue<uint64_t>& q, coro::latch& w) -> coro::task<void>
+        [](std::unique_ptr<coro::thread_pool>& tp, coro::queue<uint64_t>& q, coro::latch& w) -> coro::task<void>
     {
         co_await tp->schedule();
         for (uint64_t i = 0; i < ITERATIONS; ++i)
@@ -148,7 +148,7 @@ TEST_CASE("queue multithreaded produce consume", "[queue]")
         co_return;
     };
 
-    auto make_shutdown_task = [](std::shared_ptr<coro::thread_pool> tp, coro::queue<uint64_t>& q, coro::latch& w) -> coro::task<void>
+    auto make_shutdown_task = [](std::unique_ptr<coro::thread_pool>& tp, coro::queue<uint64_t>& q, coro::latch& w) -> coro::task<void>
     {
         co_await tp->schedule();
         // Wait for all producers to complete.
@@ -161,7 +161,7 @@ TEST_CASE("queue multithreaded produce consume", "[queue]")
         co_return;
     };
 
-    auto make_consumer_task = [](std::shared_ptr<coro::thread_pool> tp, coro::queue<uint64_t>& q, std::atomic<uint64_t>& counter) -> coro::task<void>
+    auto make_consumer_task = [](std::unique_ptr<coro::thread_pool>& tp, coro::queue<uint64_t>& q, std::atomic<uint64_t>& counter) -> coro::task<void>
     {
         std::cerr << "make_consumer_task()\n";
         co_await tp->schedule();

@@ -46,6 +46,7 @@
 *
 * [Requirements](#requirements)
 * [Build Instructions](#build-instructions)
+* [Android Support](#android-support)
 * [Contributing](#contributing)
 * [Support](#support)
 
@@ -82,9 +83,9 @@ int main()
     // execution to another thread.  We'll pass the thread pool as a parameter so
     // the task can be scheduled.
     // Note that you will need to guarantee the thread pool outlives the coroutine.
-    auto tp = coro::thread_pool::make_shared(coro::thread_pool::options{.thread_count = 1});
+    auto tp = coro::thread_pool::make_unique(coro::thread_pool::options{.thread_count = 1});
 
-    auto make_task_offload = [](std::shared_ptr<coro::thread_pool> tp, uint64_t x) -> coro::task<uint64_t>
+    auto make_task_offload = [](std::unique_ptr<coro::thread_pool>& tp, uint64_t x) -> coro::task<uint64_t>
     {
         co_await tp->schedule(); // Schedules execution on the thread pool.
         co_return x + x;         // This will execute on the thread pool.
@@ -114,9 +115,9 @@ The `when_all` construct can be used within coroutines to await a set of tasks, 
 int main()
 {
     // Create a thread pool to execute all the tasks in parallel.
-    auto tp = coro::thread_pool::make_shared(coro::thread_pool::options{.thread_count = 4});
+    auto tp = coro::thread_pool::make_unique(coro::thread_pool::options{.thread_count = 4});
     // Create the task we want to invoke multiple times and execute in parallel on the thread pool.
-    auto twice = [](std::shared_ptr<coro::thread_pool> tp, uint64_t x) -> coro::task<uint64_t>
+    auto twice = [](std::unique_ptr<coro::thread_pool>& tp, uint64_t x) -> coro::task<uint64_t>
     {
         co_await tp->schedule(); // Schedule onto the thread pool.
         co_return x + x;        // Executed on the thread pool.
@@ -145,7 +146,7 @@ int main()
     }
 
     // Use var args instead of a container as input to coro::when_all.
-    auto square = [](std::shared_ptr<coro::thread_pool> tp, double x) -> coro::task<double>
+    auto square = [](std::unique_ptr<coro::thread_pool>& tp, double x) -> coro::task<double>
     {
         co_await tp->schedule();
         co_return x* x;
@@ -184,10 +185,10 @@ int main()
 {
     // Create a scheduler to execute all tasks in parallel and also so we can
     // suspend a task to act like a timeout event.
-    auto scheduler = coro::io_scheduler::make_shared();
+    auto scheduler = coro::io_scheduler::make_unique();
 
     // This task will behave like a long running task and will produce a valid result.
-    auto make_long_running_task = [](std::shared_ptr<coro::io_scheduler> scheduler,
+    auto make_long_running_task = [](std::unique_ptr<coro::io_scheduler>& scheduler,
                                      std::chrono::milliseconds           execution_time) -> coro::task<int64_t>
     {
         // Schedule the task to execute in parallel.
@@ -198,7 +199,7 @@ int main()
         co_return 1;
     };
 
-    auto make_timeout_task = [](std::shared_ptr<coro::io_scheduler> scheduler) -> coro::task<int64_t>
+    auto make_timeout_task = [](std::unique_ptr<coro::io_scheduler>& scheduler) -> coro::task<int64_t>
     {
         // Schedule a timer to be fired so we know the task timed out.
         co_await scheduler->schedule_after(std::chrono::milliseconds{100});
@@ -435,7 +436,7 @@ int main()
     // Complete worker tasks faster on a thread pool, using the io_scheduler version so the worker
     // tasks can yield for a specific amount of time to mimic difficult work.  The pool is only
     // setup with a single thread to showcase yield_for().
-    auto tp = coro::io_scheduler::make_shared(
+    auto tp = coro::io_scheduler::make_unique(
         coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
 
     // This task will wait until the given latch setters have completed.
@@ -456,7 +457,7 @@ int main()
 
     // This task does 'work' and counts down on the latch when completed.  The final child task to
     // complete will end up resuming the latch task when the latch's count reaches zero.
-    auto make_worker_task = [](std::shared_ptr<coro::io_scheduler> tp, coro::latch& l, int64_t i) -> coro::task<void>
+    auto make_worker_task = [](std::unique_ptr<coro::io_scheduler>& tp, coro::latch& l, int64_t i) -> coro::task<void>
     {
         // Schedule the worker task onto the thread pool.
         co_await tp->schedule();
@@ -516,12 +517,12 @@ The suspend waiter queue is LIFO, however the worker that current holds the mute
 
 int main()
 {
-    auto tp = coro::thread_pool::make_shared(coro::thread_pool::options{.thread_count = 4});
+    auto tp = coro::thread_pool::make_unique(coro::thread_pool::options{.thread_count = 4});
     std::vector<uint64_t> output{};
     coro::mutex           mutex{};
 
     auto make_critical_section_task =
-        [](std::shared_ptr<coro::thread_pool> tp, coro::mutex& mutex, std::vector<uint64_t>& output, uint64_t i) -> coro::task<void>
+        [](std::unique_ptr<coro::thread_pool>& tp, coro::mutex& mutex, std::vector<uint64_t>& output, uint64_t i) -> coro::task<void>
     {
         co_await tp->schedule();
         // To acquire a mutex lock co_await its scoped_lock() function. Upon acquiring the lock the
@@ -579,10 +580,10 @@ int main()
     // to also show the interleaving of coroutines acquiring the shared lock in shared and
     // exclusive mode as they resume and suspend in a linear manner. Ideally the thread pool
     // executor would have more than 1 thread to resume all shared waiters in parallel.
-    auto tp = coro::thread_pool::make_shared(coro::thread_pool::options{.thread_count = 1});
+    auto tp = coro::thread_pool::make_unique(coro::thread_pool::options{.thread_count = 1});
     coro::shared_mutex<coro::thread_pool> mutex{tp};
 
-    auto make_shared_task = [](std::shared_ptr<coro::thread_pool>     tp,
+    auto make_shared_task = [](std::unique_ptr<coro::thread_pool>&     tp,
                                coro::shared_mutex<coro::thread_pool>& mutex,
                                uint64_t                               i) -> coro::task<void>
     {
@@ -592,7 +593,7 @@ int main()
         // Note that to have a scoped shared lock a task must be passed in for the shared scoped lock to callback,
         // this is required since coro::shared_mutex.unlock() and unlock_shared() are coroutines and cannot be
         // awaited in a RAII destructor like coro::mutex.
-        co_await mutex.scoped_lock_shared([](std::shared_ptr<coro::thread_pool> tp, uint64_t i) -> coro::task<void>
+        co_await mutex.scoped_lock_shared([](std::unique_ptr<coro::thread_pool>& tp, uint64_t i) -> coro::task<void>
         {
             std::cerr << "shared task " << i << " lock_shared() acquired\n";
             /// Immediately yield so the other shared tasks also acquire in shared state
@@ -603,11 +604,11 @@ int main()
         co_return;
     };
 
-    auto make_exclusive_task = [](std::shared_ptr<coro::thread_pool>     tp,
+    auto make_exclusive_task = [](std::unique_ptr<coro::thread_pool>&     tp,
                                   coro::shared_mutex<coro::thread_pool>& mutex) -> coro::task<void>
     {
         co_await tp->schedule();
-        co_await mutex.scoped_lock([](std::shared_ptr<coro::thread_pool> tp) -> coro::task<void>
+        co_await mutex.scoped_lock([](std::unique_ptr<coro::thread_pool>& tp) -> coro::task<void>
         {
             std::cerr << "exclusive task lock()\n";
             std::cerr << "exclusive task lock() acquired\n";
@@ -674,11 +675,11 @@ The `coro::semaphore` is a thread safe async tool to protect a limited number of
 int main()
 {
     // Have more threads/tasks than the semaphore will allow for at any given point in time.
-    auto tp = coro::thread_pool::make_shared(coro::thread_pool::options{.thread_count = 8});
+    auto tp = coro::thread_pool::make_unique(coro::thread_pool::options{.thread_count = 8});
     coro::semaphore<2>   semaphore{2};
 
     auto make_rate_limited_task =
-        [](std::shared_ptr<coro::thread_pool> tp, coro::semaphore<2>& semaphore, uint64_t task_num) -> coro::task<void>
+        [](std::unique_ptr<coro::thread_pool>& tp, coro::semaphore<2>& semaphore, uint64_t task_num) -> coro::task<void>
     {
         co_await tp->schedule();
 
@@ -725,14 +726,14 @@ int main()
 {
     const size_t                    iterations = 100;
     const size_t                    consumers  = 4;
-    auto                            tp = coro::thread_pool::make_shared(coro::thread_pool::options{.thread_count = 4});
+    auto                            tp = coro::thread_pool::make_unique(coro::thread_pool::options{.thread_count = 4});
     coro::ring_buffer<uint64_t, 16> rb{};
     coro::mutex                     m{};
 
     std::vector<coro::task<void>> tasks{};
 
     auto make_producer_task =
-        [](std::shared_ptr<coro::thread_pool> tp, coro::ring_buffer<uint64_t, 16>& rb, coro::mutex& m) -> coro::task<void>
+        [](std::unique_ptr<coro::thread_pool>& tp, coro::ring_buffer<uint64_t, 16>& rb, coro::mutex& m) -> coro::task<void>
     {
         co_await tp->schedule();
 
@@ -752,7 +753,7 @@ int main()
     };
 
     auto make_consumer_task =
-        [](std::shared_ptr<coro::thread_pool> tp, coro::ring_buffer<uint64_t, 16>& rb, coro::mutex& m, size_t id) -> coro::task<void>
+        [](std::unique_ptr<coro::thread_pool>& tp, coro::ring_buffer<uint64_t, 16>& rb, coro::mutex& m, size_t id) -> coro::task<void>
     {
         co_await tp->schedule();
 
@@ -815,13 +816,13 @@ int main()
     const size_t producers_count = 5;
     const size_t consumers_count = 2;
 
-    auto tp = coro::thread_pool::make_shared();
+    auto tp = coro::thread_pool::make_unique();
     coro::queue<uint64_t> q{};
     coro::latch           producers_done{producers_count};
     coro::mutex           m{}; /// Just for making the console prints look nice.
 
     auto make_producer_task =
-        [](std::shared_ptr<coro::thread_pool> tp, coro::queue<uint64_t>& q, coro::latch& pd) -> coro::task<void>
+        [](std::unique_ptr<coro::thread_pool>& tp, coro::queue<uint64_t>& q, coro::latch& pd) -> coro::task<void>
     {
         co_await tp->schedule();
 
@@ -834,7 +835,7 @@ int main()
         co_return;
     };
 
-    auto make_shutdown_task = [](std::shared_ptr<coro::thread_pool> tp, coro::queue<uint64_t>& q, coro::latch& pd) -> coro::task<void>
+    auto make_shutdown_task = [](std::unique_ptr<coro::thread_pool>& tp, coro::queue<uint64_t>& q, coro::latch& pd) -> coro::task<void>
     {
         // This task will wait for all the producers to complete and then for the
         // entire queue to be drained before shutting it down.
@@ -844,7 +845,7 @@ int main()
         co_return;
     };
 
-    auto make_consumer_task = [](std::shared_ptr<coro::thread_pool> tp, coro::queue<uint64_t>& q, coro::mutex& m) -> coro::task<void>
+    auto make_consumer_task = [](std::unique_ptr<coro::thread_pool>& tp, coro::queue<uint64_t>& q, coro::mutex& m) -> coro::task<void>
     {
         co_await tp->schedule();
 
@@ -918,13 +919,13 @@ NOTE: It is important to *not* hold the `coro::scoped_lock` when calling `notify
 
 int main()
 {
-    auto scheduler = coro::io_scheduler::make_shared();
+    auto scheduler = coro::io_scheduler::make_unique();
     coro::condition_variable cv{};
     coro::mutex m{};
     std::atomic<uint64_t> condition{0};
     std::stop_source ss{};
 
-    auto make_waiter_task = [](std::shared_ptr<coro::io_scheduler> scheduler, coro::condition_variable& cv, coro::mutex& m, std::stop_source& ss, std::atomic<uint64_t>& condition, int64_t id) -> coro::task<void>
+    auto make_waiter_task = [](std::unique_ptr<coro::io_scheduler>& scheduler, coro::condition_variable& cv, coro::mutex& m, std::stop_source& ss, std::atomic<uint64_t>& condition, int64_t id) -> coro::task<void>
     {
         co_await scheduler->schedule();
         while (true)
@@ -959,7 +960,7 @@ int main()
         }
     };
 
-    auto make_notifier_task = [](std::shared_ptr<coro::io_scheduler> scheduler, coro::condition_variable& cv, coro::mutex& m, std::stop_source& ss, std::atomic<uint64_t>& condition) -> coro::task<void>
+    auto make_notifier_task = [](std::unique_ptr<coro::io_scheduler>& scheduler, coro::condition_variable& cv, coro::mutex& m, std::stop_source& ss, std::atomic<uint64_t>& condition) -> coro::task<void>
     {
         // To make this example more deterministic the notifier will wait between each notify event to showcase
         // how exactly the condition variable will behave with the condition in certain states and the notify_one or notify_all.
@@ -1061,7 +1062,7 @@ ss.request_stop()                       # request to stop, wakeup all waiters an
 
 int main()
 {
-    auto tp = coro::thread_pool::make_shared(coro::thread_pool::options{
+    auto tp = coro::thread_pool::make_unique(coro::thread_pool::options{
         // By default all thread pools will create its thread count with the
         // std::thread::hardware_concurrency() as the number of worker threads in the pool,
         // but this can be changed via this thread_count option.  This example will use 4.
@@ -1076,9 +1077,9 @@ int main()
         .on_thread_stop_functor = [](std::size_t worker_idx) -> void
         { std::cout << "thread pool worker " << worker_idx << " is shutting down.\n"; }});
 
-    auto primary_task = [](std::shared_ptr<coro::thread_pool> tp) -> coro::task<uint64_t>
+    auto primary_task = [](std::unique_ptr<coro::thread_pool>& tp) -> coro::task<uint64_t>
     {
-        auto offload_task = [](std::shared_ptr<coro::thread_pool> tp, uint64_t child_idx) -> coro::task<uint64_t>
+        auto offload_task = [](std::unique_ptr<coro::thread_pool>& tp, uint64_t child_idx) -> coro::task<uint64_t>
         {
             // Start by scheduling this offload worker task onto the thread pool.
             co_await tp->schedule();
@@ -1191,7 +1192,7 @@ The example provided here shows an i/o scheduler that spins up a basic `coro::ne
 
 int main()
 {
-    auto scheduler = coro::io_scheduler::make_shared(coro::io_scheduler::options{
+    auto scheduler = coro::io_scheduler::make_unique(coro::io_scheduler::options{
         // The scheduler will spawn a dedicated event processing thread.  This is the default, but
         // it is possible to use 'manual' and call 'process_events()' to drive the scheduler yourself.
         .thread_strategy = coro::io_scheduler::thread_strategy_t::spawn,
@@ -1214,7 +1215,7 @@ int main()
             },
         .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_on_thread_pool});
 
-    auto make_server_task = [](std::shared_ptr<coro::io_scheduler> scheduler) -> coro::task<void>
+    auto make_server_task = [](std::unique_ptr<coro::io_scheduler>& scheduler) -> coro::task<void>
     {
         // Start by creating a tcp server, we'll do this before putting it into the scheduler so
         // it is immediately available for the client to connect since this will create a socket,
@@ -1302,7 +1303,7 @@ int main()
         co_return;
     };
 
-    auto make_client_task = [](std::shared_ptr<coro::io_scheduler> scheduler) -> coro::task<void>
+    auto make_client_task = [](std::unique_ptr<coro::io_scheduler>& scheduler) -> coro::task<void>
     {
         // Immediately schedule onto the scheduler.
         co_await scheduler->schedule();
@@ -1431,6 +1432,85 @@ Running 1m test @ http://127.0.0.1:8888/
 Requests/sec: 325778.99
 Transfer/sec:     18.33MB
 ```
+
+## Android Support
+
+libcoro ships with an Android test harness that builds and runs the library on Android devices and emulators. This is intended to validate coroutine primitives on Android and to sanity-check networking/TLS integration using OpenSSL where available.
+
+### Status at a glance
+- Toolchain: Android Gradle Plugin 8.5.2, Gradle Wrapper, NDK r29 (29.0.13846066), CMake 3.22.1
+- Minimum SDK: 24, Target SDK: 34
+- ABIs: arm64-v8a, armeabi-v7a, x86, x86_64 (APK contains selected ABIs; CI builds per-ABI)
+- JNI test app package: `com.example.libcorotest`
+- TLS: supported via prebuilt OpenSSL static libraries per-ABI
+- Networking: enabled in Android builds (`LIBCORO_FEATURE_NETWORKING`, `LIBCORO_FEATURE_TLS`)
+
+### Project layout
+- `test/android/` — Android application project (Gradle)
+    - `src/main/cpp/CMakeLists.txt` — integrates libcoro and links in the canonical test sources
+    - `src/main/cpp/main.cpp` — JNI host that launches Catch2-based libcoro tests with live log streaming
+    - `scripts/build_openssl.sh` — helper to produce per-ABI OpenSSL static libs under `external/openssl/<ABI>/`
+
+### Building the Android test APK locally
+Prerequisites: Android SDK + NDK r29, CMake 3.22.1 (installed via SDK), JDK 17.
+
+From repo root:
+
+```bash
+cd test/android
+# Optionally build OpenSSL for required ABIs (script downloads/compiles):
+bash scripts/build_openssl.sh --abis arm64-v8a,armeabi-v7a,x86_64,x86 --api 24
+
+# Single-ABI debug build (faster iterations):
+gradle assembleDebug -PciAbi=x86_64 -PcustomBuildDir=build-x86_64
+
+# Multi-ABI build when experimenting locally (produces a fat APK per chosen filters):
+gradle assembleDebug
+```
+
+Notes:
+- You can override the Gradle build directory via `-PcustomBuildDir=...` (used in CI).
+- You can restrict to a specific ABI via `-PciAbi=<abi>`.
+
+### Running tests on an emulator
+Tests are executed by launching the app, which loads a shared library `libcoroTest.so` that embeds the libcoro test suite (Catch2). Output is streamed to Logcat with tag `coroTest` and also mirrored into the app sandbox file `files/libcoro-tests.log`.
+
+You can pass test options by pushing a simple properties file to the device:
+
+```
+filter=~[benchmark] ~[bench] ~[semaphore] ~[io_scheduler]
+timeout=600
+```
+
+Place it at `/data/local/tmp/coro_test_config.properties` or inside the app sandbox at `files/coro_test_config.properties`. The JNI runner falls back to defaults when the sandbox is not writable.
+
+Default exclusions in emulator runs skip slow/fragile suites (benchmarks, some networking/TLS servers, long-running schedulers). See `test/android/src/main/cpp/main.cpp` for the current filter set.
+
+### CI pipeline
+The GitHub Actions workflow `.github/workflows/ci-android.yml` performs:
+- Per-ABI matrix builds (arm64-v8a, armeabi-v7a, x86, x86_64)
+- OpenSSL prebuild per ABI via `scripts/build_openssl.sh`
+- Emulator provisioning on x86_64 (Android 30), headless launch, storage readiness checks
+- Pushing test configuration (filter/timeout) and running the app
+- Collecting `coroTest` Logcat into `emulator.log` and exporting `libcoro-tests.log`
+
+The test filter excludes particularly slow suites to keep runs under a 10-minute global timeout inside the app. Adjust `TEST_FILTER`/`TEST_TIMEOUT` env vars in the workflow as needed.
+
+### Known limitations on Android
+- Network server tests (e.g., TCP/TLS servers) are skipped in CI to avoid emulator networking flakiness
+- Some timing-sensitive `condition_variable` cases may be excluded on emulators due to short timeouts
+- The Android harness is for validation; apps should link `libcoro` as a regular CMake target in their own projects
+
+### Using libcoro in your Android CMake project
+Add libcoro as a subdirectory in your native CMake and link it to your library target. Example snippet for your module’s CMakeLists:
+
+```cmake
+add_subdirectory(${CMAKE_SOURCE_DIR}/path/to/libcoro libcoro_build)
+target_link_libraries(your-lib PRIVATE libcoro log)
+target_compile_definitions(your-lib PRIVATE LIBCORO_FEATURE_NETWORKING LIBCORO_FEATURE_TLS)
+```
+
+If you require TLS, provide OpenSSL for the target ABI (static or shared) and set `OPENSSL_ROOT_DIR`/`OPENSSL_USE_STATIC_LIBS` accordingly.
 
 ### Requirements
     C++20 Compiler with coroutine support

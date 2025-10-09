@@ -20,7 +20,7 @@ io_scheduler::io_scheduler(options&& opts, private_constructor)
 {
     if (m_opts.execution_strategy == execution_strategy_t::process_tasks_on_thread_pool)
     {
-        m_thread_pool = thread_pool::make_shared(std::move(m_opts.pool));
+        m_thread_pool = thread_pool::make_unique(std::move(m_opts.pool));
     }
 
     m_shutdown_fd = std::array<fd_t, 2>{};
@@ -34,15 +34,15 @@ io_scheduler::io_scheduler(options&& opts, private_constructor)
     m_recent_events.reserve(m_max_events);
 }
 
-auto io_scheduler::make_shared(options opts) -> std::shared_ptr<io_scheduler>
+auto io_scheduler::make_unique(options opts) -> std::unique_ptr<io_scheduler>
 {
-    auto s = std::make_shared<io_scheduler>(std::move(opts), private_constructor{});
+    auto s = std::make_unique<io_scheduler>(std::move(opts), private_constructor{});
 
-    // Initialize once the shared pointer is constructed so it can be captured for
-    // the background thread.
+    // Spawn the dedicated event loop thread once the scheduler is fully constructed
+    // so it has a full object to work with.
     if (s->m_opts.thread_strategy == thread_strategy_t::spawn)
     {
-        s->m_io_thread = std::thread([s]() { s->process_events_dedicated_thread(); });
+        s->m_io_thread = std::thread([s = s.get()]() { s->process_events_dedicated_thread(); });
     }
     // else manual mode, the user must call process_events.
 

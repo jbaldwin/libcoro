@@ -17,9 +17,9 @@ int main()
     // execution to another thread.  We'll pass the thread pool as a parameter so
     // the task can be scheduled.
     // Note that you will need to guarantee the thread pool outlives the coroutine.
-    auto tp = coro::thread_pool::make_shared(coro::thread_pool::options{.thread_count = 1});
+    auto tp = coro::thread_pool::make_unique(coro::thread_pool::options{.thread_count = 1});
 
-    auto make_task_offload = [](std::shared_ptr<coro::thread_pool> tp, uint64_t x) -> coro::task<uint64_t>
+    auto make_task_offload = [](std::unique_ptr<coro::thread_pool>& tp, uint64_t x) -> coro::task<uint64_t>
     {
         co_await tp->schedule(); // Schedules execution on the thread pool.
         co_return x + x;         // This will execute on the thread pool.

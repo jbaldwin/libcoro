@@ -18,15 +18,15 @@ thread_pool::thread_pool(options&& opts, private_constructor) : m_opts(opts)
     m_threads.reserve(m_opts.thread_count);
 }
 
-auto thread_pool::make_shared(options opts) -> std::shared_ptr<thread_pool>
+auto thread_pool::make_unique(options opts) -> std::unique_ptr<thread_pool>
 {
-    auto tp = std::make_shared<thread_pool>(std::move(opts), private_constructor{});
+    auto tp = std::make_unique<thread_pool>(std::move(opts), private_constructor{});
 
-    // Initialize once the shared pointer is constructor so it can be captured for
-    // the background threads.
+    // Initialize the background worker threads once the thread pool is fully constructed
+    // so the workers have a full ready object to work with.
     for (uint32_t i = 0; i < tp->m_opts.thread_count; ++i)
     {
-        tp->m_threads.emplace_back([tp, i]() { tp->executor(i); });
+        tp->m_threads.emplace_back([tp = tp.get(), i]() { tp->executor(i); });
     }
 
     return tp;

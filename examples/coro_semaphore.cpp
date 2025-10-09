@@ -4,11 +4,11 @@
 int main()
 {
     // Have more threads/tasks than the semaphore will allow for at any given point in time.
-    auto tp = coro::thread_pool::make_shared(coro::thread_pool::options{.thread_count = 8});
+    auto tp = coro::thread_pool::make_unique(coro::thread_pool::options{.thread_count = 8});
     coro::semaphore<2>   semaphore{2};
 
     auto make_rate_limited_task =
-        [](std::shared_ptr<coro::thread_pool> tp, coro::semaphore<2>& semaphore, uint64_t task_num) -> coro::task<void>
+        [](std::unique_ptr<coro::thread_pool>& tp, coro::semaphore<2>& semaphore, uint64_t task_num) -> coro::task<void>
     {
         co_await tp->schedule();
 

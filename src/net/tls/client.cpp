@@ -1,13 +1,14 @@
 #ifdef LIBCORO_FEATURE_TLS
 
     #include "coro/net/tls/client.hpp"
+    #include "coro/sync_wait.hpp"
 
 namespace coro::net::tls
 {
 using namespace std::chrono_literals;
 
-client::client(std::shared_ptr<io_scheduler> scheduler, std::shared_ptr<context> tls_ctx, options opts)
-    : m_io_scheduler(std::move(scheduler)),
+client::client(std::unique_ptr<coro::io_scheduler>& scheduler, std::shared_ptr<context> tls_ctx, options opts)
+    : m_io_scheduler(scheduler.get()),
       m_tls_ctx(std::move(tls_ctx)),
       m_options(std::move(opts)),
       m_socket(net::make_socket(
@@ -25,8 +26,8 @@ client::client(std::shared_ptr<io_scheduler> scheduler, std::shared_ptr<context>
 }
 
 client::client(
-    std::shared_ptr<io_scheduler> scheduler, std::shared_ptr<context> tls_ctx, net::socket socket, options opts)
-    : m_io_scheduler(std::move(scheduler)),
+    coro::io_scheduler* scheduler, std::shared_ptr<context> tls_ctx, net::socket socket, options opts)
+    : m_io_scheduler(scheduler),
       m_tls_ctx(std::move(tls_ctx)),
       m_options(std::move(opts)),
       m_socket(std::move(socket)),
@@ -41,7 +42,7 @@ client::client(
 }
 
 client::client(client&& other) noexcept
-    : m_io_scheduler(std::move(other.m_io_scheduler)),
+    : m_io_scheduler(std::exchange(other.m_io_scheduler, nullptr)),
       m_tls_ctx(std::move(other.m_tls_ctx)),
       m_options(std::move(other.m_options)),
       m_socket(std::move(other.m_socket)),
@@ -52,14 +53,10 @@ client::client(client&& other) noexcept
 
 client::~client()
 {
-    // If this tcp client is using SSL and the connection did not have an ssl error, schedule a task
-    // to shutdown the connection cleanly.  This is done on a background scheduled task since the
-    // tcp client's destructor cannot co_await the SSL_shutdown() read and write poll operations.
-    if (m_tls_info.m_tls_ptr != nullptr && !m_tls_info.m_tls_error)
+    // If the user didn't shutdown the client block on shutting down to clean up resources.
+    if (!m_shutdown.load(std::memory_order::acquire))
     {
-        // Should the shutdown timeout be configurable?
-        m_io_scheduler->spawn(tls_shutdown_and_free(
-            m_io_scheduler, std::move(m_socket), std::move(m_tls_info.m_tls_ptr), std::chrono::seconds{30}));
+        coro::sync_wait(shutdown(std::chrono::seconds{30}));
     }
 }
 
@@ -67,7 +64,7 @@ auto client::operator=(client&& other) noexcept -> client&
 {
     if (std::addressof(other) != this)
     {
-        m_io_scheduler   = std::move(other.m_io_scheduler);
+        m_io_scheduler   = std::exchange(other.m_io_scheduler, nullptr);
         m_tls_ctx        = std::move(other.m_tls_ctx);
         m_options        = std::move(other.m_options);
         m_socket         = std::move(other.m_socket);
@@ -207,15 +204,14 @@ auto client::handshake(std::chrono::milliseconds timeout) -> coro::task<connecti
 }
 
 auto client::tls_shutdown_and_free(
-    std::shared_ptr<io_scheduler> io_scheduler,
-    net::socket                   s,
-    tls_unique_ptr                tls_ptr,
     std::chrono::milliseconds     timeout) -> coro::task<void>
 {
+    auto* tls_ptr = m_tls_info.m_tls_ptr.get();
+
     while (true)
     {
         ERR_clear_error();
-        auto r = SSL_shutdown(tls_ptr.get());
+        auto r = SSL_shutdown(tls_ptr);
         if (r == 1) // shutdown complete
         {
             co_return;
@@ -223,7 +219,7 @@ auto client::tls_shutdown_and_free(
         else if (r == 0) // shutdown in progress
         {
             coro::poll_op op{coro::poll_op::read_write};
-            auto          err = SSL_get_error(tls_ptr.get(), r);
+            auto          err = SSL_get_error(tls_ptr, r);
             if (err == SSL_ERROR_WANT_WRITE)
             {
                 op = coro::poll_op::write;
@@ -237,7 +233,7 @@ auto client::tls_shutdown_and_free(
                 co_return;
             }
 
-            auto pstatus = co_await io_scheduler->poll(s, op, timeout);
+            auto pstatus = co_await m_io_scheduler->poll(m_socket, op, timeout);
             switch (pstatus)
             {
                 case poll_status::timeout:

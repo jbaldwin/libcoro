@@ -107,12 +107,12 @@ TEST_CASE("event fifo", "[event]")
     coro::event e{};
 
     // Need consistency FIFO on a single thread to verify the execution order is correct.
-    auto tp = coro::thread_pool::make_shared(coro::thread_pool::options{.thread_count = 1});
+    auto tp = coro::thread_pool::make_unique(coro::thread_pool::options{.thread_count = 1});
 
     std::atomic<uint64_t> counter{0};
 
     auto make_waiter =
-        [](std::shared_ptr<coro::thread_pool> tp, coro::event& e, std::atomic<uint64_t>& counter, uint64_t value) -> coro::task<void>
+        [](std::unique_ptr<coro::thread_pool>& tp, coro::event& e, std::atomic<uint64_t>& counter, uint64_t value) -> coro::task<void>
     {
         co_await tp->schedule();
         co_await e;
@@ -123,7 +123,7 @@ TEST_CASE("event fifo", "[event]")
         co_return;
     };
 
-    auto make_setter = [](std::shared_ptr<coro::thread_pool> tp, coro::event& e, std::atomic<uint64_t>& counter) -> coro::task<void>
+    auto make_setter = [](std::unique_ptr<coro::thread_pool>& tp, coro::event& e, std::atomic<uint64_t>& counter) -> coro::task<void>
     {
         co_await tp->schedule();
         REQUIRE(counter == 0);
@@ -147,11 +147,11 @@ TEST_CASE("event fifo none", "[event]")
     coro::event e{};
 
     // Need consistency FIFO on a single thread to verify the execution order is correct.
-    auto tp = coro::thread_pool::make_shared(coro::thread_pool::options{.thread_count = 1});
+    auto tp = coro::thread_pool::make_unique(coro::thread_pool::options{.thread_count = 1});
 
     std::atomic<uint64_t> counter{0};
 
-    auto make_setter = [](std::shared_ptr<coro::thread_pool> tp, coro::event& e, std::atomic<uint64_t>& counter) -> coro::task<void>
+    auto make_setter = [](std::unique_ptr<coro::thread_pool>& tp, coro::event& e, std::atomic<uint64_t>& counter) -> coro::task<void>
     {
         co_await tp->schedule();
         REQUIRE(counter == 0);
@@ -169,12 +169,12 @@ TEST_CASE("event fifo single", "[event]")
     coro::event e{};
 
     // Need consistency FIFO on a single thread to verify the execution order is correct.
-    auto tp = coro::thread_pool::make_shared(coro::thread_pool::options{.thread_count = 1});
+    auto tp = coro::thread_pool::make_unique(coro::thread_pool::options{.thread_count = 1});
 
     std::atomic<uint64_t> counter{0};
 
     auto make_waiter =
-        [](std::shared_ptr<coro::thread_pool> tp, coro::event& e, std::atomic<uint64_t>& counter, uint64_t value) -> coro::task<void>
+        [](std::unique_ptr<coro::thread_pool>& tp, coro::event& e, std::atomic<uint64_t>& counter, uint64_t value) -> coro::task<void>
     {
         co_await tp->schedule();
         co_await e;
@@ -185,7 +185,7 @@ TEST_CASE("event fifo single", "[event]")
         co_return;
     };
 
-    auto make_setter = [](std::shared_ptr<coro::thread_pool> tp, coro::event& e, std::atomic<uint64_t>& counter) -> coro::task<void>
+    auto make_setter = [](std::unique_ptr<coro::thread_pool>& tp, coro::event& e, std::atomic<uint64_t>& counter) -> coro::task<void>
     {
         co_await tp->schedule();
         REQUIRE(counter == 0);
@@ -203,12 +203,12 @@ TEST_CASE("event fifo executor", "[event]")
     coro::event e{};
 
     // Need consistency FIFO on a single thread to verify the execution order is correct.
-    auto tp = coro::thread_pool::make_shared(coro::thread_pool::options{.thread_count = 1});
+    auto tp = coro::thread_pool::make_unique(coro::thread_pool::options{.thread_count = 1});
 
     std::atomic<uint64_t> counter{0};
 
     auto make_waiter =
-        [](std::shared_ptr<coro::thread_pool> tp, coro::event& e, std::atomic<uint64_t>& counter, uint64_t value) -> coro::task<void>
+        [](std::unique_ptr<coro::thread_pool>& tp, coro::event& e, std::atomic<uint64_t>& counter, uint64_t value) -> coro::task<void>
     {
         co_await tp->schedule();
         co_await e;
@@ -219,7 +219,7 @@ TEST_CASE("event fifo executor", "[event]")
         co_return;
     };
 
-    auto make_setter = [](std::shared_ptr<coro::thread_pool> tp, coro::event& e, std::atomic<uint64_t>& counter) -> coro::task<void>
+    auto make_setter = [](std::unique_ptr<coro::thread_pool>& tp, coro::event& e, std::atomic<uint64_t>& counter) -> coro::task<void>
     {
         co_await tp->schedule();
         REQUIRE(counter == 0);
@@ -243,11 +243,11 @@ TEST_CASE("event fifo none executor", "[event]")
     coro::event e{};
 
     // Need consistency FIFO on a single thread to verify the execution order is correct.
-    auto tp = coro::thread_pool::make_shared(coro::thread_pool::options{.thread_count = 1});
+    auto tp = coro::thread_pool::make_unique(coro::thread_pool::options{.thread_count = 1});
 
     std::atomic<uint64_t> counter{0};
 
-    auto make_setter = [](std::shared_ptr<coro::thread_pool> tp, coro::event& e, std::atomic<uint64_t>& counter) -> coro::task<void>
+    auto make_setter = [](std::unique_ptr<coro::thread_pool>& tp, coro::event& e, std::atomic<uint64_t>& counter) -> coro::task<void>
     {
         co_await tp->schedule();
         REQUIRE(counter == 0);
@@ -265,12 +265,12 @@ TEST_CASE("event fifo single executor", "[event]")
     coro::event e{};
 
     // Need consistency FIFO on a single thread to verify the execution order is correct.
-    auto tp = coro::thread_pool::make_shared(coro::thread_pool::options{.thread_count = 1});
+    auto tp = coro::thread_pool::make_unique(coro::thread_pool::options{.thread_count = 1});
 
     std::atomic<uint64_t> counter{0};
 
     auto make_waiter =
-        [](std::shared_ptr<coro::thread_pool> tp, coro::event& e, std::atomic<uint64_t>& counter, uint64_t value) -> coro::task<void>
+        [](std::unique_ptr<coro::thread_pool>& tp, coro::event& e, std::atomic<uint64_t>& counter, uint64_t value) -> coro::task<void>
     {
         co_await tp->schedule();
         co_await e;
@@ -281,7 +281,7 @@ TEST_CASE("event fifo single executor", "[event]")
         co_return;
     };
 
-    auto make_setter = [](std::shared_ptr<coro::thread_pool> tp, coro::event& e, std::atomic<uint64_t>& counter) -> coro::task<void>
+    auto make_setter = [](std::unique_ptr<coro::thread_pool>& tp, coro::event& e, std::atomic<uint64_t>& counter) -> coro::task<void>
     {
         co_await tp->schedule();
         REQUIRE(counter == 0);

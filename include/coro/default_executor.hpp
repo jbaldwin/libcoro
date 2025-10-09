@@ -19,7 +19,7 @@ void set_executor_options(thread_pool::options thread_pool_options);
 /**
  * Get default coro::thread_pool
  */
-std::shared_ptr<thread_pool> executor();
+auto executor() -> std::unique_ptr<coro::thread_pool>&;
 
 #ifdef LIBCORO_FEATURE_NETWORKING
 /**
@@ -32,7 +32,7 @@ void set_io_executor_options(io_scheduler::options io_scheduler_options);
 /**
  * Get default coro::io_scheduler
  */
-std::shared_ptr<io_scheduler> io_executor();
+auto io_executor() -> std::unique_ptr<coro::io_scheduler>&;
 #endif
 
 /**
@@ -43,7 +43,8 @@ std::shared_ptr<io_scheduler> io_executor();
  * but you don't want to have two executor instances per application for the same thing,
  * one thread_pool and one io_scheduler.
  */
-inline auto perfect()
+template<typename return_type>
+inline auto perfect() -> return_type&
 {
 #ifdef LIBCORO_FEATURE_NETWORKING
     return io_executor();

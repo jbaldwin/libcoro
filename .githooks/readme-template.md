@@ -46,6 +46,7 @@
 *
 * [Requirements](#requirements)
 * [Build Instructions](#build-instructions)
+* [Android Support](#android-support)
 * [Contributing](#contributing)
 * [Support](#support)
 
@@ -507,6 +508,85 @@ Running 1m test @ http://127.0.0.1:8888/
 Requests/sec: 325778.99
 Transfer/sec:     18.33MB
 ```
+
+## Android Support
+
+libcoro ships with an Android test harness that builds and runs the library on Android devices and emulators. This is intended to validate coroutine primitives on Android and to sanity-check networking/TLS integration using OpenSSL where available.
+
+### Status at a glance
+- Toolchain: Android Gradle Plugin 8.5.2, Gradle Wrapper, NDK r29 (29.0.13846066), CMake 3.22.1
+- Minimum SDK: 24, Target SDK: 34
+- ABIs: arm64-v8a, armeabi-v7a, x86, x86_64 (APK contains selected ABIs; CI builds per-ABI)
+- JNI test app package: `com.example.libcorotest`
+- TLS: supported via prebuilt OpenSSL static libraries per-ABI
+- Networking: enabled in Android builds (`LIBCORO_FEATURE_NETWORKING`, `LIBCORO_FEATURE_TLS`)
+
+### Project layout
+- `test/android/` — Android application project (Gradle)
+    - `src/main/cpp/CMakeLists.txt` — integrates libcoro and links in the canonical test sources
+    - `src/main/cpp/main.cpp` — JNI host that launches Catch2-based libcoro tests with live log streaming
+    - `scripts/build_openssl.sh` — helper to produce per-ABI OpenSSL static libs under `external/openssl/<ABI>/`
+
+### Building the Android test APK locally
+Prerequisites: Android SDK + NDK r29, CMake 3.22.1 (installed via SDK), JDK 17.
+
+From repo root:
+
+```bash
+cd test/android
+# Optionally build OpenSSL for required ABIs (script downloads/compiles):
+bash scripts/build_openssl.sh --abis arm64-v8a,armeabi-v7a,x86_64,x86 --api 24
+
+# Single-ABI debug build (faster iterations):
+gradle assembleDebug -PciAbi=x86_64 -PcustomBuildDir=build-x86_64
+
+# Multi-ABI build when experimenting locally (produces a fat APK per chosen filters):
+gradle assembleDebug
+```
+
+Notes:
+- You can override the Gradle build directory via `-PcustomBuildDir=...` (used in CI).
+- You can restrict to a specific ABI via `-PciAbi=<abi>`.
+
+### Running tests on an emulator
+Tests are executed by launching the app, which loads a shared library `libcoroTest.so` that embeds the libcoro test suite (Catch2). Output is streamed to Logcat with tag `coroTest` and also mirrored into the app sandbox file `files/libcoro-tests.log`.
+
+You can pass test options by pushing a simple properties file to the device:
+
+```
+filter=~[benchmark] ~[bench] ~[semaphore] ~[io_scheduler]
+timeout=600
+```
+
+Place it at `/data/local/tmp/coro_test_config.properties` or inside the app sandbox at `files/coro_test_config.properties`. The JNI runner falls back to defaults when the sandbox is not writable.
+
+Default exclusions in emulator runs skip slow/fragile suites (benchmarks, some networking/TLS servers, long-running schedulers). See `test/android/src/main/cpp/main.cpp` for the current filter set.
+
+### CI pipeline
+The GitHub Actions workflow `.github/workflows/ci-android.yml` performs:
+- Per-ABI matrix builds (arm64-v8a, armeabi-v7a, x86, x86_64)
+- OpenSSL prebuild per ABI via `scripts/build_openssl.sh`
+- Emulator provisioning on x86_64 (Android 30), headless launch, storage readiness checks
+- Pushing test configuration (filter/timeout) and running the app
+- Collecting `coroTest` Logcat into `emulator.log` and exporting `libcoro-tests.log`
+
+The test filter excludes particularly slow suites to keep runs under a 10-minute global timeout inside the app. Adjust `TEST_FILTER`/`TEST_TIMEOUT` env vars in the workflow as needed.
+
+### Known limitations on Android
+- Network server tests (e.g., TCP/TLS servers) are skipped in CI to avoid emulator networking flakiness
+- Some timing-sensitive `condition_variable` cases may be excluded on emulators due to short timeouts
+- The Android harness is for validation; apps should link `libcoro` as a regular CMake target in their own projects
+
+### Using libcoro in your Android CMake project
+Add libcoro as a subdirectory in your native CMake and link it to your library target. Example snippet for your module’s CMakeLists:
+
+```cmake
+add_subdirectory(${CMAKE_SOURCE_DIR}/path/to/libcoro libcoro_build)
+target_link_libraries(your-lib PRIVATE libcoro log)
+target_compile_definitions(your-lib PRIVATE LIBCORO_FEATURE_NETWORKING LIBCORO_FEATURE_TLS)
+```
+
+If you require TLS, provide OpenSSL for the target ABI (static or shared) and set `OPENSSL_ROOT_DIR`/`OPENSSL_USE_STATIC_LIBS` accordingly.
 
 ### Requirements
     C++20 Compiler with coroutine support
