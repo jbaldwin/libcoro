@@ -50,13 +50,13 @@ TEST_CASE("mutex many waiters until event", "[mutex]")
     std::atomic<uint64_t>         value{0};
     std::vector<coro::task<void>> tasks;
 
-    auto tp = coro::thread_pool::make_shared(coro::thread_pool::options{.thread_count = 1});
+    auto tp = coro::thread_pool::make_unique(coro::thread_pool::options{.thread_count = 1});
 
     coro::mutex m; // acquires and holds the lock until the event is triggered
     coro::event e; // triggers the blocking thread to release the lock
 
     auto make_task =
-        [](std::shared_ptr<coro::thread_pool> tp, coro::mutex& m, std::atomic<uint64_t>& value, uint64_t id) -> coro::task<void>
+        [](std::unique_ptr<coro::thread_pool>& tp, coro::mutex& m, std::atomic<uint64_t>& value, uint64_t id) -> coro::task<void>
     {
         co_await tp->schedule();
         std::cerr << "id = " << id << " waiting to acquire the lock\n";
@@ -71,7 +71,7 @@ TEST_CASE("mutex many waiters until event", "[mutex]")
         co_return;
     };
 
-    auto make_block_task = [](std::shared_ptr<coro::thread_pool> tp, coro::mutex& m, coro::event& e) -> coro::task<void>
+    auto make_block_task = [](std::unique_ptr<coro::thread_pool>& tp, coro::mutex& m, coro::event& e) -> coro::task<void>
     {
         co_await tp->schedule();
         std::cerr << "block task acquiring lock\n";
@@ -82,7 +82,7 @@ TEST_CASE("mutex many waiters until event", "[mutex]")
         co_return;
     };
 
-    auto make_set_task = [](std::shared_ptr<coro::thread_pool> tp, coro::event& e) -> coro::task<void>
+    auto make_set_task = [](std::unique_ptr<coro::thread_pool>& tp, coro::event& e) -> coro::task<void>
     {
         co_await tp->schedule();
         std::cerr << "set task setting event\n";

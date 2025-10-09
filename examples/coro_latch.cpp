@@ -6,7 +6,7 @@ int main()
     // Complete worker tasks faster on a thread pool, using the io_scheduler version so the worker
     // tasks can yield for a specific amount of time to mimic difficult work.  The pool is only
     // setup with a single thread to showcase yield_for().
-    auto tp = coro::io_scheduler::make_shared(
+    auto tp = coro::io_scheduler::make_unique(
         coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
 
     // This task will wait until the given latch setters have completed.
@@ -27,7 +27,7 @@ int main()
 
     // This task does 'work' and counts down on the latch when completed.  The final child task to
     // complete will end up resuming the latch task when the latch's count reaches zero.
-    auto make_worker_task = [](std::shared_ptr<coro::io_scheduler> tp, coro::latch& l, int64_t i) -> coro::task<void>
+    auto make_worker_task = [](std::unique_ptr<coro::io_scheduler>& tp, coro::latch& l, int64_t i) -> coro::task<void>
     {
         // Schedule the worker task onto the thread pool.
         co_await tp->schedule();

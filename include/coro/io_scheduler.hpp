@@ -30,7 +30,7 @@ enum timeout_status
     timeout,
 };
 
-class io_scheduler : public std::enable_shared_from_this<io_scheduler>
+class io_scheduler
 {
     using timed_events = detail::poll_info::timed_events;
 
@@ -84,7 +84,7 @@ public:
     };
 
     /**
-     * @see io_scheduler::make_shared
+     * @see io_scheduler::make_unique
      */
     explicit io_scheduler(options&& opts, private_constructor);
 
@@ -92,9 +92,9 @@ public:
      * @brief Creates an io_scheduler executor.
      *
      * @param opts The scheduler's options.
-     * @return std::shared_ptr<io_scheduler>
+     * @return std::unique_ptr<io_scheduler>
      */
-    static auto make_shared(
+    static auto make_unique(
         options opts = options{
             .thread_strategy            = thread_strategy_t::spawn,
             .on_io_thread_start_functor = nullptr,
@@ -104,7 +104,7 @@ public:
                      ((std::thread::hardware_concurrency() > 1) ? (std::thread::hardware_concurrency() - 1) : 1),
                  .on_thread_start_functor = nullptr,
                  .on_thread_stop_functor  = nullptr},
-            .execution_strategy = execution_strategy_t::process_tasks_on_thread_pool}) -> std::shared_ptr<io_scheduler>;
+            .execution_strategy = execution_strategy_t::process_tasks_on_thread_pool}) -> std::unique_ptr<io_scheduler>;
 
     io_scheduler(const io_scheduler&)                    = delete;
     io_scheduler(io_scheduler&&)                         = delete;
@@ -433,7 +433,7 @@ private:
     /// The background io worker threads.
     std::thread m_io_thread;
     /// Thread pool for executing tasks when not in inline mode.
-    std::shared_ptr<thread_pool> m_thread_pool{nullptr};
+    std::unique_ptr<thread_pool> m_thread_pool{nullptr};
 
     std::mutex m_timed_events_mutex{};
     /// The map of time point's to poll infos for tasks that are yielding for a period of time

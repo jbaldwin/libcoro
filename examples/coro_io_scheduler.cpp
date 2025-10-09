@@ -3,7 +3,7 @@
 
 int main()
 {
-    auto scheduler = coro::io_scheduler::make_shared(coro::io_scheduler::options{
+    auto scheduler = coro::io_scheduler::make_unique(coro::io_scheduler::options{
         // The scheduler will spawn a dedicated event processing thread.  This is the default, but
         // it is possible to use 'manual' and call 'process_events()' to drive the scheduler yourself.
         .thread_strategy = coro::io_scheduler::thread_strategy_t::spawn,
@@ -26,7 +26,7 @@ int main()
             },
         .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_on_thread_pool});
 
-    auto make_server_task = [](std::shared_ptr<coro::io_scheduler> scheduler) -> coro::task<void>
+    auto make_server_task = [](std::unique_ptr<coro::io_scheduler>& scheduler) -> coro::task<void>
     {
         // Start by creating a tcp server, we'll do this before putting it into the scheduler so
         // it is immediately available for the client to connect since this will create a socket,
@@ -114,7 +114,7 @@ int main()
         co_return;
     };
 
-    auto make_client_task = [](std::shared_ptr<coro::io_scheduler> scheduler) -> coro::task<void>
+    auto make_client_task = [](std::unique_ptr<coro::io_scheduler>& scheduler) -> coro::task<void>
     {
         // Immediately schedule onto the scheduler.
         co_await scheduler->schedule();

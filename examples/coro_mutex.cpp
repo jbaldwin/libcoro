@@ -3,12 +3,12 @@
 
 int main()
 {
-    auto tp = coro::thread_pool::make_shared(coro::thread_pool::options{.thread_count = 4});
+    auto tp = coro::thread_pool::make_unique(coro::thread_pool::options{.thread_count = 4});
     std::vector<uint64_t> output{};
     coro::mutex           mutex{};
 
     auto make_critical_section_task =
-        [](std::shared_ptr<coro::thread_pool> tp, coro::mutex& mutex, std::vector<uint64_t>& output, uint64_t i) -> coro::task<void>
+        [](std::unique_ptr<coro::thread_pool>& tp, coro::mutex& mutex, std::vector<uint64_t>& output, uint64_t i) -> coro::task<void>
     {
         co_await tp->schedule();
         // To acquire a mutex lock co_await its scoped_lock() function. Upon acquiring the lock the

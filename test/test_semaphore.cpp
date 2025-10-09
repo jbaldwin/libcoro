@@ -135,14 +135,14 @@ TEST_CASE("semaphore produce consume", "[semaphore]")
     constexpr std::size_t iterations = 10;
 
     // This test is run in the context of a thread pool so the producer task can yield. Otherwise, the producer will just run wild!
-    auto tp = coro::thread_pool::make_shared(coro::thread_pool::options{.thread_count = 1});
+    auto tp = coro::thread_pool::make_unique(coro::thread_pool::options{.thread_count = 1});
     std::atomic<uint64_t>         value{0};
     std::vector<coro::task<void>> tasks;
 
     coro::semaphore<2> s{2};
 
     auto make_consumer_task =
-        [](std::shared_ptr<coro::thread_pool> tp, coro::semaphore<2>& s, std::atomic<uint64_t>& value, uint64_t id) -> coro::task<void>
+        [](std::unique_ptr<coro::thread_pool>& tp, coro::semaphore<2>& s, std::atomic<uint64_t>& value, uint64_t id) -> coro::task<void>
     {
         co_await tp->schedule();
 
@@ -166,7 +166,7 @@ TEST_CASE("semaphore produce consume", "[semaphore]")
         co_return;
     };
 
-    auto make_producer_task = [](std::shared_ptr<coro::thread_pool> tp, coro::semaphore<2>& s, std::atomic<uint64_t>& value) -> coro::task<void>
+    auto make_producer_task = [](std::unique_ptr<coro::thread_pool>& tp, coro::semaphore<2>& s, std::atomic<uint64_t>& value) -> coro::task<void>
     {
         co_await tp->schedule();
 
@@ -207,10 +207,10 @@ TEST_CASE("semaphore 1 producers and many consumers", "[semaphore]")
 
     coro::semaphore<50> s{0};
 
-    auto tp = coro::thread_pool::make_shared();
+    auto tp = coro::thread_pool::make_unique();
 
     auto make_consumer_task =
-        [](std::shared_ptr<coro::thread_pool> tp, coro::semaphore<50>& s, std::atomic<uint64_t>& value, uint64_t id) -> coro::task<void>
+        [](std::unique_ptr<coro::thread_pool>& tp, coro::semaphore<50>& s, std::atomic<uint64_t>& value, uint64_t id) -> coro::task<void>
     {
         co_await tp->schedule();
         std::cerr << "consumer " << id << " starting\n";
@@ -235,7 +235,7 @@ TEST_CASE("semaphore 1 producers and many consumers", "[semaphore]")
     };
 
     auto make_producer_task =
-        [](std::shared_ptr<coro::thread_pool> tp, coro::semaphore<50>& s, std::atomic<uint64_t>& value, uint64_t id) -> coro::task<void>
+        [](std::unique_ptr<coro::thread_pool>& tp, coro::semaphore<50>& s, std::atomic<uint64_t>& value, uint64_t id) -> coro::task<void>
     {
         co_await tp->schedule();
 

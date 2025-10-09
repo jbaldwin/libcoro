@@ -25,7 +25,7 @@ namespace coro
  * the thread pool will stop accepting new tasks but will complete all tasks that were scheduled
  * prior to the shutdown request.
  */
-class thread_pool : public std::enable_shared_from_this<thread_pool>
+class thread_pool
 {
     struct private_constructor
     {
@@ -81,7 +81,7 @@ public:
     };
 
     /**
-     * @see thread_pool::make_shared
+     * @see thread_pool::make_unique
      */
     explicit thread_pool(options&& opts, private_constructor);
 
@@ -89,13 +89,13 @@ public:
      * @brief Creates a thread pool executor.
      *
      * @param opts The thread pool's options.
-     * @return std::shared_ptr<thread_pool>
+     * @return std::unique_ptr<thread_pool>
      */
-    static auto make_shared(
+    static auto make_unique(
         options opts = options{
             .thread_count            = std::thread::hardware_concurrency(),
             .on_thread_start_functor = nullptr,
-            .on_thread_stop_functor  = nullptr}) -> std::shared_ptr<thread_pool>;
+            .on_thread_stop_functor  = nullptr}) -> std::unique_ptr<thread_pool>;
 
     thread_pool(const thread_pool&)                    = delete;
     thread_pool(thread_pool&&)                         = delete;

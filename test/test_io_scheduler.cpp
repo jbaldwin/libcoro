@@ -23,10 +23,10 @@ using coro::fd_t;
 
 TEST_CASE("io_scheduler schedule single task", "[io_scheduler]")
 {
-    auto s = coro::io_scheduler::make_shared(
+    auto s = coro::io_scheduler::make_unique(
         coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
 
-    auto make_task = [](std::shared_ptr<coro::io_scheduler> s) -> coro::task<uint64_t>
+    auto make_task = [](std::unique_ptr<coro::io_scheduler> &s) -> coro::task<uint64_t>
     {
         co_await s->schedule();
         co_return 42;
@@ -46,9 +46,9 @@ TEST_CASE("io_scheduler submit mutiple tasks", "[io_scheduler]")
     std::atomic<uint64_t>         counter{0};
     std::vector<coro::task<void>> tasks{};
     tasks.reserve(n);
-    auto s = coro::io_scheduler::make_shared();
+    auto s = coro::io_scheduler::make_unique();
 
-    auto make_task = [](std::shared_ptr<coro::io_scheduler> s, std::atomic<uint64_t>& counter) -> coro::task<void>
+    auto make_task = [](std::unique_ptr<coro::io_scheduler> &s, std::atomic<uint64_t>& counter) -> coro::task<void>
     {
         co_await s->schedule();
         counter++;
@@ -72,14 +72,14 @@ TEST_CASE("io_scheduler submit mutiple tasks", "[io_scheduler]")
 TEST_CASE("io_scheduler task with multiple events", "[io_scheduler]")
 {
     std::atomic<uint64_t> counter{0};
-    auto                  s = coro::io_scheduler::make_shared(
+    auto                  s = coro::io_scheduler::make_unique(
         coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
 
     coro::event e1;
     coro::event e2;
     coro::event e3;
 
-    auto make_wait_task = [](std::shared_ptr<coro::io_scheduler> s,
+    auto make_wait_task = [](std::unique_ptr<coro::io_scheduler> &s,
                              std::atomic<uint64_t>&              counter,
                              coro::event&                        e1,
                              coro::event&                        e2,
@@ -95,7 +95,7 @@ TEST_CASE("io_scheduler task with multiple events", "[io_scheduler]")
         co_return;
     };
 
-    auto make_set_task = [](std::shared_ptr<coro::io_scheduler> s, coro::event& e) -> coro::task<void>
+    auto make_set_task = [](std::unique_ptr<coro::io_scheduler> &s, coro::event& e) -> coro::task<void>
     {
         co_await s->schedule();
         e.set();
@@ -117,10 +117,10 @@ TEST_CASE("io_scheduler task with read poll", "[io_scheduler]")
 {
     auto trigger_fds = std::array<fd_t, 2>{};
     ::pipe(trigger_fds.data());
-    auto s = coro::io_scheduler::make_shared(
+    auto s = coro::io_scheduler::make_unique(
         coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
 
-    auto make_poll_read_task = [](std::shared_ptr<coro::io_scheduler> s, int trigger_fd) -> coro::task<void>
+    auto make_poll_read_task = [](std::unique_ptr<coro::io_scheduler> &s, int trigger_fd) -> coro::task<void>
     {
         co_await s->schedule();
         auto status = co_await s->poll(trigger_fd, coro::poll_op::read);
@@ -128,7 +128,7 @@ TEST_CASE("io_scheduler task with read poll", "[io_scheduler]")
         co_return;
     };
 
-    auto make_poll_write_task = [](std::shared_ptr<coro::io_scheduler> s, int trigger_fd) -> coro::task<void>
+    auto make_poll_write_task = [](std::unique_ptr<coro::io_scheduler> &s, int trigger_fd) -> coro::task<void>
     {
         co_await s->schedule();
         uint64_t value{42};
@@ -151,10 +151,10 @@ TEST_CASE("io_scheduler task with read poll with timeout", "[io_scheduler]")
 {
     auto trigger_fds = std::array<fd_t, 2>{};
     ::pipe(trigger_fds.data());
-    auto s = coro::io_scheduler::make_shared(
+    auto s = coro::io_scheduler::make_unique(
         coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
 
-    auto make_poll_read_task = [](std::shared_ptr<coro::io_scheduler> s, int trigger_fd) -> coro::task<void>
+    auto make_poll_read_task = [](std::unique_ptr<coro::io_scheduler> &s, int trigger_fd) -> coro::task<void>
     {
         co_await s->schedule();
         // Poll with a timeout but don't timeout.
@@ -163,7 +163,7 @@ TEST_CASE("io_scheduler task with read poll with timeout", "[io_scheduler]")
         co_return;
     };
 
-    auto make_poll_write_task = [](std::shared_ptr<coro::io_scheduler> s, int trigger_fd) -> coro::task<void>
+    auto make_poll_write_task = [](std::unique_ptr<coro::io_scheduler> &s, int trigger_fd) -> coro::task<void>
     {
         co_await s->schedule();
         uint64_t value{42};
@@ -186,10 +186,10 @@ TEST_CASE("io_scheduler task with read poll timeout", "[io_scheduler]")
 {
     auto trigger_fds = std::array<fd_t, 2>{};
     ::pipe(trigger_fds.data());
-    auto s = coro::io_scheduler::make_shared(
+    auto s = coro::io_scheduler::make_unique(
         coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
 
-    auto make_task = [](std::shared_ptr<coro::io_scheduler> s, int trigger_fd) -> coro::task<void>
+    auto make_task = [](std::unique_ptr<coro::io_scheduler> &s, int trigger_fd) -> coro::task<void>
     {
         co_await s->schedule();
         // Poll with a timeout and timeout.
@@ -210,14 +210,14 @@ TEST_CASE("io_scheduler task with read poll timeout", "[io_scheduler]")
 
 TEST_CASE("io_scheduler separate thread resume", "[io_scheduler]")
 {
-    auto s1 = coro::io_scheduler::make_shared(
+    auto s1 = coro::io_scheduler::make_unique(
         coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
-    auto s2 = coro::io_scheduler::make_shared(
+    auto s2 = coro::io_scheduler::make_unique(
         coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
 
     coro::event e{};
 
-    auto make_s1_task = [](std::shared_ptr<coro::io_scheduler> s1, coro::event& e) -> coro::task<void>
+    auto make_s1_task = [](std::unique_ptr<coro::io_scheduler> &s1, coro::event& e) -> coro::task<void>
     {
         co_await s1->schedule();
         auto tid = std::this_thread::get_id();
@@ -229,7 +229,7 @@ TEST_CASE("io_scheduler separate thread resume", "[io_scheduler]")
         co_return;
     };
 
-    auto make_s2_task = [](std::shared_ptr<coro::io_scheduler> s2, coro::event& e) -> coro::task<void>
+    auto make_s2_task = [](std::unique_ptr<coro::io_scheduler> &s2, coro::event& e) -> coro::task<void>
     {
         co_await s2->schedule();
         // Wait a bit to be sure the wait on 'e' in the other scheduler is done first.
@@ -248,10 +248,10 @@ TEST_CASE("io_scheduler separate thread resume", "[io_scheduler]")
 
 TEST_CASE("io_scheduler separate thread resume spawned thread", "[io_scheduler]")
 {
-    auto s = coro::io_scheduler::make_shared(
+    auto s = coro::io_scheduler::make_unique(
         coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
 
-    auto make_task = [](std::shared_ptr<coro::io_scheduler> s) -> coro::task<void>
+    auto make_task = [](std::unique_ptr<coro::io_scheduler> &s) -> coro::task<void>
     {
         co_await s->schedule();
         coro::event e{};
@@ -285,7 +285,7 @@ TEST_CASE("io_scheduler separate thread resume spawned thread", "[io_scheduler]"
 TEST_CASE("io_scheduler separate thread resume with return", "[io_scheduler]")
 {
     constexpr uint64_t expected_value{1337};
-    auto               s = coro::io_scheduler::make_shared(
+    auto               s = coro::io_scheduler::make_unique(
         coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
 
     coro::event           start_service{};
@@ -304,7 +304,7 @@ TEST_CASE("io_scheduler separate thread resume with return", "[io_scheduler]")
             service_done.set(s);
         }};
 
-    auto make_task = [](std::shared_ptr<coro::io_scheduler> s,
+    auto make_task = [](std::unique_ptr<coro::io_scheduler> &s,
                         coro::event&                        start_service,
                         coro::event&                        service_done,
                         std::atomic<uint64_t>&              output) -> coro::task<void>
@@ -338,12 +338,12 @@ TEST_CASE("io_scheduler separate thread resume with return", "[io_scheduler]")
 TEST_CASE("io_scheduler with basic task", "[io_scheduler]")
 {
     constexpr std::size_t expected_value{5};
-    auto                  s = coro::io_scheduler::make_shared(
+    auto                  s = coro::io_scheduler::make_unique(
         coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
 
-    auto func = [](std::shared_ptr<coro::io_scheduler> s) -> coro::task<int>
+    auto func = [](std::unique_ptr<coro::io_scheduler> &s) -> coro::task<int>
     {
-        auto add_data = [](std::shared_ptr<coro::io_scheduler> s, uint64_t val) -> coro::task<int>
+        auto add_data = [](std::unique_ptr<coro::io_scheduler> &s, uint64_t val) -> coro::task<int>
         {
             co_await s->schedule();
             co_return val;
@@ -389,7 +389,7 @@ TEST_CASE("io_scheduler scheduler_after", "[io_scheduler]")
     };
 
     {
-        auto s = coro::io_scheduler::make_shared(
+        auto s = coro::io_scheduler::make_unique(
             coro::io_scheduler::options{
                 .pool = coro::thread_pool::options{
                     .thread_count            = 1,
@@ -408,7 +408,7 @@ TEST_CASE("io_scheduler scheduler_after", "[io_scheduler]")
     }
 
     {
-        auto s = coro::io_scheduler::make_shared(
+        auto s = coro::io_scheduler::make_unique(
             coro::io_scheduler::options{
                 .pool = coro::thread_pool::options{
                     .thread_count            = 1,
@@ -436,12 +436,12 @@ TEST_CASE("io_scheduler schedule_at", "[io_scheduler]")
     std::atomic<uint64_t>               counter{0};
     std::thread::id                     tid;
 
-    auto s = coro::io_scheduler::make_shared(
+    auto s = coro::io_scheduler::make_unique(
         coro::io_scheduler::options{
             .pool = coro::thread_pool::options{
                 .thread_count = 1, .on_thread_start_functor = [&](std::size_t) { tid = std::this_thread::get_id(); }}});
 
-    auto func = [](std::shared_ptr<coro::io_scheduler>   s,
+    auto func = [](std::unique_ptr<coro::io_scheduler> &  s,
                    std::atomic<uint64_t>&                counter,
                    std::chrono::steady_clock::time_point time,
                    std::thread::id&                      tid) -> coro::task<void>
@@ -486,12 +486,12 @@ TEST_CASE("io_scheduler schedule_at", "[io_scheduler]")
 TEST_CASE("io_scheduler yield", "[io_scheduler]")
 {
     std::thread::id tid;
-    auto            s = coro::io_scheduler::make_shared(
+    auto            s = coro::io_scheduler::make_unique(
         coro::io_scheduler::options{
                        .pool = coro::thread_pool::options{
                            .thread_count = 1, .on_thread_start_functor = [&](std::size_t) { tid = std::this_thread::get_id(); }}});
 
-    auto func = [](std::shared_ptr<coro::io_scheduler> s, std::thread::id& tid) -> coro::task<void>
+    auto func = [](std::unique_ptr<coro::io_scheduler> &s, std::thread::id& tid) -> coro::task<void>
     {
         REQUIRE(tid != std::this_thread::get_id());
         co_await s->schedule();
@@ -511,12 +511,12 @@ TEST_CASE("io_scheduler yield", "[io_scheduler]")
 
 TEST_CASE("io_scheduler yield_for", "[io_scheduler]")
 {
-    auto s = coro::io_scheduler::make_shared(
+    auto s = coro::io_scheduler::make_unique(
         coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
 
     const std::chrono::milliseconds wait_for{50};
 
-    auto make_task = [](std::shared_ptr<coro::io_scheduler> s,
+    auto make_task = [](std::unique_ptr<coro::io_scheduler> &s,
                         std::chrono::milliseconds           wait_for) -> coro::task<std::chrono::milliseconds>
     {
         co_await s->schedule();
@@ -536,14 +536,14 @@ TEST_CASE("io_scheduler yield_for", "[io_scheduler]")
 
 TEST_CASE("io_scheduler yield_until", "[io_scheduler]")
 {
-    auto s = coro::io_scheduler::make_shared(
+    auto s = coro::io_scheduler::make_unique(
         coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
 
     // Because yield_until() takes its own time internally the wait_for might be off by a bit.
     const std::chrono::milliseconds epsilon{3};
     const std::chrono::milliseconds wait_for{50};
 
-    auto make_task = [](std::shared_ptr<coro::io_scheduler> s,
+    auto make_task = [](std::unique_ptr<coro::io_scheduler> &s,
                         std::chrono::milliseconds           wait_for) -> coro::task<std::chrono::milliseconds>
     {
         co_await s->schedule();
@@ -565,9 +565,9 @@ TEST_CASE("io_scheduler multipler event waiters", "[io_scheduler]")
 {
     const constexpr std::size_t total{10};
     coro::event                 e{};
-    auto                        s = coro::io_scheduler::make_shared();
+    auto                        s = coro::io_scheduler::make_unique();
 
-    auto spawn = [](std::shared_ptr<coro::io_scheduler> s, coro::event& e) -> coro::task<void>
+    auto spawn = [](std::unique_ptr<coro::io_scheduler> &s, coro::event& e) -> coro::task<void>
     {
         auto func = [](coro::event& e) -> coro::task<uint64_t>
         {
@@ -592,7 +592,7 @@ TEST_CASE("io_scheduler multipler event waiters", "[io_scheduler]")
         REQUIRE(counter == total);
     };
 
-    auto release = [](std::shared_ptr<coro::io_scheduler> s, coro::event& e) -> coro::task<void>
+    auto release = [](std::unique_ptr<coro::io_scheduler> &s, coro::event& e) -> coro::task<void>
     {
         co_await s->schedule_after(10ms);
         e.set(s);
@@ -610,13 +610,13 @@ TEST_CASE("io_scheduler self generating coroutine (stack overflow check)", "[io_
 {
     const constexpr std::size_t total{1'000'000};
     uint64_t                    counter{0};
-    auto                        s = coro::io_scheduler::make_shared(
+    auto                        s = coro::io_scheduler::make_unique(
         coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
 
     std::vector<coro::task<void>> tasks;
     tasks.reserve(total);
 
-    auto func = [](std::shared_ptr<coro::io_scheduler> s,
+    auto func = [](std::unique_ptr<coro::io_scheduler> &s,
                    uint64_t&                           counter,
                    auto                                f,
                    std::vector<coro::task<void>>&      tasks) -> coro::task<void>
@@ -656,7 +656,7 @@ TEST_CASE("io_scheduler manual process events thread pool", "[io_scheduler]")
 {
     auto trigger_fds = std::array<fd_t, 2>{};
     ::pipe(trigger_fds.data());
-    auto s = coro::io_scheduler::make_shared(
+    auto s = coro::io_scheduler::make_unique(
         coro::io_scheduler::options{
             .thread_strategy = coro::io_scheduler::thread_strategy_t::manual,
             .pool            = coro::thread_pool::options{
@@ -666,7 +666,7 @@ TEST_CASE("io_scheduler manual process events thread pool", "[io_scheduler]")
     std::atomic<bool> polling{false};
 
     auto make_poll_read_task =
-        [](std::shared_ptr<coro::io_scheduler> s, std::atomic<bool>& polling, int trigger_fd) -> coro::task<void>
+        [](std::unique_ptr<coro::io_scheduler> &s, std::atomic<bool>& polling, int trigger_fd) -> coro::task<void>
     {
         std::cerr << "poll task start s.size() == " << s->size() << "\n";
         co_await s->schedule();
@@ -678,7 +678,7 @@ TEST_CASE("io_scheduler manual process events thread pool", "[io_scheduler]")
         co_return;
     };
 
-    auto make_poll_write_task = [](std::shared_ptr<coro::io_scheduler> s, int trigger_fd) -> coro::task<void>
+    auto make_poll_write_task = [](std::unique_ptr<coro::io_scheduler> &s, int trigger_fd) -> coro::task<void>
     {
         std::cerr << "write task start s.size() == " << s->size() << "\n";
         co_await s->schedule();
@@ -716,12 +716,12 @@ TEST_CASE("io_scheduler manual process events inline", "[io_scheduler]")
 {
     auto trigger_fds = std::array<fd_t, 2>{};
     ::pipe(trigger_fds.data());
-    auto s = coro::io_scheduler::make_shared(
+    auto s = coro::io_scheduler::make_unique(
         coro::io_scheduler::options{
             .thread_strategy    = coro::io_scheduler::thread_strategy_t::manual,
             .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
 
-    auto make_poll_read_task = [](std::shared_ptr<coro::io_scheduler> s, int trigger_fd) -> coro::task<void>
+    auto make_poll_read_task = [](std::unique_ptr<coro::io_scheduler> &s, int trigger_fd) -> coro::task<void>
     {
         std::cerr << "poll task start s.size() == " << s->size() << "\n";
         co_await s->schedule();
@@ -732,7 +732,7 @@ TEST_CASE("io_scheduler manual process events inline", "[io_scheduler]")
         co_return;
     };
 
-    auto make_poll_write_task = [](std::shared_ptr<coro::io_scheduler> s, int trigger_fd) -> coro::task<void>
+    auto make_poll_write_task = [](std::unique_ptr<coro::io_scheduler> &s, int trigger_fd) -> coro::task<void>
     {
         std::cerr << "write task start s.size() == " << s->size() << "\n";
         co_await s->schedule();
@@ -772,10 +772,10 @@ TEST_CASE("io_scheduler manual process events inline", "[io_scheduler]")
 
 TEST_CASE("io_scheduler task throws", "[io_scheduler]")
 {
-    auto s = coro::io_scheduler::make_shared(
+    auto s = coro::io_scheduler::make_unique(
         coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
 
-    auto func = [](std::shared_ptr<coro::io_scheduler> s) -> coro::task<uint64_t>
+    auto func = [](std::unique_ptr<coro::io_scheduler> &s) -> coro::task<uint64_t>
     {
         co_await s->schedule();
         throw std::runtime_error{"I always throw."};
@@ -787,10 +787,10 @@ TEST_CASE("io_scheduler task throws", "[io_scheduler]")
 
 TEST_CASE("io_scheduler task throws after resume", "[io_scheduler]")
 {
-    auto s = coro::io_scheduler::make_shared(
+    auto s = coro::io_scheduler::make_unique(
         coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
 
-    auto make_thrower = [](std::shared_ptr<coro::io_scheduler> s) -> coro::task<bool>
+    auto make_thrower = [](std::unique_ptr<coro::io_scheduler> &s) -> coro::task<bool>
     {
         co_await s->schedule();
         std::cerr << "Throwing task is doing some work...\n";
@@ -809,7 +809,7 @@ TEST_CASE("coro::io_scheduler::spawn", "[io_scheduler]")
     const int ITERATIONS = 200000;
 
     std::atomic<uint32_t> g_count   = 0;
-    auto                  scheduler = coro::io_scheduler::make_shared(
+    auto                  scheduler = coro::io_scheduler::make_unique(
         coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
 
     auto task = [](std::atomic<uint32_t>& count) -> coro::task<void>
@@ -831,7 +831,7 @@ TEST_CASE("coro::io_scheduler::spawn", "[io_scheduler]")
 
 TEST_CASE("io_scheduler::schedule(task)", "[thread_pool]")
 {
-    auto scheduler = coro::io_scheduler::make_shared(
+    auto scheduler = coro::io_scheduler::make_unique(
         coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
     uint64_t        counter{0};
     std::thread::id coroutine_tid;
@@ -852,7 +852,7 @@ TEST_CASE("io_scheduler::schedule(task)", "[thread_pool]")
 
 TEST_CASE("io_scheduler shutdown with background yielding task", "[thread_pool]")
 {
-    auto scheduler = coro::io_scheduler::make_shared(
+    auto scheduler = coro::io_scheduler::make_unique(
         coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
 
     auto background_task = [](coro::io_scheduler* scheduler) -> coro::task<void>

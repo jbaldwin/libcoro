@@ -45,7 +45,7 @@ class result
     friend resolver<executor_type>;
 
 public:
-    result(std::shared_ptr<executor_type>& executor, coro::event& resume, uint64_t pending_dns_requests)
+    result(std::unique_ptr<executor_type>& executor, coro::event& resume, uint64_t pending_dns_requests)
         : m_executor(executor),
           m_resume(resume),
           m_pending_dns_requests(pending_dns_requests)
@@ -65,7 +65,7 @@ public:
     auto ip_addresses() const -> const std::vector<coro::net::ip_address>& { return m_ip_addresses; }
 
 private:
-    std::shared_ptr<executor_type>&    m_executor;
+    std::unique_ptr<executor_type>&    m_executor;
     coro::event&                       m_resume;
     uint64_t                           m_pending_dns_requests{0};
     dns::status                        m_status{dns::status::complete};
@@ -78,8 +78,8 @@ template<concepts::io_executor executor_type>
 class resolver
 {
 public:
-    explicit resolver(std::shared_ptr<executor_type> executor, std::chrono::milliseconds timeout)
-        : m_executor(std::move(executor)),
+    explicit resolver(std::unique_ptr<executor_type>& executor, std::chrono::milliseconds timeout)
+        : m_executor(executor),
           m_timeout(timeout)
     {
         if (m_executor == nullptr)
@@ -151,7 +151,7 @@ public:
 
 private:
     /// The executor to drive the events for dns lookups.
-    std::shared_ptr<executor_type> m_executor;
+    std::unique_ptr<executor_type>& m_executor;
 
     /// The global timeout per dns lookup request.
     std::chrono::milliseconds m_timeout{0};

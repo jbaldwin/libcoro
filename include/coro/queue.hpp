@@ -366,7 +366,7 @@ public:
      * @return coro::task<void>
      */
     template<coro::concepts::executor executor_type>
-    auto shutdown_drain(std::shared_ptr<executor_type> e) -> coro::task<void>
+    auto shutdown_drain(std::unique_ptr<executor_type>& e) -> coro::task<void>
     {
         auto lk = co_await m_mutex.scoped_lock();
         auto expected = running_state_t::running;

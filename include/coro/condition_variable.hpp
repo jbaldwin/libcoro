@@ -196,7 +196,7 @@ private:
     struct awaiter_with_wait : public awaiter_base
     {
         awaiter_with_wait(
-            std::shared_ptr<io_executor_type> executor,
+            std::unique_ptr<io_executor_type>& executor,
             coro::condition_variable& cv,
             coro::scoped_lock& l,
             const std::chrono::nanoseconds wait_for,
@@ -204,7 +204,7 @@ private:
             std::optional<std::stop_token> stop_token = std::nullopt
         ) noexcept
             : awaiter_base(cv, l),
-              m_executor(std::move(executor)),
+              m_executor(executor),
               m_wait_for(wait_for),
               m_predicate(std::move(predicate)),
               m_stop_token(std::move(stop_token))
@@ -329,7 +329,7 @@ private:
         }
 
         /// @brief The io_executor used to wait for the timeout.
-        std::shared_ptr<io_executor_type> m_executor{nullptr};
+        std::unique_ptr<io_executor_type>& m_executor;
         /// @brief The amount of time to wait for before timing out.
         const std::chrono::nanoseconds m_wait_for;
         /// @brief If the condition timed out or not.
@@ -365,7 +365,7 @@ public:
      * @param executor The executor that the waiter will be resumed on.
      */
     template<coro::concepts::executor executor_type>
-    auto notify_one(std::shared_ptr<executor_type> executor) -> void
+    auto notify_one(std::unique_ptr<executor_type>& executor) -> void
     {
         executor->spawn(notify_one());
     }
@@ -386,7 +386,7 @@ public:
      * @return void
      */
     template<coro::concepts::executor executor_type>
-    auto notify_all(std::shared_ptr<executor_type> executor) -> void
+    auto notify_all(std::unique_ptr<executor_type>& executor) -> void
     {
         auto* waiter = detail::awaiter_list_pop_all(m_awaiters);
         awaiter_base* next;
@@ -447,52 +447,52 @@ public:
 
     template<concepts::io_executor io_executor_type, class rep_type, class period_type>
     [[nodiscard]] auto wait_for(
-        std::shared_ptr<io_executor_type> executor,
+        std::unique_ptr<io_executor_type>& executor,
         coro::scoped_lock& lock,
         const std::chrono::duration<rep_type, period_type> wait_for
     ) -> awaiter_with_wait<io_executor_type, std::cv_status>
     {
-        return awaiter_with_wait<io_executor_type, std::cv_status>{std::move(executor), *this, lock, std::chrono::duration_cast<std::chrono::nanoseconds>(wait_for)};
+        return awaiter_with_wait<io_executor_type, std::cv_status>{executor, *this, lock, std::chrono::duration_cast<std::chrono::nanoseconds>(wait_for)};
     }
 
     template<concepts::io_executor io_executor_type, class rep_type, class period_type>
     [[nodiscard]] auto wait_for(
-        std::shared_ptr<io_executor_type> executor,
+        std::unique_ptr<io_executor_type>& executor,
         coro::scoped_lock& lock,
         const std::chrono::duration<rep_type, period_type> wait_for,
         predicate_type predicate
     ) -> awaiter_with_wait<io_executor_type, bool>
     {
-        return awaiter_with_wait<io_executor_type, bool>{std::move(executor), *this, lock, std::chrono::duration_cast<std::chrono::nanoseconds>(wait_for), std::move(predicate)};
+        return awaiter_with_wait<io_executor_type, bool>{executor, *this, lock, std::chrono::duration_cast<std::chrono::nanoseconds>(wait_for), std::move(predicate)};
     }
 
     template<concepts::io_executor io_executor_type, class rep_type, class period_type>
     [[nodiscard]] auto wait_for(
-        std::shared_ptr<io_executor_type> executor,
+        std::unique_ptr<io_executor_type>& executor,
         coro::scoped_lock& lock,
         std::stop_token stop_token,
         const std::chrono::duration<rep_type, period_type> wait_for,
         predicate_type predicate
     ) -> awaiter_with_wait<io_executor_type, bool>
     {
-        return awaiter_with_wait<io_executor_type, bool>{std::move(executor), *this, lock, std::chrono::duration_cast<std::chrono::nanoseconds>(wait_for), std::move(predicate), std::move(stop_token)};
+        return awaiter_with_wait<io_executor_type, bool>{executor, *this, lock, std::chrono::duration_cast<std::chrono::nanoseconds>(wait_for), std::move(predicate), std::move(stop_token)};
     }
 
     template<concepts::io_executor io_executor_type, class clock_type, class duration_type>
     auto wait_until(
-        std::shared_ptr<io_executor_type> executor,
+        std::unique_ptr<io_executor_type>& executor,
         coro::scoped_lock& lock,
         const std::chrono::time_point<clock_type, duration_type> wait_until_time
     ) -> awaiter_with_wait<io_executor_type, std::cv_status>
     {
         auto now = std::chrono::time_point<clock_type, duration_type>::clock::now();
         auto wait_for = (now < wait_until_time) ? (wait_until_time - now) : std::chrono::nanoseconds{1};
-        return awaiter_with_wait<io_executor_type, std::cv_status>{std::move(executor), *this, lock, std::chrono::duration_cast<std::chrono::nanoseconds>(wait_for)};
+        return awaiter_with_wait<io_executor_type, std::cv_status>{executor, *this, lock, std::chrono::duration_cast<std::chrono::nanoseconds>(wait_for)};
     }
 
     template<concepts::io_executor io_executor_type, class clock_type, class duration_type>
     auto wait_until(
-        std::shared_ptr<io_executor_type> executor,
+        std::unique_ptr<io_executor_type>& executor,
         coro::scoped_lock& lock,
         const std::chrono::time_point<clock_type, duration_type> wait_until_time,
         predicate_type predicate
@@ -500,12 +500,12 @@ public:
     {
         auto now = std::chrono::time_point<clock_type, duration_type>::clock::now();
         auto wait_for = (now < wait_until_time) ? (wait_until_time - now) : std::chrono::nanoseconds{1};
-        return awaiter_with_wait<io_executor_type, bool>{std::move(executor), *this, lock, std::chrono::duration_cast<std::chrono::nanoseconds>(wait_for), std::move(predicate)};
+        return awaiter_with_wait<io_executor_type, bool>{executor, *this, lock, std::chrono::duration_cast<std::chrono::nanoseconds>(wait_for), std::move(predicate)};
     }
 
     template<concepts::io_executor io_executor_type, class clock_type, class duration_type>
     auto wait_until(
-        std::shared_ptr<io_executor_type> executor,
+        std::unique_ptr<io_executor_type>& executor,
         coro::scoped_lock& lock,
         std::stop_token stop_token,
         const std::chrono::time_point<clock_type, duration_type> wait_until_time,
@@ -514,7 +514,7 @@ public:
     {
         auto now = std::chrono::time_point<clock_type, duration_type>::clock::now();
         auto wait_for = (now < wait_until_time) ? (wait_until_time - now) : std::chrono::nanoseconds{1};
-        return awaiter_with_wait<io_executor_type, bool>{std::move(executor), *this, lock, std::chrono::duration_cast<std::chrono::nanoseconds>(wait_for), std::move(predicate), std::move(stop_token)};
+        return awaiter_with_wait<io_executor_type, bool>{executor, *this, lock, std::chrono::duration_cast<std::chrono::nanoseconds>(wait_for), std::move(predicate), std::move(stop_token)};
     }
 #endif
 

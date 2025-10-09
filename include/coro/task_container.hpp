@@ -26,7 +26,7 @@ public:
      * @param e Tasks started in the container are scheduled onto this executor.  For tasks created
      *           from a coro::io_scheduler, this would usually be that coro::io_scheduler instance.
      */
-    explicit task_container(std::shared_ptr<executor_type> e) : m_executor(std::move(e))
+    explicit task_container(std::unique_ptr<executor_type>& e) : m_executor(e.get())
     {
         if (m_executor == nullptr)
         {
@@ -98,7 +98,7 @@ private:
     /// The number of alive tasks.
     std::atomic<std::size_t> m_size{};
     /// The executor to schedule tasks that have just started.
-    std::shared_ptr<executor_type> m_executor{nullptr};
+    executor_type* m_executor{nullptr};
 };
 
 } // namespace coro

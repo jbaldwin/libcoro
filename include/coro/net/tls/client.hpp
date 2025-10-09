@@ -42,7 +42,7 @@ public:
      * @param opts See tls::client::options for more information.
      */
     explicit client(
-        std::shared_ptr<io_scheduler> scheduler,
+        std::unique_ptr<coro::io_scheduler>& scheduler,
         std::shared_ptr<context>      tls_ctx,
         options                       opts = options{
                                   .address = {net::ip_address::from_string("127.0.0.1")},
@@ -250,6 +250,36 @@ public:
         }
     }
 
+    /**
+     * Shuts down the tls client with a 30 second timeout.
+     *
+     * IMPORTANT:
+     * This is very important to call manually for each client as the client's destructor will synchronously wait
+     * to shutdown if this isn't called before the client is destructed, possibly hanging the thread of execution
+     * until it completes.
+     * @return Task.
+     */
+    auto shutdown() -> coro::task<void>
+    {
+        co_await shutdown(std::chrono::seconds{30});
+    }
+
+    template<typename rep, typename period>
+    auto shutdown(std::chrono::duration<rep, period> timeout) -> coro::task<void>
+    {
+        // Only allow the client to be shutdown once.
+        if (m_shutdown.exchange(true, std::memory_order::acq_rel) != false)
+        {
+            co_return;
+        }
+
+        // If the client exists and it didn't have an error.
+        if (m_tls_info.m_tls_ptr != nullptr && !m_tls_info.m_tls_error)
+        {
+            co_await tls_shutdown_and_free(std::chrono::duration_cast<std::chrono::milliseconds>(timeout));
+        }
+    }
+
 private:
     /**
      * @param timeout How long to allow for the tls handshake to successfully complete?
@@ -325,10 +355,10 @@ private:
 
     /// The tls::server creates already connected clients and provides a tcp socket pre-built.
     friend server;
-    client(std::shared_ptr<io_scheduler> scheduler, std::shared_ptr<context> tls_ctx, net::socket socket, options opts);
+    client(coro::io_scheduler* scheduler, std::shared_ptr<context> tls_ctx, net::socket socket, options opts);
 
     /// The scheduler that will drive this tcp client.
-    std::shared_ptr<io_scheduler> m_io_scheduler{nullptr};
+    coro::io_scheduler* m_io_scheduler{nullptr};
     // The tls context.
     std::shared_ptr<context> m_tls_ctx{nullptr};
     /// Options for what server to connect to.
@@ -339,12 +369,11 @@ private:
     std::optional<connection_status> m_connect_status{std::nullopt};
     /// SSL/TLS specific information.
     tls_info m_tls_info{};
+    /// Flag to signal if this tls client has already been shutdown or not.
+    std::atomic<bool> m_shutdown{false};
 
-    static auto tls_shutdown_and_free(
-        std::shared_ptr<io_scheduler> io_scheduler,
-        net::socket                   s,
-        tls_unique_ptr                tls_ptr,
-        std::chrono::milliseconds     timeout = std::chrono::milliseconds{0}) -> coro::task<void>;
+    auto tls_shutdown_and_free(
+        std::chrono::milliseconds timeout = std::chrono::milliseconds{0}) -> coro::task<void>;
 };
 
 } // namespace coro::net::tls
