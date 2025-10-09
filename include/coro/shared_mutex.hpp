@@ -255,8 +255,8 @@ public:
     /**
      * @brief Gets the executor that drives the shared mutex.
      *
-     * @return executor_type>&
-     * */
+     * @return executor_type&
+     */
     [[nodiscard]] auto executor() -> executor_type&
     {
         return *m_executor;
