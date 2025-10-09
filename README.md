@@ -688,7 +688,7 @@ int main()
         if (result == coro::semaphore_acquire_result::acquired)
         {
             std::cout << task_num << ", ";
-            semaphore.release();
+            co_await semaphore.release();
         }
         else
         {
