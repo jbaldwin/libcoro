@@ -22,11 +22,10 @@ auto thread_pool::make_unique(options opts) -> std::unique_ptr<thread_pool>
 {
     auto tp = std::make_unique<thread_pool>(std::move(opts), private_constructor{});
 
-    // Initialize once the unique pointer is constructor so it can be captured for
-    // the background threads.
+    // Initialize the background worker threads once the thread pool is fully constructed
+    // so the workers have a full ready object to work with.
     for (uint32_t i = 0; i < tp->m_opts.thread_count; ++i)
     {
-        // Threads capture a raw pointer to avoid reference cycles
         tp->m_threads.emplace_back([tp = tp.get(), i]() { tp->executor(i); });
     }
 
