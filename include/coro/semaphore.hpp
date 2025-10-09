@@ -4,6 +4,7 @@
 #include "coro/expected.hpp"
 #include "coro/export.hpp"
 #include "coro/mutex.hpp"
+#include "coro/sync_wait.hpp"
 
 #include <atomic>
 #include <coroutine>
@@ -88,7 +89,7 @@ public:
         : m_counter(starting_value)
     { }
 
-    ~semaphore() { shutdown(); }
+    ~semaphore() { coro::sync_wait(shutdown()); }
 
     semaphore(const semaphore&) = delete;
     semaphore(semaphore&&)      = delete;
@@ -167,12 +168,17 @@ public:
      * Stops the semaphore and will notify all release/acquire waiters to wake up in a failed state.
      * Once this is set it cannot be un-done and all future oprations on the semaphore will fail.
      */
-    auto shutdown() noexcept -> void
+    [[nodiscard]] auto shutdown() noexcept -> coro::task<void>
     {
+        if (is_shutdown()) {
+            co_return;
+        }
+        auto lock = co_await m_mutex.scoped_lock();
         bool expected{false};
         if (m_shutdown.compare_exchange_strong(expected, true, std::memory_order::release, std::memory_order::relaxed))
         {
             auto* waiter = detail::awaiter_list_pop_all(m_acquire_waiters);
+            lock.unlock();
             while (waiter != nullptr)
             {
                 auto* next = waiter->m_next;
