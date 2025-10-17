@@ -379,7 +379,7 @@ public:
         }
         lk.unlock();
 
-        while (!empty())
+        while (!empty() && m_running_state.load(std::memory_order::acquire) == running_state_t::draining)
         {
             co_await e->yield();
         }
