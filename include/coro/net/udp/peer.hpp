@@ -10,7 +10,6 @@
 
 #include <chrono>
 #include <span>
-#include <variant>
 
 namespace coro
 {
@@ -43,11 +42,11 @@ public:
      */
     explicit peer(std::unique_ptr<coro::io_scheduler>& scheduler, const info& bind_info);
 
-    peer(const peer&)                             = default;
-    peer(peer&&)                                  = default;
-    auto operator=(const peer&) noexcept -> peer& = default;
-    auto operator=(peer&&) noexcept -> peer&      = default;
-    ~peer()                                       = default;
+    peer(const peer&) noexcept = default;
+    peer(peer&&) noexcept;
+    auto operator=(const peer&) noexcept -> peer&;
+    auto operator=(peer&&) noexcept -> peer&;
+    ~peer() = default;
 
     /**
      * @return A reference to the underlying socket.
@@ -147,7 +146,7 @@ public:
 
 private:
     /// The scheduler that will drive this udp client.
-    std::unique_ptr<coro::io_scheduler>& m_io_scheduler;
+    coro::io_scheduler* m_io_scheduler;
     /// The udp socket.
     net::socket m_socket{-1};
     /// Did the user request this udp socket is bound locally to receive packets?
