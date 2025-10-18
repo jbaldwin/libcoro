@@ -2,9 +2,11 @@
 
 #include "coro/concepts/executor.hpp"
 #include "coro/expected.hpp"
+#include "coro/mutex.hpp"
 #include "coro/sync_wait.hpp"
 #include "coro/task.hpp"
 
+#include <atomic>
 #include <queue>
 
 namespace coro
@@ -377,7 +379,7 @@ public:
         }
         lk.unlock();
 
-        while (!empty())
+        while (!empty() && m_running_state.load(std::memory_order::acquire) == running_state_t::draining)
         {
             co_await e->yield();
         }

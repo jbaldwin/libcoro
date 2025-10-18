@@ -2,9 +2,7 @@
 
 #include <coro/coro.hpp>
 
-#include <chrono>
 #include <iostream>
-#include <thread>
 
 TEST_CASE("ring_buffer", "[ring_buffer]")
 {
@@ -411,6 +409,32 @@ TEST_CASE("ring_buffer issue-242 basic type", "[ring_buffer]")
     auto data = std::move(*result);
     REQUIRE(data == 1);
     std::cerr << "END ring_buffer issue-242 basic type\n";
+}
+
+TEST_CASE("ring_buffer shutdown_drain non-empty consumer shutdown", "[ring_buffer]")
+{
+    std::cerr << "BEGIN ring_buffer issue-401\n";
+
+    coro::ring_buffer<int, 1> buffer;
+    auto                      exec = coro::thread_pool::make_unique(coro::thread_pool::options{.thread_count = 1});
+
+    const auto producer = [](coro::ring_buffer<int, 1>&          buffer,
+                             std::unique_ptr<coro::thread_pool>& exec) -> coro::task<void>
+    {
+        auto r = co_await buffer.produce(1);
+        REQUIRE(r == coro::ring_buffer_result::produce::produced);
+        co_await buffer.shutdown_drain(exec);
+        REQUIRE(buffer.is_shutdown());
+    };
+    const auto consumer = [](coro::ring_buffer<int, 1>& buffer) -> coro::task<void>
+    {
+        co_await buffer.shutdown();
+        REQUIRE(buffer.is_shutdown());
+    };
+
+    std::ignore =
+        coro::sync_wait(coro::when_all(exec->schedule(producer(buffer, exec)), exec->schedule(consumer(buffer))));
+    std::cerr << "END ring_buffer issue-401\n";
 }
 
 TEST_CASE("~ring_buffer", "[ring_buffer]")

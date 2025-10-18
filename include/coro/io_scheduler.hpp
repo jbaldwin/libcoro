@@ -7,6 +7,7 @@
 #include "coro/io_notifier.hpp"
 #include "coro/poll.hpp"
 #include "coro/thread_pool.hpp"
+#include <type_traits>
 #include <unistd.h>
 
 #ifdef LIBCORO_FEATURE_NETWORKING
@@ -17,7 +18,6 @@
 #include <functional>
 #include <map>
 #include <memory>
-#include <optional>
 #include <stop_token>
 #include <thread>
 #include <vector>
@@ -225,13 +225,28 @@ public:
         auto timeout_ms = std::max(std::chrono::duration_cast<std::chrono::milliseconds>(timeout), 0ms);
         if (timeout_ms == 0ms)
         {
-            co_return coro::expected<return_type, timeout_status>(co_await schedule(std::move(task)));
+            if constexpr (std::is_void_v<return_type>)
+            {
+                co_await schedule(std::move(task));
+                co_return coro::expected<return_type, timeout_status>();
+            }
+            else
+            {
+                co_return coro::expected<return_type, timeout_status>(co_await schedule(std::move(task)));
+            }
         }
 
         auto result = co_await when_any(std::move(task), make_timeout_task(timeout_ms));
         if (!std::holds_alternative<timeout_status>(result))
         {
-            co_return coro::expected<return_type, timeout_status>(std::move(std::get<0>(result)));
+            if constexpr (std::is_void_v<return_type>)
+            {
+                co_return coro::expected<return_type, timeout_status>();
+            }
+            else
+            {
+                co_return coro::expected<return_type, timeout_status>(std::move(std::get<0>(result)));
+            }
         }
         else
         {
@@ -261,13 +276,27 @@ public:
         auto timeout_ms = std::max(std::chrono::duration_cast<std::chrono::milliseconds>(timeout), 0ms);
         if (timeout_ms == 0ms)
         {
-            co_return coro::expected<return_type, timeout_status>(co_await schedule(std::move(task)));
+            if constexpr (std::is_void_v<return_type>)
+            {
+                co_return coro::expected<return_type, timeout_status>();
+            }
+            else
+            {
+                co_return coro::expected<return_type, timeout_status>(co_await schedule(std::move(task)));
+            }
         }
 
         auto result = co_await when_any(std::move(stop_source), std::move(task), make_timeout_task(timeout_ms));
         if (!std::holds_alternative<timeout_status>(result))
         {
-            co_return coro::expected<return_type, timeout_status>(std::move(std::get<0>(result)));
+            if constexpr (std::is_void_v<return_type>)
+            {
+                co_return coro::expected<return_type, timeout_status>();
+            }
+            else
+            {
+                co_return coro::expected<return_type, timeout_status>(std::move(std::get<0>(result)));
+            }
         }
         else
         {
@@ -282,7 +311,7 @@ public:
      *               Given zero or negative amount of time this behaves identical to schedule().
      */
     template<class rep_type, class period_type>
-     [[nodiscard]] auto schedule_after(std::chrono::duration<rep_type, period_type> amount) -> coro::task<void>
+    [[nodiscard]] auto schedule_after(std::chrono::duration<rep_type, period_type> amount) -> coro::task<void>
     {
         return yield_for_internal(std::chrono::duration_cast<std::chrono::nanoseconds>(amount));
     }
