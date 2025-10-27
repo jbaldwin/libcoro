@@ -29,7 +29,7 @@ class thread_pool
 {
     struct private_constructor
     {
-        private_constructor() = default;
+        explicit private_constructor() = default;
     };
 public:
     /**
