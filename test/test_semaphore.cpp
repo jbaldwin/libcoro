@@ -206,7 +206,7 @@ TEST_CASE("semaphore 1 producers and many consumers", "[semaphore]")
     std::atomic<uint64_t> value{0};
 
     coro::semaphore<50> s{0};
-    coro::latch done{consumers};
+    coro::latch done{iterations};
 
     auto tp = coro::thread_pool::make_unique();
 
@@ -225,6 +225,7 @@ TEST_CASE("semaphore 1 producers and many consumers", "[semaphore]")
                 // std::cerr << "consumer " << id << " acquired\n";
                 co_await tp->schedule();
                 value.fetch_add(1, std::memory_order::release);
+                done.count_down();
             }
             else
             {
@@ -233,7 +234,6 @@ TEST_CASE("semaphore 1 producers and many consumers", "[semaphore]")
         }
 
         std::cerr << "consumer " << id << " exiting\n";
-        done.count_down();
         co_return;
     };
 
@@ -250,6 +250,7 @@ TEST_CASE("semaphore 1 producers and many consumers", "[semaphore]")
         }
 
         // Wait for all jobs to complete.
+        std::cerr << "producer " << id << " waiting for consumers to complete\n";
         co_await done;
 
         std::cerr << "producer " << id << " exiting\n";

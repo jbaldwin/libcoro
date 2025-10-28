@@ -47,6 +47,8 @@ public:
         explicit schedule_operation(thread_pool& tp) noexcept;
 
     public:
+        explicit schedule_operation(thread_pool& tp, bool force_global_queue) noexcept;
+
         /**
          * Schedule operations always pause so the executing thread can be switched.
          */
@@ -66,6 +68,7 @@ public:
     private:
         /// @brief The thread pool that this schedule operation will execute on.
         thread_pool& m_thread_pool;
+        bool m_force_global_queue{false};
     };
 
     struct options
@@ -163,7 +166,7 @@ public:
         {
             if (handle != nullptr) [[likely]]
             {
-                m_queue.enqueue(handle);
+                m_global_queue.enqueue(handle);
             }
             else
             {
@@ -185,7 +188,7 @@ public:
      * FIFO task queue.  This function is useful to yielding long processing tasks to let other tasks
      * get processing time.
      */
-    [[nodiscard]] auto yield() -> schedule_operation { return schedule(); }
+    [[nodiscard]] auto yield() -> schedule_operation { return schedule_operation{*this, true}; }
 
     /**
      * Shuts down the thread pool.  This will finish any tasks scheduled prior to calling this
@@ -199,34 +202,50 @@ public:
     /**
      * @return The number of tasks waiting in the task queue + the executing tasks.
      */
-    auto size() const noexcept -> std::size_t { return m_size.load(std::memory_order::acquire); }
+    [[nodiscard]] auto size() const noexcept -> std::size_t { return m_size.load(std::memory_order::acquire); }
 
     /**
      * @return True if the task queue is empty and zero tasks are currently executing.
      */
-    auto empty() const noexcept -> bool { return size() == 0; }
+    [[nodiscard]] auto empty() const noexcept -> bool { return size() == 0; }
 
     /**
      * @return The approximate number of tasks waiting in the task queue to be executed.
      */
-    auto queue_size() const noexcept -> std::size_t
+    [[nodiscard]] auto queue_size() const noexcept -> std::size_t
     {
-        std::atomic_thread_fence(std::memory_order::acquire);
-        return m_queue.size_approx();
+        std::size_t approx_size{0};
+        for (auto& queue : m_local_queues)
+        {
+            approx_size += queue.size_approx();
+        }
+        return approx_size + m_global_queue.size_approx();
     }
 
     /**
      * @return True if the task queue is currently empty.
      */
-    auto queue_empty() const noexcept -> bool { return queue_size() == 0; }
+    [[nodiscard]] auto queue_empty() const noexcept -> bool { return queue_size() == 0; }
 
 private:
+    struct executor_state
+    {
+        std::thread::id m_thread_id;
+        std::mutex m_mutex;
+    };
+
     /// The configuration options.
     options m_opts;
     /// The background executor threads.
     std::vector<std::thread> m_threads;
-    /// The tasks waiting to be executed.
-    moodycamel::BlockingConcurrentQueue<std::coroutine_handle<>> m_queue;
+    /// Local executor worker thread queues.
+    std::vector<moodycamel::BlockingConcurrentQueue<std::coroutine_handle<>>> m_local_queues;
+    /// Global queue.
+    moodycamel::BlockingConcurrentQueue<std::coroutine_handle<>> m_global_queue;
+
+    std::vector<std::unique_ptr<executor_state>> m_executor_state;
+
+    auto try_steal_work(std::size_t my_idx, std::array<std::coroutine_handle<>, 4>& handles) -> bool;
 
     /**
      * Each background thread runs from this function.
@@ -236,7 +255,7 @@ private:
     /**
      * @param handle Schedules the given coroutine to be executed upon the first available thread.
      */
-    auto schedule_impl(std::coroutine_handle<> handle) noexcept -> void;
+    auto schedule_impl(std::coroutine_handle<> handle, bool force_global_queue) noexcept -> void;
 
     /// The number of tasks in the queue + currently executing.
     std::atomic<std::size_t> m_size{0};
