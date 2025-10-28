@@ -237,7 +237,7 @@ TEST_CASE("mutex many shared and exclusive waiters interleaved", "[shared_mutex]
             std::cerr << "make_shared_task shared lock acquired\n";
             bool value = read_value.load(std::memory_order::acquire);
             co_await m.unlock_shared();
-            std::cerr << "make_shared_task shared lock releasing on thread_id = " << std::this_thread::get_id() << "\n";
+            std::cerr << "make_shared_task shared lock releasing on thread_id = " << std::this_thread::get_id() << "value=[" << value << "]\n";
             co_return value;
         };
 
@@ -278,6 +278,8 @@ TEST_CASE("mutex many shared and exclusive waiters interleaved", "[shared_mutex]
             {
                 break;
             }
+
+            co_await s->yield_for(std::chrono::milliseconds{1});
         }
 
         co_return;
