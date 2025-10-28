@@ -36,7 +36,7 @@ class io_scheduler
 
     struct private_constructor
     {
-        private_constructor() = default;
+        explicit private_constructor() = default;
     };
 
 public:
