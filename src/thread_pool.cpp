@@ -13,7 +13,9 @@ auto thread_pool::schedule_operation::await_suspend(std::coroutine_handle<> awai
     m_thread_pool.schedule_impl(awaiting_coroutine);
 }
 
-thread_pool::thread_pool(options&& opts, private_constructor) : m_opts(opts)
+thread_pool::thread_pool(options&& opts, private_constructor)
+    : m_opts(opts),
+      m_queue(6 * moodycamel::ConcurrentQueue<std::coroutine_handle<>>::BLOCK_SIZE, 1, 1)
 {
     m_threads.reserve(m_opts.thread_count);
 }
@@ -82,13 +84,6 @@ auto thread_pool::shutdown() noexcept -> void
     // Only allow shutdown to occur once.
     if (m_shutdown_requested.exchange(true, std::memory_order::acq_rel) == false)
     {
-        {
-            // There is a race condition if we are not holding the lock with the executors
-            // to always receive this.  std::jthread stop token works without this properly.
-            std::unique_lock<std::mutex> lk{m_wait_mutex};
-            m_wait_cv.notify_all();
-        }
-
         for (auto& thread : m_threads)
         {
             if (thread.joinable())
@@ -101,6 +96,7 @@ auto thread_pool::shutdown() noexcept -> void
 
 auto thread_pool::executor(std::size_t idx) -> void
 {
+    std::chrono::milliseconds wait_timeout{100};
     if (m_opts.on_thread_start_functor != nullptr)
     {
         m_opts.on_thread_start_functor(idx);
@@ -109,41 +105,73 @@ auto thread_pool::executor(std::size_t idx) -> void
     // Process until shutdown is requested.
     while (!m_shutdown_requested.load(std::memory_order::acquire))
     {
-        std::unique_lock<std::mutex> lk{m_wait_mutex};
-        m_wait_cv.wait(lk, [&]() { return !m_queue.empty() || m_shutdown_requested.load(std::memory_order::acquire); });
-
-        if (m_queue.empty())
+        // todo: make this constexpr.
+        if (m_threads.size() > 1)
         {
-            continue;
+            std::coroutine_handle<> handle{nullptr};
+            if (!m_queue.wait_dequeue_timed(handle, wait_timeout))
+            {
+                continue;
+            }
+
+            handle.resume();
+            m_size.fetch_sub(1, std::memory_order::release);
         }
+        else
+        {
+            // dequeue multiple items so a continuous yield() on a coroutine doesn't hold the executor thread indefinitly.
+            std::coroutine_handle<> handles[32] = { nullptr };
+            if (!m_queue.wait_dequeue_bulk_timed(handles, 32, wait_timeout))
+            {
+                continue;
+            }
 
-        auto handle = m_queue.front();
-        m_queue.pop_front();
-        lk.unlock();
+            for (auto& handle : handles)
+            {
+                if (handle == nullptr)
+                {
+                    break;
+                }
 
-        // Release the lock while executing the coroutine.
-        handle.resume();
-        m_size.fetch_sub(1, std::memory_order::release);
+                handle.resume();
+                m_size.fetch_sub(1, std::memory_order::release);
+            }
+        }
     }
 
     // Process until there are no ready tasks left.
     while (m_size.load(std::memory_order::acquire) > 0)
     {
-        std::unique_lock<std::mutex> lk{m_wait_mutex};
-        // m_size will only drop to zero once all executing coroutines are finished
-        // but the queue could be empty for threads that finished early.
-        if (m_queue.empty())
+        if (m_threads.size() > 1)
         {
-            break;
+            std::coroutine_handle<> handle{nullptr};
+            if (!m_queue.try_dequeue(handle))
+            {
+                break;
+            }
+
+            handle.resume();
+            m_size.fetch_sub(1, std::memory_order::release);
         }
+        else
+        {
+            std::coroutine_handle<> handles[32] = { nullptr };
+            if (!m_queue.wait_dequeue_bulk_timed(handles, 32, wait_timeout))
+            {
+                break;
+            }
 
-        auto handle = m_queue.front();
-        m_queue.pop_front();
-        lk.unlock();
+            for (auto& handle : handles)
+            {
+                if (handle == nullptr)
+                {
+                    break;
+                }
 
-        // Release the lock while executing the coroutine.
-        handle.resume();
-        m_size.fetch_sub(1, std::memory_order::release);
+                handle.resume();
+                m_size.fetch_sub(1, std::memory_order::release);
+            }
+        }
     }
 
     if (m_opts.on_thread_stop_functor != nullptr)
@@ -159,11 +187,7 @@ auto thread_pool::schedule_impl(std::coroutine_handle<> handle) noexcept -> void
         return;
     }
 
-    {
-        std::scoped_lock lk{m_wait_mutex};
-        m_queue.emplace_back(handle);
-        m_wait_cv.notify_one();
-    }
+    m_queue.enqueue(handle);
 }
 
 } // namespace coro

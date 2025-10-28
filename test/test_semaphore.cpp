@@ -206,11 +206,12 @@ TEST_CASE("semaphore 1 producers and many consumers", "[semaphore]")
     std::atomic<uint64_t> value{0};
 
     coro::semaphore<50> s{0};
+    coro::latch done{iterations};
 
     auto tp = coro::thread_pool::make_unique();
 
     auto make_consumer_task =
-        [](std::unique_ptr<coro::thread_pool>& tp, coro::semaphore<50>& s, std::atomic<uint64_t>& value, uint64_t id) -> coro::task<void>
+        [](std::unique_ptr<coro::thread_pool>& tp, coro::semaphore<50>& s, std::atomic<uint64_t>& value, coro::latch& done, uint64_t id) -> coro::task<void>
     {
         co_await tp->schedule();
         std::cerr << "consumer " << id << " starting\n";
@@ -224,6 +225,7 @@ TEST_CASE("semaphore 1 producers and many consumers", "[semaphore]")
                 // std::cerr << "consumer " << id << " acquired\n";
                 co_await tp->schedule();
                 value.fetch_add(1, std::memory_order::release);
+                done.count_down();
             }
             else
             {
@@ -235,9 +237,10 @@ TEST_CASE("semaphore 1 producers and many consumers", "[semaphore]")
     };
 
     auto make_producer_task =
-        [](std::unique_ptr<coro::thread_pool>& tp, coro::semaphore<50>& s, std::atomic<uint64_t>& value, uint64_t id) -> coro::task<void>
+        [](std::unique_ptr<coro::thread_pool>& tp, coro::semaphore<50>& s, coro::latch& done, uint64_t id) -> coro::task<void>
     {
         co_await tp->schedule();
+        std::cerr << "producer " << id << " starting\n";
 
         for (size_t i = 0; i < iterations; ++i)
         {
@@ -246,10 +249,7 @@ TEST_CASE("semaphore 1 producers and many consumers", "[semaphore]")
         }
 
         // Wait for all jobs to complete.
-        while (value.load(std::memory_order::acquire) < iterations)
-        {
-            co_await tp->yield();
-        }
+        co_await done;
 
         std::cerr << "producer " << id << " exiting\n";
         co_await s.shutdown();
@@ -259,11 +259,11 @@ TEST_CASE("semaphore 1 producers and many consumers", "[semaphore]")
     std::vector<coro::task<void>> tasks{};
     for (size_t i = 0; i < consumers; ++i)
     {
-        tasks.emplace_back(make_consumer_task(tp, s, value, i));
+        tasks.emplace_back(make_consumer_task(tp, s, value, done, i));
     }
     for (size_t i = 0; i < producers; ++i)
     {
-        tasks.emplace_back(make_producer_task(tp, s, value, i));
+        tasks.emplace_back(make_producer_task(tp, s, done, i));
     }
 
     coro::sync_wait(coro::when_all(std::move(tasks)));
