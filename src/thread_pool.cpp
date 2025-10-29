@@ -5,7 +5,7 @@
 
 namespace coro
 {
-static constexpr std::size_t MAX_HANDLES{4};
+static constexpr std::size_t MAX_HANDLES{2};
 
 thread_pool::schedule_operation::schedule_operation(thread_pool& tp) noexcept : m_thread_pool(tp)
 {

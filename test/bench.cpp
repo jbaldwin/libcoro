@@ -141,7 +141,6 @@ TEST_CASE("benchmark thread_pool{1} counter task", "[benchmark]")
 
     auto make_task = [](std::unique_ptr<coro::thread_pool>& tp, std::atomic<uint64_t>& c) -> coro::task<void>
     {
-        co_await tp->schedule();
         c.fetch_add(1, std::memory_order::relaxed);
         co_return;
     };

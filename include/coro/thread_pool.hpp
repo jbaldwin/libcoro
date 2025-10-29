@@ -239,13 +239,13 @@ private:
     /// The background executor threads.
     std::vector<std::thread> m_threads;
     /// Local executor worker thread queues.
-    std::vector<moodycamel::BlockingConcurrentQueue<std::coroutine_handle<>>> m_local_queues;
+    std::vector<moodycamel::ConcurrentQueue<std::coroutine_handle<>>> m_local_queues;
     /// Global queue.
     moodycamel::BlockingConcurrentQueue<std::coroutine_handle<>> m_global_queue;
 
     std::vector<std::unique_ptr<executor_state>> m_executor_state;
 
-    auto try_steal_work(std::size_t my_idx, std::array<std::coroutine_handle<>, 4>& handles) -> bool;
+    auto try_steal_work(std::size_t my_idx, std::array<std::coroutine_handle<>, 2>& handles) -> bool;
 
     /**
      * Each background thread runs from this function.
