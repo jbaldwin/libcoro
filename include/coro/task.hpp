@@ -114,7 +114,10 @@ public:
         }
     }
 
-    auto unhandled_exception() noexcept -> void { new (&m_storage) variant_type(std::current_exception()); }
+    auto unhandled_exception() noexcept -> void
+    {
+        m_storage.template emplace<std::exception_ptr>(std::current_exception());
+    }
 
     auto result() & -> decltype(auto)
     {
