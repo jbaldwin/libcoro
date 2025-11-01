@@ -56,6 +56,11 @@ auto io_notifier_kqueue::watch(fd_t fd, coro::poll_op op, void* data, bool keep)
     {
         mode |= EV_ONESHOT;
     }
+    else
+    {
+        // For events being kept in a scheduler they need to be edge triggered or they'll constantly wake-up the event loop.
+        mode |= EV_CLEAR;
+    }
     EV_SET(&event_data, fd, static_cast<int16_t>(op), mode, 0, 0, data);
     return ::kevent(m_fd, &event_data, 1, nullptr, 0, nullptr) != -1;
 }
