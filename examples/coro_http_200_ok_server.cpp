@@ -6,12 +6,7 @@ auto main() -> int
     {
         auto make_on_connection_task = [](coro::net::tcp::client client) -> coro::task<void>
         {
-            std::string response =
-                R"(HTTP/1.1 200 OK
-Content-Length: 0
-Connection: keep-alive
-
-)";
+            std::string response ="HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: keep-alive\r\n\r\n";
             std::string buf(1024, '\0');
 
             while (true)
@@ -35,7 +30,6 @@ Connection: keep-alive
             }
         };
 
-        co_await scheduler->schedule();
         coro::net::tcp::server server{scheduler, coro::net::tcp::server::options{.port = 8888}};
 
         while (true)
@@ -64,14 +58,22 @@ Connection: keep-alive
         co_return;
     };
 
+    std::vector<std::unique_ptr<coro::io_scheduler>> schedulers{};
     std::vector<coro::task<void>> workers{};
-    for (size_t i = 0; i < std::thread::hardware_concurrency(); ++i)
-    {
-        auto scheduler = coro::io_scheduler::make_unique(
-            coro::io_scheduler::options{
-                .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
 
-        workers.push_back(make_http_200_ok_server(scheduler));
+    std::size_t count = std::thread::hardware_concurrency();
+    count = 1;
+
+    schedulers.reserve(count);
+    workers.reserve(count);
+
+    for (size_t i = 0; i < count; ++i)
+    {
+        auto& scheduler = schedulers.emplace_back(coro::io_scheduler::make_unique(
+            coro::io_scheduler::options{
+                .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline}));
+
+        workers.emplace_back(scheduler->schedule(make_http_200_ok_server(scheduler)));
     }
 
     coro::sync_wait(coro::when_all(std::move(workers)));

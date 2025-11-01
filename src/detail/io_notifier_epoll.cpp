@@ -59,6 +59,11 @@ auto io_notifier_epoll::watch(fd_t fd, coro::poll_op op, void* data, bool keep) 
     {
         event_data.events |= EPOLLONESHOT;
     }
+    else
+    {
+        // For events being kept in a scheduler they need to be edge triggered or they'll constantly wake-up the event loop.
+        event_data.events |= EPOLLET;
+    }
     return ::epoll_ctl(m_fd, EPOLL_CTL_ADD, fd, &event_data) != -1;
 }
 
