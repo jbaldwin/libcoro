@@ -243,7 +243,7 @@ TEST_CASE("mutex many shared and exclusive waiters interleaved", "[shared_mutex]
 
         co_await s->schedule();
 
-        std::vector<coro::task<bool>> shared_tasks{};
+        std::list<coro::task<bool>> shared_tasks{};
 
         bool stop{false};
         while (!stop)
