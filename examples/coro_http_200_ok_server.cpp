@@ -61,8 +61,7 @@ auto main() -> int
     std::vector<std::unique_ptr<coro::io_scheduler>> schedulers{};
     std::vector<coro::task<void>> workers{};
 
-    std::size_t count = std::thread::hardware_concurrency();
-    count = 1;
+    const std::size_t count = std::thread::hardware_concurrency();
 
     schedulers.reserve(count);
     workers.reserve(count);
