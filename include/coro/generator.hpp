@@ -3,7 +3,9 @@
 #include <coroutine>
 #include <exception>
 #include <iterator>
+#include <memory>
 #include <type_traits>
+#include <utility>
 
 namespace coro
 {
@@ -133,8 +135,14 @@ public:
     auto operator=(const generator&) = delete;
     auto operator=(generator&& other) noexcept -> generator&
     {
-        m_coroutine       = other.m_coroutine;
-        other.m_coroutine = nullptr;
+        if (std::addressof(other) != this)
+        {
+            if (m_coroutine)
+            {
+                m_coroutine.destroy();
+            }
+            m_coroutine = std::exchange(other.m_coroutine, nullptr);
+        }
 
         return *this;
     }
