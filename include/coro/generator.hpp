@@ -4,6 +4,7 @@
 #include <exception>
 #include <iterator>
 #include <type_traits>
+#include <utility>
 
 namespace coro
 {
@@ -133,9 +134,7 @@ public:
     auto operator=(const generator&) = delete;
     auto operator=(generator&& other) noexcept -> generator&
     {
-        m_coroutine       = other.m_coroutine;
-        other.m_coroutine = nullptr;
-
+        m_coroutine = std::exchange(other.m_coroutine, nullptr);
         return *this;
     }
 
