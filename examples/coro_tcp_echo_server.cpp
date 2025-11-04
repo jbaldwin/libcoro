@@ -58,14 +58,21 @@ auto main() -> int
         co_return;
     };
 
+    std::vector<std::unique_ptr<coro::io_scheduler>> schedulers;
     std::vector<coro::task<void>> workers{};
+
+    const std::size_t count = std::thread::hardware_concurrency();
+
+    schedulers.reserve(count);
+    workers.reserve(count);
+
     for (size_t i = 0; i < std::thread::hardware_concurrency(); ++i)
     {
-        auto scheduler = coro::io_scheduler::make_unique(
+        auto& scheduler = schedulers.emplace_back(coro::io_scheduler::make_unique(
             coro::io_scheduler::options{
-                .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
+                .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline}));
 
-        workers.push_back(make_tcp_echo_server(scheduler));
+        workers.emplace_back(make_tcp_echo_server(scheduler));
     }
 
     coro::sync_wait(coro::when_all(std::move(workers)));
