@@ -141,6 +141,7 @@ set(LIBCORO_SOURCE_FILES
 
 if(LIBCORO_FEATURE_NETWORKING)
     list(APPEND LIBCORO_SOURCE_FILES
+        include/coro/detail/pipe.hpp src/detail/pipe.cpp
         include/coro/detail/poll_info.hpp
         include/coro/detail/timer_handle.hpp src/detail/timer_handle.cpp
 
@@ -251,8 +252,6 @@ if(${CMAKE_CXX_COMPILER_ID} MATCHES "GNU")
     endif()
 
     target_compile_options(${PROJECT_NAME} PUBLIC
-        $<$<COMPILE_LANGUAGE:CXX>:-fcoroutines>
-        $<$<COMPILE_LANGUAGE:CXX>:-fconcepts>
         $<$<COMPILE_LANGUAGE:CXX>:-fexceptions>
         $<$<COMPILE_LANGUAGE:CXX>:-Wall>
         $<$<COMPILE_LANGUAGE:CXX>:-Wextra>

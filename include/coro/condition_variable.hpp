@@ -389,12 +389,11 @@ public:
     auto notify_all(std::unique_ptr<executor_type>& executor) -> void
     {
         auto* waiter = detail::awaiter_list_pop_all(m_awaiters);
-        awaiter_base* next;
 
         while (waiter != nullptr)
         {
             // Need to grab next before notifying since the notifier will self destruct after completing.
-            next = waiter->m_next;
+            awaiter_base* next = waiter->m_next;
             // This will kick off each task in parallel on the scheduler, they will fight over the lock
             // but will give the best parallelism scheduling them immediately.
             executor->spawn(make_notify_all_executor_individual_task(waiter));

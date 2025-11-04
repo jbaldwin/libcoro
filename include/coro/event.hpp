@@ -19,7 +19,7 @@ enum class resume_order_policy
 };
 
 /**
- * Event is a manully triggered thread safe signal that can be co_await()'ed by multiple awaiters.
+ * Event is a manually triggered thread safe signal that can be co_await()'ed by multiple awaiters.
  * Each awaiter should co_await the event and upon the event being set each awaiter will have their
  * coroutine resumed.
  *
@@ -107,7 +107,7 @@ public:
         void* old_value = m_state.exchange(this, std::memory_order::acq_rel);
         if (old_value != this)
         {
-            // If FIFO has been requsted then reverse the order upon resuming.
+            // If FIFO has been requested then reverse the order upon resuming.
             if (policy == resume_order_policy::fifo)
             {
                 old_value = reverse(static_cast<awaiter*>(old_value));

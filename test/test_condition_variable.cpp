@@ -13,6 +13,7 @@ TEST_CASE("condition_variable", "[condition_variable]")
 
 TEST_CASE("wait(lock) 1 waiter", "[condition_variable]")
 {
+    std::cerr << "BEGIN condition_variable wait(lock) 1 waiter\n";
     coro::condition_variable cv{};
     coro::mutex m{};
     coro::event e{}; // just used to coordinate the order in which the tasks run.
@@ -35,10 +36,14 @@ TEST_CASE("wait(lock) 1 waiter", "[condition_variable]")
     auto results = coro::sync_wait(coro::when_all(make_waiter(cv, m, e), make_notifier(cv, e)));
     REQUIRE(std::get<0>(results).return_value() == 42);
     REQUIRE(std::get<1>(results).return_value() == 0);
+
+    std::cerr << "END condition_variable wait(lock) 1 waiter\n";
 }
 
 TEST_CASE("wait(lock predicate) 1 waiter", "[condition_variable]")
 {
+    std::cerr << "BEGIN condition_variable wait(lock predicate) 1 waiter\n";
+
     coro::condition_variable cv{};
     coro::mutex m{};
     coro::event e{}; // just used to coordinate the order in which the tasks run.
@@ -61,12 +66,16 @@ TEST_CASE("wait(lock predicate) 1 waiter", "[condition_variable]")
     auto results = coro::sync_wait(coro::when_all(make_waiter(cv, m, e), make_notifier(cv, e)));
     REQUIRE(std::get<0>(results).return_value() == 42);
     REQUIRE(std::get<1>(results).return_value() == 0);
+
+    std::cerr << "END condition_variable wait(lock predicate) 1 waiter\n";
 }
 
 #ifndef EMSCRIPTEN
 
 TEST_CASE("wait(lock stop_token predicate) 1 waiter", "[condition_variable]")
 {
+    std::cerr << "BEGIN condition_variable wait(lock stop_token predicate) 1 waiter\n";
+
     coro::condition_variable cv{};
     coro::mutex m{};
     std::stop_source ss{};
@@ -89,6 +98,8 @@ TEST_CASE("wait(lock stop_token predicate) 1 waiter", "[condition_variable]")
     auto results = coro::sync_wait(coro::when_all(make_waiter(cv, m, ss), make_notifier(cv, ss)));
     REQUIRE(std::get<0>(results).return_value() == 42);
     REQUIRE(std::get<1>(results).return_value() == 0);
+
+    std::cerr << "END condition_variable wait(lock stop_token predicate) 1 waiter\n";
 }
 
 #endif
@@ -97,6 +108,8 @@ TEST_CASE("wait(lock stop_token predicate) 1 waiter", "[condition_variable]")
 
 TEST_CASE("wait(lock predicate) 1 waiter notify_one until predicate passes", "[condition_variable]")
 {
+    std::cerr << "BEGIN condition_variable wait(lock predicate) 1 waiter notify_one until predicate passes\n";
+
     auto s = coro::io_scheduler::make_unique(coro::io_scheduler::options{
             .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
     coro::condition_variable cv{};
@@ -133,10 +146,14 @@ TEST_CASE("wait(lock predicate) 1 waiter notify_one until predicate passes", "[c
     // 2) On the first notify_all() when counter is still 0.
     // 3) On the final notify_all() when the counter is now 1.
     REQUIRE(predicate_called == 3);
+
+    std::cerr << "END condition_variable wait(lock predicate) 1 waiter notify_one until predicate passes\n";
 }
 
 TEST_CASE("wait(lock predicate) 1 waiter predicate notify_all until predicate passes", "[condition_variable]")
 {
+    std::cerr << "BEGIN condition_variable wait(lock predicate) 1 waiter predicate notify_all until predicate passes\n";
+
     auto s = coro::io_scheduler::make_unique(coro::io_scheduler::options{
             .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
     coro::condition_variable cv{};
@@ -173,10 +190,14 @@ TEST_CASE("wait(lock predicate) 1 waiter predicate notify_all until predicate pa
     // 2) On the first notify_all() when counter is still 0.
     // 3) On the final notify_all() when the counter is now 1.
     REQUIRE(predicate_called == 3);
+
+    std::cerr << "END condition_variable wait(lock predicate) 1 waiter predicate notify_all until predicate passes\n";
 }
 
 TEST_CASE("wait(lock) 3 waiters notify_one", "[condition_variable]")
 {
+    std::cerr << "BEGIN condition_variable wait(lock) 3 waiters notify_one\n";
+
     auto s = coro::io_scheduler::make_unique(coro::io_scheduler::options{
             .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
     coro::condition_variable cv{};
@@ -212,10 +233,14 @@ TEST_CASE("wait(lock) 3 waiters notify_one", "[condition_variable]")
     REQUIRE(std::get<0>(results).return_value() == 1);
     REQUIRE(std::get<1>(results).return_value() == 2);
     REQUIRE(std::get<2>(results).return_value() == 3);
+
+    std::cerr << "END condition_variable wait(lock) 3 waiters notify_one\n";
 }
 
 TEST_CASE("wait(lock predicate) 3 waiters predicate notify_one", "[condition_variable]")
 {
+    std::cerr << "BEGIN condition_variable wait(lock predicate) 3 waiters predicate notify_one\n";
+
     auto s = coro::io_scheduler::make_unique(coro::io_scheduler::options{
             .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
     coro::condition_variable cv{};
@@ -254,10 +279,14 @@ TEST_CASE("wait(lock predicate) 3 waiters predicate notify_one", "[condition_var
     REQUIRE(std::get<0>(results).return_value() == 1);
     REQUIRE(std::get<1>(results).return_value() == 2);
     REQUIRE(std::get<2>(results).return_value() == 3);
+
+    std::cerr << "END condition_variable wait(lock predicate) 3 waiters predicate notify_one\n";
 }
 
 TEST_CASE("wait(lock) 3 waiters notify_all", "[condition_variable]")
 {
+    std::cerr << "BEGIN condition_variable wait(lock) 3 waiters notify_all\n";
+
     auto s = coro::io_scheduler::make_unique(coro::io_scheduler::options{
             .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
     coro::condition_variable cv{};
@@ -299,10 +328,14 @@ TEST_CASE("wait(lock) 3 waiters notify_all", "[condition_variable]")
     REQUIRE(std::get<0>(results).return_value() == 1);
     REQUIRE(std::get<1>(results).return_value() == 2);
     REQUIRE(std::get<2>(results).return_value() == 3);
+
+    std::cerr << "END condition_variable wait(lock) 3 waiters notify_all\n";
 }
 
 TEST_CASE("wait(lock predicate) 3 waiters predicate notify_all", "[condition_variable]")
 {
+    std::cerr << "BEGIN condition_variable wait(lock predicate) 3 waiters predicate notify_all\n";
+
     auto s = coro::io_scheduler::make_unique(coro::io_scheduler::options{
             .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
     coro::condition_variable cv{};
@@ -345,10 +378,14 @@ TEST_CASE("wait(lock predicate) 3 waiters predicate notify_all", "[condition_var
     REQUIRE(std::get<0>(results).return_value() == 1);
     REQUIRE(std::get<1>(results).return_value() == 2);
     REQUIRE(std::get<2>(results).return_value() == 3);
+
+    std::cerr << "END condition_variable wait(lock predicate) 3 waiters predicate notify_all\n";
 }
 
 TEST_CASE("wait_for(s lock duration predicate) 1 waiter predicate notify_one until predicate passes", "[condition_variable]")
 {
+    std::cerr << "BEGIN condition_variable wait_for(s lock duration predicate) 1 waiter predicate notify_one until predicate passes\n";
+
     auto s = coro::io_scheduler::make_unique(coro::io_scheduler::options{
             .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
     coro::condition_variable cv{};
@@ -386,10 +423,14 @@ TEST_CASE("wait_for(s lock duration predicate) 1 waiter predicate notify_one unt
     // 2) On the first notify_all() when counter is still 0.
     // 3) On the final notify_all() when the counter is now 1.
     REQUIRE(predicate_called == 3);
+
+    std::cerr << "END condition_variable wait_for(s lock duration predicate) 1 waiter predicate notify_one until predicate passes\n";
 }
 
 TEST_CASE("wait_for(s lock duration) 1 waiter no_timeout", "[condition_variable]")
 {
+    std::cerr << "BEGIN condition_variable wait_for(s lock duration) 1 waiter no_timeout\n";
+
     auto s = coro::io_scheduler::make_unique(coro::io_scheduler::options{
             .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
     coro::condition_variable cv{};
@@ -413,10 +454,14 @@ TEST_CASE("wait_for(s lock duration) 1 waiter no_timeout", "[condition_variable]
     auto results = coro::sync_wait(coro::when_all(make_waiter(s, cv, m), make_notifier(s, cv)));
     REQUIRE(std::get<0>(results).return_value() == 1);
     REQUIRE(std::get<1>(results).return_value() == 0);
+
+    std::cerr << "END condition_variable wait_for(s lock duration) 1 waiter no_timeout\n";
 }
 
 TEST_CASE("wait_for(s lock duration predicate) 1 waiter predicate no_timeout", "[condition_variable]")
 {
+    std::cerr << "BEGIN condition_variable wait_for(s lock duration predicate) 1 waiter predicate no_timeout\n";
+
     auto s = coro::io_scheduler::make_unique(coro::io_scheduler::options{
             .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
     coro::condition_variable cv{};
@@ -442,10 +487,14 @@ TEST_CASE("wait_for(s lock duration predicate) 1 waiter predicate no_timeout", "
     auto results = coro::sync_wait(coro::when_all(make_waiter(s, cv, m, c), make_notifier(s, cv, c)));
     REQUIRE(std::get<0>(results).return_value() == 1);
     REQUIRE(std::get<1>(results).return_value() == 0);
+
+    std::cerr << "END condition_variable wait_for(s lock duration predicate) 1 waiter predicate no_timeout\n";
 }
 
 TEST_CASE("wait_for(s lock stop_token duration predicate) 1 waiter predicate stop_token no_timeout", "[condition_variable]")
 {
+    std::cerr << "BEGIN condition_variable wait_for(s lock stop_token duration predicate) 1 waiter predicate stop_token no_timeout\n";
+
     auto s = coro::io_scheduler::make_unique(coro::io_scheduler::options{
             .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
     coro::condition_variable cv{};
@@ -472,11 +521,15 @@ TEST_CASE("wait_for(s lock stop_token duration predicate) 1 waiter predicate sto
     auto results = coro::sync_wait(coro::when_all(make_waiter(s, cv, m, ss), make_notifier(s, cv, ss)));
     REQUIRE(std::get<0>(results).return_value() == 1);
     REQUIRE(std::get<1>(results).return_value() == 0);
+
+    std::cerr << "END condition_variable wait_for(s lock stop_token duration predicate) 1 waiter predicate stop_token no_timeout\n";
 }
 
 
 TEST_CASE("wait_for(s lock duration) 1 waiter timeout", "[condition_variable]")
 {
+    std::cerr << "BEGIN condition_variable wait_for(s lock duration) 1 waiter timeout\n";
+
     auto s = coro::io_scheduler::make_unique(coro::io_scheduler::options{
             .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
     coro::condition_variable cv{};
@@ -500,10 +553,14 @@ TEST_CASE("wait_for(s lock duration) 1 waiter timeout", "[condition_variable]")
     auto results = coro::sync_wait(coro::when_all(make_waiter(s, cv, m), make_notifier(s, cv)));
     REQUIRE(std::get<0>(results).return_value() == -1);
     REQUIRE(std::get<1>(results).return_value() == 0);
+
+    std::cerr << "END condition_variable wait_for(s lock duration) 1 waiter timeout\n";
 }
 
 TEST_CASE("wait_for(s lock duration predicate) 1 waiter predicate timeout", "[condition_variable]")
 {
+    std::cerr << "BEGIN condition_variable wait_for(s lock duration predicate) 1 waiter predicate timeout\n";
+
     auto s = coro::io_scheduler::make_unique(coro::io_scheduler::options{
             .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
     coro::condition_variable cv{};
@@ -529,10 +586,14 @@ TEST_CASE("wait_for(s lock duration predicate) 1 waiter predicate timeout", "[co
     auto results = coro::sync_wait(coro::when_all(make_waiter(s, cv, m, c), make_notifier(s, cv, c)));
     REQUIRE(std::get<0>(results).return_value() == -1);
     REQUIRE(std::get<1>(results).return_value() == 0);
+
+    std::cerr << "END condition_variable wait_for(s lock duration predicate) 1 waiter predicate timeout\n";
 }
 
 TEST_CASE("wait_for(s lock duration) 3 waiters with timeout notify_all no_timeout", "[condition_variable]")
 {
+    std::cerr << "BEGIN condition_variable wait_for(s lock duration) 3 waiters with timeout notify_all no_timeout\n";
+
     auto s = coro::io_scheduler::make_unique(coro::io_scheduler::options{
             .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
     coro::condition_variable cv{};
@@ -574,10 +635,14 @@ TEST_CASE("wait_for(s lock duration) 3 waiters with timeout notify_all no_timeou
     REQUIRE(std::get<0>(results).return_value() == 1);
     REQUIRE(std::get<1>(results).return_value() == 2);
     REQUIRE(std::get<2>(results).return_value() == 3);
+
+    std::cerr << "END condition_variable wait_for(s lock duration) 3 waiters with timeout notify_all no_timeout\n";
 }
 
 TEST_CASE("wait_for(s lock duration) 3 with notify_all timeout", "[condition_variable]")
 {
+    std::cerr << "BEGIN condition_variable wait_for(s lock duration) 3 with notify_all timeout\n";
+
     auto s = coro::io_scheduler::make_unique(coro::io_scheduler::options{
             .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
     coro::condition_variable cv{};
@@ -620,10 +685,14 @@ TEST_CASE("wait_for(s lock duration) 3 with notify_all timeout", "[condition_var
     REQUIRE(std::get<0>(results).return_value() == -1);
     REQUIRE(std::get<1>(results).return_value() == -2);
     REQUIRE(std::get<2>(results).return_value() == -3);
+
+    std::cerr << "END condition_variable wait_for(s lock duration) 3 with notify_all timeout\n";
 }
 
 TEST_CASE("wait_until(s lock time_point) 1 waiter no_timeout", "[condition_variable]")
 {
+    std::cerr << "BEGIN condition_variable wait_until(s lock time_point) 1 waiter no_timeout\n";
+
     auto s = coro::io_scheduler::make_unique(coro::io_scheduler::options{
             .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
     coro::condition_variable cv{};
@@ -648,10 +717,14 @@ TEST_CASE("wait_until(s lock time_point) 1 waiter no_timeout", "[condition_varia
     auto results = coro::sync_wait(coro::when_all(make_waiter(s, cv, m), make_notifier(s, cv)));
     REQUIRE(std::get<0>(results).return_value() == 1);
     REQUIRE(std::get<1>(results).return_value() == 0);
+
+    std::cerr << "END condition_variable wait_until(s lock time_point) 1 waiter no_timeout\n";
 }
 
 TEST_CASE("wait_until(s lock time_point) 1 waiter timeout", "[condition_variable]")
 {
+    std::cerr << "BEGIN condition_variable wait_until(s lock time_point) 1 waiter timeout\n";
+
     auto s = coro::io_scheduler::make_unique(coro::io_scheduler::options{
             .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
     coro::condition_variable cv{};
@@ -676,10 +749,14 @@ TEST_CASE("wait_until(s lock time_point) 1 waiter timeout", "[condition_variable
     auto results = coro::sync_wait(coro::when_all(make_waiter(s, cv, m), make_notifier(s, cv)));
     REQUIRE(std::get<0>(results).return_value() == -1);
     REQUIRE(std::get<1>(results).return_value() == 0);
+
+    std::cerr << "END condition_variable wait_until(s lock time_point) 1 waiter timeout\n";
 }
 
 TEST_CASE("wait_until(s lock time_point predicate) 1 waiter predicate no_timeout", "[condition_variable]")
 {
+    std::cerr << "BEGIN condition_variable wait_until(s lock time_point predicate) 1 waiter predicate no_timeout\n";
+
     auto s = coro::io_scheduler::make_unique(coro::io_scheduler::options{
             .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
     coro::condition_variable cv{};
@@ -706,10 +783,14 @@ TEST_CASE("wait_until(s lock time_point predicate) 1 waiter predicate no_timeout
     auto results = coro::sync_wait(coro::when_all(make_waiter(s, cv, m, c), make_notifier(s, cv, c)));
     REQUIRE(std::get<0>(results).return_value() == 1);
     REQUIRE(std::get<1>(results).return_value() == 0);
+
+    std::cerr << "END condition_variable wait_until(s lock time_point predicate) 1 waiter predicate no_timeout\n";
 }
 
 TEST_CASE("wait_until(s lock time_point predicate) 1 waiter predicate timeout", "[condition_variable]")
 {
+    std::cerr << "BEGIN condition_variable wait_until(s lock time_point predicate) 1 waiter predicate timeout\n";
+
     auto s = coro::io_scheduler::make_unique(coro::io_scheduler::options{
             .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
     coro::condition_variable cv{};
@@ -736,10 +817,14 @@ TEST_CASE("wait_until(s lock time_point predicate) 1 waiter predicate timeout", 
     auto results = coro::sync_wait(coro::when_all(make_waiter(s, cv, m, c), make_notifier(s, cv, c)));
     REQUIRE(std::get<0>(results).return_value() == -1);
     REQUIRE(std::get<1>(results).return_value() == 0);
+
+    std::cerr << "END condition_variable wait_until(s lock time_point predicate) 1 waiter predicate timeout\n";
 }
 
 TEST_CASE("wait_until(s lock stop_token time_point predicate) 1 waiter predicate stop_token no_timeout", "[condition_variable]")
 {
+    std::cerr << "BEGIN condition_variable wait_until(s lock stop_token time_point predicate) 1 waiter predicate stop_token no_timeout\n";
+
     auto s = coro::io_scheduler::make_unique(coro::io_scheduler::options{
             .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
     coro::condition_variable cv{};
@@ -766,10 +851,14 @@ TEST_CASE("wait_until(s lock stop_token time_point predicate) 1 waiter predicate
     auto results = coro::sync_wait(coro::when_all(make_waiter(s, cv, m, ss), make_notifier(s, cv, ss)));
     REQUIRE(std::get<0>(results).return_value() == 1);
     REQUIRE(std::get<1>(results).return_value() == 0);
+
+    std::cerr << "END condition_variable wait_until(s lock stop_token time_point predicate) 1 waiter predicate stop_token no_timeout\n";
 }
 
 TEST_CASE("wait_until(s lock stop_token time_point predicate) 1 waiter predicate stop_token timeout", "[condition_variable]")
 {
+    std::cerr << "BEGIN condition_variable wait_until(s lock stop_token time_point predicate) 1 waiter predicate stop_token no_timeout\n";
+
     auto s = coro::io_scheduler::make_unique(coro::io_scheduler::options{
             .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
     coro::condition_variable cv{};
@@ -796,54 +885,74 @@ TEST_CASE("wait_until(s lock stop_token time_point predicate) 1 waiter predicate
     auto results = coro::sync_wait(coro::when_all(make_waiter(s, cv, m, ss), make_notifier(s, cv, ss)));
     REQUIRE(std::get<0>(results).return_value() == -1);
     REQUIRE(std::get<1>(results).return_value() == 0);
+
+    std::cerr << "END condition_variable wait_until(s lock stop_token time_point predicate) 1 waiter predicate stop_token no_timeout\n";
 }
 
 TEST_CASE("notify_all(executor)", "[condition_variable]")
 {
+    std::cerr << "BEGIN condition_variable notify_all(executor)\n";
+
     auto s = coro::io_scheduler::make_unique();
     coro::condition_variable cv{};
     coro::mutex m{};
+    coro::latch ready{10};
 
-    auto make_waiter = [](coro::condition_variable& cv, coro::mutex& m, uint64_t id) -> coro::task<int64_t>
+    auto make_waiter = [](std::unique_ptr<coro::io_scheduler>& s, coro::condition_variable& cv, coro::mutex& m, coro::latch& ready, uint64_t id) -> coro::task<int64_t>
     {
         {
             auto lk = co_await m.scoped_lock();
+            ready.count_down(s); // schedule on the executor so this coroutine doesn't transfer directly to the notifier.
+            std::cerr << "waiter" << id << " waiting\n";
             co_await cv.wait(lk);
             std::cerr << "waiter" << id << " notified\n";
         }
         co_return id;
     };
 
-    auto make_notifier = [](std::unique_ptr<coro::io_scheduler> &s, coro::condition_variable& cv) -> coro::task<int64_t>
+    auto make_notifier = [](std::unique_ptr<coro::io_scheduler>& s, coro::condition_variable& cv, coro::mutex& m, coro::latch& ready) -> coro::task<int64_t>
     {
-        // Make sure all waiters are waiting.
-        co_await s->yield_for(std::chrono::milliseconds{50});
+        // Make sure all waiters have acquired the mutex and are waiting on the condition variable.
+        // The latch isn't quite enough to guarantee it, but its close, the lock is acquired as it will be
+        // released by the final waiter in the co_await cv.wait() call
+        co_await ready;
+        std::cerr << "notifier ready\n";
+        {
+            // Acquire the lock to guarantee all waiters are waiting on the condition variable before proceeding.
+            auto lk = co_await m.scoped_lock();
+            std::cerr << "notified acquired lock\n";
+        }
+
         std::cerr << "notify_all(s)\n";
         cv.notify_all(s);
         co_return 0;
     };
 
     auto results = coro::sync_wait(coro::when_all(
-        make_waiter(cv, m, 1),
-        make_waiter(cv, m, 2),
-        make_waiter(cv, m, 3),
-        make_waiter(cv, m, 4),
-        make_waiter(cv, m, 5),
-        make_waiter(cv, m, 6),
-        make_waiter(cv, m, 7),
-        make_waiter(cv, m, 8),
-        make_waiter(cv, m, 9),
-        make_waiter(cv, m, 10),
-        make_notifier(s, cv)
+        make_waiter(s, cv, m, ready, 1),
+        make_waiter(s, cv, m, ready, 2),
+        make_waiter(s, cv, m, ready, 3),
+        make_waiter(s, cv, m, ready, 4),
+        make_waiter(s, cv, m, ready, 5),
+        make_waiter(s,cv, m, ready, 6),
+        make_waiter(s, cv , m, ready, 7),
+        make_waiter(s, cv , m, ready, 8),
+        make_waiter(s, cv, m, ready, 9),
+        make_waiter(s, cv, m, ready, 10),
+        make_notifier(s, cv, m, ready)
     ));
 
     uint64_t counter{0};
     std::apply([&counter](auto&&... tasks) -> void { ((counter += tasks.return_value()), ...); }, results);
     REQUIRE(counter == 55);
+
+    std::cerr << "END condition_variable notify_all(executor)\n";
 }
 
 TEST_CASE("notify_one(executor)", "[condition_variable]")
 {
+    std::cerr << "BEGIN condition_variable notify_one(executor)\n";
+
     struct Args
     {
         std::unique_ptr<coro::io_scheduler> sched = coro::io_scheduler::make_unique();
@@ -897,6 +1006,8 @@ TEST_CASE("notify_one(executor)", "[condition_variable]")
                                    starter(args)));
 
     REQUIRE(args.counter == 5);
+
+    std::cerr << "END condition_variable notify_one(executor)\n";
 }
 
 #endif

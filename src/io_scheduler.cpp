@@ -18,20 +18,22 @@ io_scheduler::io_scheduler(options&& opts, private_constructor)
       m_io_notifier(),
       m_timer(static_cast<const void*>(&m_timer_object), m_io_notifier)
 {
+    if (!m_io_notifier.watch(m_shutdown_pipe.read_fd(), coro::poll_op::read, const_cast<void*>(m_shutdown_ptr), true))
+    {
+        throw std::runtime_error("Failed to register m_shutdown_pipe.read_fd() for read events.");
+    }
+
+    if (!m_io_notifier.watch(m_schedule_pipe.read_fd(), coro::poll_op::read, const_cast<void*>(m_schedule_ptr), true))
+    {
+        throw std::runtime_error("Failed to register m_schedule.pipe.read_rd() for read events.");
+    }
+
+    m_recent_events.reserve(m_max_events);
+
     if (m_opts.execution_strategy == execution_strategy_t::process_tasks_on_thread_pool)
     {
         m_thread_pool = thread_pool::make_unique(std::move(m_opts.pool));
     }
-
-    m_shutdown_fd = std::array<fd_t, 2>{};
-    ::pipe(m_shutdown_fd.data());
-    m_io_notifier.watch(m_shutdown_fd[0], coro::poll_op::read, const_cast<void*>(m_shutdown_ptr), true);
-
-    m_schedule_fd = std::array<fd_t, 2>{};
-    ::pipe(m_schedule_fd.data());
-    m_io_notifier.watch(m_schedule_fd[0], coro::poll_op::read, const_cast<void*>(m_schedule_ptr), true);
-
-    m_recent_events.reserve(m_max_events);
 }
 
 auto io_scheduler::make_unique(options opts) -> std::unique_ptr<io_scheduler>
@@ -58,27 +60,8 @@ io_scheduler::~io_scheduler()
         m_io_thread.join();
     }
 
-    if (m_shutdown_fd[0] != -1)
-    {
-        close(m_shutdown_fd[0]);
-        m_shutdown_fd[0] = -1;
-    }
-    if (m_shutdown_fd[1] != -1)
-    {
-        close(m_shutdown_fd[1]);
-        m_shutdown_fd[1] = -1;
-    }
-
-    if (m_schedule_fd[0] != -1)
-    {
-        close(m_schedule_fd[0]);
-        m_schedule_fd[0] = -1;
-    }
-    if (m_schedule_fd[1] != -1)
-    {
-        close(m_schedule_fd[1]);
-        m_schedule_fd[1] = -1;
-    }
+    m_shutdown_pipe.close();
+    m_schedule_pipe.close();
 }
 
 auto io_scheduler::process_events(std::chrono::milliseconds timeout) -> std::size_t
@@ -162,9 +145,9 @@ auto io_scheduler::shutdown() noexcept -> void
     if (m_shutdown_requested.exchange(true, std::memory_order::acq_rel) == false)
     {
 
-        // Signal the event loop to stop asap, triggering the event fd is safe.
+        // Signal the event loop to stop asap.
         const int value{1};
-        ::write(m_shutdown_fd[1], reinterpret_cast<const void*>(&value), sizeof(value));
+        ::write(m_shutdown_pipe.write_fd(), reinterpret_cast<const void*>(&value), sizeof(value));
 
         if (m_io_thread.joinable())
         {
@@ -191,7 +174,7 @@ auto io_scheduler::yield_for_internal(std::chrono::nanoseconds amount) -> coro::
         // for the scheduled task there.
         m_size.fetch_add(1, std::memory_order::release);
 
-        // Yielding does not requiring setting the timer position on the poll info since
+        // Yielding does not require setting the timer position on the poll info since
         // it doesn't have a corresponding 'event' that can trigger, it always waits for
         // the timeout to occur before resuming.
 
@@ -296,12 +279,37 @@ auto io_scheduler::process_scheduled_execute_inline() -> void
         std::scoped_lock lk{m_scheduled_tasks_mutex};
         tasks.swap(m_scheduled_tasks);
 
-        // Clear the schedule eventfd if this is a scheduled task.
-        int control = 0;
-        ::read(m_schedule_fd[1], reinterpret_cast<void*>(&control), sizeof(control));
+        // Clear the notification by reading until the pipe is cleared.
+        while (true)
+        {
+            constexpr std::size_t READ_COUNT{4};
+            constexpr ssize_t READ_COUNT_BYTES = READ_COUNT * sizeof(int);
+            std::array<int, READ_COUNT> control{};
+            const ssize_t result = ::read(m_schedule_pipe.read_fd(), reinterpret_cast<void*>(control.data()), READ_COUNT_BYTES);
+            if (result == READ_COUNT_BYTES)
+            {
+                continue;
+            }
+
+            // If we got nothing, or we got a partial read break the loop since the pipe is empty.
+            if (result >= 0)
+            {
+                break;
+            }
+
+            // pipe is set to O_NONBLOCK so ignore empty blocking reads.
+            if (errno == EAGAIN)
+            {
+                break;
+            }
+
+            // Not much we can do here, we're in a very bad state, lets report to stderr.
+            std::cerr << "::read(m_schedule_pipe.read_fd()) error[" << errno << "] " << ::strerror(errno) << " fd=[" << m_schedule_pipe.read_fd() << "]" << std::endl;
+            break;
+        }
 
         // Clear the in memory flag to reduce eventfd_* calls on scheduling.
-        m_schedule_fd_triggered.exchange(false, std::memory_order::release);
+        m_schedule_pipe_triggered.exchange(false, std::memory_order::release);
     }
 
     // This set of handles can be safely resumed now since they do not have a corresponding timeout event.

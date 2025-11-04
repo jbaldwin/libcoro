@@ -1,4 +1,4 @@
-name: ci-ubuntu
+name: ci-cpu-usage
 
 on: [pull_request, workflow_dispatch]
 
