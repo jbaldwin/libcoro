@@ -290,26 +290,40 @@ auto io_scheduler::process_events_execute(std::chrono::milliseconds timeout) -> 
 
 auto io_scheduler::process_scheduled_execute_inline() -> void
 {
-    std::vector<std::coroutine_handle<>> tasks{};
+    // Clear the schedule eventfd if this is a scheduled task.
+    int control = 0;
+    ::read(m_schedule_fd[1], reinterpret_cast<void*>(&control), sizeof(control));
+
+    // Clear the in memory flag to reduce eventfd_* calls on scheduling.
+    m_schedule_fd_triggered.exchange(false, std::memory_order::release);
+
+    constexpr std::size_t MAX{32};
+    std::size_t processed{0};
+    while (true)
     {
-        // Acquire the entire list, and then reset it.
-        std::scoped_lock lk{m_scheduled_tasks_mutex};
-        tasks.swap(m_scheduled_tasks);
+        std::array<std::coroutine_handle<>, MAX> tasks{nullptr};
+        if (!m_scheduled_tasks.try_dequeue_bulk(tasks.data(), MAX))
+        {
+            break;
+        }
 
-        // Clear the schedule eventfd if this is a scheduled task.
-        int control = 0;
-        ::read(m_schedule_fd[1], reinterpret_cast<void*>(&control), sizeof(control));
+        for (std::size_t i = 0; i < MAX; ++i)
+        {
+            auto& handle = tasks[i];
+            if (handle == nullptr)
+            {
+                break;
+            }
 
-        // Clear the in memory flag to reduce eventfd_* calls on scheduling.
-        m_schedule_fd_triggered.exchange(false, std::memory_order::release);
+            handle.resume();
+            ++processed;
+        }
     }
 
-    // This set of handles can be safely resumed now since they do not have a corresponding timeout event.
-    for (auto& task : tasks)
+    if (processed > 0)
     {
-        task.resume();
+        m_size.fetch_sub(processed, std::memory_order::release);
     }
-    m_size.fetch_sub(tasks.size(), std::memory_order::release);
 }
 
 auto io_scheduler::process_event_execute(detail::poll_info* pi, poll_status status) -> void

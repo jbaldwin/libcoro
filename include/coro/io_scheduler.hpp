@@ -1,5 +1,6 @@
 #pragma once
 
+#include "coro/detail/vendor/cameron314/concurrentqueue/concurrentqueue.h"
 #include "coro/detail/poll_info.hpp"
 #include "coro/detail/timer_handle.hpp"
 #include "coro/expected.hpp"
@@ -145,10 +146,7 @@ public:
             if (m_scheduler.m_opts.execution_strategy == execution_strategy_t::process_tasks_inline)
             {
                 m_scheduler.m_size.fetch_add(1, std::memory_order::release);
-                {
-                    std::scoped_lock lk{m_scheduler.m_scheduled_tasks_mutex};
-                    m_scheduler.m_scheduled_tasks.emplace_back(awaiting_coroutine);
-                }
+                m_scheduler.m_scheduled_tasks.enqueue(awaiting_coroutine);
 
                 // Trigger the event to wake-up the scheduler if this event isn't currently triggered.
                 bool expected{false};
@@ -393,10 +391,7 @@ public:
         if (m_opts.execution_strategy == execution_strategy_t::process_tasks_inline)
         {
             m_size.fetch_add(1, std::memory_order::release);
-            {
-                std::scoped_lock lk{m_scheduled_tasks_mutex};
-                m_scheduled_tasks.emplace_back(handle);
-            }
+            m_scheduled_tasks.enqueue(handle);
 
             bool expected{false};
             if (m_schedule_fd_triggered.compare_exchange_strong(
@@ -481,8 +476,7 @@ private:
     static auto       event_to_poll_status(uint32_t events) -> poll_status;
 
     auto                                 process_scheduled_execute_inline() -> void;
-    std::mutex                           m_scheduled_tasks_mutex{};
-    std::vector<std::coroutine_handle<>> m_scheduled_tasks{};
+    moodycamel::ConcurrentQueue<std::coroutine_handle<>> m_scheduled_tasks;
 
     static constexpr const int   m_shutdown_object{0};
     static constexpr const void* m_shutdown_ptr = &m_shutdown_object;

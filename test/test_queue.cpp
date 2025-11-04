@@ -242,22 +242,25 @@ TEST_CASE("queue shutdown_drain non-empty consumer shutdown", "[queue]")
     std::cerr << "BEGIN queue issue-401\n";
 
     coro::queue<int> q{};
+    coro::event start{};
     auto             exec = coro::thread_pool::make_unique(coro::thread_pool::options{.thread_count = 1});
 
-    const auto producer = [](coro::queue<int>& q, std::unique_ptr<coro::thread_pool>& exec) -> coro::task<void>
+    const auto producer = [](coro::queue<int>& q, std::unique_ptr<coro::thread_pool>& exec, coro::event& start) -> coro::task<void>
     {
         auto r = co_await q.push(1);
         REQUIRE(r == coro::queue_produce_result::produced);
+        start.set();
         co_await q.shutdown_drain(exec);
         REQUIRE(q.is_shutdown());
     };
-    const auto consumer = [](coro::queue<int>& q) -> coro::task<void>
+    const auto consumer = [](coro::queue<int>& q, coro::event& start) -> coro::task<void>
     {
+        co_await start;
         co_await q.shutdown();
         REQUIRE(q.is_shutdown());
     };
 
-    std::ignore = coro::sync_wait(coro::when_all(exec->schedule(producer(q, exec)), exec->schedule(consumer(q))));
+    std::ignore = coro::sync_wait(coro::when_all(exec->schedule(producer(q, exec, start)), exec->schedule(consumer(q, start))));
     std::cerr << "END queue issue-401\n";
 }
 

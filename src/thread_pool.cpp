@@ -1,21 +1,35 @@
 #include "coro/thread_pool.hpp"
 #include "coro/detail/task_self_deleting.hpp"
 
+#include <queue>
+
 namespace coro
 {
+static constexpr std::size_t MAX_HANDLES{2};
+
 thread_pool::schedule_operation::schedule_operation(thread_pool& tp) noexcept : m_thread_pool(tp)
+{
+
+}
+
+thread_pool::schedule_operation::schedule_operation(thread_pool& tp, bool force_global_queue) noexcept
+    : m_thread_pool(tp),
+      m_force_global_queue(force_global_queue)
 {
 
 }
 
 auto thread_pool::schedule_operation::await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept -> void
 {
-    m_thread_pool.schedule_impl(awaiting_coroutine);
+    m_thread_pool.schedule_impl(awaiting_coroutine, m_force_global_queue);
 }
 
-thread_pool::thread_pool(options&& opts, private_constructor) : m_opts(opts)
+thread_pool::thread_pool(options&& opts, private_constructor)
+    : m_opts(opts)
 {
     m_threads.reserve(m_opts.thread_count);
+    m_executor_state.reserve(m_opts.thread_count);
+    m_local_queues.reserve(m_opts.thread_count);
 }
 
 auto thread_pool::make_unique(options opts) -> std::unique_ptr<thread_pool>
@@ -26,6 +40,8 @@ auto thread_pool::make_unique(options opts) -> std::unique_ptr<thread_pool>
     // so the workers have a full ready object to work with.
     for (uint32_t i = 0; i < tp->m_opts.thread_count; ++i)
     {
+        tp->m_local_queues.emplace_back();
+        tp->m_executor_state.emplace_back(std::make_unique<executor_state>());
         tp->m_threads.emplace_back([tp = tp.get(), i]() { tp->executor(i); });
     }
 
@@ -73,7 +89,7 @@ auto thread_pool::resume(std::coroutine_handle<> handle) noexcept -> bool
         return false;
     }
 
-    schedule_impl(handle);
+    schedule_impl(handle, false);
     return true;
 }
 
@@ -82,13 +98,6 @@ auto thread_pool::shutdown() noexcept -> void
     // Only allow shutdown to occur once.
     if (m_shutdown_requested.exchange(true, std::memory_order::acq_rel) == false)
     {
-        {
-            // There is a race condition if we are not holding the lock with the executors
-            // to always receive this.  std::jthread stop token works without this properly.
-            std::unique_lock<std::mutex> lk{m_wait_mutex};
-            m_wait_cv.notify_all();
-        }
-
         for (auto& thread : m_threads)
         {
             if (thread.joinable())
@@ -99,8 +108,32 @@ auto thread_pool::shutdown() noexcept -> void
     }
 }
 
+auto thread_pool::try_steal_work(std::size_t my_idx, std::array<std::coroutine_handle<>, MAX_HANDLES>& handles) -> bool
+{
+    for (std::size_t i = 0; i < m_local_queues.size(); ++i)
+    {
+        if (i == my_idx)
+        {
+            continue;
+        }
+
+        auto& queue = m_local_queues[i];
+        if (queue.try_dequeue_bulk(handles.data(), MAX_HANDLES))
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 auto thread_pool::executor(std::size_t idx) -> void
 {
+    auto& state = *m_executor_state[idx].get();
+    state.m_thread_id = std::this_thread::get_id();
+    auto& local_queue = m_local_queues[idx];
+
+    constexpr std::chrono::milliseconds wait_timeout{100};
     if (m_opts.on_thread_start_functor != nullptr)
     {
         m_opts.on_thread_start_functor(idx);
@@ -109,41 +142,91 @@ auto thread_pool::executor(std::size_t idx) -> void
     // Process until shutdown is requested.
     while (!m_shutdown_requested.load(std::memory_order::acquire))
     {
-        std::unique_lock<std::mutex> lk{m_wait_mutex};
-        m_wait_cv.wait(lk, [&]() { return !m_queue.empty() || m_shutdown_requested.load(std::memory_order::acquire); });
-
-        if (m_queue.empty())
+        // Try and grab work from out local queue first.
+        std::array<std::coroutine_handle<>, MAX_HANDLES> handles{nullptr};
+        if (!local_queue.try_dequeue_bulk(handles.data(), MAX_HANDLES))
         {
-            continue;
+            // Try and grab work from the global queue next.
+            if (!m_global_queue.try_dequeue_bulk(handles.data(), MAX_HANDLES))
+            {
+                // Try and steal work from another local queue last.
+                if (!try_steal_work(idx, handles))
+                {
+                    // If there is nothing on global and nothing to steal, try and lock to sleep
+                    if (state.m_mutex.try_lock())
+                    {
+                        // Hold the lock for the duration of sleeping
+                        std::scoped_lock lk{std::adopt_lock, state.m_mutex};
+                        if (!m_global_queue.wait_dequeue_bulk_timed(handles.data(), MAX_HANDLES, wait_timeout))
+                        {
+                            // If we wait the full timeout and there is no work, probe around.
+                            continue;
+                        }
+                    }
+                    // else if we didn't get the lock we just enqueued on this thread (which should be impossible?)
+                }
+            }
         }
 
-        auto handle = m_queue.front();
-        m_queue.pop_front();
-        lk.unlock();
+        for (std::size_t i = 0; i < MAX_HANDLES; ++i)
+        {
+            auto& handle = handles[i];
+            if (handle == nullptr)
+            {
+                break;
+            }
 
-        // Release the lock while executing the coroutine.
-        handle.resume();
-        m_size.fetch_sub(1, std::memory_order::release);
+            handle.resume();
+            m_size.fetch_sub(1, std::memory_order::release);
+        }
     }
 
-    // Process until there are no ready tasks left.
-    while (m_size.load(std::memory_order::acquire) > 0)
+    // We'll lock our local thread so nothing new gets enqueued to it.
+    std::scoped_lock lk{state.m_mutex};
+
+    // Process until there are no ready tasks left, start by draining the local queue.
+    while (true)
     {
-        std::unique_lock<std::mutex> lk{m_wait_mutex};
-        // m_size will only drop to zero once all executing coroutines are finished
-        // but the queue could be empty for threads that finished early.
-        if (m_queue.empty())
+        // Try and grab work from out local queue first.
+        std::array<std::coroutine_handle<>, MAX_HANDLES> handles{nullptr};
+        if (!local_queue.try_dequeue_bulk(handles.data(), MAX_HANDLES))
         {
             break;
         }
 
-        auto handle = m_queue.front();
-        m_queue.pop_front();
-        lk.unlock();
+        for (std::size_t i = 0; i < MAX_HANDLES; ++i)
+        {
+            auto& handle = handles[i];
+            if (handle == nullptr)
+            {
+                break;
+            }
 
-        // Release the lock while executing the coroutine.
-        handle.resume();
-        m_size.fetch_sub(1, std::memory_order::release);
+            handle.resume();
+            m_size.fetch_sub(1, std::memory_order::release);
+        }
+    }
+
+    // Now finish by draining the global queue.
+    while (m_size.load(std::memory_order::acquire) > 0)
+    {
+        std::array<std::coroutine_handle<>, MAX_HANDLES> handles{nullptr};
+        if (!m_global_queue.try_dequeue_bulk(handles.data(), MAX_HANDLES))
+        {
+            break;
+        }
+
+        for (std::size_t i = 0; i < MAX_HANDLES; ++i)
+        {
+            auto& handle = handles[i];
+            if (handle == nullptr)
+            {
+                break;
+            }
+
+            handle.resume();
+            m_size.fetch_sub(1, std::memory_order::release);
+        }
     }
 
     if (m_opts.on_thread_stop_functor != nullptr)
@@ -152,18 +235,38 @@ auto thread_pool::executor(std::size_t idx) -> void
     }
 }
 
-auto thread_pool::schedule_impl(std::coroutine_handle<> handle) noexcept -> void
+auto thread_pool::schedule_impl(std::coroutine_handle<> handle, bool force_global_queue) noexcept -> void
 {
     if (handle == nullptr || handle.done())
     {
         return;
     }
 
+    if (!force_global_queue)
     {
-        std::scoped_lock lk{m_wait_mutex};
-        m_queue.emplace_back(handle);
-        m_wait_cv.notify_one();
+        // Attempt to see if we are on one of the thread_pool threads and enqueue to our local queue.
+        for (std::size_t i = 0; i < m_executor_state.size(); i++)
+        {
+            // If we're on an executor thread and it is not sleeping enqueue locally, otherwise enqueue on the global queue to wake up a sleeping worker.
+            auto& state = *m_executor_state[i].get();
+            if (state.m_thread_id == std::this_thread::get_id())
+            {
+                // If we can lock and we're not sleeping enqueue locally.
+                if (state.m_mutex.try_lock())
+                {
+                    std::scoped_lock lk{std::adopt_lock, state.m_mutex};
+                    m_local_queues[i].enqueue(handle);
+                    return;
+                }
+
+                // Either the lock couldn't be acquired without contention or the thread is sleeping
+                // so enqueue globally.
+                break;
+            }
+        }
     }
+
+    m_global_queue.enqueue(handle);
 }
 
 } // namespace coro
