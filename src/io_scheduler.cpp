@@ -18,44 +18,14 @@ io_scheduler::io_scheduler(options&& opts, private_constructor)
       m_io_notifier(),
       m_timer(static_cast<const void*>(&m_timer_object), m_io_notifier)
 {
-    int flags{};
-
-    m_shutdown_fd = std::array<fd_t, 2>{};
-    if (::pipe(m_shutdown_fd.data()) != 0)
+    if (!m_io_notifier.watch(m_shutdown_pipe.read_fd(), coro::poll_op::read, const_cast<void*>(m_shutdown_ptr), true))
     {
-        const std::string msg = "Failed to create m_shutdown_fd pipes, errno=[" + std::string{strerror(errno)} + "]";
-        throw std::runtime_error(msg);
-    }
-    flags = fcntl(m_shutdown_fd[0], F_GETFL);
-    flags |= O_NONBLOCK;
-    fcntl(m_shutdown_fd[0], F_SETFL, flags);
-
-    flags = fcntl(m_shutdown_fd[1], F_GETFL);
-    flags |= O_NONBLOCK;
-    fcntl(m_shutdown_fd[1], F_SETFL, flags);
-
-    if (!m_io_notifier.watch(m_shutdown_fd[0], coro::poll_op::read, const_cast<void*>(m_shutdown_ptr), true))
-    {
-        throw std::runtime_error("Failed to register m_shutdown_fd[0] for read events.");
+        throw std::runtime_error("Failed to register m_shutdown_pipe.read_fd() for read events.");
     }
 
-    m_schedule_fd = std::array<fd_t, 2>{};
-    if (::pipe(m_schedule_fd.data()) != 0)
+    if (!m_io_notifier.watch(m_schedule_pipe.read_fd(), coro::poll_op::read, const_cast<void*>(m_schedule_ptr), true))
     {
-        const std::string msg = "Failed to create m_schedule_fd pipes, errno=[" + std::string{strerror(errno)} + "]";
-        throw std::runtime_error(msg);
-    }
-    flags = fcntl(m_schedule_fd[0], F_GETFL);
-    flags |= O_NONBLOCK;
-    fcntl(m_schedule_fd[0], F_SETFL, flags);
-
-    flags = fcntl(m_schedule_fd[1], F_GETFL);
-    flags |= O_NONBLOCK;
-    fcntl(m_schedule_fd[1], F_SETFL, flags);
-
-    if (!m_io_notifier.watch(m_schedule_fd[0], coro::poll_op::read, const_cast<void*>(m_schedule_ptr), true))
-    {
-        throw std::runtime_error("Failed to register m_schedule_fd[0] for read events.");
+        throw std::runtime_error("Failed to register m_schedule.pipe.read_rd() for read events.");
     }
 
     m_recent_events.reserve(m_max_events);
@@ -90,27 +60,8 @@ io_scheduler::~io_scheduler()
         m_io_thread.join();
     }
 
-    if (m_shutdown_fd[0] != -1)
-    {
-        close(m_shutdown_fd[0]);
-        m_shutdown_fd[0] = -1;
-    }
-    if (m_shutdown_fd[1] != -1)
-    {
-        close(m_shutdown_fd[1]);
-        m_shutdown_fd[1] = -1;
-    }
-
-    if (m_schedule_fd[0] != -1)
-    {
-        close(m_schedule_fd[0]);
-        m_schedule_fd[0] = -1;
-    }
-    if (m_schedule_fd[1] != -1)
-    {
-        close(m_schedule_fd[1]);
-        m_schedule_fd[1] = -1;
-    }
+    m_shutdown_pipe.close();
+    m_schedule_pipe.close();
 }
 
 auto io_scheduler::process_events(std::chrono::milliseconds timeout) -> std::size_t
@@ -194,9 +145,9 @@ auto io_scheduler::shutdown() noexcept -> void
     if (m_shutdown_requested.exchange(true, std::memory_order::acq_rel) == false)
     {
 
-        // Signal the event loop to stop asap, triggering the event fd is safe.
+        // Signal the event loop to stop asap.
         const int value{1};
-        ::write(m_shutdown_fd[1], reinterpret_cast<const void*>(&value), sizeof(value));
+        ::write(m_shutdown_pipe.write_fd(), reinterpret_cast<const void*>(&value), sizeof(value));
 
         if (m_io_thread.joinable())
         {
@@ -223,7 +174,7 @@ auto io_scheduler::yield_for_internal(std::chrono::nanoseconds amount) -> coro::
         // for the scheduled task there.
         m_size.fetch_add(1, std::memory_order::release);
 
-        // Yielding does not requiring setting the timer position on the poll info since
+        // Yielding does not require setting the timer position on the poll info since
         // it doesn't have a corresponding 'event' that can trigger, it always waits for
         // the timeout to occur before resuming.
 
@@ -331,30 +282,34 @@ auto io_scheduler::process_scheduled_execute_inline() -> void
         // Clear the notification by reading until the pipe is cleared.
         while (true)
         {
-            std::array<int, 4> control{};
-            const ssize_t result = ::read(m_schedule_fd[0], reinterpret_cast<void*>(control.data()), sizeof(int) * 4);
-            if (result == 0)
+            constexpr std::size_t READ_COUNT{4};
+            constexpr ssize_t READ_COUNT_BYTES = READ_COUNT * sizeof(int);
+            std::array<int, READ_COUNT> control{};
+            const ssize_t result = ::read(m_schedule_pipe.read_fd(), reinterpret_cast<void*>(control.data()), READ_COUNT_BYTES);
+            if (result == READ_COUNT_BYTES)
+            {
+                continue;
+            }
+
+            // If we got nothing, or we got a partial read break the loop since the pipe is empty.
+            if (result >= 0)
             {
                 break;
             }
 
-            // Report the error if it simply isn't empty.
-            if (result < 0)
+            // pipe is set to O_NONBLOCK so ignore empty blocking reads.
+            if (errno == EAGAIN)
             {
-                // pipe is set to O_NONBLOCK so ignore empty reads.
-                if (errno == EAGAIN)
-                {
-                    break;
-                }
-
-                // Not much we can do here, we're in a very bad state.
-                std::cerr << "::read(m_schedule_fd[0]) error[" << errno << "] " << ::strerror(errno) << " fd=[" << m_schedule_fd[0] << "]" << std::endl;
                 break;
             }
+
+            // Not much we can do here, we're in a very bad state, lets report to stderr.
+            std::cerr << "::read(m_schedule_pipe.read_fd()) error[" << errno << "] " << ::strerror(errno) << " fd=[" << m_schedule_pipe.read_fd() << "]" << std::endl;
+            break;
         }
 
         // Clear the in memory flag to reduce eventfd_* calls on scheduling.
-        m_schedule_fd_triggered.exchange(false, std::memory_order::release);
+        m_schedule_pipe_triggered.exchange(false, std::memory_order::release);
     }
 
     // This set of handles can be safely resumed now since they do not have a corresponding timeout event.

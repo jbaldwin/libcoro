@@ -14,6 +14,8 @@
     #include "coro/net/socket.hpp"
 #endif
 
+#include "detail/pipe.hpp"
+
 #include <chrono>
 #include <functional>
 #include <map>
@@ -121,7 +123,7 @@ public:
      *                Passing zero (default) for the timeout will check for any events that are
      *                ready now, and then return.  This could be zero events.  Passing -1 means block
      *                indefinitely until an event happens.
-     * @param return The number of tasks currently executing or waiting to execute.
+     * @return The number of tasks currently executing or waiting to execute.
      */
     auto process_events(std::chrono::milliseconds timeout = std::chrono::milliseconds{0}) -> std::size_t;
 
@@ -152,11 +154,11 @@ public:
 
                 // Trigger the event to wake-up the scheduler if this event isn't currently triggered.
                 bool expected{false};
-                if (m_scheduler.m_schedule_fd_triggered.compare_exchange_strong(
+                if (m_scheduler.m_schedule_pipe_triggered.compare_exchange_strong(
                         expected, true, std::memory_order::release, std::memory_order::relaxed))
                 {
-                    const int control = 1;
-                    ::write(m_scheduler.m_schedule_fd[1], reinterpret_cast<const void*>(&control), sizeof(control));
+                    constexpr int control = 1;
+                    ::write(m_scheduler.m_schedule_pipe.write_fd(), reinterpret_cast<const void*>(&control), sizeof(control));
                 }
             }
             else
@@ -399,11 +401,11 @@ public:
             }
 
             bool expected{false};
-            if (m_schedule_fd_triggered.compare_exchange_strong(
+            if (m_schedule_pipe_triggered.compare_exchange_strong(
                     expected, true, std::memory_order::release, std::memory_order::relaxed))
             {
                 const int value = 1;
-                ::write(m_schedule_fd[1], reinterpret_cast<const void*>(&value), sizeof(value));
+                ::write(m_schedule_pipe.write_fd(), reinterpret_cast<const void*>(&value), sizeof(value));
             }
 
             return true;
@@ -450,11 +452,11 @@ private:
     io_notifier m_io_notifier;
     /// The timer handle for timed events, e.g. yield_for() or scheduler_after().
     detail::timer_handle m_timer;
-    /// The event loop fd to trigger a shutdown.
-    std::array<fd_t, 2> m_shutdown_fd{-1};
-    /// The schedule file descriptor if the scheduler is in inline processing mode.
-    std::array<fd_t, 2> m_schedule_fd{-1};
-    std::atomic<bool>   m_schedule_fd_triggered{false};
+    /// The event loop pipe to trigger a shutdown.
+    detail::pipe_t m_shutdown_pipe{};
+    /// The event loop schedule task pipe.
+    detail::pipe_t m_schedule_pipe{};
+    std::atomic<bool>   m_schedule_pipe_triggered{false};
 
     /// The number of tasks executing or awaiting events in this io scheduler.
     std::atomic<std::size_t> m_size{0};

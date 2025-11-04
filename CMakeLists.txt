@@ -141,6 +141,7 @@ set(LIBCORO_SOURCE_FILES
 
 if(LIBCORO_FEATURE_NETWORKING)
     list(APPEND LIBCORO_SOURCE_FILES
+        include/coro/detail/pipe.hpp src/detail/pipe.cpp
         include/coro/detail/poll_info.hpp
         include/coro/detail/timer_handle.hpp src/detail/timer_handle.cpp
 
