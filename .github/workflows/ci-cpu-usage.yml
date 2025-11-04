@@ -3,8 +3,8 @@ name: ci-ubuntu
 on: [pull_request, workflow_dispatch]
 
 jobs:
-  ci-ubuntu-24-04-gplusplus:
-    name: ci-ubuntu-24.04-g++
+  ci-cpu-usage-ubuntu-24-04-gplusplus:
+    name: ci-cpu-usage-ubuntu-24.04-g++
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -54,7 +54,7 @@ jobs:
                 -DLIBCORO_FEATURE_TLS=${{ matrix.libcoro_feature_networking.tls }} \
                 ..
             ninja
-      -   name: Test
+      -   name: Test CPU Usage
           run: |
             cd Release
             ./examples/coro_http_200_ok_server &
@@ -62,3 +62,55 @@ jobs:
             if [[ $CPU_USAGE -gt "5" ]]; then
               exit 1
             fi
+  ci-cpu-usage-macos:
+    name: macos-15
+    runs-on: macos-15
+    strategy:
+      fail-fast: false
+      matrix:
+        clang_version: [ 20 ]
+        cxx_standard: [ 20 ]
+        libcoro_feature_networking:
+          [
+            { enabled: ON, tls: ON },
+          ]
+        libcoro_build_shared_libs: [ OFF ]
+    steps:
+      - name: Install Dependencies
+        run: |
+          brew update
+          brew install llvm@${{ matrix.clang_version }}
+          brew install ninja
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+          fetch-tags: true
+      - name: Mark repository as safe
+        run: git config --global --add safe.directory "*"
+      - name: Release
+        run: |
+          brew --prefix llvm@${{ matrix.clang_version }}
+          ls $(brew --prefix llvm@${{ matrix.clang_version }})/bin
+          mkdir Release
+          cd Release
+          cmake \
+              -GNinja \
+              -DCMAKE_BUILD_TYPE=Release \
+              -DCMAKE_C_COMPILER=$(brew --prefix llvm@${{ matrix.clang_version }})/bin/clang-${{ matrix.clang_version }} \
+              -DCMAKE_CXX_COMPILER=$(brew --prefix llvm@${{ matrix.clang_version }})/bin/clang-${{ matrix.clang_version }} \
+              -DCMAKE_CXX_STANDARD=${{ matrix.cxx_standard }} \
+              -DLIBCORO_FEATURE_NETWORKING=${{ matrix.libcoro_feature_networking.enabled }} \
+              -DLIBCORO_FEATURE_TLS=${{ matrix.libcoro_feature_networking.tls }} \
+              -DLIBCORO_BUILD_SHARED_LIBS=${{ matrix.libcoro_build_shared_libs }} \
+              ..
+          cmake --build . --config Release
+      - name: Test CPU Usage
+        run: |
+          cd Release
+          ./examples/coro_http_200_ok_server &
+          CPU_USAGE=top -d 1 -b -n 5 -p $(pgrep coro_http) | egrep -v "top|Tasks|%Cpu|MiB|PID|$^" | awk '{ sum += $9 } END { print sum }'
+          if [[ $CPU_USAGE -gt "5" ]]; then
+            exit 1
+          fi
