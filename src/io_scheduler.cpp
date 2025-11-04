@@ -18,20 +18,52 @@ io_scheduler::io_scheduler(options&& opts, private_constructor)
       m_io_notifier(),
       m_timer(static_cast<const void*>(&m_timer_object), m_io_notifier)
 {
+    int flags{};
+
+    m_shutdown_fd = std::array<fd_t, 2>{};
+    if (::pipe(m_shutdown_fd.data()) != 0)
+    {
+        const std::string msg = "Failed to create m_shutdown_fd pipes, errno=[" + std::string{strerror(errno)} + "]";
+        throw std::runtime_error(msg);
+    }
+    flags = fcntl(m_shutdown_fd[0], F_GETFL);
+    flags |= O_NONBLOCK;
+    fcntl(m_shutdown_fd[0], F_SETFL, flags);
+
+    flags = fcntl(m_shutdown_fd[1], F_GETFL);
+    flags |= O_NONBLOCK;
+    fcntl(m_shutdown_fd[1], F_SETFL, flags);
+
+    if (!m_io_notifier.watch(m_shutdown_fd[0], coro::poll_op::read, const_cast<void*>(m_shutdown_ptr), true))
+    {
+        throw std::runtime_error("Failed to register m_shutdown_fd[0] for read events.");
+    }
+
+    m_schedule_fd = std::array<fd_t, 2>{};
+    if (::pipe(m_schedule_fd.data()) != 0)
+    {
+        const std::string msg = "Failed to create m_schedule_fd pipes, errno=[" + std::string{strerror(errno)} + "]";
+        throw std::runtime_error(msg);
+    }
+    flags = fcntl(m_schedule_fd[0], F_GETFL);
+    flags |= O_NONBLOCK;
+    fcntl(m_schedule_fd[0], F_SETFL, flags);
+
+    flags = fcntl(m_schedule_fd[1], F_GETFL);
+    flags |= O_NONBLOCK;
+    fcntl(m_schedule_fd[1], F_SETFL, flags);
+
+    if (!m_io_notifier.watch(m_schedule_fd[0], coro::poll_op::read, const_cast<void*>(m_schedule_ptr), true))
+    {
+        throw std::runtime_error("Failed to register m_schedule_fd[0] for read events.");
+    }
+
+    m_recent_events.reserve(m_max_events);
+
     if (m_opts.execution_strategy == execution_strategy_t::process_tasks_on_thread_pool)
     {
         m_thread_pool = thread_pool::make_unique(std::move(m_opts.pool));
     }
-
-    m_shutdown_fd = std::array<fd_t, 2>{};
-    ::pipe(m_shutdown_fd.data());
-    m_io_notifier.watch(m_shutdown_fd[0], coro::poll_op::read, const_cast<void*>(m_shutdown_ptr), true);
-
-    m_schedule_fd = std::array<fd_t, 2>{};
-    ::pipe(m_schedule_fd.data());
-    m_io_notifier.watch(m_schedule_fd[0], coro::poll_op::read, const_cast<void*>(m_schedule_ptr), true);
-
-    m_recent_events.reserve(m_max_events);
 }
 
 auto io_scheduler::make_unique(options opts) -> std::unique_ptr<io_scheduler>
@@ -296,9 +328,30 @@ auto io_scheduler::process_scheduled_execute_inline() -> void
         std::scoped_lock lk{m_scheduled_tasks_mutex};
         tasks.swap(m_scheduled_tasks);
 
-        // Clear the schedule eventfd if this is a scheduled task.
-        int control = 0;
-        ::read(m_schedule_fd[1], reinterpret_cast<void*>(&control), sizeof(control));
+        // Clear the notification by reading until the pipe is cleared.
+        while (true)
+        {
+            std::array<int, 4> control{};
+            const ssize_t result = ::read(m_schedule_fd[0], reinterpret_cast<void*>(control.data()), sizeof(int) * 4);
+            if (result == 0)
+            {
+                break;
+            }
+
+            // Report the error if it simply isn't empty.
+            if (result < 0)
+            {
+                // pipe is set to O_NONBLOCK so ignore empty reads.
+                if (errno == EAGAIN)
+                {
+                    break;
+                }
+
+                // Not much we can do here, we're in a very bad state.
+                std::cerr << "::read(m_schedule_fd[0]) error[" << errno << "] " << ::strerror(errno) << " fd=[" << m_schedule_fd[0] << "]" << std::endl;
+                break;
+            }
+        }
 
         // Clear the in memory flag to reduce eventfd_* calls on scheduling.
         m_schedule_fd_triggered.exchange(false, std::memory_order::release);
