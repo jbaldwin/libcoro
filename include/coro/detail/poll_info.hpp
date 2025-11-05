@@ -11,6 +11,7 @@
 
 namespace coro::detail
 {
+
 /**
  * Poll Info encapsulates everything about a poll operation for the event as well as its paired
  * timeout.  This is important since coroutines that are waiting on an event or timeout do not
@@ -32,6 +33,13 @@ struct poll_info
     ~poll_info() = default;
 
     poll_info(fd_t fd, coro::poll_op op) : m_fd(fd), m_op(op) {}
+
+    poll_info(fd_t fd, coro::poll_op op, std::optional<poll_stop_token> cancel_trigger)
+        : m_fd(fd),
+          m_op(op),
+          m_cancel_trigger(cancel_trigger)
+    {
+    }
 
     poll_info(const poll_info&)                    = delete;
     poll_info(poll_info&&)                         = delete;
@@ -71,6 +79,8 @@ struct poll_info
     /// Did the timeout and event trigger at the same time on the same epoll_wait call?
     /// Once this is set to true all future events on this poll info are null and void.
     bool m_processed{false};
+    /// Cancellation receiver of this poll operation.
+    std::optional<poll_stop_token> m_cancel_trigger = std::nullopt;
 };
 
 } // namespace coro::detail

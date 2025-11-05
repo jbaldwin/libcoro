@@ -199,7 +199,6 @@ TEST_CASE("tcp_server concurrent polling on the same socket", "[tcp_server]")
     std::cerr << "END tcp_server concurrent polling on the same socket\n";
 }
 
-    #ifndef __APPLE__
 // This test is known to not work on kqueue style systems (e.g. apple) because the socket shutdown()
 // call does not properly trigger an EV_EOF flag on the accept socket.
 
@@ -217,7 +216,7 @@ TEST_CASE("tcp_server graceful shutdown via socket", "[tcp_server]")
         std::cerr << "make accept task start\n";
         started.set();
         auto poll_result = co_await server.poll();
-        REQUIRE(poll_result == coro::poll_status::closed);
+        REQUIRE(poll_result == coro::poll_status::cancelled);
         auto client = server.accept();
         REQUIRE_FALSE(client.socket().is_valid());
         std::cerr << "make accept task completed\n";
@@ -229,13 +228,11 @@ TEST_CASE("tcp_server graceful shutdown via socket", "[tcp_server]")
     // we'll wait a bit to make sure the server.poll() is fully registered.
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
-    server.accept_socket().shutdown(coro::poll_op::read_write);
+    server.shutdown();
 
     scheduler->shutdown();
     std::cerr << "END tcp_server graceful shutdown via socket\n";
 }
-
-    #endif
 
 TEST_CASE("~tcp_server", "[tcp_server]")
 {
