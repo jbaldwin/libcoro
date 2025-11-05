@@ -1,3 +1,5 @@
+#pragma once
+
 #include "coro/fd.hpp"
 
 #include <array>
@@ -25,6 +27,5 @@ public:
 private:
     std::array<fd_t, 2> m_fds{-1};
 };
-
 
 } // namespace coro::detail

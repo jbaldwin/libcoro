@@ -17,8 +17,8 @@ TEST_CASE("tls_server hello world server", "[tls_server]")
     const std::string server_msg = "Hello world from TLS server!!";
 
     auto make_client_task = [](std::unique_ptr<coro::io_scheduler>& scheduler,
-                               const std::string&                  client_msg,
-                               const std::string&                  server_msg) -> coro::task<void>
+                               const std::string&                   client_msg,
+                               const std::string&                   server_msg) -> coro::task<void>
     {
         co_await scheduler->schedule();
 
@@ -59,8 +59,8 @@ TEST_CASE("tls_server hello world server", "[tls_server]")
     };
 
     auto make_server_task = [](std::unique_ptr<coro::io_scheduler>& scheduler,
-                               const std::string&                  client_msg,
-                               const std::string&                  server_msg) -> coro::task<void>
+                               const std::string&                   client_msg,
+                               const std::string&                   server_msg) -> coro::task<void>
     {
         co_await scheduler->schedule();
 

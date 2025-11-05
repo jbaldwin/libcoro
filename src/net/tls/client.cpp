@@ -195,6 +195,8 @@ auto client::handshake(std::chrono::milliseconds timeout) -> coro::task<connecti
                 co_return connection_status::poll_error;
             case poll_status::closed:
                 co_return connection_status::unexpected_close;
+            case poll_status::cancelled:
+                co_return connection_status::unexpected_close;
             default:
                 // Event triggered, continue handshake.
                 break;
@@ -240,6 +242,7 @@ auto client::tls_shutdown_and_free(
                 case poll_status::timeout:
                 case poll_status::error:
                 case poll_status::closed:
+                case poll_status::cancelled:
                     co_return;
                 default:
                     // continue shutdown.
