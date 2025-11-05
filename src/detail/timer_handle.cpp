@@ -22,7 +22,7 @@ timer_handle::timer_handle(const void* timer_handle_ptr, io_notifier& notifier)
     : m_fd(::timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC)),
       m_timer_handle_ptr(timer_handle_ptr)
 {
-    notifier.watch(m_fd, coro::poll_op::read, const_cast<void*>(m_timer_handle_ptr), true);
+    notifier.watch(m_fd, poll_op::read, const_cast<void*>(m_timer_handle_ptr), true);
 }
 
 #endif

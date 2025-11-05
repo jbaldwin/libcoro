@@ -3,6 +3,7 @@
 
 #include <atomic>
 #include <cstring>
+#include <iostream>
 #include <optional>
 #include <sys/socket.h>
 #include <sys/types.h>
@@ -124,7 +125,9 @@ auto io_scheduler::yield_until(time_point time) -> coro::task<void>
     co_return;
 }
 
-auto io_scheduler::poll(fd_t fd, coro::poll_op op, std::chrono::milliseconds timeout) -> coro::task<poll_status>
+auto io_scheduler::poll(
+    fd_t fd, coro::poll_op op, std::chrono::milliseconds timeout, std::optional<poll_stop_token> cancel_trigger)
+    -> coro::task<poll_status>
 {
     // Because the size will drop when this coroutine suspends every poll needs to undo the subtraction
     // on the number of active tasks in the scheduler.  When this task is resumed by the event loop.
@@ -136,7 +139,7 @@ auto io_scheduler::poll(fd_t fd, coro::poll_op op, std::chrono::milliseconds tim
 
     bool timeout_requested = (timeout > 0ms);
 
-    auto pi = detail::poll_info{fd, op};
+    auto pi = detail::poll_info{fd, op, cancel_trigger};
 
     if (timeout_requested)
     {
