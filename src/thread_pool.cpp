@@ -1,4 +1,5 @@
 #include "coro/thread_pool.hpp"
+#include "coro/detail/awaiter_list.hpp"
 #include "coro/detail/task_self_deleting.hpp"
 
 namespace coro
@@ -10,12 +11,24 @@ thread_pool::schedule_operation::schedule_operation(thread_pool& tp) noexcept : 
 
 auto thread_pool::schedule_operation::await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept -> void
 {
-    m_thread_pool.schedule_impl(awaiting_coroutine);
+    m_awaiting_coroutine = awaiting_coroutine;
+    detail::awaiter_list_push(m_thread_pool.m_global_queue, this);
+
+    // If there is at least one sleeping executor wake it up.
+    if (m_thread_pool.m_sleeping_executors.load(std::memory_order::acquire) != 0)
+    {
+        std::scoped_lock lk{m_thread_pool.m_wait_mutex};
+        m_thread_pool.m_wait_cv.notify_one();
+    }
 }
 
 thread_pool::thread_pool(options&& opts, private_constructor) : m_opts(opts)
 {
     m_threads.reserve(m_opts.thread_count);
+    for (uint32_t i = 0; i < m_opts.thread_count; ++i)
+    {
+        m_executor_queues.emplace_back(nullptr);
+    }
 }
 
 auto thread_pool::make_unique(options opts) -> std::unique_ptr<thread_pool>
@@ -73,7 +86,9 @@ auto thread_pool::resume(std::coroutine_handle<> handle) noexcept -> bool
         return false;
     }
 
-    schedule_impl(handle);
+    auto* schedule_op = new schedule_operation(*this);
+    schedule_op->m_allocated = true;
+    schedule_op->await_suspend(handle);
     return true;
 }
 
@@ -101,6 +116,10 @@ auto thread_pool::shutdown() noexcept -> void
 
 auto thread_pool::executor(std::size_t idx) -> void
 {
+    auto executor_queues_it = m_executor_queues.begin();
+    std::advance(executor_queues_it, idx);
+    auto& local_queue = *executor_queues_it;
+
     if (m_opts.on_thread_start_functor != nullptr)
     {
         m_opts.on_thread_start_functor(idx);
@@ -110,59 +129,126 @@ auto thread_pool::executor(std::size_t idx) -> void
     while (!m_shutdown_requested.load(std::memory_order::acquire))
     {
         std::unique_lock<std::mutex> lk{m_wait_mutex};
-        m_wait_cv.wait(lk, [&]() { return !m_queue.empty() || m_shutdown_requested.load(std::memory_order::acquire); });
+        m_sleeping_executors.fetch_add(1, std::memory_order::release);
+        m_wait_cv.wait(lk, [&]() { return m_global_queue.load(std::memory_order::acquire) != nullptr || m_shutdown_requested.load(std::memory_order::acquire); });
+        m_sleeping_executors.fetch_sub(1, std::memory_order::release);
+        lk.unlock();
 
-        if (m_queue.empty())
+        auto* op = detail::awaiter_list_pop_all(m_global_queue);
+        if (op == nullptr)
         {
+            // Attempt to steal work.
+            for (auto& executor_queue : m_executor_queues)
+            {
+                while ((op = detail::awaiter_list_pop(executor_queue)) != nullptr)
+                {
+                    op->m_awaiting_coroutine.resume();
+                    m_size.fetch_sub(1, std::memory_order::release);
+                    if (op->m_allocated)
+                    {
+                        delete op;
+                    }
+                }
+            }
             continue;
         }
 
-        auto handle = m_queue.front();
-        m_queue.pop_front();
-        lk.unlock();
+        // Move extra operations to local queue (they can still be stolen)
+        op = detail::awaiter_list_reverse(op);
+        if (op->m_next != nullptr)
+        {
+            detail::awaiter_list_store(local_queue, op->m_next);
+        }
 
-        // Release the lock while executing the coroutine.
-        handle.resume();
-        m_size.fetch_sub(1, std::memory_order::release);
+        // Process until local queue is empty.
+        while (op != nullptr)
+        {
+            op->m_awaiting_coroutine.resume();
+            m_size.fetch_sub(1, std::memory_order::release);
+            if (op->m_allocated)
+            {
+                delete op;
+            }
+
+            op = detail::awaiter_list_pop(local_queue);
+        }
+
+        // Attempt to steal work.
+        for (auto& executor_queue : m_executor_queues)
+        {
+            while ((op = detail::awaiter_list_pop(executor_queue)) != nullptr)
+            {
+                op->m_awaiting_coroutine.resume();
+                m_size.fetch_sub(1, std::memory_order::release);
+                if (op->m_allocated)
+                {
+                    delete op;
+                }
+            }
+        }
     }
 
     // Process until there are no ready tasks left.
     while (m_size.load(std::memory_order::acquire) > 0)
     {
-        std::unique_lock<std::mutex> lk{m_wait_mutex};
-        // m_size will only drop to zero once all executing coroutines are finished
-        // but the queue could be empty for threads that finished early.
-        if (m_queue.empty())
+        auto* op = detail::awaiter_list_pop_all(m_global_queue);
+        if (op == nullptr)
         {
+            // Attempt to steal work on shutdown since the global queue is empty.
+            for (auto& executor_queue : m_executor_queues)
+            {
+                while ((op = detail::awaiter_list_pop(executor_queue)) != nullptr)
+                {
+                    op->m_awaiting_coroutine.resume();
+                    m_size.fetch_sub(1, std::memory_order::release);
+                    if (op->m_allocated)
+                    {
+                        delete op;
+                    }
+                }
+            }
+
             break;
         }
 
-        auto handle = m_queue.front();
-        m_queue.pop_front();
-        lk.unlock();
+        // Move operations to local queue (they can still be stolen)
+        op = detail::awaiter_list_reverse(op);
+        if (op->m_next != nullptr)
+        {
+            detail::awaiter_list_store(local_queue, op->m_next);
+        }
 
-        // Release the lock while executing the coroutine.
-        handle.resume();
-        m_size.fetch_sub(1, std::memory_order::release);
+        // Process until local queue is empty.
+        while (op != nullptr)
+        {
+            op->m_awaiting_coroutine.resume();
+            m_size.fetch_sub(1, std::memory_order::release);
+            if (op->m_allocated)
+            {
+                delete op;
+            }
+
+            op = detail::awaiter_list_pop(local_queue);
+        }
+
+        // Attempt to steal work.
+        for (auto& executor_queue : m_executor_queues)
+        {
+            while ((op = detail::awaiter_list_pop(executor_queue)) != nullptr)
+            {
+                op->m_awaiting_coroutine.resume();
+                m_size.fetch_sub(1, std::memory_order::release);
+                if (op->m_allocated)
+                {
+                    delete op;
+                }
+            }
+        }
     }
 
     if (m_opts.on_thread_stop_functor != nullptr)
     {
         m_opts.on_thread_stop_functor(idx);
-    }
-}
-
-auto thread_pool::schedule_impl(std::coroutine_handle<> handle) noexcept -> void
-{
-    if (handle == nullptr || handle.done())
-    {
-        return;
-    }
-
-    {
-        std::scoped_lock lk{m_wait_mutex};
-        m_queue.emplace_back(handle);
-        m_wait_cv.notify_one();
     }
 }
 

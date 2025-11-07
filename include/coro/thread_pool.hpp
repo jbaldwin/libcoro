@@ -8,6 +8,7 @@
 #include <coroutine>
 #include <deque>
 #include <functional>
+#include <list>
 #include <mutex>
 #include <optional>
 #include <ranges>
@@ -61,6 +62,10 @@ public:
          * no-op as this is the function called first by the thread pool's executing thread.
          */
         auto await_resume() noexcept -> void {}
+
+        schedule_operation* m_next{nullptr};
+        std::coroutine_handle<> m_awaiting_coroutine;
+        bool m_allocated{false};
 
     private:
         /// @brief The thread pool that this schedule operation will execute on.
@@ -142,14 +147,14 @@ public:
     /**
      * Schedules any coroutine handle that is ready to be resumed.
      * @param handle The coroutine handle to schedule.
-     * @return True if the coroutine is resumed, false if its a nullptr or the coroutine is already done.
+     * @return True if the coroutine is resumed, false if it is a nullptr or the coroutine is already done.
      */
     auto resume(std::coroutine_handle<> handle) noexcept -> bool;
 
     /**
      * Schedules the set of coroutine handles that are ready to be resumed.
      * @param handles The coroutine handles to schedule.
-     * @param uint64_t The number of tasks resumed, if any are null they are discarded.
+     * @return uint64_t The number of tasks resumed, if any are null or done they are discarded.
      */
     template<coro::concepts::range_of<std::coroutine_handle<>> range_type>
     auto resume(const range_type& handles) noexcept -> uint64_t
@@ -159,12 +164,14 @@ public:
         size_t null_handles{0};
 
         {
-            std::scoped_lock lk{m_wait_mutex};
+            // std::scoped_lock lk{m_wait_mutex};
             for (const auto& handle : handles)
             {
                 if (handle != nullptr) [[likely]]
                 {
-                    m_queue.emplace_back(handle);
+                    auto* schedule_op = new schedule_operation(*this);
+                    schedule_op->m_allocated = true;
+                    schedule_op->await_suspend(handle);
                 }
                 else
                 {
@@ -179,18 +186,6 @@ public:
         }
 
         uint64_t total = std::size(handles) - null_handles;
-        if (total >= m_threads.size())
-        {
-            m_wait_cv.notify_all();
-        }
-        else
-        {
-            for (uint64_t i = 0; i < total; ++i)
-            {
-                m_wait_cv.notify_one();
-            }
-        }
-
         return total;
     }
 
@@ -221,20 +216,6 @@ public:
      */
     auto empty() const noexcept -> bool { return size() == 0; }
 
-    /**
-     * @return The number of tasks waiting in the task queue to be executed.
-     */
-    auto queue_size() const noexcept -> std::size_t
-    {
-        std::atomic_thread_fence(std::memory_order::acquire);
-        return m_queue.size();
-    }
-
-    /**
-     * @return True if the task queue is currently empty.
-     */
-    auto queue_empty() const noexcept -> bool { return queue_size() == 0; }
-
 private:
     /// The configuration options.
     options m_opts;
@@ -245,17 +226,16 @@ private:
     /// Condition variable for each executor thread to wait on when no tasks are available.
     std::condition_variable_any m_wait_cv;
     /// FIFO queue of tasks waiting to be executed.
-    std::deque<std::coroutine_handle<>> m_queue;
+    std::atomic<schedule_operation*> m_global_queue{nullptr};
+
+    std::list<std::atomic<schedule_operation*>> m_executor_queues;
+    std::atomic<std::size_t> m_sleeping_executors{0};
 
     /**
      * Each background thread runs from this function.
      * @param idx The executor's idx for internal data structure accesses.
      */
     auto executor(std::size_t idx) -> void;
-    /**
-     * @param handle Schedules the given coroutine to be executed upon the first available thread.
-     */
-    auto schedule_impl(std::coroutine_handle<> handle) noexcept -> void;
 
     /// The number of tasks in the queue + currently executing.
     std::atomic<std::size_t> m_size{0};
