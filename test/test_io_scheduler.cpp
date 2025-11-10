@@ -829,7 +829,7 @@ TEST_CASE("coro::io_scheduler::spawn", "[io_scheduler]")
     REQUIRE(g_count.load() == ITERATIONS);
 }
 
-TEST_CASE("io_scheduler::schedule(task)", "[thread_pool]")
+TEST_CASE("io_scheduler::schedule(task)", "[io_scheduler]")
 {
     auto scheduler = coro::io_scheduler::make_unique(
         coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
@@ -850,7 +850,7 @@ TEST_CASE("io_scheduler::schedule(task)", "[thread_pool]")
     REQUIRE(main_tid != coroutine_tid);
 }
 
-TEST_CASE("io_scheduler shutdown with background yielding task", "[thread_pool]")
+TEST_CASE("io_scheduler shutdown with background yielding task", "[io_scheduler]")
 {
     auto scheduler = coro::io_scheduler::make_unique(
         coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
