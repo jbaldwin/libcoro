@@ -1,6 +1,8 @@
 #pragma once
 
+#include "coro/detail/awaiter_list.hpp"
 #include "coro/detail/poll_info.hpp"
+#include "detail/pipe.hpp"
 #include "coro/detail/timer_handle.hpp"
 #include "coro/expected.hpp"
 #include "coro/fd.hpp"
@@ -13,8 +15,6 @@
 #ifdef LIBCORO_FEATURE_NETWORKING
     #include "coro/net/socket.hpp"
 #endif
-
-#include "detail/pipe.hpp"
 
 #include <chrono>
 #include <functional>
@@ -147,10 +147,8 @@ public:
             if (m_scheduler.m_opts.execution_strategy == execution_strategy_t::process_tasks_inline)
             {
                 m_scheduler.m_size.fetch_add(1, std::memory_order::release);
-                {
-                    std::scoped_lock lk{m_scheduler.m_scheduled_tasks_mutex};
-                    m_scheduler.m_scheduled_tasks.emplace_back(awaiting_coroutine);
-                }
+                m_awaiting_coroutine = awaiting_coroutine;
+                detail::awaiter_list_push(m_scheduler.m_schedule_tasks, this);
 
                 // Trigger the event to wake-up the scheduler if this event isn't currently triggered.
                 bool expected{false};
@@ -167,14 +165,12 @@ public:
             }
         }
 
-        /**
-         * no-op as this is the function called first by the thread pool's executing thread.
-         */
         auto await_resume() noexcept -> void {}
 
-    private:
-        /// The thread pool that this operation will execute on.
+        schedule_operation* m_next{nullptr};
+        std::coroutine_handle<> m_awaiting_coroutine{nullptr};
         io_scheduler& m_scheduler;
+        bool m_allocated{false};
     };
 
     /**
@@ -394,11 +390,10 @@ public:
 
         if (m_opts.execution_strategy == execution_strategy_t::process_tasks_inline)
         {
-            m_size.fetch_add(1, std::memory_order::release);
-            {
-                std::scoped_lock lk{m_scheduled_tasks_mutex};
-                m_scheduled_tasks.emplace_back(handle);
-            }
+            // Since this does not have a coroutine frame to live in it must be dynamically allocated.
+            auto* schedule_op = new schedule_operation(*this);
+            schedule_op->m_allocated = true;
+            schedule_op->await_suspend(handle);
 
             bool expected{false};
             if (m_schedule_pipe_triggered.compare_exchange_strong(
@@ -483,8 +478,8 @@ private:
     static auto       event_to_poll_status(uint32_t events) -> poll_status;
 
     auto                                 process_scheduled_execute_inline() -> void;
-    std::mutex                           m_scheduled_tasks_mutex{};
-    std::vector<std::coroutine_handle<>> m_scheduled_tasks{};
+    std::atomic<schedule_operation*> m_schedule_tasks{nullptr};
+
 
     static constexpr const int   m_shutdown_object{0};
     static constexpr const void* m_shutdown_ptr = &m_shutdown_object;
