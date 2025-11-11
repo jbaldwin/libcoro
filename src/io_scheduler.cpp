@@ -247,7 +247,7 @@ auto io_scheduler::process_events_execute(std::chrono::milliseconds timeout) -> 
         }
     }
 
-    // Its important to not resume any handles until the full set is accounted for.  If a timeout
+    // It is important to not resume any handles until the full set is accounted for.  If a timeout
     // and an event for the same handle happen in the same epoll_wait() call then inline processing
     // will destruct the poll_info object before the second event is handled.  This is also possible
     // with thread pool processing, but probably has an extremely low chance of occuring due to

@@ -164,7 +164,6 @@ TEST_CASE("ring_buffer producer consumer separate threads", "[ring_buffer]")
     const size_t                   iterations = 10'000'000;
     coro::ring_buffer<uint64_t, 2> rb{};
 
-    // We'll use an io schedule so we can use yield_for on shutdown since its two threads.
     auto producer_tp = coro::thread_pool::make_unique(coro::thread_pool::options{.thread_count = 1});
     auto consumer_tp = coro::thread_pool::make_unique(coro::thread_pool::options{.thread_count = 1});
 

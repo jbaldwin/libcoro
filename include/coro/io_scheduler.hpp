@@ -147,7 +147,7 @@ public:
             if (m_scheduler.m_opts.execution_strategy == execution_strategy_t::process_tasks_inline)
             {
                 m_scheduler.m_size.fetch_add(1, std::memory_order::release);
-                this->m_awaiting_coroutine = awaiting_coroutine;
+                m_awaiting_coroutine = awaiting_coroutine;
                 detail::awaiter_list_push(m_scheduler.m_schedule_tasks, this);
 
                 // Trigger the event to wake-up the scheduler if this event isn't currently triggered.

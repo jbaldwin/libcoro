@@ -72,5 +72,4 @@ auto awaiter_list_reverse(awaiter_type* curr) -> awaiter_type*
     return prev;
 }
 
-
 } // namespace coro::detail

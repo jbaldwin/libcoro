@@ -221,15 +221,22 @@ private:
     options m_opts;
     /// The background executor threads.
     std::vector<std::thread> m_threads;
-    /// Mutex for executor threads to sleep on the condition variable.
-    std::mutex m_wait_mutex;
-    /// Condition variable for each executor thread to wait on when no tasks are available.
-    std::condition_variable_any m_wait_cv;
     /// FIFO queue of tasks waiting to be executed.
     std::atomic<schedule_operation*> m_global_queue{nullptr};
 
-    std::list<std::atomic<schedule_operation*>> m_executor_queues;
-    std::atomic<std::size_t> m_sleeping_executors{0};
+    struct executor_state
+    {
+        std::mutex m_wait_mutex{};
+        std::condition_variable_any m_wait_cv{};
+        std::atomic<bool> m_wait_cv_set{false};
+        std::atomic<schedule_operation*> m_queue{nullptr};
+        executor_state* m_next{nullptr};
+        std::coroutine_handle<> m_awaiting_coroutine; // TODO: dead field to match concept, will remove
+    };
+
+    std::unique_ptr<executor_state[]> m_executor_state;
+    // std::mutex m_sleeping_mutex{};
+    std::atomic<executor_state*> m_sleeping_executors{nullptr};
 
     /**
      * Each background thread runs from this function.
@@ -239,8 +246,17 @@ private:
 
     /// The number of tasks in the queue + currently executing.
     std::atomic<std::size_t> m_size{0};
+    std::atomic<std::size_t> m_queued_size{0};
     /// Has the thread pool been requested to shut down?
     std::atomic<bool> m_shutdown_requested{false};
+
+    auto try_take_global_queue(std::atomic<schedule_operation*>& local_queue) -> schedule_operation*;
+    auto try_steal_work(std::size_t idx) -> schedule_operation*;
+    auto try_sleep(executor_state& state) -> void;
+    auto try_stay_awake() -> bool;
+    auto try_wakeup_executor() -> void;
+    auto resume_coroutine(schedule_operation* op) -> void;
+    auto should_wakeup_executor() const -> bool;
 };
 
 } // namespace coro
