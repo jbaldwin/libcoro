@@ -247,7 +247,7 @@ auto io_scheduler::process_events_execute(std::chrono::milliseconds timeout) -> 
         }
     }
 
-    // Its important to not resume any handles until the full set is accounted for.  If a timeout
+    // It is important to not resume any handles until the full set is accounted for.  If a timeout
     // and an event for the same handle happen in the same epoll_wait() call then inline processing
     // will destruct the poll_info object before the second event is handled.  This is also possible
     // with thread pool processing, but probably has an extremely low chance of occuring due to
@@ -273,11 +273,17 @@ auto io_scheduler::process_events_execute(std::chrono::milliseconds timeout) -> 
 
 auto io_scheduler::process_scheduled_execute_inline() -> void
 {
-    std::vector<std::coroutine_handle<>> tasks{};
+    schedule_operation* ops{nullptr};
     {
         // Acquire the entire list, and then reset it.
-        std::scoped_lock lk{m_scheduled_tasks_mutex};
-        tasks.swap(m_scheduled_tasks);
+        ops = detail::awaiter_list_pop_all<schedule_operation>(m_schedule_tasks);
+        if (ops == nullptr)
+        {
+            return;
+        }
+
+        // Since newer items are always placed at the head reverse the list so it is executed in the given schedule order.
+        ops = detail::awaiter_list_reverse<schedule_operation>(ops);
 
         // Clear the notification by reading until the pipe is cleared.
         while (true)
@@ -313,11 +319,22 @@ auto io_scheduler::process_scheduled_execute_inline() -> void
     }
 
     // This set of handles can be safely resumed now since they do not have a corresponding timeout event.
-    for (auto& task : tasks)
+    std::size_t resumed{0};
+    while (ops != nullptr)
     {
-        task.resume();
+        auto* next = ops->m_next;
+
+        ops->m_awaiting_coroutine.resume();
+        ++resumed;
+        if (ops->m_allocated)
+        {
+            delete ops;
+        }
+
+        ops = next;
     }
-    m_size.fetch_sub(tasks.size(), std::memory_order::release);
+
+    m_size.fetch_sub(resumed, std::memory_order::release);
 }
 
 auto io_scheduler::process_event_execute(detail::poll_info* pi, poll_status status) -> void
