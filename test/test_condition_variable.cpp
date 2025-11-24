@@ -924,7 +924,7 @@ TEST_CASE("notify_all(executor)", "[condition_variable]")
         }
 
         std::cerr << "notify_all(s)\n";
-        cv.notify_all(s);
+        co_await cv.notify_all(s);
         co_return 0;
     };
 
