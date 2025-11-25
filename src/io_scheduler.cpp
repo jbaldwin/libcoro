@@ -73,9 +73,12 @@ auto io_scheduler::process_events(std::chrono::milliseconds timeout) -> std::siz
 auto io_scheduler::spawn(coro::task<void>&& task) -> bool
 {
     m_size.fetch_add(1, std::memory_order::release);
-    auto owned_task = detail::make_task_self_deleting(std::move(task));
-    owned_task.promise().executor_size(m_size);
-    return resume(owned_task.handle());
+    auto wrapper_task = detail::make_task_self_deleting(std::move(task));
+    wrapper_task.promise().user_final_suspend([this]() -> void
+    {
+        m_size.fetch_sub(1, std::memory_order::release);
+    });
+    return resume(wrapper_task.handle());
 }
 
 auto io_scheduler::schedule_at(time_point time) -> coro::task<void>
@@ -137,6 +140,42 @@ auto io_scheduler::poll(fd_t fd, coro::poll_op op, std::chrono::milliseconds tim
     auto result = co_await pi;
     m_size.fetch_sub(1, std::memory_order::release);
     co_return result;
+}
+
+auto io_scheduler::resume(std::coroutine_handle<> handle) -> bool
+{
+    if (handle == nullptr || handle.done())
+    {
+        return false;
+    }
+
+    if (m_shutdown_requested.load(std::memory_order::acquire))
+    {
+        return false;
+    }
+
+    if (m_opts.execution_strategy == execution_strategy_t::process_tasks_inline)
+    {
+        m_size.fetch_add(1, std::memory_order::release);
+        {
+            std::scoped_lock lk{m_scheduled_tasks_mutex};
+            m_scheduled_tasks.emplace_back(handle);
+        }
+
+        bool expected{false};
+        if (m_schedule_pipe_triggered.compare_exchange_strong(
+                expected, true, std::memory_order::release, std::memory_order::relaxed))
+        {
+            const int value = 1;
+            ::write(m_schedule_pipe.write_fd(), reinterpret_cast<const void*>(&value), sizeof(value));
+        }
+
+        return true;
+    }
+    else
+    {
+        return m_thread_pool->resume(handle);
+    }
 }
 
 auto io_scheduler::shutdown() noexcept -> void

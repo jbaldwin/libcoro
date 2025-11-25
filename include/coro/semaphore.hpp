@@ -166,13 +166,15 @@ public:
 
     /**
      * Stops the semaphore and will notify all release/acquire waiters to wake up in a failed state.
-     * Once this is set it cannot be un-done and all future oprations on the semaphore will fail.
+     * Once this is set it cannot be un-done and all future operations on the semaphore will fail.
      */
     [[nodiscard]] auto shutdown() noexcept -> coro::task<void>
     {
-        if (is_shutdown()) {
+        if (is_shutdown())
+        {
             co_return;
         }
+
         auto lock = co_await m_mutex.scoped_lock();
         bool expected{false};
         if (m_shutdown.compare_exchange_strong(expected, true, std::memory_order::release, std::memory_order::relaxed))
