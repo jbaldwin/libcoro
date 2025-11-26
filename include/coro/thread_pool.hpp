@@ -142,21 +142,21 @@ public:
     /**
      * Schedules any coroutine handle that is ready to be resumed.
      * @param handle The coroutine handle to schedule.
-     * @return True if the coroutine is resumed, false if its a nullptr or the coroutine is already done.
+     * @return True if the coroutine is resumed, false if it is a nullptr or the coroutine is already done.
      */
     auto resume(std::coroutine_handle<> handle) noexcept -> bool;
 
     /**
      * Schedules the set of coroutine handles that are ready to be resumed.
      * @param handles The coroutine handles to schedule.
-     * @param uint64_t The number of tasks resumed, if any are null they are discarded.
+     * @return std::size_t The number of tasks resumed, if any are null they are discarded.
      */
-    template<coro::concepts::range_of<std::coroutine_handle<>> range_type>
-    auto resume(const range_type& handles) noexcept -> uint64_t
+    template<coro::concepts::sized_range_of<std::coroutine_handle<>> range_type>
+    auto resume(const range_type& handles) noexcept -> std::size_t
     {
         m_size.fetch_add(std::size(handles), std::memory_order::release);
 
-        size_t null_handles{0};
+        std::size_t null_handles{0};
 
         {
             std::scoped_lock lk{m_wait_mutex};
@@ -178,7 +178,7 @@ public:
             m_size.fetch_sub(null_handles, std::memory_order::release);
         }
 
-        uint64_t total = std::size(handles) - null_handles;
+        std::size_t total = std::size(handles) - null_handles;
         if (total >= m_threads.size())
         {
             m_wait_cv.notify_all();

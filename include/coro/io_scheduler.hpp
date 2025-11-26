@@ -380,40 +380,22 @@ public:
      * Resumes execution of a direct coroutine handle on this io scheduler.
      * @param handle The coroutine handle to resume execution.
      */
-    auto resume(std::coroutine_handle<> handle) -> bool
+    auto resume(std::coroutine_handle<> handle) -> bool;
+
+    template<coro::concepts::sized_range_of<std::coroutine_handle<>> range_type>
+    auto resume(const range_type& handles) noexcept -> std::size_t
     {
-        if (handle == nullptr || handle.done())
+        auto size = std::size(handles);
+        std::size_t invalid_handles{0};
+        for (const auto& handle : handles)
         {
-            return false;
-        }
-
-        if (m_shutdown_requested.load(std::memory_order::acquire))
-        {
-            return false;
-        }
-
-        if (m_opts.execution_strategy == execution_strategy_t::process_tasks_inline)
-        {
-            m_size.fetch_add(1, std::memory_order::release);
+            if (!resume(handle))
             {
-                std::scoped_lock lk{m_scheduled_tasks_mutex};
-                m_scheduled_tasks.emplace_back(handle);
+                ++invalid_handles;
             }
-
-            bool expected{false};
-            if (m_schedule_pipe_triggered.compare_exchange_strong(
-                    expected, true, std::memory_order::release, std::memory_order::relaxed))
-            {
-                const int value = 1;
-                ::write(m_schedule_pipe.write_fd(), reinterpret_cast<const void*>(&value), sizeof(value));
-            }
-
-            return true;
         }
-        else
-        {
-            return m_thread_pool->resume(handle);
-        }
+
+        return size - invalid_handles;
     }
 
     /**

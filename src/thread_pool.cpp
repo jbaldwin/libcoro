@@ -55,7 +55,10 @@ auto thread_pool::spawn(coro::task<void>&& task) noexcept -> bool
 {
     m_size.fetch_add(1, std::memory_order::release);
     auto wrapper_task = detail::make_task_self_deleting(std::move(task));
-    wrapper_task.promise().executor_size(m_size);
+    wrapper_task.promise().user_final_suspend([this]() -> void
+    {
+        m_size.fetch_sub(1, std::memory_order::release);
+    });
     return resume(wrapper_task.handle());
 }
 
