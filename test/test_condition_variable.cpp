@@ -3,8 +3,8 @@
 #include <coro/coro.hpp>
 
 #include <chrono>
-#include <thread>
 #include <iostream>
+#include <thread>
 
 TEST_CASE("condition_variable", "[condition_variable]")
 {
@@ -15,8 +15,8 @@ TEST_CASE("wait(lock) 1 waiter", "[condition_variable]")
 {
     std::cerr << "BEGIN condition_variable wait(lock) 1 waiter\n";
     coro::condition_variable cv{};
-    coro::mutex m{};
-    coro::event e{}; // just used to coordinate the order in which the tasks run.
+    coro::mutex              m{};
+    coro::event              e{}; // just used to coordinate the order in which the tasks run.
 
     auto make_waiter = [](coro::condition_variable& cv, coro::mutex& m, coro::event& e) -> coro::task<int64_t>
     {
@@ -45,8 +45,8 @@ TEST_CASE("wait(lock predicate) 1 waiter", "[condition_variable]")
     std::cerr << "BEGIN condition_variable wait(lock predicate) 1 waiter\n";
 
     coro::condition_variable cv{};
-    coro::mutex m{};
-    coro::event e{}; // just used to coordinate the order in which the tasks run.
+    coro::mutex              m{};
+    coro::event              e{}; // just used to coordinate the order in which the tasks run.
 
     auto make_waiter = [](coro::condition_variable& cv, coro::mutex& m, coro::event& e) -> coro::task<int64_t>
     {
@@ -77,12 +77,12 @@ TEST_CASE("wait(lock stop_token predicate) 1 waiter", "[condition_variable]")
     std::cerr << "BEGIN condition_variable wait(lock stop_token predicate) 1 waiter\n";
 
     coro::condition_variable cv{};
-    coro::mutex m{};
-    std::stop_source ss{};
+    coro::mutex              m{};
+    std::stop_source         ss{};
 
     auto make_waiter = [](coro::condition_variable& cv, coro::mutex& m, std::stop_source& ss) -> coro::task<int64_t>
     {
-        auto lk = co_await m.scoped_lock();
+        auto lk     = co_await m.scoped_lock();
         auto result = co_await cv.wait(lk, ss.get_token(), []() -> bool { return false; });
         REQUIRE(result == false);
         co_return 42;
@@ -110,25 +110,32 @@ TEST_CASE("wait(lock predicate) 1 waiter notify_one until predicate passes", "[c
 {
     std::cerr << "BEGIN condition_variable wait(lock predicate) 1 waiter notify_one until predicate passes\n";
 
-    auto s = coro::io_scheduler::make_unique(coro::io_scheduler::options{
-            .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
+    auto                     s = coro::io_scheduler::make_unique(coro::io_scheduler::options{
+                            .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
     coro::condition_variable cv{};
-    coro::mutex m{};
-    std::atomic<int64_t> counter{0};
-    std::atomic<int64_t> predicate_called{0};
+    coro::mutex              m{};
+    std::atomic<int64_t>     counter{0};
+    std::atomic<int64_t>     predicate_called{0};
 
-    auto make_waiter = [](coro::condition_variable& cv, coro::mutex& m, std::atomic<int64_t>& counter, std::atomic<int64_t>& predicate_called) -> coro::task<int64_t>
+    auto make_waiter = [](coro::condition_variable& cv,
+                          coro::mutex&              m,
+                          std::atomic<int64_t>&     counter,
+                          std::atomic<int64_t>&     predicate_called) -> coro::task<int64_t>
     {
         auto lk = co_await m.scoped_lock();
-        co_await cv.wait(lk, [&counter, &predicate_called]() -> bool
-        {
-            predicate_called++;
-            return counter == 1;
-        });
+        co_await cv.wait(
+            lk,
+            [&counter, &predicate_called]() -> bool
+            {
+                predicate_called++;
+                return counter == 1;
+            });
         co_return 42;
     };
 
-    auto make_notifier = [](std::unique_ptr<coro::io_scheduler>& s, coro::condition_variable& cv, std::atomic<int64_t>& counter) -> coro::task<int64_t>
+    auto make_notifier = [](std::unique_ptr<coro::io_scheduler>& s,
+                            coro::condition_variable&            cv,
+                            std::atomic<int64_t>&                counter) -> coro::task<int64_t>
     {
         co_await s->yield_for(std::chrono::milliseconds{10});
         co_await cv.notify_one(); // The predicate will not pass
@@ -137,7 +144,8 @@ TEST_CASE("wait(lock predicate) 1 waiter notify_one until predicate passes", "[c
         co_return 0;
     };
 
-    auto results = coro::sync_wait(coro::when_all(make_waiter(cv, m, counter, predicate_called), make_notifier(s, cv, counter)));
+    auto results =
+        coro::sync_wait(coro::when_all(make_waiter(cv, m, counter, predicate_called), make_notifier(s, cv, counter)));
     REQUIRE(std::get<0>(results).return_value() == 42);
     REQUIRE(std::get<1>(results).return_value() == 0);
 
@@ -154,25 +162,32 @@ TEST_CASE("wait(lock predicate) 1 waiter predicate notify_all until predicate pa
 {
     std::cerr << "BEGIN condition_variable wait(lock predicate) 1 waiter predicate notify_all until predicate passes\n";
 
-    auto s = coro::io_scheduler::make_unique(coro::io_scheduler::options{
-            .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
+    auto                     s = coro::io_scheduler::make_unique(coro::io_scheduler::options{
+                            .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
     coro::condition_variable cv{};
-    coro::mutex m{};
-    std::atomic<int64_t> counter{0};
-    std::atomic<int64_t> predicate_called{0};
+    coro::mutex              m{};
+    std::atomic<int64_t>     counter{0};
+    std::atomic<int64_t>     predicate_called{0};
 
-    auto make_waiter = [](coro::condition_variable& cv, coro::mutex& m, std::atomic<int64_t>& counter, std::atomic<int64_t>& predicate_called) -> coro::task<int64_t>
+    auto make_waiter = [](coro::condition_variable& cv,
+                          coro::mutex&              m,
+                          std::atomic<int64_t>&     counter,
+                          std::atomic<int64_t>&     predicate_called) -> coro::task<int64_t>
     {
         auto lk = co_await m.scoped_lock();
-        co_await cv.wait(lk, [&counter, &predicate_called]() -> bool
-        {
-            predicate_called++;
-            return counter == 1;
-        });
+        co_await cv.wait(
+            lk,
+            [&counter, &predicate_called]() -> bool
+            {
+                predicate_called++;
+                return counter == 1;
+            });
         co_return 42;
     };
 
-    auto make_notifier = [](std::unique_ptr<coro::io_scheduler>& s, coro::condition_variable& cv, std::atomic<int64_t>& counter) -> coro::task<int64_t>
+    auto make_notifier = [](std::unique_ptr<coro::io_scheduler>& s,
+                            coro::condition_variable&            cv,
+                            std::atomic<int64_t>&                counter) -> coro::task<int64_t>
     {
         co_await s->yield_for(std::chrono::milliseconds{10});
         co_await cv.notify_all(); // The predicate will not pass
@@ -181,7 +196,8 @@ TEST_CASE("wait(lock predicate) 1 waiter predicate notify_all until predicate pa
         co_return 0;
     };
 
-    auto results = coro::sync_wait(coro::when_all(make_waiter(cv, m, counter, predicate_called), make_notifier(s, cv, counter)));
+    auto results =
+        coro::sync_wait(coro::when_all(make_waiter(cv, m, counter, predicate_called), make_notifier(s, cv, counter)));
     REQUIRE(std::get<0>(results).return_value() == 42);
     REQUIRE(std::get<1>(results).return_value() == 0);
 
@@ -198,15 +214,19 @@ TEST_CASE("wait(lock) 3 waiters notify_one", "[condition_variable]")
 {
     std::cerr << "BEGIN condition_variable wait(lock) 3 waiters notify_one\n";
 
-    auto s = coro::io_scheduler::make_unique(coro::io_scheduler::options{
-            .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
+    auto                     s = coro::io_scheduler::make_unique(coro::io_scheduler::options{
+                            .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
     coro::condition_variable cv{};
-    coro::mutex m{};
-    coro::event e1{};
-    coro::event e2{};
-    coro::event e3{};
+    coro::mutex              m{};
+    coro::event              e1{};
+    coro::event              e2{};
+    coro::event              e3{};
 
-    auto make_waiter = [](std::unique_ptr<coro::io_scheduler>& s, coro::condition_variable& cv, coro::mutex& m, coro::event& e, int64_t r) -> coro::task<int64_t>
+    auto make_waiter = [](std::unique_ptr<coro::io_scheduler>& s,
+                          coro::condition_variable&            cv,
+                          coro::mutex&                         m,
+                          coro::event&                         e,
+                          int64_t                              r) -> coro::task<int64_t>
     {
         co_await s->schedule();
         auto lk = co_await m.scoped_lock();
@@ -215,7 +235,8 @@ TEST_CASE("wait(lock) 3 waiters notify_one", "[condition_variable]")
         co_return r;
     };
 
-    auto make_notifier = [](std::unique_ptr<coro::io_scheduler>& s, coro::condition_variable& cv, coro::event& e) -> coro::task<int64_t>
+    auto make_notifier =
+        [](std::unique_ptr<coro::io_scheduler>& s, coro::condition_variable& cv, coro::event& e) -> coro::task<int64_t>
     {
         co_await s->schedule_after(std::chrono::milliseconds{10});
         co_await e;
@@ -241,24 +262,25 @@ TEST_CASE("wait(lock predicate) 3 waiters predicate notify_one", "[condition_var
 {
     std::cerr << "BEGIN condition_variable wait(lock predicate) 3 waiters predicate notify_one\n";
 
-    auto s = coro::io_scheduler::make_unique(coro::io_scheduler::options{
-            .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
+    auto                     s = coro::io_scheduler::make_unique(coro::io_scheduler::options{
+                            .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
     coro::condition_variable cv{};
-    coro::mutex m{};
-    std::atomic<int64_t> e{0};
+    coro::mutex              m{};
+    std::atomic<int64_t>     e{0};
 
-    auto make_waiter = [](coro::condition_variable& cv, coro::mutex& m, std::atomic<int64_t>& e, int64_t r) -> coro::task<int64_t>
+    auto make_waiter =
+        [](coro::condition_variable& cv, coro::mutex& m, std::atomic<int64_t>& e, int64_t r) -> coro::task<int64_t>
     {
         auto lk = co_await m.scoped_lock();
-        co_await cv.wait(lk, [&e]() -> bool
-        {
-            return e > 0;
-        });
+        co_await cv.wait(lk, [&e]() -> bool { return e > 0; });
         e--;
         co_return r;
     };
 
-    auto make_notifier = [](std::unique_ptr<coro::io_scheduler>& s, coro::condition_variable& cv, coro::mutex& m, std::atomic<int64_t>& e) -> coro::task<int64_t>
+    auto make_notifier = [](std::unique_ptr<coro::io_scheduler>& s,
+                            coro::condition_variable&            cv,
+                            coro::mutex&                         m,
+                            std::atomic<int64_t>&                e) -> coro::task<int64_t>
     {
         co_await s->schedule_after(std::chrono::milliseconds{10});
         {
@@ -287,14 +309,18 @@ TEST_CASE("wait(lock) 3 waiters notify_all", "[condition_variable]")
 {
     std::cerr << "BEGIN condition_variable wait(lock) 3 waiters notify_all\n";
 
-    auto s = coro::io_scheduler::make_unique(coro::io_scheduler::options{
-            .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
+    auto                     s = coro::io_scheduler::make_unique(coro::io_scheduler::options{
+                            .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
     coro::condition_variable cv{};
-    coro::mutex m{};
-    coro::latch l{3};
-    coro::event e{};
+    coro::mutex              m{};
+    coro::latch              l{3};
+    coro::event              e{};
 
-    auto make_waiter = [](std::unique_ptr<coro::io_scheduler>& s, coro::condition_variable& cv, coro::mutex& m, coro::latch& l, int64_t r) -> coro::task<int64_t>
+    auto make_waiter = [](std::unique_ptr<coro::io_scheduler>& s,
+                          coro::condition_variable&            cv,
+                          coro::mutex&                         m,
+                          coro::latch&                         l,
+                          int64_t                              r) -> coro::task<int64_t>
     {
         co_await s->schedule();
         auto lk = co_await m.scoped_lock();
@@ -303,7 +329,8 @@ TEST_CASE("wait(lock) 3 waiters notify_all", "[condition_variable]")
         co_return r;
     };
 
-    auto make_all_waiting = [](std::unique_ptr<coro::io_scheduler>& s, coro::latch& l, coro::event& e) -> coro::task<int64_t>
+    auto make_all_waiting =
+        [](std::unique_ptr<coro::io_scheduler>& s, coro::latch& l, coro::event& e) -> coro::task<int64_t>
     {
         co_await s->schedule();
         co_await l;
@@ -311,7 +338,8 @@ TEST_CASE("wait(lock) 3 waiters notify_all", "[condition_variable]")
         co_return 0;
     };
 
-    auto make_notify_all = [](std::unique_ptr<coro::io_scheduler>& s, coro::condition_variable& cv, coro::event& e) -> coro::task<int64_t>
+    auto make_notify_all =
+        [](std::unique_ptr<coro::io_scheduler>& s, coro::condition_variable& cv, coro::event& e) -> coro::task<int64_t>
     {
         co_await e;
         co_await s->schedule_after(std::chrono::milliseconds{10});
@@ -336,14 +364,18 @@ TEST_CASE("wait(lock predicate) 3 waiters predicate notify_all", "[condition_var
 {
     std::cerr << "BEGIN condition_variable wait(lock predicate) 3 waiters predicate notify_all\n";
 
-    auto s = coro::io_scheduler::make_unique(coro::io_scheduler::options{
-            .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
+    auto                     s = coro::io_scheduler::make_unique(coro::io_scheduler::options{
+                            .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
     coro::condition_variable cv{};
-    coro::mutex m{};
-    coro::latch l{3};
-    coro::event e{};
+    coro::mutex              m{};
+    coro::latch              l{3};
+    coro::event              e{};
 
-    auto make_waiter = [](std::unique_ptr<coro::io_scheduler>& s, coro::condition_variable& cv, coro::mutex& m, coro::latch& l, int64_t r) -> coro::task<int64_t>
+    auto make_waiter = [](std::unique_ptr<coro::io_scheduler>& s,
+                          coro::condition_variable&            cv,
+                          coro::mutex&                         m,
+                          coro::latch&                         l,
+                          int64_t                              r) -> coro::task<int64_t>
     {
         int64_t called{0};
         co_await s->schedule();
@@ -353,7 +385,8 @@ TEST_CASE("wait(lock predicate) 3 waiters predicate notify_all", "[condition_var
         co_return r;
     };
 
-    auto make_all_waiting = [](std::unique_ptr<coro::io_scheduler>& s, coro::latch& l, coro::event& e) -> coro::task<int64_t>
+    auto make_all_waiting =
+        [](std::unique_ptr<coro::io_scheduler>& s, coro::latch& l, coro::event& e) -> coro::task<int64_t>
     {
         co_await s->schedule();
         co_await l;
@@ -361,7 +394,8 @@ TEST_CASE("wait(lock predicate) 3 waiters predicate notify_all", "[condition_var
         co_return 0;
     };
 
-    auto make_notify_all = [](std::unique_ptr<coro::io_scheduler>& s, coro::condition_variable& cv, coro::event& e) -> coro::task<int64_t>
+    auto make_notify_all =
+        [](std::unique_ptr<coro::io_scheduler>& s, coro::condition_variable& cv, coro::event& e) -> coro::task<int64_t>
     {
         co_await e;
         co_await s->schedule_after(std::chrono::milliseconds{10});
@@ -382,30 +416,42 @@ TEST_CASE("wait(lock predicate) 3 waiters predicate notify_all", "[condition_var
     std::cerr << "END condition_variable wait(lock predicate) 3 waiters predicate notify_all\n";
 }
 
-TEST_CASE("wait_for(s lock duration predicate) 1 waiter predicate notify_one until predicate passes", "[condition_variable]")
+TEST_CASE(
+    "wait_for(s lock duration predicate) 1 waiter predicate notify_one until predicate passes", "[condition_variable]")
 {
-    std::cerr << "BEGIN condition_variable wait_for(s lock duration predicate) 1 waiter predicate notify_one until predicate passes\n";
+    std::cerr
+        << "BEGIN condition_variable wait_for(s lock duration predicate) 1 waiter predicate notify_one until predicate passes\n";
 
-    auto s = coro::io_scheduler::make_unique(coro::io_scheduler::options{
-            .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
+    auto                     s = coro::io_scheduler::make_unique(coro::io_scheduler::options{
+                            .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
     coro::condition_variable cv{};
-    coro::mutex m{};
-    std::atomic<int64_t> counter{0};
-    std::atomic<int64_t> predicate_called{0};
+    coro::mutex              m{};
+    std::atomic<int64_t>     counter{0};
+    std::atomic<int64_t>     predicate_called{0};
 
-    auto make_waiter = [](std::unique_ptr<coro::io_scheduler>& s, coro::condition_variable& cv, coro::mutex& m, std::atomic<int64_t>& counter, std::atomic<int64_t>& predicate_called) -> coro::task<int64_t>
+    auto make_waiter = [](std::unique_ptr<coro::io_scheduler>& s,
+                          coro::condition_variable&            cv,
+                          coro::mutex&                         m,
+                          std::atomic<int64_t>&                counter,
+                          std::atomic<int64_t>&                predicate_called) -> coro::task<int64_t>
     {
-        auto lk = co_await m.scoped_lock();
-        auto status = co_await cv.wait_for(s, lk, std::chrono::milliseconds{50}, [&counter, &predicate_called]() -> bool
-        {
-            predicate_called++;
-            return counter == 1;
-        });
+        auto lk     = co_await m.scoped_lock();
+        auto status = co_await cv.wait_for(
+            s,
+            lk,
+            std::chrono::milliseconds{50},
+            [&counter, &predicate_called]() -> bool
+            {
+                predicate_called++;
+                return counter == 1;
+            });
         REQUIRE(status == true);
         co_return 42;
     };
 
-    auto make_notifier = [](std::unique_ptr<coro::io_scheduler>& s, coro::condition_variable& cv, std::atomic<int64_t>& counter) -> coro::task<int64_t>
+    auto make_notifier = [](std::unique_ptr<coro::io_scheduler>& s,
+                            coro::condition_variable&            cv,
+                            std::atomic<int64_t>&                counter) -> coro::task<int64_t>
     {
         co_await s->yield_for(std::chrono::milliseconds{10});
         co_await cv.notify_one(); // The predicate will not pass
@@ -414,7 +460,8 @@ TEST_CASE("wait_for(s lock duration predicate) 1 waiter predicate notify_one unt
         co_return 0;
     };
 
-    auto results = coro::sync_wait(coro::when_all(make_waiter(s, cv, m, counter, predicate_called), make_notifier(s, cv, counter)));
+    auto results = coro::sync_wait(
+        coro::when_all(make_waiter(s, cv, m, counter, predicate_called), make_notifier(s, cv, counter)));
     REQUIRE(std::get<0>(results).return_value() == 42);
     REQUIRE(std::get<1>(results).return_value() == 0);
 
@@ -424,27 +471,29 @@ TEST_CASE("wait_for(s lock duration predicate) 1 waiter predicate notify_one unt
     // 3) On the final notify_all() when the counter is now 1.
     REQUIRE(predicate_called == 3);
 
-    std::cerr << "END condition_variable wait_for(s lock duration predicate) 1 waiter predicate notify_one until predicate passes\n";
+    std::cerr
+        << "END condition_variable wait_for(s lock duration predicate) 1 waiter predicate notify_one until predicate passes\n";
 }
 
 TEST_CASE("wait_for(s lock duration) 1 waiter no_timeout", "[condition_variable]")
 {
     std::cerr << "BEGIN condition_variable wait_for(s lock duration) 1 waiter no_timeout\n";
 
-    auto s = coro::io_scheduler::make_unique(coro::io_scheduler::options{
-            .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
+    auto                     s = coro::io_scheduler::make_unique(coro::io_scheduler::options{
+                            .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
     coro::condition_variable cv{};
-    coro::mutex m{};
+    coro::mutex              m{};
 
-    auto make_waiter = [](std::unique_ptr<coro::io_scheduler>& s, coro::condition_variable& cv, coro::mutex& m) -> coro::task<int64_t>
+    auto make_waiter =
+        [](std::unique_ptr<coro::io_scheduler>& s, coro::condition_variable& cv, coro::mutex& m) -> coro::task<int64_t>
     {
-        auto lk = co_await m.scoped_lock();
+        auto lk     = co_await m.scoped_lock();
         auto status = co_await cv.wait_for(s, lk, std::chrono::milliseconds{50});
         REQUIRE(status == std::cv_status::no_timeout);
         co_return (status == std::cv_status::no_timeout) ? 1 : -1;
     };
 
-    auto make_notifier = [](std::unique_ptr<coro::io_scheduler> &s, coro::condition_variable& cv) -> coro::task<int64_t>
+    auto make_notifier = [](std::unique_ptr<coro::io_scheduler>& s, coro::condition_variable& cv) -> coro::task<int64_t>
     {
         co_await s->yield_for(std::chrono::milliseconds{10});
         co_await cv.notify_one();
@@ -462,21 +511,26 @@ TEST_CASE("wait_for(s lock duration predicate) 1 waiter predicate no_timeout", "
 {
     std::cerr << "BEGIN condition_variable wait_for(s lock duration predicate) 1 waiter predicate no_timeout\n";
 
-    auto s = coro::io_scheduler::make_unique(coro::io_scheduler::options{
-            .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
+    auto                     s = coro::io_scheduler::make_unique(coro::io_scheduler::options{
+                            .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
     coro::condition_variable cv{};
-    coro::mutex m{};
-    std::atomic<int64_t> c{0};
+    coro::mutex              m{};
+    std::atomic<int64_t>     c{0};
 
-    auto make_waiter = [](std::unique_ptr<coro::io_scheduler> &s, coro::condition_variable& cv, coro::mutex& m, std::atomic<int64_t>& c) -> coro::task<int64_t>
+    auto make_waiter = [](std::unique_ptr<coro::io_scheduler>& s,
+                          coro::condition_variable&            cv,
+                          coro::mutex&                         m,
+                          std::atomic<int64_t>&                c) -> coro::task<int64_t>
     {
-        auto lk = co_await m.scoped_lock();
+        auto lk     = co_await m.scoped_lock();
         auto status = co_await cv.wait_for(s, lk, std::chrono::milliseconds{50}, [&c]() -> bool { return c == 1; });
         REQUIRE(status == true);
         co_return (status) ? 1 : -1;
     };
 
-    auto make_notifier = [](std::unique_ptr<coro::io_scheduler> &s, coro::condition_variable& cv, std::atomic<int64_t>& c) -> coro::task<int64_t>
+    auto make_notifier = [](std::unique_ptr<coro::io_scheduler>& s,
+                            coro::condition_variable&            cv,
+                            std::atomic<int64_t>&                c) -> coro::task<int64_t>
     {
         co_await s->yield_for(std::chrono::milliseconds{10});
         c++;
@@ -491,26 +545,33 @@ TEST_CASE("wait_for(s lock duration predicate) 1 waiter predicate no_timeout", "
     std::cerr << "END condition_variable wait_for(s lock duration predicate) 1 waiter predicate no_timeout\n";
 }
 
-TEST_CASE("wait_for(s lock stop_token duration predicate) 1 waiter predicate stop_token no_timeout", "[condition_variable]")
+TEST_CASE(
+    "wait_for(s lock stop_token duration predicate) 1 waiter predicate stop_token no_timeout", "[condition_variable]")
 {
-    std::cerr << "BEGIN condition_variable wait_for(s lock stop_token duration predicate) 1 waiter predicate stop_token no_timeout\n";
+    std::cerr
+        << "BEGIN condition_variable wait_for(s lock stop_token duration predicate) 1 waiter predicate stop_token no_timeout\n";
 
-    auto s = coro::io_scheduler::make_unique(coro::io_scheduler::options{
-            .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
+    auto                     s = coro::io_scheduler::make_unique(coro::io_scheduler::options{
+                            .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
     coro::condition_variable cv{};
-    coro::mutex m{};
-    std::stop_source ss{};
+    coro::mutex              m{};
+    std::stop_source         ss{};
 
-    auto make_waiter = [](std::unique_ptr<coro::io_scheduler> &s, coro::condition_variable& cv, coro::mutex& m, std::stop_source& ss) -> coro::task<int64_t>
+    auto make_waiter = [](std::unique_ptr<coro::io_scheduler>& s,
+                          coro::condition_variable&            cv,
+                          coro::mutex&                         m,
+                          std::stop_source&                    ss) -> coro::task<int64_t>
     {
-
-        auto lk = co_await m.scoped_lock();
-        auto status = co_await cv.wait_for(s, lk, ss.get_token(), std::chrono::milliseconds{50}, [&ss]() -> bool { return ss.stop_requested(); });
+        auto lk     = co_await m.scoped_lock();
+        auto status = co_await cv.wait_for(
+            s, lk, ss.get_token(), std::chrono::milliseconds{50}, [&ss]() -> bool { return ss.stop_requested(); });
         REQUIRE(status == true);
         co_return (status) ? 1 : -1;
     };
 
-    auto make_notifier = [](std::unique_ptr<coro::io_scheduler>& s, coro::condition_variable& cv, std::stop_source& ss) -> coro::task<int64_t>
+    auto make_notifier = [](std::unique_ptr<coro::io_scheduler>& s,
+                            coro::condition_variable&            cv,
+                            std::stop_source&                    ss) -> coro::task<int64_t>
     {
         co_await s->yield_for(std::chrono::milliseconds{10});
         ss.request_stop();
@@ -522,28 +583,29 @@ TEST_CASE("wait_for(s lock stop_token duration predicate) 1 waiter predicate sto
     REQUIRE(std::get<0>(results).return_value() == 1);
     REQUIRE(std::get<1>(results).return_value() == 0);
 
-    std::cerr << "END condition_variable wait_for(s lock stop_token duration predicate) 1 waiter predicate stop_token no_timeout\n";
+    std::cerr
+        << "END condition_variable wait_for(s lock stop_token duration predicate) 1 waiter predicate stop_token no_timeout\n";
 }
-
 
 TEST_CASE("wait_for(s lock duration) 1 waiter timeout", "[condition_variable]")
 {
     std::cerr << "BEGIN condition_variable wait_for(s lock duration) 1 waiter timeout\n";
 
-    auto s = coro::io_scheduler::make_unique(coro::io_scheduler::options{
-            .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
+    auto                     s = coro::io_scheduler::make_unique(coro::io_scheduler::options{
+                            .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
     coro::condition_variable cv{};
-    coro::mutex m{};
+    coro::mutex              m{};
 
-    auto make_waiter = [](std::unique_ptr<coro::io_scheduler> &s, coro::condition_variable& cv, coro::mutex& m) -> coro::task<int64_t>
+    auto make_waiter =
+        [](std::unique_ptr<coro::io_scheduler>& s, coro::condition_variable& cv, coro::mutex& m) -> coro::task<int64_t>
     {
-        auto lk = co_await m.scoped_lock();
+        auto lk     = co_await m.scoped_lock();
         auto status = co_await cv.wait_for(s, lk, std::chrono::milliseconds{10});
         REQUIRE(status == std::cv_status::timeout);
         co_return (status == std::cv_status::no_timeout) ? 1 : -1;
     };
 
-    auto make_notifier = [](std::unique_ptr<coro::io_scheduler> &s, coro::condition_variable& cv) -> coro::task<int64_t>
+    auto make_notifier = [](std::unique_ptr<coro::io_scheduler>& s, coro::condition_variable& cv) -> coro::task<int64_t>
     {
         co_await s->yield_for(std::chrono::milliseconds{100});
         co_await cv.notify_one();
@@ -561,21 +623,26 @@ TEST_CASE("wait_for(s lock duration predicate) 1 waiter predicate timeout", "[co
 {
     std::cerr << "BEGIN condition_variable wait_for(s lock duration predicate) 1 waiter predicate timeout\n";
 
-    auto s = coro::io_scheduler::make_unique(coro::io_scheduler::options{
-            .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
+    auto                     s = coro::io_scheduler::make_unique(coro::io_scheduler::options{
+                            .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
     coro::condition_variable cv{};
-    coro::mutex m{};
-    std::atomic<uint64_t> c{0};
+    coro::mutex              m{};
+    std::atomic<uint64_t>    c{0};
 
-    auto make_waiter = [](std::unique_ptr<coro::io_scheduler> &s, coro::condition_variable& cv, coro::mutex& m, std::atomic<uint64_t>& c) -> coro::task<int64_t>
+    auto make_waiter = [](std::unique_ptr<coro::io_scheduler>& s,
+                          coro::condition_variable&            cv,
+                          coro::mutex&                         m,
+                          std::atomic<uint64_t>&               c) -> coro::task<int64_t>
     {
-        auto lk = co_await m.scoped_lock();
+        auto lk     = co_await m.scoped_lock();
         auto status = co_await cv.wait_for(s, lk, std::chrono::milliseconds{10}, [&c]() -> bool { return c == 1; });
         REQUIRE(status == false);
         co_return (status) ? 1 : -1;
     };
 
-    auto make_notifier = [](std::unique_ptr<coro::io_scheduler> &s, coro::condition_variable& cv, std::atomic<uint64_t>& c) -> coro::task<int64_t>
+    auto make_notifier = [](std::unique_ptr<coro::io_scheduler>& s,
+                            coro::condition_variable&            cv,
+                            std::atomic<uint64_t>&               c) -> coro::task<int64_t>
     {
         co_await s->yield_for(std::chrono::milliseconds{50});
         c++;
@@ -594,14 +661,18 @@ TEST_CASE("wait_for(s lock duration) 3 waiters with timeout notify_all no_timeou
 {
     std::cerr << "BEGIN condition_variable wait_for(s lock duration) 3 waiters with timeout notify_all no_timeout\n";
 
-    auto s = coro::io_scheduler::make_unique(coro::io_scheduler::options{
-            .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
+    auto                     s = coro::io_scheduler::make_unique(coro::io_scheduler::options{
+                            .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
     coro::condition_variable cv{};
-    coro::mutex m{};
-    coro::latch l{3};
-    coro::event e{};
+    coro::mutex              m{};
+    coro::latch              l{3};
+    coro::event              e{};
 
-    auto make_waiter = [](std::unique_ptr<coro::io_scheduler> &s, coro::condition_variable& cv, coro::mutex& m, coro::latch& l, int64_t r) -> coro::task<int64_t>
+    auto make_waiter = [](std::unique_ptr<coro::io_scheduler>& s,
+                          coro::condition_variable&            cv,
+                          coro::mutex&                         m,
+                          coro::latch&                         l,
+                          int64_t                              r) -> coro::task<int64_t>
     {
         co_await s->schedule();
         auto lk = co_await m.scoped_lock();
@@ -610,7 +681,8 @@ TEST_CASE("wait_for(s lock duration) 3 waiters with timeout notify_all no_timeou
         co_return (status == std::cv_status::no_timeout) ? r : -r;
     };
 
-    auto make_all_waiting = [](std::unique_ptr<coro::io_scheduler> &s, coro::latch& l, coro::event& e) -> coro::task<int64_t>
+    auto make_all_waiting =
+        [](std::unique_ptr<coro::io_scheduler>& s, coro::latch& l, coro::event& e) -> coro::task<int64_t>
     {
         co_await s->schedule();
         co_await l;
@@ -618,7 +690,8 @@ TEST_CASE("wait_for(s lock duration) 3 waiters with timeout notify_all no_timeou
         co_return 0;
     };
 
-    auto make_notify_all = [](std::unique_ptr<coro::io_scheduler> &s, coro::condition_variable& cv, coro::event& e) -> coro::task<int64_t>
+    auto make_notify_all =
+        [](std::unique_ptr<coro::io_scheduler>& s, coro::condition_variable& cv, coro::event& e) -> coro::task<int64_t>
     {
         co_await s->schedule();
         co_await e;
@@ -643,14 +716,18 @@ TEST_CASE("wait_for(s lock duration) 3 with notify_all timeout", "[condition_var
 {
     std::cerr << "BEGIN condition_variable wait_for(s lock duration) 3 with notify_all timeout\n";
 
-    auto s = coro::io_scheduler::make_unique(coro::io_scheduler::options{
-            .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
+    auto                     s = coro::io_scheduler::make_unique(coro::io_scheduler::options{
+                            .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
     coro::condition_variable cv{};
-    coro::mutex m{};
-    coro::latch l{3};
-    coro::event e{};
+    coro::mutex              m{};
+    coro::latch              l{3};
+    coro::event              e{};
 
-    auto make_waiter = [](std::unique_ptr<coro::io_scheduler> &s, coro::condition_variable& cv, coro::mutex& m, coro::latch& l, int64_t r) -> coro::task<int64_t>
+    auto make_waiter = [](std::unique_ptr<coro::io_scheduler>& s,
+                          coro::condition_variable&            cv,
+                          coro::mutex&                         m,
+                          coro::latch&                         l,
+                          int64_t                              r) -> coro::task<int64_t>
     {
         co_await s->schedule();
         auto lk = co_await m.scoped_lock();
@@ -659,7 +736,8 @@ TEST_CASE("wait_for(s lock duration) 3 with notify_all timeout", "[condition_var
         co_return (status == std::cv_status::no_timeout) ? r : -r;
     };
 
-    auto make_all_waiting = [](std::unique_ptr<coro::io_scheduler> &s, coro::latch& l, coro::event& e) -> coro::task<int64_t>
+    auto make_all_waiting =
+        [](std::unique_ptr<coro::io_scheduler>& s, coro::latch& l, coro::event& e) -> coro::task<int64_t>
     {
         co_await s->schedule();
         co_await l;
@@ -667,7 +745,8 @@ TEST_CASE("wait_for(s lock duration) 3 with notify_all timeout", "[condition_var
         co_return 0;
     };
 
-    auto make_notify_all = [](std::unique_ptr<coro::io_scheduler> &s, coro::condition_variable& cv, coro::event& e) -> coro::task<int64_t>
+    auto make_notify_all =
+        [](std::unique_ptr<coro::io_scheduler>& s, coro::condition_variable& cv, coro::event& e) -> coro::task<int64_t>
     {
         co_await s->schedule();
         co_await e;
@@ -693,21 +772,22 @@ TEST_CASE("wait_until(s lock time_point) 1 waiter no_timeout", "[condition_varia
 {
     std::cerr << "BEGIN condition_variable wait_until(s lock time_point) 1 waiter no_timeout\n";
 
-    auto s = coro::io_scheduler::make_unique(coro::io_scheduler::options{
-            .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
+    auto                     s = coro::io_scheduler::make_unique(coro::io_scheduler::options{
+                            .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
     coro::condition_variable cv{};
-    coro::mutex m{};
+    coro::mutex              m{};
 
-    auto make_waiter = [](std::unique_ptr<coro::io_scheduler> &s, coro::condition_variable& cv, coro::mutex& m) -> coro::task<int64_t>
+    auto make_waiter =
+        [](std::unique_ptr<coro::io_scheduler>& s, coro::condition_variable& cv, coro::mutex& m) -> coro::task<int64_t>
     {
-        auto tp = std::chrono::steady_clock::now() + std::chrono::milliseconds{50};
-        auto lk = co_await m.scoped_lock();
+        auto tp     = std::chrono::steady_clock::now() + std::chrono::milliseconds{50};
+        auto lk     = co_await m.scoped_lock();
         auto status = co_await cv.wait_until(s, lk, tp);
         REQUIRE(status == std::cv_status::no_timeout);
         co_return (status == std::cv_status::no_timeout) ? 1 : -1;
     };
 
-    auto make_notifier = [](std::unique_ptr<coro::io_scheduler> &s, coro::condition_variable& cv) -> coro::task<int64_t>
+    auto make_notifier = [](std::unique_ptr<coro::io_scheduler>& s, coro::condition_variable& cv) -> coro::task<int64_t>
     {
         co_await s->yield_for(std::chrono::milliseconds{10});
         co_await cv.notify_one();
@@ -725,21 +805,22 @@ TEST_CASE("wait_until(s lock time_point) 1 waiter timeout", "[condition_variable
 {
     std::cerr << "BEGIN condition_variable wait_until(s lock time_point) 1 waiter timeout\n";
 
-    auto s = coro::io_scheduler::make_unique(coro::io_scheduler::options{
-            .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
+    auto                     s = coro::io_scheduler::make_unique(coro::io_scheduler::options{
+                            .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
     coro::condition_variable cv{};
-    coro::mutex m{};
+    coro::mutex              m{};
 
-    auto make_waiter = [](std::unique_ptr<coro::io_scheduler> &s, coro::condition_variable& cv, coro::mutex& m) -> coro::task<int64_t>
+    auto make_waiter =
+        [](std::unique_ptr<coro::io_scheduler>& s, coro::condition_variable& cv, coro::mutex& m) -> coro::task<int64_t>
     {
-        auto tp = std::chrono::steady_clock::now() + std::chrono::milliseconds{10};
-        auto lk = co_await m.scoped_lock();
+        auto tp     = std::chrono::steady_clock::now() + std::chrono::milliseconds{10};
+        auto lk     = co_await m.scoped_lock();
         auto status = co_await cv.wait_until(s, lk, tp);
         REQUIRE(status == std::cv_status::timeout);
         co_return (status == std::cv_status::no_timeout) ? 1 : -1;
     };
 
-    auto make_notifier = [](std::unique_ptr<coro::io_scheduler> &s, coro::condition_variable& cv) -> coro::task<int64_t>
+    auto make_notifier = [](std::unique_ptr<coro::io_scheduler>& s, coro::condition_variable& cv) -> coro::task<int64_t>
     {
         co_await s->yield_for(std::chrono::milliseconds{50});
         co_await cv.notify_one();
@@ -757,22 +838,27 @@ TEST_CASE("wait_until(s lock time_point predicate) 1 waiter predicate no_timeout
 {
     std::cerr << "BEGIN condition_variable wait_until(s lock time_point predicate) 1 waiter predicate no_timeout\n";
 
-    auto s = coro::io_scheduler::make_unique(coro::io_scheduler::options{
-            .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
+    auto                     s = coro::io_scheduler::make_unique(coro::io_scheduler::options{
+                            .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
     coro::condition_variable cv{};
-    coro::mutex m{};
-    std::atomic<int64_t> c{0};
+    coro::mutex              m{};
+    std::atomic<int64_t>     c{0};
 
-    auto make_waiter = [](std::unique_ptr<coro::io_scheduler> &s, coro::condition_variable& cv, coro::mutex& m, std::atomic<int64_t>& c) -> coro::task<int64_t>
+    auto make_waiter = [](std::unique_ptr<coro::io_scheduler>& s,
+                          coro::condition_variable&            cv,
+                          coro::mutex&                         m,
+                          std::atomic<int64_t>&                c) -> coro::task<int64_t>
     {
-        auto tp = std::chrono::steady_clock::now() + std::chrono::milliseconds{50};
-        auto lk = co_await m.scoped_lock();
+        auto tp     = std::chrono::steady_clock::now() + std::chrono::milliseconds{50};
+        auto lk     = co_await m.scoped_lock();
         auto status = co_await cv.wait_until(s, lk, tp, [&c]() -> bool { return c == 1; });
         REQUIRE(status == true);
         co_return (status) ? 1 : -1;
     };
 
-    auto make_notifier = [](std::unique_ptr<coro::io_scheduler> &s, coro::condition_variable& cv, std::atomic<int64_t>& c) -> coro::task<int64_t>
+    auto make_notifier = [](std::unique_ptr<coro::io_scheduler>& s,
+                            coro::condition_variable&            cv,
+                            std::atomic<int64_t>&                c) -> coro::task<int64_t>
     {
         co_await s->yield_for(std::chrono::milliseconds{10});
         c++;
@@ -791,22 +877,27 @@ TEST_CASE("wait_until(s lock time_point predicate) 1 waiter predicate timeout", 
 {
     std::cerr << "BEGIN condition_variable wait_until(s lock time_point predicate) 1 waiter predicate timeout\n";
 
-    auto s = coro::io_scheduler::make_unique(coro::io_scheduler::options{
-            .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
+    auto                     s = coro::io_scheduler::make_unique(coro::io_scheduler::options{
+                            .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
     coro::condition_variable cv{};
-    coro::mutex m{};
-    std::atomic<int64_t> c{0};
+    coro::mutex              m{};
+    std::atomic<int64_t>     c{0};
 
-    auto make_waiter = [](std::unique_ptr<coro::io_scheduler> &s, coro::condition_variable& cv, coro::mutex& m, std::atomic<int64_t>& c) -> coro::task<int64_t>
+    auto make_waiter = [](std::unique_ptr<coro::io_scheduler>& s,
+                          coro::condition_variable&            cv,
+                          coro::mutex&                         m,
+                          std::atomic<int64_t>&                c) -> coro::task<int64_t>
     {
-        auto tp = std::chrono::steady_clock::now() + std::chrono::milliseconds{10};
-        auto lk = co_await m.scoped_lock();
+        auto tp     = std::chrono::steady_clock::now() + std::chrono::milliseconds{10};
+        auto lk     = co_await m.scoped_lock();
         auto status = co_await cv.wait_until(s, lk, tp, [&c]() -> bool { return c == 1; });
         REQUIRE(status == false);
         co_return (status) ? 1 : -1;
     };
 
-    auto make_notifier = [](std::unique_ptr<coro::io_scheduler> &s, coro::condition_variable& cv, std::atomic<int64_t>& c) -> coro::task<int64_t>
+    auto make_notifier = [](std::unique_ptr<coro::io_scheduler>& s,
+                            coro::condition_variable&            cv,
+                            std::atomic<int64_t>&                c) -> coro::task<int64_t>
     {
         co_await s->yield_for(std::chrono::milliseconds{50});
         c++;
@@ -821,26 +912,35 @@ TEST_CASE("wait_until(s lock time_point predicate) 1 waiter predicate timeout", 
     std::cerr << "END condition_variable wait_until(s lock time_point predicate) 1 waiter predicate timeout\n";
 }
 
-TEST_CASE("wait_until(s lock stop_token time_point predicate) 1 waiter predicate stop_token no_timeout", "[condition_variable]")
+TEST_CASE(
+    "wait_until(s lock stop_token time_point predicate) 1 waiter predicate stop_token no_timeout",
+    "[condition_variable]")
 {
-    std::cerr << "BEGIN condition_variable wait_until(s lock stop_token time_point predicate) 1 waiter predicate stop_token no_timeout\n";
+    std::cerr
+        << "BEGIN condition_variable wait_until(s lock stop_token time_point predicate) 1 waiter predicate stop_token no_timeout\n";
 
-    auto s = coro::io_scheduler::make_unique(coro::io_scheduler::options{
-            .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
+    auto                     s = coro::io_scheduler::make_unique(coro::io_scheduler::options{
+                            .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
     coro::condition_variable cv{};
-    coro::mutex m{};
-    std::stop_source ss{};
+    coro::mutex              m{};
+    std::stop_source         ss{};
 
-    auto make_waiter = [](std::unique_ptr<coro::io_scheduler> &s, coro::condition_variable& cv, coro::mutex& m, std::stop_source& ss) -> coro::task<int64_t>
+    auto make_waiter = [](std::unique_ptr<coro::io_scheduler>& s,
+                          coro::condition_variable&            cv,
+                          coro::mutex&                         m,
+                          std::stop_source&                    ss) -> coro::task<int64_t>
     {
         auto tp = std::chrono::steady_clock::now() + std::chrono::milliseconds{50};
         auto lk = co_await m.scoped_lock();
-        auto status = co_await cv.wait_until(s, lk, ss.get_token(), tp, [&ss]() -> bool { return ss.stop_requested(); });
+        auto status =
+            co_await cv.wait_until(s, lk, ss.get_token(), tp, [&ss]() -> bool { return ss.stop_requested(); });
         REQUIRE(status == true);
         co_return (status) ? 1 : -1;
     };
 
-    auto make_notifier = [](std::unique_ptr<coro::io_scheduler> &s, coro::condition_variable& cv, std::stop_source& ss) -> coro::task<int64_t>
+    auto make_notifier = [](std::unique_ptr<coro::io_scheduler>& s,
+                            coro::condition_variable&            cv,
+                            std::stop_source&                    ss) -> coro::task<int64_t>
     {
         co_await s->yield_for(std::chrono::milliseconds{10});
         ss.request_stop();
@@ -852,29 +952,38 @@ TEST_CASE("wait_until(s lock stop_token time_point predicate) 1 waiter predicate
     REQUIRE(std::get<0>(results).return_value() == 1);
     REQUIRE(std::get<1>(results).return_value() == 0);
 
-    std::cerr << "END condition_variable wait_until(s lock stop_token time_point predicate) 1 waiter predicate stop_token no_timeout\n";
+    std::cerr
+        << "END condition_variable wait_until(s lock stop_token time_point predicate) 1 waiter predicate stop_token no_timeout\n";
 }
 
-TEST_CASE("wait_until(s lock stop_token time_point predicate) 1 waiter predicate stop_token timeout", "[condition_variable]")
+TEST_CASE(
+    "wait_until(s lock stop_token time_point predicate) 1 waiter predicate stop_token timeout", "[condition_variable]")
 {
-    std::cerr << "BEGIN condition_variable wait_until(s lock stop_token time_point predicate) 1 waiter predicate stop_token no_timeout\n";
+    std::cerr
+        << "BEGIN condition_variable wait_until(s lock stop_token time_point predicate) 1 waiter predicate stop_token no_timeout\n";
 
-    auto s = coro::io_scheduler::make_unique(coro::io_scheduler::options{
-            .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
+    auto                     s = coro::io_scheduler::make_unique(coro::io_scheduler::options{
+                            .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
     coro::condition_variable cv{};
-    coro::mutex m{};
-    std::stop_source ss{};
+    coro::mutex              m{};
+    std::stop_source         ss{};
 
-    auto make_waiter = [](std::unique_ptr<coro::io_scheduler> &s, coro::condition_variable& cv, coro::mutex& m, std::stop_source& ss) -> coro::task<int64_t>
+    auto make_waiter = [](std::unique_ptr<coro::io_scheduler>& s,
+                          coro::condition_variable&            cv,
+                          coro::mutex&                         m,
+                          std::stop_source&                    ss) -> coro::task<int64_t>
     {
         auto tp = std::chrono::steady_clock::now() + std::chrono::milliseconds{10};
         auto lk = co_await m.scoped_lock();
-        auto status = co_await cv.wait_until(s, lk, ss.get_token(), tp, [&ss]() -> bool { return ss.stop_requested(); });
+        auto status =
+            co_await cv.wait_until(s, lk, ss.get_token(), tp, [&ss]() -> bool { return ss.stop_requested(); });
         REQUIRE(status == false);
         co_return (status) ? 1 : -1;
     };
 
-    auto make_notifier = [](std::unique_ptr<coro::io_scheduler> &s, coro::condition_variable& cv, std::stop_source& ss) -> coro::task<int64_t>
+    auto make_notifier = [](std::unique_ptr<coro::io_scheduler>& s,
+                            coro::condition_variable&            cv,
+                            std::stop_source&                    ss) -> coro::task<int64_t>
     {
         co_await s->yield_for(std::chrono::milliseconds{50});
         ss.request_stop();
@@ -886,23 +995,29 @@ TEST_CASE("wait_until(s lock stop_token time_point predicate) 1 waiter predicate
     REQUIRE(std::get<0>(results).return_value() == -1);
     REQUIRE(std::get<1>(results).return_value() == 0);
 
-    std::cerr << "END condition_variable wait_until(s lock stop_token time_point predicate) 1 waiter predicate stop_token no_timeout\n";
+    std::cerr
+        << "END condition_variable wait_until(s lock stop_token time_point predicate) 1 waiter predicate stop_token no_timeout\n";
 }
 
 TEST_CASE("notify_all(executor)", "[condition_variable]")
 {
     std::cerr << "BEGIN condition_variable notify_all(executor)\n";
 
-    auto s = coro::io_scheduler::make_unique();
+    auto                     s = coro::io_scheduler::make_unique();
     coro::condition_variable cv{};
-    coro::mutex m{};
-    coro::latch ready{10};
+    coro::mutex              m{};
+    coro::latch              ready{10};
 
-    auto make_waiter = [](std::unique_ptr<coro::io_scheduler>& s, coro::condition_variable& cv, coro::mutex& m, coro::latch& ready, uint64_t id) -> coro::task<int64_t>
+    auto make_waiter = [](std::unique_ptr<coro::io_scheduler>& s,
+                          coro::condition_variable&            cv,
+                          coro::mutex&                         m,
+                          coro::latch&                         ready,
+                          uint64_t                             id) -> coro::task<int64_t>
     {
         {
             auto lk = co_await m.scoped_lock();
-            ready.count_down(s); // schedule on the executor so this coroutine doesn't transfer directly to the notifier.
+            ready.count_down(
+                s); // schedule on the executor so this coroutine doesn't transfer directly to the notifier.
             std::cerr << "waiter" << id << " waiting\n";
             co_await cv.wait(lk);
             std::cerr << "waiter" << id << " notified\n";
@@ -910,7 +1025,10 @@ TEST_CASE("notify_all(executor)", "[condition_variable]")
         co_return id;
     };
 
-    auto make_notifier = [](std::unique_ptr<coro::io_scheduler>& s, coro::condition_variable& cv, coro::mutex& m, coro::latch& ready) -> coro::task<int64_t>
+    auto make_notifier = [](std::unique_ptr<coro::io_scheduler>& s,
+                            coro::condition_variable&            cv,
+                            coro::mutex&                         m,
+                            coro::latch&                         ready) -> coro::task<int64_t>
     {
         // Make sure all waiters have acquired the mutex and are waiting on the condition variable.
         // The latch isn't quite enough to guarantee it, but its close, the lock is acquired as it will be
@@ -934,13 +1052,12 @@ TEST_CASE("notify_all(executor)", "[condition_variable]")
         make_waiter(s, cv, m, ready, 3),
         make_waiter(s, cv, m, ready, 4),
         make_waiter(s, cv, m, ready, 5),
-        make_waiter(s,cv, m, ready, 6),
-        make_waiter(s, cv , m, ready, 7),
-        make_waiter(s, cv , m, ready, 8),
+        make_waiter(s, cv, m, ready, 6),
+        make_waiter(s, cv, m, ready, 7),
+        make_waiter(s, cv, m, ready, 8),
         make_waiter(s, cv, m, ready, 9),
         make_waiter(s, cv, m, ready, 10),
-        make_notifier(s, cv, m, ready)
-    ));
+        make_notifier(s, cv, m, ready)));
 
     uint64_t counter{0};
     std::apply([&counter](auto&&... tasks) -> void { ((counter += tasks.return_value()), ...); }, results);
@@ -956,16 +1073,17 @@ TEST_CASE("notify_one(executor)", "[condition_variable]")
     struct Args
     {
         std::unique_ptr<coro::io_scheduler> sched = coro::io_scheduler::make_unique();
-        coro::condition_variable cv{};
-        coro::mutex m{};
-        std::atomic<int64_t> counter{0};
+        coro::condition_variable            cv{};
+        coro::mutex                         m{};
+        std::atomic<int64_t>                counter{0};
     };
 
     using namespace std::chrono_literals;
 
     Args args;
 
-    auto task = [](Args& a) -> coro::task<void> {
+    auto task = [](Args& a) -> coro::task<void>
+    {
         co_await a.sched->schedule();
         {
             auto lk = co_await a.m.scoped_lock();
@@ -981,7 +1099,8 @@ TEST_CASE("notify_one(executor)", "[condition_variable]")
         co_return;
     };
 
-    auto starter = [](Args& a) -> coro::task<void> {
+    auto starter = [](Args& a) -> coro::task<void>
+    {
         co_await a.sched->schedule_after(20ms);
 
         // Suppose we received a portion of data designed for parallel processing in n = 5 coroutine,
@@ -989,21 +1108,16 @@ TEST_CASE("notify_one(executor)", "[condition_variable]")
         // When trying to wake n coroutine, only one will wake up,
         // because this coroutine is busy and does not plan to fall asleep
         // (thereby returning to cv.notify_one() to awaken other coroutines)
-        a.cv.notify_one(a.sched);
-        a.cv.notify_one(a.sched);
-        a.cv.notify_one(a.sched);
-        a.cv.notify_one(a.sched);
-        a.cv.notify_one(a.sched);
+        a.sched->spawn(a.cv.notify_one());
+        a.sched->spawn(a.cv.notify_one());
+        a.sched->spawn(a.cv.notify_one());
+        a.sched->spawn(a.cv.notify_one());
+        a.sched->spawn(a.cv.notify_one());
         co_return;
     };
 
     // in this scenario only one thread will wake up instead of 5 as intended
-    coro::sync_wait(coro::when_all(task(args),
-                                   task(args),
-                                   task(args),
-                                   task(args),
-                                   task(args),
-                                   starter(args)));
+    coro::sync_wait(coro::when_all(task(args), task(args), task(args), task(args), task(args), starter(args)));
 
     REQUIRE(args.counter == 5);
 
