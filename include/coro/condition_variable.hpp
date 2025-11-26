@@ -387,6 +387,7 @@ public:
 
         co_await m_notify_mutex.scoped_lock();
         auto* waiter = detail::awaiter_list_pop_all(m_awaiters);
+        notify_tasks.reserve(detail::awaiter_list_size(waiter));
 
         while (waiter != nullptr)
         {
