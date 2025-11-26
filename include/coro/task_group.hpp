@@ -3,6 +3,7 @@
 #include "coro/concepts/executor.hpp"
 #include "coro/detail/task_self_deleting.hpp"
 #include "coro/event.hpp"
+#include "coro/latch.hpp"
 #include "coro/task.hpp"
 
 #include <atomic>
