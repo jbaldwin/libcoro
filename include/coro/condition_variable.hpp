@@ -1,13 +1,11 @@
 #pragma once
 
 #include "coro/concepts/executor.hpp"
-#include "coro/concepts/range_of.hpp"
 #include "coro/detail/awaiter_list.hpp"
 #include "coro/detail/task_self_deleting.hpp"
 #include "coro/event.hpp"
 #include "coro/mutex.hpp"
 #include "coro/task.hpp"
-#include "coro/task_group.hpp"
 #include "coro/when_all.hpp"
 
 #include <atomic>
@@ -392,12 +390,11 @@ public:
 
         while (waiter != nullptr)
         {
-            notify_tasks.emplace_back(make_notify_all_executor_individual_task(waiter));
+            notify_tasks.emplace_back(make_notify_all_executor_individual_task(executor, waiter));
             waiter = waiter->m_next;
         }
 
-        coro::task_group group{executor, std::move(notify_tasks)};
-        co_await group;
+        co_await coro::when_all(std::move(notify_tasks));
         co_return;
     }
 
@@ -548,8 +545,11 @@ private:
     /// @brief mutual exclusion for notification/arrival
     coro::mutex m_notify_mutex;
 
-    auto make_notify_all_executor_individual_task(awaiter_base* waiter) -> coro::task<void>
+    template<coro::concepts::executor executor_type>
+    auto make_notify_all_executor_individual_task(std::unique_ptr<executor_type>& executor, awaiter_base* waiter)
+        -> coro::task<void>
     {
+        co_await executor->schedule();
         // Precondition: m_notify_mutex is held.
         switch (co_await waiter->on_notify())
         {
@@ -560,6 +560,8 @@ private:
             case notify_status_t::ready:
             case notify_status_t::awaiter_dead:
                 // Don't re-enqueue any awaiters that are ready or dead.
+                break;
+            default:
                 break;
         }
     }
