@@ -94,7 +94,7 @@ auto thread_pool::shutdown() noexcept -> void
 
         for (auto& thread : m_threads)
         {
-            if (thread.joinable())
+            if (thread.joinable() && std::this_thread::get_id() != thread.get_id())
             {
                 thread.join();
             }
