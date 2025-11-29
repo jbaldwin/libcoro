@@ -5,8 +5,8 @@
 
 #include <atomic>
 #include <chrono>
-#include <thread>
 #include <iostream>
+#include <thread>
 
 #include <cstring>
 #include <sys/socket.h>
@@ -124,7 +124,7 @@ TEST_CASE("io_scheduler task with read poll", "[io_scheduler]")
     {
         co_await s->schedule();
         auto status = co_await s->poll(trigger_fd, coro::poll_op::read);
-        REQUIRE(status == coro::poll_status::event);
+        REQUIRE(status == coro::poll_status::read);
         co_return;
     };
 
@@ -159,7 +159,7 @@ TEST_CASE("io_scheduler task with read poll with timeout", "[io_scheduler]")
         co_await s->schedule();
         // Poll with a timeout but don't timeout.
         auto status = co_await s->poll(trigger_fd, coro::poll_op::read, 50ms);
-        REQUIRE(status == coro::poll_status::event);
+        REQUIRE(status == coro::poll_status::read);
         co_return;
     };
 
@@ -673,7 +673,7 @@ TEST_CASE("io_scheduler manual process events thread pool", "[io_scheduler]")
         polling = true;
         std::cerr << "poll task polling s.size() == " << s->size() << "\n";
         auto status = co_await s->poll(trigger_fd, coro::poll_op::read);
-        REQUIRE(status == coro::poll_status::event);
+        REQUIRE(status == coro::poll_status::read);
         std::cerr << "poll task exiting s.size() == " << s->size() << "\n";
         co_return;
     };
@@ -727,7 +727,7 @@ TEST_CASE("io_scheduler manual process events inline", "[io_scheduler]")
         co_await s->schedule();
         std::cerr << "poll task polling s.size() == " << s->size() << "\n";
         auto status = co_await s->poll(trigger_fd, coro::poll_op::read);
-        REQUIRE(status == coro::poll_status::event);
+        REQUIRE(status == coro::poll_status::read);
         std::cerr << "poll task exiting s.size() == " << s->size() << "\n";
         co_return;
     };

@@ -216,13 +216,12 @@ private:
         auto result = co_await m_executor->poll(fd, ops, m_timeout);
         switch (result)
         {
-            case poll_status::event:
-            {
-                auto read_sock  = poll_op_readable(ops) ? fd : ARES_SOCKET_BAD;
-                auto write_sock = poll_op_writeable(ops) ? fd : ARES_SOCKET_BAD;
-                ares_process_fd(m_ares_channel, read_sock, write_sock);
-            }
-            break;
+            case poll_status::read:
+                ares_process_fd(m_ares_channel, fd, ARES_SOCKET_BAD);
+                break;
+            case poll_status::write:
+                ares_process_fd(m_ares_channel, ARES_SOCKET_BAD, fd);
+                break;
             case poll_status::timeout:
                 ares_process_fd(m_ares_channel, ARES_SOCKET_BAD, ARES_SOCKET_BAD);
                 break;

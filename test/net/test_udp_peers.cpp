@@ -32,7 +32,7 @@ TEST_CASE("udp one way", "[udp]")
         coro::net::udp::peer self{scheduler, self_info};
 
         auto pstatus = co_await self.poll(coro::poll_op::read);
-        REQUIRE(pstatus == coro::poll_status::event);
+        REQUIRE(pstatus == coro::poll_status::read);
 
         std::string buffer(64, '\0');
         auto [rstatus, peer_info, rspan] = self.recvfrom(buffer);
@@ -82,7 +82,7 @@ TEST_CASE("udp echo peers", "[udp]")
         {
             // Poll for my peers message first.
             auto pstatus = co_await me.poll(coro::poll_op::read);
-            REQUIRE(pstatus == coro::poll_status::event);
+            REQUIRE(pstatus == coro::poll_status::read);
 
             std::string buffer(64, '\0');
             auto [rstatus, recv_peer_info, rspan] = me.recvfrom(buffer);
@@ -97,7 +97,7 @@ TEST_CASE("udp echo peers", "[udp]")
         {
             // I sent first so now I need to await my peer's message.
             auto pstatus = co_await me.poll(coro::poll_op::read);
-            REQUIRE(pstatus == coro::poll_status::event);
+            REQUIRE(pstatus == coro::poll_status::read);
 
             std::string buffer(64, '\0');
             auto [rstatus, recv_peer_info, rspan] = me.recvfrom(buffer);
@@ -117,9 +117,10 @@ TEST_CASE("udp echo peers", "[udp]")
         co_return;
     };
 
-    coro::sync_wait(coro::when_all(
-        make_peer_task(scheduler, 8081, 8080, false, peer2_msg, peer1_msg),
-        make_peer_task(scheduler, 8080, 8081, true, peer1_msg, peer2_msg)));
+    coro::sync_wait(
+        coro::when_all(
+            make_peer_task(scheduler, 8081, 8080, false, peer2_msg, peer1_msg),
+            make_peer_task(scheduler, 8080, 8081, true, peer1_msg, peer2_msg)));
 }
 
 #endif // LIBCORO_FEATURE_NETWORKING
