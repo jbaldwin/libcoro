@@ -2,6 +2,7 @@
 
 #include "coro/concepts/range_of.hpp"
 #include "coro/task.hpp"
+#include "coro/task_group.hpp"
 
 #include <atomic>
 #include <condition_variable>
@@ -31,6 +32,7 @@ class thread_pool
     {
         explicit private_constructor() = default;
     };
+
 public:
     /**
      * A schedule operation is an awaitable type with a coroutine to resume the task scheduled on one of
@@ -107,7 +109,7 @@ public:
     /**
      * @return The number of executor threads for processing tasks.
      */
-    auto thread_count() const noexcept -> size_t { return m_threads.size(); }
+    [[nodiscard]] auto thread_count() const noexcept -> size_t { return m_threads.size(); }
 
     /**
      * Schedules the currently executing coroutine to be run on this thread pool.  This must be
@@ -119,11 +121,22 @@ public:
     [[nodiscard]] auto schedule() -> schedule_operation;
 
     /**
-     * Spawns the given task to be run on this thread pool, the task is detached from the user.
+     * Spawns the given task to be run on this thread pool, the task is detached from the user and cannot be joined.
      * @param task The task to spawn onto the thread pool.
      * @return True if the task has been spawned onto this thread pool.
      */
-    auto spawn(coro::task<void>&& task) noexcept -> bool;
+    auto spawn_detached(coro::task<void>&& task) noexcept -> bool;
+
+    /**
+     * Spawns the given task to be run on this thread pool, the task returned must be joined in the future.
+     * @note The returned task shouldn't be co_await'ed immediately, the spawned task is started on the thread
+     *       pool automatically but the returned join task *must* be co_await'ed at some point in the future.
+     *       If you drop the returned task it will hang the thread until the spawned task completes so it is
+     *       highly advisable to co_await the returned join task appropriately.
+     * @param task The task to spawn onto the thread pool.
+     * @return A task that can be co_await'ed (joined) in the future to know when the spawned task is complete.
+     */
+    auto spawn_joinable(coro::task<void>&& task) noexcept -> coro::task<void>;
 
     /**
      * Schedules a task on the thread pool and returns another task that must be awaited on for completion.

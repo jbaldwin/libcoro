@@ -13,6 +13,17 @@ using namespace std::chrono_literals;
 namespace coro
 {
 
+namespace detail
+{
+static auto
+    make_spawned_joinable_wait_task(std::unique_ptr<coro::task_group<coro::io_scheduler>> group_ptr) -> coro::task<void>
+{
+    co_await *group_ptr;
+    co_return;
+}
+
+} // namespace detail
+
 io_scheduler::io_scheduler(options&& opts, private_constructor)
     : m_opts(opts),
       m_io_notifier(),
@@ -70,15 +81,18 @@ auto io_scheduler::process_events(std::chrono::milliseconds timeout) -> std::siz
     return size();
 }
 
-auto io_scheduler::spawn(coro::task<void>&& task) -> bool
+auto io_scheduler::spawn_detached(coro::task<void>&& task) -> bool
 {
     m_size.fetch_add(1, std::memory_order::release);
     auto wrapper_task = detail::make_task_self_deleting(std::move(task));
-    wrapper_task.promise().user_final_suspend([this]() -> void
-    {
-        m_size.fetch_sub(1, std::memory_order::release);
-    });
+    wrapper_task.promise().user_final_suspend([this]() -> void { m_size.fetch_sub(1, std::memory_order::release); });
     return resume(wrapper_task.handle());
+}
+
+auto io_scheduler::spawn_joinable(coro::task<void>&& task) -> coro::task<void>
+{
+    auto group_ptr = std::make_unique<coro::task_group<coro::io_scheduler>>(this, std::move(task));
+    return detail::make_spawned_joinable_wait_task(std::move(group_ptr));
 }
 
 auto io_scheduler::schedule_at(time_point time) -> coro::task<void>
@@ -183,7 +197,6 @@ auto io_scheduler::shutdown() noexcept -> void
     // Only allow shutdown to occur once.
     if (m_shutdown_requested.exchange(true, std::memory_order::acq_rel) == false)
     {
-
         // Signal the event loop to stop asap.
         const int value{1};
         ::write(m_shutdown_pipe.write_fd(), reinterpret_cast<const void*>(&value), sizeof(value));
@@ -321,10 +334,11 @@ auto io_scheduler::process_scheduled_execute_inline() -> void
         // Clear the notification by reading until the pipe is cleared.
         while (true)
         {
-            constexpr std::size_t READ_COUNT{4};
-            constexpr ssize_t READ_COUNT_BYTES = READ_COUNT * sizeof(int);
+            constexpr std::size_t       READ_COUNT{4};
+            constexpr ssize_t           READ_COUNT_BYTES = READ_COUNT * sizeof(int);
             std::array<int, READ_COUNT> control{};
-            const ssize_t result = ::read(m_schedule_pipe.read_fd(), reinterpret_cast<void*>(control.data()), READ_COUNT_BYTES);
+            const ssize_t               result =
+                ::read(m_schedule_pipe.read_fd(), reinterpret_cast<void*>(control.data()), READ_COUNT_BYTES);
             if (result == READ_COUNT_BYTES)
             {
                 continue;
@@ -343,7 +357,8 @@ auto io_scheduler::process_scheduled_execute_inline() -> void
             }
 
             // Not much we can do here, we're in a very bad state, lets report to stderr.
-            std::cerr << "::read(m_schedule_pipe.read_fd()) error[" << errno << "] " << ::strerror(errno) << " fd=[" << m_schedule_pipe.read_fd() << "]" << std::endl;
+            std::cerr << "::read(m_schedule_pipe.read_fd()) error[" << errno << "] " << ::strerror(errno) << " fd=["
+                      << m_schedule_pipe.read_fd() << "]" << std::endl;
             break;
         }
 

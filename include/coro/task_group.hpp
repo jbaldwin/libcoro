@@ -3,6 +3,7 @@
 #include "coro/concepts/executor.hpp"
 #include "coro/detail/task_self_deleting.hpp"
 #include "coro/event.hpp"
+#include "coro/latch.hpp"
 #include "coro/task.hpp"
 
 #include <atomic>
@@ -12,19 +13,49 @@
 
 namespace coro
 {
-class io_scheduler;
 
 template<concepts::executor executor_type>
 class task_group
 {
 public:
+    explicit task_group(std::unique_ptr<executor_type>& executor, coro::task<void>&& task)
+        : task_group(executor.get(), std::forward<coro::task<void>>(task))
+    {
+    }
+
+    explicit task_group(executor_type* executor, coro::task<void> task) : m_size(1)
+    {
+        if (executor == nullptr)
+        {
+            throw std::runtime_error{"task_group cannot have a nullptr executor"};
+        }
+
+        auto wrapper_task = detail::make_task_self_deleting(std::move(task));
+        wrapper_task.promise().user_final_suspend([this]() -> void { m_size.count_down(); });
+        if (!executor->resume(wrapper_task.handle()))
+        {
+            m_size.count_down();
+        }
+    }
+
     /**
      * @tparam range_type The range type.
      * @param executor Tasks started in the group are scheduled onto this executor.
      * @param tasks The group of tasks to track.
      */
     template<coro::concepts::range_of<coro::task<void>> range_type>
-    explicit task_group(std::unique_ptr<executor_type>& executor, range_type tasks) : m_size(std::size(tasks))
+    explicit task_group(std::unique_ptr<executor_type>& executor, range_type tasks)
+        : task_group(executor.get(), std::forward<range_type>(tasks))
+    {
+    }
+
+    /**
+     * @tparam range_type The range type.
+     * @param executor Tasks started in the group are scheduled onto this executor.
+     * @param tasks The group of tasks to track.
+     */
+    template<coro::concepts::range_of<coro::task<void>> range_type>
+    explicit task_group(executor_type* executor, range_type tasks) : m_size(std::size(tasks))
     {
         if (executor == nullptr)
         {

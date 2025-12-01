@@ -20,8 +20,8 @@ using sc = std::chrono::steady_clock;
 constexpr std::size_t default_iterations = 5'000'000;
 // constexpr std::size_t default_iterations = 10;
 
-static auto print_stats(const std::string& bench_name, uint64_t operations, sc::time_point start, sc::time_point stop)
-    -> void
+static auto
+    print_stats(const std::string& bench_name, uint64_t operations, sc::time_point start, sc::time_point stop) -> void
 {
     auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start);
     auto ms       = std::chrono::duration_cast<std::chrono::milliseconds>(duration);
@@ -332,7 +332,7 @@ TEST_CASE("benchmark counter task scheduler await event from another coroutine",
 
     std::atomic<uint64_t> counter{0};
 
-    auto wait_func = [](std::unique_ptr<coro::io_scheduler>&        s,
+    auto wait_func = [](std::unique_ptr<coro::io_scheduler>&       s,
                         std::vector<std::unique_ptr<coro::event>>& events,
                         std::atomic<uint64_t>&                     counter,
                         std::size_t                                index) -> coro::task<void>
@@ -343,7 +343,7 @@ TEST_CASE("benchmark counter task scheduler await event from another coroutine",
         co_return;
     };
 
-    auto resume_func = [](std::unique_ptr<coro::io_scheduler>&        s,
+    auto resume_func = [](std::unique_ptr<coro::io_scheduler>&       s,
                           std::vector<std::unique_ptr<coro::event>>& events,
                           std::size_t                                index) -> coro::task<void>
     {
@@ -387,13 +387,12 @@ TEST_CASE("benchmark tcp::server echo server thread pool", "[benchmark]")
     std::atomic<uint64_t> accepted{0};
     std::atomic<uint64_t> clients_completed{0};
 
-    auto server_scheduler = coro::io_scheduler::make_unique(
-        coro::io_scheduler::options{
-            .pool               = coro::thread_pool::options{},
-            .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_on_thread_pool});
+    auto server_scheduler = coro::io_scheduler::make_unique(coro::io_scheduler::options{
+        .pool               = coro::thread_pool::options{},
+        .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_on_thread_pool});
     auto make_server_task = [](std::unique_ptr<coro::io_scheduler>& server_scheduler,
-                               std::atomic<uint64_t>&              listening,
-                               std::atomic<uint64_t>&              accepted) -> coro::task<void>
+                               std::atomic<uint64_t>&               listening,
+                               std::atomic<uint64_t>&               accepted) -> coro::task<void>
     {
         auto make_on_connection_task = [](coro::net::tcp::client client,
                                           coro::latch&           wait_for_clients) -> coro::task<void>
@@ -449,7 +448,7 @@ TEST_CASE("benchmark tcp::server echo server thread pool", "[benchmark]")
                 if (c.socket().is_valid())
                 {
                     accepted.fetch_add(1, std::memory_order::release);
-                    server_scheduler->spawn(make_on_connection_task(std::move(c), wait_for_clients));
+                    server_scheduler->spawn_detached(make_on_connection_task(std::move(c), wait_for_clients));
                 }
             }
         }
@@ -463,11 +462,10 @@ TEST_CASE("benchmark tcp::server echo server thread pool", "[benchmark]")
     std::mutex                                    g_histogram_mutex;
     std::map<std::chrono::milliseconds, uint64_t> g_histogram;
 
-    auto client_scheduler = coro::io_scheduler::make_unique(
-        coro::io_scheduler::options{
-            .pool               = coro::thread_pool::options{},
-            .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_on_thread_pool});
-    auto make_client_task = [](std::unique_ptr<coro::io_scheduler>&            client_scheduler,
+    auto client_scheduler = coro::io_scheduler::make_unique(coro::io_scheduler::options{
+        .pool               = coro::thread_pool::options{},
+        .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_on_thread_pool});
+    auto make_client_task = [](std::unique_ptr<coro::io_scheduler>&           client_scheduler,
                                const std::string&                             msg,
                                std::atomic<uint64_t>&                         clients_completed,
                                std::map<std::chrono::milliseconds, uint64_t>& g_histogram,
@@ -654,7 +652,7 @@ TEST_CASE("benchmark tcp::server echo server inline", "[benchmark]")
                 if (c.socket().is_valid())
                 {
                     s.live_clients++;
-                    s.scheduler->spawn(make_on_connection_task(s, std::move(c)));
+                    s.scheduler->spawn_detached(make_on_connection_task(s, std::move(c)));
                 }
             }
         }
@@ -811,13 +809,12 @@ TEST_CASE("benchmark tls::server echo server thread pool", "[benchmark]")
     std::atomic<uint64_t> accepted{0};
     std::atomic<uint64_t> clients_completed{0};
 
-    auto server_scheduler = coro::io_scheduler::make_unique(
-        coro::io_scheduler::options{
-            .pool               = coro::thread_pool::options{},
-            .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_on_thread_pool});
+    auto server_scheduler = coro::io_scheduler::make_unique(coro::io_scheduler::options{
+        .pool               = coro::thread_pool::options{},
+        .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_on_thread_pool});
     auto make_server_task = [](std::unique_ptr<coro::io_scheduler>& server_scheduler,
-                               std::atomic<uint64_t>&              listening,
-                               std::atomic<uint64_t>&              accepted) -> coro::task<void>
+                               std::atomic<uint64_t>&               listening,
+                               std::atomic<uint64_t>&               accepted) -> coro::task<void>
     {
         auto make_on_connection_task = [](coro::net::tls::client client,
                                           coro::latch&           wait_for_clients) -> coro::task<void>
@@ -896,7 +893,7 @@ TEST_CASE("benchmark tls::server echo server thread pool", "[benchmark]")
                 if (c.socket().is_valid())
                 {
                     accepted.fetch_add(1, std::memory_order::release);
-                    server_scheduler->spawn(make_on_connection_task(std::move(c), wait_for_clients));
+                    server_scheduler->spawn_detached(make_on_connection_task(std::move(c), wait_for_clients));
                 }
             }
         }
@@ -910,11 +907,10 @@ TEST_CASE("benchmark tls::server echo server thread pool", "[benchmark]")
     coro::mutex                                   histogram_mutex;
     std::map<std::chrono::milliseconds, uint64_t> g_histogram;
 
-    auto client_scheduler = coro::io_scheduler::make_unique(
-        coro::io_scheduler::options{
-            .pool               = coro::thread_pool::options{},
-            .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_on_thread_pool});
-    auto make_client_task = [](std::unique_ptr<coro::io_scheduler>&            client_scheduler,
+    auto client_scheduler = coro::io_scheduler::make_unique(coro::io_scheduler::options{
+        .pool               = coro::thread_pool::options{},
+        .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_on_thread_pool});
+    auto make_client_task = [](std::unique_ptr<coro::io_scheduler>&           client_scheduler,
                                const std::string&                             msg,
                                std::atomic<uint64_t>&                         clients_completed,
                                std::map<std::chrono::milliseconds, uint64_t>& g_histogram,
