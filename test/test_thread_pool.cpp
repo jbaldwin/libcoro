@@ -73,7 +73,7 @@ TEST_CASE("thread_pool one worker many tasks vector", "[thread_pool]")
 TEST_CASE("thread_pool N workers 100k tasks", "[thread_pool]")
 {
     constexpr const std::size_t iterations = 100'000;
-    auto tp = coro::thread_pool::make_unique();
+    auto                        tp         = coro::thread_pool::make_unique();
 
     auto make_task = [](std::unique_ptr<coro::thread_pool>& tp) -> coro::task<uint64_t>
     {
@@ -214,7 +214,7 @@ TEST_CASE("issue-287", "[thread_pool]")
     const int ITERATIONS = 200000;
 
     std::atomic<uint32_t> g_count = 0;
-    auto tp              = coro::thread_pool::make_unique(coro::thread_pool::options{.thread_count = 1});
+    auto                  tp      = coro::thread_pool::make_unique(coro::thread_pool::options{.thread_count = 1});
 
     auto task = [](std::atomic<uint32_t>& count) -> coro::task<void>
     {
@@ -224,7 +224,7 @@ TEST_CASE("issue-287", "[thread_pool]")
 
     for (int i = 0; i < ITERATIONS; ++i)
     {
-        REQUIRE(tp->spawn(task(g_count)));
+        REQUIRE(tp->spawn_detached(task(g_count)));
     }
 
     tp->shutdown();
@@ -235,7 +235,7 @@ TEST_CASE("issue-287", "[thread_pool]")
 
 TEST_CASE("thread_pool::spawn", "[thread_pool]")
 {
-    auto tp = coro::thread_pool::make_unique(coro::thread_pool::options{.thread_count = 2});
+    auto                  tp = coro::thread_pool::make_unique(coro::thread_pool::options{.thread_count = 2});
     std::atomic<uint64_t> counter{0};
 
     auto make_task = [](std::atomic<uint64_t>& counter, uint64_t amount) -> coro::task<void>
@@ -244,9 +244,9 @@ TEST_CASE("thread_pool::spawn", "[thread_pool]")
         co_return;
     };
 
-    REQUIRE(tp->spawn(make_task(counter, 1)));
-    REQUIRE(tp->spawn(make_task(counter, 2)));
-    REQUIRE(tp->spawn(make_task(counter, 3)));
+    REQUIRE(tp->spawn_detached(make_task(counter, 1)));
+    REQUIRE(tp->spawn_detached(make_task(counter, 2)));
+    REQUIRE(tp->spawn_detached(make_task(counter, 3)));
 
     tp->shutdown();
 
@@ -255,9 +255,9 @@ TEST_CASE("thread_pool::spawn", "[thread_pool]")
 
 TEST_CASE("thread_pool::schedule(task)", "[thread_pool]")
 {
-    auto tp = coro::thread_pool::make_unique(coro::thread_pool::options{.thread_count = 1});
-    uint64_t          counter{0};
-    std::thread::id   coroutine_tid;
+    auto            tp = coro::thread_pool::make_unique(coro::thread_pool::options{.thread_count = 1});
+    uint64_t        counter{0};
+    std::thread::id coroutine_tid;
 
     auto make_task = [](uint64_t value, std::thread::id& coroutine_id) -> coro::task<uint64_t>
     {
@@ -271,6 +271,49 @@ TEST_CASE("thread_pool::schedule(task)", "[thread_pool]")
 
     REQUIRE(counter == 53);
     REQUIRE(main_tid != coroutine_tid);
+}
+
+TEST_CASE("thread_pool::schedule(task) manually resume returned task", "[thread_pool]")
+{
+    auto tp = coro::thread_pool::make_unique(coro::thread_pool::options{.thread_count = 1});
+
+    auto long_task = []() -> coro::task<bool>
+    {
+        std::this_thread::sleep_for(std::chrono::milliseconds{200});
+        co_return true;
+    };
+
+    auto task = long_task();
+    tp->resume(task.handle());
+
+    REQUIRE(!task.is_ready());
+
+    std::this_thread::sleep_for(std::chrono::milliseconds{500});
+    REQUIRE(task.is_ready());
+    auto result = coro::sync_wait(task);
+    REQUIRE(result == true);
+}
+
+TEST_CASE("thread_pool::spawn_joinable", "[thread_pool]")
+{
+    auto                  tp = coro::thread_pool::make_unique(coro::thread_pool::options{.thread_count = 1});
+    std::atomic<uint64_t> counter{0};
+    coro::event           e1{};
+
+    auto long_task = [](std::atomic<uint64_t>& c, coro::event& e1) -> coro::task<void>
+    {
+        ++c;
+        e1.set();
+        std::this_thread::sleep_for(std::chrono::milliseconds{100});
+        ++c;
+        co_return;
+    };
+
+    auto join_task = tp->spawn_joinable(long_task(counter, e1));
+    coro::sync_wait(e1);
+    REQUIRE(counter.load() == 1);
+    coro::sync_wait(join_task);
+    REQUIRE(counter.load() == 2);
 }
 
 TEST_CASE("~thread_pool", "[thread_pool]")

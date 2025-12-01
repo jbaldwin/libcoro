@@ -21,7 +21,8 @@ template<typename executor_type>
 concept executor = requires(executor_type e, std::coroutine_handle<> c)
 {
     { e.schedule() } -> coro::concepts::awaiter;
-    { e.spawn(std::declval<coro::task<void>>()) } -> std::same_as<bool>;
+    { e.spawn_detached(std::declval<coro::task<void>>()) } -> std::same_as<bool>;
+    { e.spawn_joinable(std::declval<coro::task<void>>()) } -> std::same_as<coro::task<void>>;
     { e.yield() } -> coro::concepts::awaiter;
     { e.resume(c) } -> std::same_as<bool>;
     { e.size() } -> std::same_as<std::size_t>;
