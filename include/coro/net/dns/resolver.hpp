@@ -206,7 +206,7 @@ private:
             // If this socket is not currently actively polling, start polling!
             if (m_active_sockets.emplace(fd).second)
             {
-                m_executor->spawn(make_poll_task(fd, poll_ops[i]));
+                m_executor->spawn_detached(make_poll_task(fd, poll_ops[i]));
             }
         }
     }
