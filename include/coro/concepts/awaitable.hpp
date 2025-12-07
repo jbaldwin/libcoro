@@ -76,10 +76,15 @@ template<awaitable awaitable>
 static auto get_awaiter(awaitable&& value)
 {
     if constexpr (member_co_await_awaitable<awaitable>)
+    {
         return std::forward<awaitable>(value).operator co_await();
+    }
     else if constexpr (global_co_await_awaitable<awaitable>)
+    {
         return operator co_await(std::forward<awaitable>(value));
-    else if constexpr (awaiter<awaitable>) {
+    }
+    else if constexpr (awaiter<awaitable>)
+    {
         return std::forward<awaitable>(value);
     }
 }
