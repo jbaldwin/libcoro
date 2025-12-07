@@ -12,17 +12,18 @@
 
 namespace coro
 {
-class io_scheduler;
 
 template<concepts::executor executor_type>
 class task_group
 {
 public:
     /**
-     * Creates a task group, use the start method to schedule tasks into this group.
-     * @param executor Tasks started in the group are scheduled onto this executor.
+     * Creates a task group to run the tasks on the given executor, use start(task) to add tasks to the group.
+     * @param executor The executor to run the tasks on.
+     * @throws std::runtime_error If the provided executor is nullptr.
      */
-    explicit task_group(std::unique_ptr<executor_type>& executor) : m_executor(executor.get())
+    explicit task_group(executor_type* executor)
+        : m_executor(executor)
     {
         if (executor == nullptr)
         {
@@ -31,29 +32,43 @@ public:
     }
 
     /**
-     * Creates a task group with a single task to start oon the executor.
-     * @param executor Tasks started in the group are scheduled onto this executor.
-     * @param task The first task to start in the group.
+     * Creates a task group with a single task to start.
+     * @param executor The executor to run the tasks on.
+     * @param task The initial starting task to start in the group, can use start(task) to add more to the group.
      */
-    explicit task_group(std::unique_ptr<executor_type>& executor, coro::task<void>&& task) : task_group(executor)
+    explicit task_group(executor_type* executor, coro::task<void>&& task)
+        : task_group(executor)
     {
         (void)start(std::forward<coro::task<void>>(task));
     }
 
     /**
-     * Creates a task group and starts the given range of tasks on the executor.
-     * @tparam range_type The range type.
-     * @param executor Tasks started in the group are scheduled onto this executor.
-     * @param tasks The group of tasks to track.
+     * Creates a task group with the given range of tasks to start.
+     * @tparam range_type The range type of tasks.
+     * @param executor The executor to run the tasks on.
+     * @param tasks The initial starting set of tasks to start in the group, can use start(task) to add more to the group.
      */
     template<coro::concepts::range_of<coro::task<void>> range_type>
-    explicit task_group(std::unique_ptr<executor_type>& executor, range_type tasks) : task_group(executor)
+    explicit task_group(executor_type* executor, range_type tasks) : task_group(executor)
     {
         for (auto& task : tasks)
         {
             (void)start(std::move(task));
         }
     }
+
+    explicit task_group(std::unique_ptr<executor_type>& executor)
+        : m_executor(executor.get())
+    { }
+
+    explicit task_group(std::unique_ptr<executor_type>& executor, coro::task<void>&& task)
+        : task_group(executor.get(), std::forward<coro::task<void>>(task))
+    { }
+
+    template<coro::concepts::range_of<coro::task<void>> range_type>
+    explicit task_group(std::unique_ptr<executor_type>& executor, range_type tasks) : task_group(executor.get(), std::forward<range_type>(tasks))
+    { }
+
     task_group(const task_group&)                    = delete;
     task_group(task_group&&)                         = delete;
     auto operator=(const task_group&) -> task_group& = delete;
@@ -83,7 +98,6 @@ public:
     {
         // Make sure the event isn't triggered, or can trigger again.
         m_on_empty_event.reset();
-        // We're about to start another task.
         m_size.fetch_add(1, std::memory_order::release);
         auto wrapper_task = detail::make_task_self_deleting(std::move(task));
         wrapper_task.promise().user_final_suspend([this]() -> void { count_down(); });
