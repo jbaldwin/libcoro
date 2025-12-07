@@ -33,7 +33,7 @@
         - Can use `coro::thread_pool` for latency sensitive or long-lived tasks.
         - Can use inline task processing for thread per core or short-lived tasks.
         - Requires `LIBCORO_FEATURE_NETWORKING` to be supported.
-    - coro::task_container for dynamic task lifetimes, used in conjunction of an executor.
+    - coro::task_group for grouping dynamic lifetime tasks
 * Coroutine Networking
     - coro::net::dns::resolver for async dns
         - Uses libc-ares
@@ -1051,9 +1051,10 @@ ss.request_stop()                       # request to stop, wakeup all waiters an
 
 #### Ways to schedule tasks onto a `coro::thread_pool`
 * `coro::thread_pool::schedule()` Use `co_await` on this method inside a coroutine to transfer the tasks execution to the `coro::thread_pool`.
-* `coro::thread_pool::spawn(coro::task<void>&& task)` Spawns the task to be detached and owned by the `coro::thread_pool`, use this if you want to fire and forget the task, the `coro::thread_pool` will maintain the task's lifetime.
-* `coro::thread_pool::schedule(coro::task<T> task) -> coro::task<T>` schedules the task on the `coro::thread_pool` and then returns the result in a task that must be awaited. This is useful if you want to schedule work on the `coro::thread_pool` and want to wait for the result.
-* `coro::task_container::start(coro::task<void>&& task)` schedules the task on the `coro::thread_pool`. Use this when you want to share a `coro::thread_pool` while monitoring the progress of a subset of tasks.
+* `coro::thread_pool::schedule(coro::task<T> task) -> coro::task<T>` schedules the task on the `coro::thread_pool` and then returns the result in a task that must be awaited. This is useful if you want to schedule work on the `coro::thread_pool` and want to wait for the result inline.
+* `coro::thread_pool::spawn_detached(coro::task<void>&& task)` Spawns the task to be detached and owned by the `coro::thread_pool`, use this if you want to fire and forget the task, the `coro::thread_pool` will maintain the task's lifetime.
+* `coro::thread_pool::spawn_joinable(coro::task<void>&& task) -> coro::task<void>` Spawns the task to be started immediately but can be joined at later time, use this if you want to start the task immediately but want to join it later.
+* `coro::task_group<coro::thread_pool>(coro::task<void>&& task | range<coro::task<void>)` schedules the task(s) on the `coro::thread_pool`. Use this when you want to share a `coro::thread_pool` while monitoring the progress of a group of tasks.
 
 ```C++
 #include <coro/coro.hpp>
@@ -1174,15 +1175,16 @@ The `coro::io_scheduler` can use a dedicated spawned thread for processing event
 
 #### Ways to schedule tasks onto a `coro::io_scheduler`
 * `coro::io_scheduler::schedule()` Use `co_await` on this method inside a coroutine to transfer the tasks execution to the `coro::io_scheduler`.
-* `coro::io_scheduler::spawn(coro::task<void&& task>)` Spawns the task to be detached and owned by the `coro::io_scheduler`, use this if you want to fire and forget the task, the `coro::io_scheduler` will maintain the task's lifetime.
 * `coro::io_scheduler::schedule(coro::task<T> task) -> coro::task<T>` schedules the task on the `coro::io_scheduler` and then returns the result in a task that must be awaited. This is useful if you want to schedule work on the `coro::io_scheduler` and want to wait for the result.
 * `coro::io_scheduler::schedule(std::stop_source st, coro::task<T> task, std::chrono::duration timeout) -> coro::expected<T, coro::timeout_status>` schedules the task on the `coro::io_scheduler` and then returns the result in a task that must be awaited. That task will then either return the completed task's value if it completes before the timeout, or a return value denoted the task timed out. If the task times out the `std::stop_source.request_stop()` will be invoked so the task can check for it and stop executing. This must be done by the user, the `coro::io_scheduler` cannot stop the execution of the task but it is able through the `std::stop_source` to signal to the task it should stop executing.
 * `coro::io_scheduler::scheduler_after(std::chrono::milliseconds amount)` schedules the current task to be rescheduled after a specified amount of time has passed.
 * `coro::io_scheduler::schedule_at(std::chrono::steady_clock::time_point time)` schedules the current task to be rescheduled at the specified timepoint.
 * `coro::io_scheduler::yield()` will yield execution of the current task and resume after other tasks have had a chance to execute. This effectively places the task at the back of the queue of waiting tasks.
-* `coro::io_scheduler::yield_for(std::chrono::milliseconds amount)` will yield for the given amount of time and then reschedule the task. This is a yield for at least this much time since its placed in the waiting execution queue and might take additional time to start executing again.
+* `coro::io_scheduler::yield_for(std::chrono::milliseconds amount)` will yield for the given amount of time and then reschedule the task. This is a yield for at least this much time since it is placed in the waiting execution queue and might take additional time to start executing again.
 * `coro::io_scheduler::yield_until(std::chrono::steady_clock::time_point time)` will yield execution until the time point.
-* `coro::task_container::start(coro::task<void>&& task)` schedules the task on the `coro::io_scheduler`. Use this when you want to share a `coro::io_scheduler` while monitoring the progress of a subset of tasks.
+* `coro::io_scheduler::spawn_detached(coro::task<void&& task>)` Spawns the task to be detached and owned by the `coro::io_scheduler`, use this if you want to fire and forget the task, the `coro::io_scheduler` will maintain the task's lifetime.
+* `coro::io_scheduler::spawn_joinable(coro::task<void>&& task) -> coro::task<void>` Spawns the task to be started immediately but can be joined at later time, use this if you want to start the task immediately but want to join it later.
+* `coro::task_group<coro::io_scheduler>(coro::task<void>&& task | range<coro::task<void>>)` schedules the task(s) on the `coro::io_scheduler`. Use this when you want to share a `coro::io_scheduler` while monitoring the progress of a subset of tasks.
 
 The example provided here shows an i/o scheduler that spins up a basic `coro::net::tcp::server` and a `coro::net::tcp::client` that will connect to each other and then send a request and a response.
 

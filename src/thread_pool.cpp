@@ -3,9 +3,20 @@
 
 namespace coro
 {
+
+namespace detail
+{
+static auto
+    make_spawned_joinable_wait_task(std::unique_ptr<coro::task_group<coro::thread_pool>> group_ptr) -> coro::task<void>
+{
+    co_await *group_ptr;
+    co_return;
+}
+
+} // namespace detail
+
 thread_pool::schedule_operation::schedule_operation(thread_pool& tp) noexcept : m_thread_pool(tp)
 {
-
 }
 
 auto thread_pool::schedule_operation::await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept -> void
@@ -51,12 +62,18 @@ auto thread_pool::schedule() -> schedule_operation
     }
 }
 
-auto thread_pool::spawn(coro::task<void>&& task) noexcept -> bool
+auto thread_pool::spawn_detached(coro::task<void>&& task) noexcept -> bool
 {
     m_size.fetch_add(1, std::memory_order::release);
     auto wrapper_task = detail::make_task_self_deleting(std::move(task));
-    wrapper_task.promise().executor_size(m_size);
+    wrapper_task.promise().user_final_suspend([this]() -> void { m_size.fetch_sub(1, std::memory_order::release); });
     return resume(wrapper_task.handle());
+}
+
+auto thread_pool::spawn_joinable(coro::task<void>&& task) noexcept -> coro::task<void>
+{
+    auto group_ptr = std::make_unique<coro::task_group<coro::thread_pool>>(this, std::move(task));
+    return detail::make_spawned_joinable_wait_task(std::move(group_ptr));
 }
 
 auto thread_pool::resume(std::coroutine_handle<> handle) noexcept -> bool

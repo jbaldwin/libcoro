@@ -5,6 +5,7 @@
 #include <atomic>
 #include <coroutine>
 #include <memory>
+#include <vector>
 
 namespace coro
 {

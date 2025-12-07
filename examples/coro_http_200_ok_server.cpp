@@ -6,7 +6,7 @@ auto main() -> int
     {
         auto make_on_connection_task = [](coro::net::tcp::client client) -> coro::task<void>
         {
-            std::string response ="HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: keep-alive\r\n\r\n";
+            std::string response = "HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: keep-alive\r\n\r\n";
             std::string buf(1024, '\0');
 
             while (true)
@@ -43,7 +43,7 @@ auto main() -> int
                     auto client = server.accept();
                     if (client.socket().is_valid())
                     {
-                        scheduler->spawn(make_on_connection_task(std::move(client)));
+                        scheduler->spawn_detached(make_on_connection_task(std::move(client)));
                     } // else report error or something if the socket was invalid or could not be accepted.
                 }
                 break;
@@ -59,7 +59,7 @@ auto main() -> int
     };
 
     std::vector<std::unique_ptr<coro::io_scheduler>> schedulers{};
-    std::vector<coro::task<void>> workers{};
+    std::vector<coro::task<void>>                    workers{};
 
     const std::size_t count = std::thread::hardware_concurrency();
 
@@ -68,9 +68,8 @@ auto main() -> int
 
     for (size_t i = 0; i < count; ++i)
     {
-        auto& scheduler = schedulers.emplace_back(coro::io_scheduler::make_unique(
-            coro::io_scheduler::options{
-                .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline}));
+        auto& scheduler = schedulers.emplace_back(coro::io_scheduler::make_unique(coro::io_scheduler::options{
+            .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline}));
 
         workers.emplace_back(scheduler->schedule(make_http_200_ok_server(scheduler)));
     }

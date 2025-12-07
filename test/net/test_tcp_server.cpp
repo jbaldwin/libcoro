@@ -21,8 +21,8 @@ TEST_CASE("tcp_server ping server", "[tcp_server]")
         coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
 
     auto make_client_task = [](std::unique_ptr<coro::io_scheduler>& scheduler,
-                               const std::string&                  client_msg,
-                               const std::string&                  server_msg) -> coro::task<void>
+                               const std::string&                   client_msg,
+                               const std::string&                   server_msg) -> coro::task<void>
     {
         co_await scheduler->schedule();
         coro::net::tcp::client client{scheduler};
@@ -127,7 +127,7 @@ TEST_CASE("tcp_server concurrent polling on the same socket", "[tcp_server]")
         // make a copy so we can poll twice at the same time in different coroutines
         auto write_client = read_client;
 
-        scheduler->spawn(make_read_task(std::move(read_client)));
+        scheduler->spawn_detached(make_read_task(std::move(read_client)));
 
         // Make sure the read op has completed.
         co_await scheduler->yield_for(500ms);
@@ -184,17 +184,17 @@ TEST_CASE("tcp_server concurrent polling on the same socket", "[tcp_server]")
     std::cerr << "END tcp_server concurrent polling on the same socket\n";
 }
 
-#ifndef __APPLE__
+    #ifndef __APPLE__
 // This test is known to not work on kqueue style systems (e.g. apple) because the socket shutdown()
 // call does not properly trigger an EV_EOF flag on the accept socket.
 
 TEST_CASE("tcp_server graceful shutdown via socket", "[tcp_server]")
 {
     std::cerr << "BEGIN tcp_server graceful shutdown via socket\n";
-    auto scheduler = coro::io_scheduler::make_unique(coro::io_scheduler::options{
-        .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
+    auto                   scheduler = coro::io_scheduler::make_unique(coro::io_scheduler::options{
+                          .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
     coro::net::tcp::server server{scheduler};
-    coro::event started{};
+    coro::event            started{};
 
     auto make_accept_task = [](coro::net::tcp::server& server, coro::event& started) -> coro::task<void>
     {
@@ -207,7 +207,7 @@ TEST_CASE("tcp_server graceful shutdown via socket", "[tcp_server]")
         std::cerr << "make accept task completed\n";
     };
 
-    scheduler->spawn(make_accept_task(server, started));
+    scheduler->spawn_detached(make_accept_task(server, started));
 
     coro::sync_wait(started);
     // we'll wait a bit to make sure the server.poll() is fully registered.
@@ -219,13 +219,11 @@ TEST_CASE("tcp_server graceful shutdown via socket", "[tcp_server]")
     std::cerr << "END tcp_server graceful shutdown via socket\n";
 }
 
-#endif
+    #endif
 
 TEST_CASE("~tcp_server", "[tcp_server]")
 {
     std::cerr << "[~tcp_server]\n\n";
 }
 
-
 #endif // LIBCORO_FEATURE_NETWORKING
-

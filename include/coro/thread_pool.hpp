@@ -2,6 +2,7 @@
 
 #include "coro/concepts/range_of.hpp"
 #include "coro/task.hpp"
+#include "coro/task_group.hpp"
 
 #include <atomic>
 #include <condition_variable>
@@ -31,6 +32,7 @@ class thread_pool
     {
         explicit private_constructor() = default;
     };
+
 public:
     /**
      * A schedule operation is an awaitable type with a coroutine to resume the task scheduled on one of
@@ -107,7 +109,7 @@ public:
     /**
      * @return The number of executor threads for processing tasks.
      */
-    auto thread_count() const noexcept -> size_t { return m_threads.size(); }
+    [[nodiscard]] auto thread_count() const noexcept -> size_t { return m_threads.size(); }
 
     /**
      * Schedules the currently executing coroutine to be run on this thread pool.  This must be
@@ -119,11 +121,33 @@ public:
     [[nodiscard]] auto schedule() -> schedule_operation;
 
     /**
-     * Spawns the given task to be run on this thread pool, the task is detached from the user.
+     * Spawns the given task to be run on this thread pool, the task is detached from the user and cannot be joined.
+     * @note This method is preferable to `spawn_joinable()` when possible as it has less overhead.
      * @param task The task to spawn onto the thread pool.
      * @return True if the task has been spawned onto this thread pool.
      */
-    auto spawn(coro::task<void>&& task) noexcept -> bool;
+    auto spawn_detached(coro::task<void>&& task) noexcept -> bool;
+
+    /**
+     * Spawns the given task to be run on this thread pool, the task returned must be joined in the future.
+     * @note `spawn_joinable()` function is not a coroutine, instead it returns a coroutine that should be awaited in
+     *       the future when you want to join back to the task.
+     * @code
+     * // Do not co_await the spawn_joinable() returned coroutine until you are ready to join the user task.
+     * auto join_task = thread_pool->spawn_joinable(std::move(user_task));
+     * ...
+     * ... // do some other work while the spawned task executes on the thread pool
+     * ...
+     * // Await the join task once you are ready to join.
+     * co_await join_task;
+     * @endcode
+     * @note The returned coroutine uses a `task_group` internally which will auto-join the task in its destructor
+     *       if you do not manually join it, that means if you drop the returned join task without awaiting it, then
+     *       it could hang the thread until the spawned task joins.
+     * @param task The task to spawn onto the thread pool.
+     * @return A task that can be co_await'ed (joined) in the future to know when the spawned task is complete.
+     */
+    auto spawn_joinable(coro::task<void>&& task) noexcept -> coro::task<void>;
 
     /**
      * Schedules a task on the thread pool and returns another task that must be awaited on for completion.
@@ -142,21 +166,21 @@ public:
     /**
      * Schedules any coroutine handle that is ready to be resumed.
      * @param handle The coroutine handle to schedule.
-     * @return True if the coroutine is resumed, false if its a nullptr or the coroutine is already done.
+     * @return True if the coroutine is resumed, false if it is a nullptr or the coroutine is already done.
      */
     auto resume(std::coroutine_handle<> handle) noexcept -> bool;
 
     /**
      * Schedules the set of coroutine handles that are ready to be resumed.
      * @param handles The coroutine handles to schedule.
-     * @param uint64_t The number of tasks resumed, if any are null they are discarded.
+     * @return std::size_t The number of tasks resumed, if any are null they are discarded.
      */
-    template<coro::concepts::range_of<std::coroutine_handle<>> range_type>
-    auto resume(const range_type& handles) noexcept -> uint64_t
+    template<coro::concepts::sized_range_of<std::coroutine_handle<>> range_type>
+    auto resume(const range_type& handles) noexcept -> std::size_t
     {
         m_size.fetch_add(std::size(handles), std::memory_order::release);
 
-        size_t null_handles{0};
+        std::size_t null_handles{0};
 
         {
             std::scoped_lock lk{m_wait_mutex};
@@ -178,7 +202,7 @@ public:
             m_size.fetch_sub(null_handles, std::memory_order::release);
         }
 
-        uint64_t total = std::size(handles) - null_handles;
+        std::size_t total = std::size(handles) - null_handles;
         if (total >= m_threads.size())
         {
             m_wait_cv.notify_all();

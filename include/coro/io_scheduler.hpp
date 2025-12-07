@@ -158,7 +158,10 @@ public:
                         expected, true, std::memory_order::release, std::memory_order::relaxed))
                 {
                     constexpr int control = 1;
-                    ::write(m_scheduler.m_schedule_pipe.write_fd(), reinterpret_cast<const void*>(&control), sizeof(control));
+                    ::write(
+                        m_scheduler.m_schedule_pipe.write_fd(),
+                        reinterpret_cast<const void*>(&control),
+                        sizeof(control));
                 }
             }
             else
@@ -191,7 +194,18 @@ public:
      * @return True if the task was succesfully spawned onto the io_scheduler. This can fail if the task
      *         is already completed or does not contain a valid coroutine anymore.
      */
-    auto spawn(coro::task<void>&& task) -> bool;
+    auto spawn_detached(coro::task<void>&& task) -> bool;
+
+    /**
+     * Spawns the given task to be run on this io_scheduler, the task returned must be joined in the future.
+     * @note The returned task shouldn't be co_await'ed immediately, the spawned task is started on the io_scheduler
+     *       automatically but the returned join task *must* be co_await'ed at some point in the future.
+     *       If you drop the returned task it will hang the thread until the spawned task completes so it is
+     *       highly advisable to co_await the returned join task appropriately.
+     * @param task The task to spawn onto the io_scheduler.
+     * @return A task that can be co_await'ed (joined) in the future to know when the spawned task is complete.
+     */
+    auto spawn_joinable(coro::task<void>&& task) -> coro::task<void>;
 
     /**
      * Schedules a task on the io_scheduler and returns another task that must be awaited on for completion.
@@ -369,8 +383,9 @@ public:
      * @return THe result of the poll operation.
      */
     [[nodiscard]] auto poll(
-        const net::socket& sock, coro::poll_op op, std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
-        -> coro::task<poll_status>
+        const net::socket&        sock,
+        coro::poll_op             op,
+        std::chrono::milliseconds timeout = std::chrono::milliseconds{0}) -> coro::task<poll_status>
     {
         return poll(sock.native_handle(), op, timeout);
     }
@@ -380,40 +395,22 @@ public:
      * Resumes execution of a direct coroutine handle on this io scheduler.
      * @param handle The coroutine handle to resume execution.
      */
-    auto resume(std::coroutine_handle<> handle) -> bool
+    auto resume(std::coroutine_handle<> handle) -> bool;
+
+    template<coro::concepts::sized_range_of<std::coroutine_handle<>> range_type>
+    auto resume(const range_type& handles) noexcept -> std::size_t
     {
-        if (handle == nullptr || handle.done())
+        auto        size = std::size(handles);
+        std::size_t invalid_handles{0};
+        for (const auto& handle : handles)
         {
-            return false;
-        }
-
-        if (m_shutdown_requested.load(std::memory_order::acquire))
-        {
-            return false;
-        }
-
-        if (m_opts.execution_strategy == execution_strategy_t::process_tasks_inline)
-        {
-            m_size.fetch_add(1, std::memory_order::release);
+            if (!resume(handle))
             {
-                std::scoped_lock lk{m_scheduled_tasks_mutex};
-                m_scheduled_tasks.emplace_back(handle);
+                ++invalid_handles;
             }
-
-            bool expected{false};
-            if (m_schedule_pipe_triggered.compare_exchange_strong(
-                    expected, true, std::memory_order::release, std::memory_order::relaxed))
-            {
-                const int value = 1;
-                ::write(m_schedule_pipe.write_fd(), reinterpret_cast<const void*>(&value), sizeof(value));
-            }
-
-            return true;
         }
-        else
-        {
-            return m_thread_pool->resume(handle);
-        }
+
+        return size - invalid_handles;
     }
 
     /**
@@ -455,8 +452,8 @@ private:
     /// The event loop pipe to trigger a shutdown.
     detail::pipe_t m_shutdown_pipe{};
     /// The event loop schedule task pipe.
-    detail::pipe_t m_schedule_pipe{};
-    std::atomic<bool>   m_schedule_pipe_triggered{false};
+    detail::pipe_t    m_schedule_pipe{};
+    std::atomic<bool> m_schedule_pipe_triggered{false};
 
     /// The number of tasks executing or awaiting events in this io scheduler.
     std::atomic<std::size_t> m_size{0};

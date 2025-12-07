@@ -14,8 +14,8 @@ set(LIBCORO_TEST_SOURCE_FILES
     test_semaphore.cpp
     test_shared_mutex.cpp
     test_sync_wait.cpp
-    test_task_container.cpp
     test_task.cpp
+    test_task_group.cpp
     test_thread_pool.cpp
     test_when_all.cpp
 

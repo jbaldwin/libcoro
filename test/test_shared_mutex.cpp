@@ -4,6 +4,7 @@
 
 #include <chrono>
 #include <iostream>
+#include <list>
 #include <thread>
 
 TEST_CASE("shared_mutex", "[shared_mutex]")
