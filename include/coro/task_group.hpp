@@ -1,13 +1,13 @@
 #pragma once
 
 #include "coro/concepts/executor.hpp"
+#include "coro/concepts/range_of.hpp"
 #include "coro/detail/task_self_deleting.hpp"
 #include "coro/event.hpp"
 #include "coro/task.hpp"
 
 #include <atomic>
 #include <memory>
-#include <ranges>
 #include <thread>
 
 namespace coro
@@ -19,26 +19,39 @@ class task_group
 {
 public:
     /**
-     * @tparam range_type The range type.
+     * Creates a task group, use the start method to schedule tasks into this group.
      * @param executor Tasks started in the group are scheduled onto this executor.
-     * @param tasks The group of tasks to track.
      */
-    template<coro::concepts::range_of<coro::task<void>> range_type>
-    explicit task_group(std::unique_ptr<executor_type>& executor, range_type tasks) : m_size(std::size(tasks))
+    explicit task_group(std::unique_ptr<executor_type>& executor) : m_executor(executor.get())
     {
         if (executor == nullptr)
         {
             throw std::runtime_error{"task_group cannot have a nullptr executor"};
         }
+    }
 
+    /**
+     * Creates a task group with a single task to start oon the executor.
+     * @param executor Tasks started in the group are scheduled onto this executor.
+     * @param task The first task to start in the group.
+     */
+    explicit task_group(std::unique_ptr<executor_type>& executor, coro::task<void>&& task) : task_group(executor)
+    {
+        (void)start(std::forward<coro::task<void>>(task));
+    }
+
+    /**
+     * Creates a task group and starts the given range of tasks on the executor.
+     * @tparam range_type The range type.
+     * @param executor Tasks started in the group are scheduled onto this executor.
+     * @param tasks The group of tasks to track.
+     */
+    template<coro::concepts::range_of<coro::task<void>> range_type>
+    explicit task_group(std::unique_ptr<executor_type>& executor, range_type tasks) : task_group(executor)
+    {
         for (auto& task : tasks)
         {
-            auto wrapper_task = detail::make_task_self_deleting(std::move(task));
-            wrapper_task.promise().user_final_suspend([this]() -> void { m_size.count_down(); });
-            if (!executor->resume(wrapper_task.handle()))
-            {
-                m_size.count_down();
-            }
+            (void)start(std::move(task));
         }
     }
     task_group(const task_group&)                    = delete;
@@ -61,9 +74,33 @@ public:
     }
 
     /**
+     * Starts a task into this group.
+     * @param task The task to include into this group.
+     * @return True if the task was started, this will only return false if the executor
+     *         has been shutdown.
+     */
+    [[nodiscard]] auto start(coro::task<void>&& task) -> bool
+    {
+        // Make sure the event isn't triggered, or can trigger again.
+        m_on_empty_event.reset();
+        // We're about to start another task.
+        m_size.fetch_add(1, std::memory_order::release);
+        auto wrapper_task = detail::make_task_self_deleting(std::move(task));
+        wrapper_task.promise().user_final_suspend([this]() -> void { count_down(); });
+
+        // Kick it.
+        if (!m_executor->resume(wrapper_task.handle()))
+        {
+            count_down();
+            return false;
+        }
+        return true;
+    }
+
+    /**
      * @return The number of active tasks in the group.
      */
-    [[nodiscard]] auto size() const -> std::size_t { return m_size.remaining(); }
+    [[nodiscard]] auto size() const -> std::size_t { return m_size.load(std::memory_order::acquire); }
 
     /**
      * @return True if there are no active tasks in the group.
@@ -72,12 +109,26 @@ public:
 
     /**
      * Wait until the task group's tasks are completed (zero tasks remain).
+     * NOTE: that this can happen multiple times if you are using start(task) as its possible
+     * for the task count to drop to zero and then increase again. It is advisable to not
+     * await this method on the task group until you know all tasks in the group have started.
      */
-    auto operator co_await() const noexcept -> event::awaiter { return m_size.operator co_await(); }
+    auto operator co_await() const noexcept -> event::awaiter { return m_on_empty_event.operator co_await(); }
 
 private:
+    executor_type* m_executor{nullptr};
     /// The number of alive tasks.
-    coro::latch m_size;
+    std::atomic<uint64_t> m_size{};
+    /// Event to trigger if m_size goes to zero.
+    coro::event m_on_empty_event{};
+
+    auto count_down() -> void
+    {
+        if (m_size.fetch_sub(1, std::memory_order::acq_rel) == 1)
+        {
+            m_on_empty_event.set();
+        }
+    }
 };
 
 } // namespace coro
