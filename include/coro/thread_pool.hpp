@@ -122,6 +122,7 @@ public:
 
     /**
      * Spawns the given task to be run on this thread pool, the task is detached from the user and cannot be joined.
+     * @note This method is preferable to `spawn_joinable()` when possible as it has less overhead.
      * @param task The task to spawn onto the thread pool.
      * @return True if the task has been spawned onto this thread pool.
      */
@@ -129,10 +130,20 @@ public:
 
     /**
      * Spawns the given task to be run on this thread pool, the task returned must be joined in the future.
-     * @note The returned task shouldn't be co_await'ed immediately, the spawned task is started on the thread
-     *       pool automatically but the returned join task *must* be co_await'ed at some point in the future.
-     *       If you drop the returned task it will hang the thread until the spawned task completes so it is
-     *       highly advisable to co_await the returned join task appropriately.
+     * @note `spawn_joinable()` function is not a coroutine, instead it returns a coroutine that should be awaited in
+     *       the future when you want to join back to the task.
+     * @code
+     * // Do not co_await the spawn_joinable() returned coroutine until you are ready to join the user task.
+     * auto join_task = thread_pool->spawn_joinable(std::move(user_task));
+     * ...
+     * ... // do some other work while the spawned task executes on the thread pool
+     * ...
+     * // Await the join task once you are ready to join.
+     * co_await join_task;
+     * @endcode
+     * @note The returned coroutine uses a `task_group` internally which will auto-join the task in its destructor
+     *       if you do not manually join it, that means if you drop the returned join task without awaiting it, then
+     *       it could hang the thread until the spawned task joins.
      * @param task The task to spawn onto the thread pool.
      * @return A task that can be co_await'ed (joined) in the future to know when the spawned task is complete.
      */
