@@ -71,7 +71,7 @@ private:
     dns::status                        m_status{dns::status::complete};
     std::vector<coro::net::ip_address> m_ip_addresses{};
 
-    friend auto ares_dns_callback(void* arg, int status, int timeouts, struct hostent* host) -> void;
+    friend auto ares_dns_callback(void* arg, int status, int timeouts, ares_addrinfo* addr_info) -> void;
 };
 
 template<concepts::io_executor executor_type>
@@ -100,7 +100,11 @@ public:
             ++detail::m_ares_count;
         }
 
-        auto channel_init_status = ares_init_options(&m_ares_channel, nullptr, 0);
+        ares_options options       = {0};
+        options.sock_state_cb      = resolver::ares_socket_state_callback;
+        options.sock_state_cb_data = this;
+
+        auto channel_init_status = ares_init_options(&m_ares_channel, &options, ARES_OPT_SOCK_STATE_CB);
         if (channel_init_status != ARES_SUCCESS)
         {
             throw std::runtime_error{ares_strerror(channel_init_status)};
@@ -136,13 +140,18 @@ public:
     auto host_by_name(const net::hostname& hn) -> coro::task<std::unique_ptr<result<executor_type>>>
     {
         coro::event resume_event{};
-        auto        result_ptr = std::make_unique<result<executor_type>>(m_executor, resume_event, 2);
+        auto        result_ptr = std::make_unique<result<executor_type>>(m_executor, resume_event, 1);
 
-        ares_gethostbyname(m_ares_channel, hn.data().data(), AF_INET, ares_dns_callback, result_ptr.get());
-        ares_gethostbyname(m_ares_channel, hn.data().data(), AF_INET6, ares_dns_callback, result_ptr.get());
+        ares_addrinfo_hints hints = {0};
+        hints.ai_family           = AF_UNSPEC; // Request both IPv4 and IPv6
 
-        // Add all required poll calls for ares to kick off the dns requests.
-        ares_poll();
+        ares_getaddrinfo(
+            m_ares_channel,
+            hn.data().data(),
+            nullptr, // service name (port number or NULL)
+            &hints,
+            ares_dns_callback,
+            result_ptr.get());
 
         // Suspend until this specific result is completed by ares.
         co_await resume_event;
@@ -163,92 +172,73 @@ private:
     /// are not setup when ares_poll() is called.
     std::unordered_set<fd_t> m_active_sockets{};
 
-    auto ares_poll() -> void
-    {
-        std::array<ares_socket_t, ARES_GETSOCK_MAXNUM> ares_sockets{};
-        std::array<poll_op, ARES_GETSOCK_MAXNUM>       poll_ops{};
-
-        int bitmask = ares_getsock(m_ares_channel, ares_sockets.data(), ARES_GETSOCK_MAXNUM);
-
-        size_t new_sockets{0};
-
-        for (size_t i = 0; i < ARES_GETSOCK_MAXNUM; ++i)
-        {
-            uint64_t ops{0};
-
-            if (ARES_GETSOCK_READABLE(bitmask, i))
-            {
-                ops |= static_cast<uint64_t>(poll_op::read);
-            }
-            if (ARES_GETSOCK_WRITABLE(bitmask, i))
-            {
-                ops |= static_cast<uint64_t>(poll_op::write);
-            }
-
-            if (ops != 0)
-            {
-                poll_ops[i] = static_cast<poll_op>(ops);
-                ++new_sockets;
-            }
-            else
-            {
-                // According to ares usage within curl once a bitmask for a socket is zero the rest of
-                // the bitmask will also be zero.
-                break;
-            }
-        }
-
-        std::vector<coro::task<void>> poll_tasks{};
-        for (size_t i = 0; i < new_sockets; ++i)
-        {
-            auto fd = static_cast<fd_t>(ares_sockets[i]);
-
-            // If this socket is not currently actively polling, start polling!
-            if (m_active_sockets.emplace(fd).second)
-            {
-                m_executor->spawn_detached(make_poll_task(fd, poll_ops[i]));
-            }
-        }
-    }
-
     auto make_poll_task(fd_t fd, poll_op ops) -> coro::task<void>
     {
-        auto result = co_await m_executor->poll(fd, ops, m_timeout);
-        switch (result)
+        // The loop ensures non-blocking polling until the socket is closed by c-ares.
+        while (m_active_sockets.contains(fd))
         {
-            case poll_status::event:
+            auto result = co_await m_executor->poll(fd, ops, m_timeout);
+            switch (result)
             {
-                auto read_sock  = poll_op_readable(ops) ? fd : ARES_SOCKET_BAD;
-                auto write_sock = poll_op_writeable(ops) ? fd : ARES_SOCKET_BAD;
-                ares_process_fd(m_ares_channel, read_sock, write_sock);
+                case poll_status::event:
+                {
+                    auto read_sock  = poll_op_readable(ops) ? fd : ARES_SOCKET_BAD;
+                    auto write_sock = poll_op_writeable(ops) ? fd : ARES_SOCKET_BAD;
+                    ares_process_fd(m_ares_channel, read_sock, write_sock);
+                }
+                break;
+                case poll_status::timeout:
+                    ares_process_fd(m_ares_channel, ARES_SOCKET_BAD, ARES_SOCKET_BAD);
+                    break;
+                case poll_status::closed:
+                    // might need to do something like call with two ARES_SOCKET_BAD?
+                    m_active_sockets.erase(fd);
+                    break;
+                case poll_status::error:
+                    // might need to do something like call with two ARES_SOCKET_BAD?
+                    m_active_sockets.erase(fd);
+                    break;
             }
-            break;
-            case poll_status::timeout:
-                ares_process_fd(m_ares_channel, ARES_SOCKET_BAD, ARES_SOCKET_BAD);
-                break;
-            case poll_status::closed:
-                // might need to do something like call with two ARES_SOCKET_BAD?
-                break;
-            case poll_status::error:
-                // might need to do something like call with two ARES_SOCKET_BAD?
-                break;
         }
-
-        // Remove from the list of actively polling sockets.
-        m_active_sockets.erase(fd);
-
-        // Re-initialize sockets/polls for ares since this one has now triggered.
-        ares_poll();
 
         co_return;
     }
 
-    static auto ares_dns_callback(void* arg, int status, int /*timeouts*/, struct hostent* host) -> void
+    static auto ares_socket_state_callback(void* data, ares_socket_t socket_fd, int readable, int writable) -> void
+    {
+        resolver* self = static_cast<resolver*>(data);
+        uint64_t  ops{0};
+
+        if (readable)
+        {
+            ops |= static_cast<uint64_t>(poll_op::read);
+        }
+        if (writable)
+        {
+            ops |= static_cast<uint64_t>(poll_op::write);
+        }
+
+        auto fd       = static_cast<fd_t>(socket_fd);
+        auto poll_ops = static_cast<poll_op>(ops);
+        if (ops != 0)
+        {
+            if (self->m_active_sockets.emplace(fd).second)
+            {
+                self->m_executor->spawn_detached(self->make_poll_task(fd, poll_ops));
+            }
+        }
+        else
+        {
+            self->m_active_sockets.erase(fd);
+        }
+    }
+
+    static auto ares_dns_callback(void* arg, int status, int /*timeouts*/, ares_addrinfo* addr_info) -> void
     {
         auto& result = *static_cast<coro::net::dns::result<executor_type>*>(arg);
         --result.m_pending_dns_requests;
 
-        if (host == nullptr || status != ARES_SUCCESS)
+        if (addr_info == nullptr || status != ARES_SUCCESS)
         {
             result.m_status = status::error;
         }
@@ -256,15 +246,31 @@ private:
         {
             result.m_status = status::complete;
 
-            for (size_t i = 0; host->h_addr_list[i] != nullptr; ++i)
+            for (ares_addrinfo_node* node = addr_info->nodes; node != nullptr; node = node->ai_next)
             {
-                size_t len = (host->h_addrtype == AF_INET) ? net::ip_address::ipv4_len : net::ip_address::ipv6_len;
-                net::ip_address ip_addr{
-                    std::span<const uint8_t>{reinterpret_cast<const uint8_t*>(host->h_addr_list[i]), len},
-                    static_cast<net::domain_t>(host->h_addrtype)};
+                if (node->ai_family == AF_INET)
+                {
+                    sockaddr_in*    sin = reinterpret_cast<sockaddr_in*>(node->ai_addr);
+                    net::ip_address ip_addr{
+                        std::span<const uint8_t>{
+                            reinterpret_cast<const uint8_t*>(&sin->sin_addr), net::ip_address::ipv4_len},
+                        static_cast<net::domain_t>(AF_INET)};
 
-                result.m_ip_addresses.emplace_back(std::move(ip_addr));
+                    result.m_ip_addresses.emplace_back(std::move(ip_addr));
+                }
+                else if (node->ai_family == AF_INET6)
+                {
+                    sockaddr_in6*   sin6 = reinterpret_cast<sockaddr_in6*>(node->ai_addr);
+                    net::ip_address ip_addr{
+                        std::span<const uint8_t>{
+                            reinterpret_cast<const uint8_t*>(&sin6->sin6_addr), net::ip_address::ipv6_len},
+                        static_cast<net::domain_t>(AF_INET6)};
+
+                    result.m_ip_addresses.emplace_back(std::move(ip_addr));
+                }
             }
+
+            ares_freeaddrinfo(addr_info);
         }
 
         if (result.m_pending_dns_requests == 0)
