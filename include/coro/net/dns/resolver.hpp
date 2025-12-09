@@ -100,7 +100,7 @@ public:
             ++detail::m_ares_count;
         }
 
-        ares_options options       = {0};
+        ares_options options{};
         options.sock_state_cb      = resolver::ares_socket_state_callback;
         options.sock_state_cb_data = this;
 
@@ -142,8 +142,8 @@ public:
         coro::event resume_event{};
         auto        result_ptr = std::make_unique<result<executor_type>>(m_executor, resume_event, 1);
 
-        ares_addrinfo_hints hints = {0};
-        hints.ai_family           = AF_UNSPEC; // Request both IPv4 and IPv6
+        ares_addrinfo_hints hints{};
+        hints.ai_family = AF_UNSPEC; // Request both IPv4 and IPv6
 
         ares_getaddrinfo(
             m_ares_channel,
