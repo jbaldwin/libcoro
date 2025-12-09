@@ -17,7 +17,7 @@
 #include <functional>
 #include <memory>
 #include <mutex>
-#include <unordered_set>
+#include <unordered_map>
 #include <vector>
 
 namespace coro::net::dns
@@ -168,15 +168,16 @@ private:
     /// The libc-ares channel for looking up dns entries.
     ares_channel m_ares_channel{nullptr};
 
-    /// This is the set of sockets that are currently being actively polled so multiple poll tasks
-    /// are not setup when ares_poll() is called.
-    std::unordered_set<fd_t> m_active_sockets{};
+    /// This is the map of sockets that are currently being actively polled so multiple poll tasks
+    /// are not setup when socket state is changed.
+    std::unordered_map<fd_t, poll_op> m_active_sockets{};
 
-    auto make_poll_task(fd_t fd, poll_op ops) -> coro::task<void>
+    auto make_poll_task(fd_t fd) -> coro::task<void>
     {
         // The loop ensures non-blocking polling until the socket is closed by c-ares.
         while (m_active_sockets.contains(fd))
         {
+            auto ops    = m_active_sockets[fd];
             auto result = co_await m_executor->poll(fd, ops, m_timeout);
             switch (result)
             {
@@ -222,9 +223,10 @@ private:
         auto poll_ops = static_cast<poll_op>(ops);
         if (ops != 0)
         {
-            if (self->m_active_sockets.emplace(fd).second)
+            auto [it, inserted] = self->m_active_sockets.insert_or_assign(fd, poll_ops);
+            if (inserted)
             {
-                self->m_executor->spawn_detached(self->make_poll_task(fd, poll_ops));
+                self->m_executor->spawn_detached(self->make_poll_task(fd));
             }
         }
         else
