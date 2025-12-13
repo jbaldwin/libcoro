@@ -3,28 +3,29 @@
 
 int main()
 {
-    auto scheduler = coro::io_scheduler::make_unique(coro::io_scheduler::options{
-        // The scheduler will spawn a dedicated event processing thread.  This is the default, but
-        // it is possible to use 'manual' and call 'process_events()' to drive the scheduler yourself.
-        .thread_strategy = coro::io_scheduler::thread_strategy_t::spawn,
-        // If the scheduler is in spawn mode this functor is called upon starting the dedicated
-        // event processor thread.
-        .on_io_thread_start_functor = [] { std::cout << "io_scheduler::process event thread start\n"; },
-        // If the scheduler is in spawn mode this functor is called upon stopping the dedicated
-        // event process thread.
-        .on_io_thread_stop_functor = [] { std::cout << "io_scheduler::process event thread stop\n"; },
-        // The io scheduler can use a coro::thread_pool to process the events or tasks it is given.
-        // You can use an execution strategy of `process_tasks_inline` to have the event loop thread
-        // directly process the tasks, this might be desirable for small tasks vs a thread pool for large tasks.
-        .pool =
-            coro::thread_pool::options{
-                .thread_count            = 2,
-                .on_thread_start_functor = [](size_t i)
-                { std::cout << "io_scheduler::thread_pool worker " << i << " starting\n"; },
-                .on_thread_stop_functor = [](size_t i)
-                { std::cout << "io_scheduler::thread_pool worker " << i << " stopping\n"; },
-            },
-        .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_on_thread_pool});
+    auto scheduler = coro::io_scheduler::make_unique(
+        coro::io_scheduler::options{
+            // The scheduler will spawn a dedicated event processing thread.  This is the default, but
+            // it is possible to use 'manual' and call 'process_events()' to drive the scheduler yourself.
+            .thread_strategy = coro::io_scheduler::thread_strategy_t::spawn,
+            // If the scheduler is in spawn mode this functor is called upon starting the dedicated
+            // event processor thread.
+            .on_io_thread_start_functor = [] { std::cout << "io_scheduler::process event thread start\n"; },
+            // If the scheduler is in spawn mode this functor is called upon stopping the dedicated
+            // event process thread.
+            .on_io_thread_stop_functor = [] { std::cout << "io_scheduler::process event thread stop\n"; },
+            // The io scheduler can use a coro::thread_pool to process the events or tasks it is given.
+            // You can use an execution strategy of `process_tasks_inline` to have the event loop thread
+            // directly process the tasks, this might be desirable for small tasks vs a thread pool for large tasks.
+            .pool =
+                coro::thread_pool::options{
+                    .thread_count            = 2,
+                    .on_thread_start_functor = [](size_t i)
+                    { std::cout << "io_scheduler::thread_pool worker " << i << " starting\n"; },
+                    .on_thread_stop_functor = [](size_t i)
+                    { std::cout << "io_scheduler::thread_pool worker " << i << " stopping\n"; },
+                },
+            .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_on_thread_pool});
 
     auto make_server_task = [](std::unique_ptr<coro::io_scheduler>& scheduler) -> coro::task<void>
     {
@@ -39,7 +40,7 @@ int main()
 
         // Wait for an incoming connection and accept it.
         auto poll_status = co_await server.poll();
-        if (poll_status != coro::poll_status::event)
+        if (poll_status != coro::poll_status::read)
         {
             co_return; // Handle error, see poll_status for detailed error states.
         }
@@ -56,7 +57,7 @@ int main()
         // Now wait for the client message, this message is small enough it should always arrive
         // with a single recv() call.
         poll_status = co_await client.poll(coro::poll_op::read);
-        if (poll_status != coro::poll_status::event)
+        if (poll_status != coro::poll_status::read)
         {
             co_return; // Handle error.
         }
@@ -76,7 +77,7 @@ int main()
 
         // Make sure the client socket can be written to.
         poll_status = co_await client.poll(coro::poll_op::write);
-        if (poll_status != coro::poll_status::event)
+        if (poll_status != coro::poll_status::write)
         {
             co_return; // Handle error.
         }
@@ -105,7 +106,7 @@ int main()
             // able to be written to again.
             remaining    = r;
             auto pstatus = co_await client.poll(coro::poll_op::write);
-            if (pstatus != coro::poll_status::event)
+            if (pstatus != coro::poll_status::write)
             {
                 co_return; // Handle error.
             }
