@@ -61,6 +61,10 @@ add_executable(coro_when_all coro_when_all.cpp)
 target_link_libraries(coro_when_all PUBLIC libcoro)
 target_compile_options(coro_when_all PUBLIC ${LIBCORO_EXAMPLE_OPTIONS})
 
+add_executable(coro_invoke coro_invoke.cpp)
+target_link_libraries(coro_invoke PUBLIC libcoro)
+target_compile_options(coro_invoke PUBLIC ${LIBCORO_EXAMPLE_OPTIONS})
+
 if(LIBCORO_FEATURE_NETWORKING)
     add_executable(coro_condition_variable coro_condition_variable.cpp)
     target_link_libraries(coro_condition_variable PUBLIC libcoro)

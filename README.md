@@ -27,6 +27,7 @@
     - [coro::ring_buffer<element, num_elements>](#ring_buffer)
     - [coro::queue](#queue)
     - [coro::condition_variable](#condition_variable)
+    - [coro::invoke(functor, args...) -> awaitable](#invoke)
 * Executors
     - [coro::thread_pool](#thread_pool) for coroutine cooperative multitasking
     - [coro::io_scheduler](#io_scheduler) for driving i/o events
@@ -55,10 +56,12 @@
 ### A note on co_await and threads
 It's important to note with coroutines that _any_ `co_await` has the potential to switch the underlying thread that is executing the currently executing coroutine if the scheduler used has more than 1 thread. In general this shouldn't affect the way any user of the library would write code except for `thread_local`. Usage of `thread_local` should be extremely careful and _never_ used across any `co_await` boundary do to thread switching and work stealing on libcoro's schedulers. The only way this is safe is by using a `coro::thread_pool` with 1 thread or an inline `io_scheduler` which also only has 1 thread.
 
-### A note on lambda captures (do not use them!)
+### A note on lambda captures
 [C++ Core Guidelines - CP.51: Do no use capturing lambdas that are coroutines](https://isocpp.github.io/CppCoreGuidelines/CppCoreGuidelines#Rcoro-capture)
 
-The recommendation is to not use lambda captures and instead pass any data into the coroutine via its function arguments to guarantee the argument lifetimes. Lambda captures will be destroyed at the coroutines first suspension point so if they are used past that point it will result in a use after free bug.
+The recommendation is to not use lambda captures and instead pass any data into the coroutine via its function arguments by value to guarantee the argument lifetimes. Lambda captures will be destroyed at the coroutines first suspension point so if they are used past that point it will result in a use after free bug.
+
+If you must use lambda captures with your coroutines then libcoro offers [coro::invoke](#invoke) to create a stable coroutine frame to hold the captures for the duration of the user's coroutine.
 
 ### sync_wait
 The `sync_wait` construct is meant to be used outside a coroutine context to block the calling thread until the coroutine has completed. The coroutine can be executed on the calling thread or scheduled on one of libcoro's schedulers.
@@ -1044,6 +1047,42 @@ ss.request_stop()                       # request to stop, wakeup all waiters an
 0 predicate condition = 0
 0 waiter condition = 0
 0 ss.stop_requsted() co_return
+```
+
+### invoke
+`coro::invoke<functor_type, args_types...> -> awaitable` takes a coroutine functor and its arguments, invokes the functor as a coroutine and awaits its result. This is useful for invoking lambda coroutines that have lambdas that need a stable coroutine frame to last the duration of the invocable coroutine.
+
+```C++
+#include <coro/coro.hpp>
+#include <iostream>
+
+int main()
+{
+    auto tp = coro::thread_pool::make_unique();
+
+    int a = 1;
+    int b = 2;
+    int c = 3;
+
+    auto make_task_with_captures = [&tp, &c](int d, int e) -> coro::task<int>
+    {
+        // Mimic a suspension so lambda captures would normally be dangling/destroyed.
+        co_await tp->yield();
+        co_return c + d + e;
+    };
+
+    // This is bad form, the captures will be dangling after `co_await tp->yield();`.
+    // coro::sync_wait(make_task_with_captures(a, b));
+
+    // This is good form, the coro::invoke will create a stable coroutine frame for the lambda captures.
+    std::cout << coro::sync_wait(coro::invoke(make_task_with_captures, a, b));
+}
+```
+
+Example output:
+```bash
+$ ./examples/coro_invoke
+6
 ```
 
 ### thread_pool
