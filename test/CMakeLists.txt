@@ -7,6 +7,7 @@ set(LIBCORO_TEST_SOURCE_FILES
     test_condition_variable.cpp
     test_event.cpp
     test_generator.cpp
+    test_invoke.cpp
     test_latch.cpp
     test_mutex.cpp
     test_queue.cpp

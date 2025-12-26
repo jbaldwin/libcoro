@@ -33,6 +33,7 @@
 #include "coro/default_executor.hpp"
 #include "coro/event.hpp"
 #include "coro/generator.hpp"
+#include "coro/invoke.hpp"
 #include "coro/latch.hpp"
 #include "coro/mutex.hpp"
 #include "coro/queue.hpp"
