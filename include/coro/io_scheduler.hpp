@@ -20,9 +20,12 @@
 #include <functional>
 #include <map>
 #include <memory>
+#include <optional>
 #include <stop_token>
 #include <thread>
 #include <vector>
+
+#include <unistd.h>
 
 namespace coro
 {
@@ -223,9 +226,10 @@ public:
 
     /**
      * Schedules a task on the io_scheduler that must complete within the given timeout.
-     * NOTE: This version of schedule does *NOT* cancel the given task, it will continue executing even if it times out.
-     *       It is absolutely recommended to use the version of this schedule() function that takes an std::stop_token
-     * and have the scheduled task check to see if its been cancelled due to timeout to not waste resources.
+     * NOTE: This version of schedule does *NOT* cancel the given task, it will continue executing even if it times
+     * out. It is absolutely recommended to use the version of this schedule() function that takes an
+     * std::stop_token and have the scheduled task check to see if its been cancelled due to timeout to not waste
+     * resources.
      * @tparam return_type The return value of the task.
      * @param task The task to schedule on the io_scheduler with the given timeout.
      * @param timeout How long should this task be given to complete before it times out?
@@ -274,8 +278,8 @@ public:
     /**
      * Schedules a task on the io_scheduler that must complete within the given timeout.
      * NOTE: This version of the task will have the stop_source.request_stop() be called if the timeout triggers.
-     *       It is up to you to check in the scheduled task if the stop has been requested to actually stop executing
-     *       the task.
+     *       It is up to you to check in the scheduled task if the stop has been requested to actually stop
+     * executing the task.
      * @tparam return_type The return value of the task.
      * @param task The task to schedule on the io_scheduler with the given timeout.
      * @param timeout How long should this task be given to complete before it times out?
@@ -370,8 +374,11 @@ public:
      *                block indefinitely until the event triggers.
      * @return The result of the poll operation.
      */
-    [[nodiscard]] auto poll(fd_t fd, coro::poll_op op, std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
-        -> coro::task<poll_status>;
+    [[nodiscard]] auto poll(
+        fd_t                           fd,
+        coro::poll_op                  op,
+        std::chrono::milliseconds      timeout        = std::chrono::milliseconds{0},
+        std::optional<poll_stop_token> cancel_trigger = std::nullopt) -> coro::task<poll_status>;
 
 #ifdef LIBCORO_FEATURE_NETWORKING
     /**
@@ -383,11 +390,12 @@ public:
      * @return THe result of the poll operation.
      */
     [[nodiscard]] auto poll(
-        const net::socket&        sock,
-        coro::poll_op             op,
-        std::chrono::milliseconds timeout = std::chrono::milliseconds{0}) -> coro::task<poll_status>
+        const net::socket&             sock,
+        coro::poll_op                  op,
+        std::chrono::milliseconds      timeout        = std::chrono::milliseconds{0},
+        std::optional<poll_stop_token> cancel_trigger = std::nullopt) -> coro::task<poll_status>
     {
-        return poll(sock.native_handle(), op, timeout);
+        return poll(sock.native_handle(), op, timeout, cancel_trigger);
     }
 #endif
 
@@ -441,12 +449,14 @@ public:
 
     [[nodiscard]] auto is_shutdown() const -> bool { return m_shutdown_requested.load(std::memory_order::acquire); }
 
+    auto io_notifier() -> io_notifier& { return m_io_notifier; }
+
 private:
     /// The configuration options.
     options m_opts;
 
     /// The io event notifier.
-    io_notifier m_io_notifier;
+    ::coro::io_notifier m_io_notifier;
     /// The timer handle for timed events, e.g. yield_for() or scheduler_after().
     detail::timer_handle m_timer;
     /// The event loop pipe to trigger a shutdown.

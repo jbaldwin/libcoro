@@ -55,7 +55,7 @@ public:
      */
     auto poll(std::chrono::milliseconds timeout = std::chrono::milliseconds{0}) -> coro::task<coro::poll_status>
     {
-        return m_io_scheduler->poll(m_accept_socket, coro::poll_op::read, timeout);
+        return m_io_scheduler->poll(m_accept_socket, coro::poll_op::read, timeout, m_cancel_trigger.get_token());
     }
 
     /**
@@ -74,6 +74,12 @@ public:
     [[nodiscard]] auto accept_socket() const -> const net::socket& { return m_accept_socket; }
     /** @} */
 
+    auto shutdown()
+    {
+        m_cancel_trigger.signal_stop();
+        m_accept_socket.shutdown(coro::poll_op::read_write);
+    }
+
 private:
     /// The io scheduler for awaiting new connections.
     coro::io_scheduler* m_io_scheduler{nullptr};
@@ -83,6 +89,8 @@ private:
     options m_options;
     /// The socket for accepting new tcp connections on.
     net::socket m_accept_socket{-1};
+    /// Stop signal to trigger a cancellation of the async accept poll operation.
+    poll_stop_source m_cancel_trigger{};
 };
 
 } // namespace coro::net::tls

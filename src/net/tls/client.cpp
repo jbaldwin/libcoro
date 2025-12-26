@@ -11,8 +11,9 @@ client::client(std::unique_ptr<coro::io_scheduler>& scheduler, std::shared_ptr<c
     : m_io_scheduler(scheduler.get()),
       m_tls_ctx(std::move(tls_ctx)),
       m_options(std::move(opts)),
-      m_socket(net::make_socket(
-          net::socket::options{m_options.address.domain(), net::socket::type_t::tcp, net::socket::blocking_t::no}))
+      m_socket(
+          net::make_socket(
+              net::socket::options{m_options.address.domain(), net::socket::type_t::tcp, net::socket::blocking_t::no}))
 {
     if (m_io_scheduler == nullptr)
     {
@@ -113,7 +114,7 @@ auto client::connect(std::chrono::milliseconds timeout) -> coro::task<connection
         if (errno == EAGAIN || errno == EINPROGRESS)
         {
             auto pstatus = co_await m_io_scheduler->poll(m_socket, poll_op::write, timeout);
-            if (pstatus == poll_status::event)
+            if (pstatus == poll_status::write)
             {
                 int       result{0};
                 socklen_t result_length{sizeof(result)};
@@ -194,6 +195,8 @@ auto client::handshake(std::chrono::milliseconds timeout) -> coro::task<connecti
                 co_return connection_status::poll_error;
             case poll_status::closed:
                 co_return connection_status::unexpected_close;
+            case poll_status::cancelled:
+                co_return connection_status::unexpected_close;
             default:
                 // Event triggered, continue handshake.
                 break;
@@ -239,6 +242,7 @@ auto client::tls_shutdown_and_free(
                 case poll_status::timeout:
                 case poll_status::error:
                 case poll_status::closed:
+                case poll_status::cancelled:
                     co_return;
                 default:
                     // continue shutdown.
