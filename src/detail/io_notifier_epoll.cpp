@@ -111,7 +111,7 @@ auto io_notifier_epoll::watch(poll_info& pi) -> bool
     return true;
 }
 
-auto io_notifier_epoll::unwatch(fd_t fd, poll_op op) -> bool
+auto io_notifier_epoll::unwatch(fd_t fd, poll_op) -> bool
 {
     return ::epoll_ctl(m_fd, EPOLL_CTL_DEL, fd, nullptr) != -1;
 }

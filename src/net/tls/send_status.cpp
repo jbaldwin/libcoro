@@ -8,6 +8,7 @@ static std::string send_status_buffer_is_empty{"buffer_is_empty"};
 static std::string send_status_timeout{"timeout"};
 static std::string send_status_closed{"closed"};
 static std::string send_status_error{"error"};
+static std::string send_status_cancelled{"cancelled"};
 static std::string send_status_want_read{"want_read"};
 static std::string send_status_want_write{"want_write"};
 static std::string send_status_want_connect{"want_connect"};
@@ -30,6 +31,8 @@ auto to_string(send_status status) -> const std::string&
             return send_status_closed;
         case send_status::error:
             return send_status_error;
+        case send_status::cancelled:
+            return send_status_cancelled;
         case send_status::want_read:
             return send_status_want_read;
         case send_status::want_write:

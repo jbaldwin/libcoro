@@ -2,6 +2,7 @@
 
 #include <array>
 #include <string>
+#include <iostream>
 
 #if defined(__linux__)
     #include <sys/epoll.h>
@@ -103,7 +104,11 @@ public:
     auto signal_stop() -> void
     {
         const int value{1};
-        ::write(m_pipe.write_fd(), reinterpret_cast<const void*>(&value), sizeof(value));
+        ssize_t written = ::write(m_pipe.write_fd(), reinterpret_cast<const void*>(&value), sizeof(value));
+        if (written != sizeof(value))
+        {
+            std::cerr << "poll::signal_stop() write failed, only wrote " << written << " bytes\n";
+        }
     }
 };
 

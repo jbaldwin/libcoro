@@ -184,7 +184,11 @@ auto io_scheduler::resume(std::coroutine_handle<> handle) -> bool
                 expected, true, std::memory_order::release, std::memory_order::relaxed))
         {
             const int value = 1;
-            ::write(m_schedule_pipe.write_fd(), reinterpret_cast<const void*>(&value), sizeof(value));
+            ssize_t written = ::write(m_schedule_pipe.write_fd(), reinterpret_cast<const void*>(&value), sizeof(value));
+            if (written != sizeof(value))
+            {
+                std::cerr << "libcoro::io_scheduler::resume() failed to write to schedule pipe, bytes written=" << written << "\n";
+            }
         }
 
         return true;
@@ -202,7 +206,11 @@ auto io_scheduler::shutdown() noexcept -> void
     {
         // Signal the event loop to stop asap.
         const int value{1};
-        ::write(m_shutdown_pipe.write_fd(), reinterpret_cast<const void*>(&value), sizeof(value));
+        ssize_t written = ::write(m_shutdown_pipe.write_fd(), reinterpret_cast<const void*>(&value), sizeof(value));
+        if (written != sizeof(value))
+        {
+            std::cerr << "libcoro::io_scheduler::shutdown() failed to write to shutdown pipe, bytes written=" << written << "\n";
+        }
 
         if (m_io_thread.joinable())
         {

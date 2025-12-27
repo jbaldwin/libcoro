@@ -8,6 +8,7 @@ static std::string recv_status_buffer_is_empty{"buffer_is_empty"};
 static std::string recv_status_timeout{"timeout"};
 static std::string recv_status_closed{"closed"};
 static std::string recv_status_error{"error"};
+static std::string recv_status_cancelled{"cancelled"};
 static std::string recv_status_want_read{"want_read"};
 static std::string recv_status_want_write{"want_write"};
 static std::string recv_status_want_connect{"want_connect"};
@@ -30,6 +31,8 @@ auto to_string(recv_status status) -> const std::string&
             return recv_status_closed;
         case recv_status::error:
             return recv_status_error;
+        case recv_status::cancelled:
+            return recv_status_cancelled;
         case recv_status::want_read:
             return recv_status_want_read;
         case recv_status::want_write:

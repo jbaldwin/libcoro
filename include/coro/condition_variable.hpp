@@ -18,6 +18,13 @@
     #include <stop_token>
 #endif
 
+// latest gcc versions > 13 are incorrectly reporting the std::optional<std::function<bool>()> = std::nullopt as the internal
+// std::function being uninitialized, it is but that is expected since its wrapped in an nullopt optional.
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
+#endif
+
 namespace coro
 {
 
@@ -539,5 +546,10 @@ private:
         }
     }
 };
+
+
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic pop
+#endif
 
 } // namespace coro

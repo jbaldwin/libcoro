@@ -748,7 +748,7 @@ TEST_CASE("benchmark tcp::server echo server inline", "[benchmark]")
     for (size_t i = 0; i < server_count; ++i)
     {
         server_threads.emplace_back(
-            [&, i]()
+            [&]()
             {
                 server s{
                     .id = server_id++,
