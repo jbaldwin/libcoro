@@ -101,6 +101,7 @@ else()
         set(CARES_SHARED    ${LIBCORO_BUILD_SHARED_LIBS} CACHE INTERNAL "")
         set(CARES_INSTALL   OFF CACHE INTERNAL "")
         add_subdirectory(vendor/c-ares/c-ares)
+        target_compile_options(c-ares PRIVATE -w)
     endif()
 endif()
 

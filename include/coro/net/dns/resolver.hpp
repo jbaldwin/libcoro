@@ -199,6 +199,9 @@ private:
                     // might need to do something like call with two ARES_SOCKET_BAD?
                     m_active_sockets.erase(fd);
                     break;
+                case poll_status::cancelled:
+                    m_active_sockets.erase(fd);
+                    break;
             }
         }
 

@@ -161,10 +161,14 @@ public:
                         expected, true, std::memory_order::release, std::memory_order::relaxed))
                 {
                     constexpr int control = 1;
-                    ::write(
+                    ssize_t written = ::write(
                         m_scheduler.m_schedule_pipe.write_fd(),
                         reinterpret_cast<const void*>(&control),
                         sizeof(control));
+                    if (written != sizeof(control))
+                    {
+                        std::cerr << "libcoro::io_scheduler::schedule_operation failed to write to schedule pipe, bytes written=" << written << "\n";
+                    }
                 }
             }
             else

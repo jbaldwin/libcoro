@@ -128,6 +128,8 @@ public:
                     co_return {recv_status::error, std::span<element_type>{}};
                 case poll_status::closed:
                     co_return {recv_status::closed, std::span<element_type>{}};
+                case poll_status::cancelled:
+                    co_return {recv_status::cancelled, std::span<element_type>{}};
             }
 
             size_t bytes_recv{0};
@@ -222,6 +224,8 @@ public:
                     co_return {send_status::error, std::span<element_type>{}};
                 case poll_status::closed:
                     co_return {send_status::closed, std::span<element_type>{}};
+                case poll_status::cancelled:
+                    co_return {send_status::cancelled, std::span<element_type>{}};
             }
 
             size_t bytes_sent{0};

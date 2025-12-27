@@ -16,6 +16,8 @@ enum class recv_status : int64_t
     // The user provided an 0 length buffer.
     buffer_is_empty = -3,
     timeout         = -4,
+    // The operation was cancelled.
+    cancelled = -5,
     /// The peer closed the socket.
     closed           = SSL_ERROR_ZERO_RETURN,
     error            = SSL_ERROR_SSL,

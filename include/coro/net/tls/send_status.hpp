@@ -17,6 +17,8 @@ enum class send_status : int64_t
     buffer_is_empty = -3,
     // The operation timed out.
     timeout = -4,
+    /// The operation was cancelled.
+    cancelled = -5,
     /// The peer closed the socket.
     closed           = SSL_ERROR_ZERO_RETURN,
     error            = SSL_ERROR_SSL,

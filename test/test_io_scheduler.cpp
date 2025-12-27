@@ -115,7 +115,7 @@ TEST_CASE("io_scheduler task with multiple events", "[io_scheduler]")
 TEST_CASE("io_scheduler task with read poll", "[io_scheduler]")
 {
     auto trigger_fds = std::array<fd_t, 2>{};
-    ::pipe(trigger_fds.data());
+    REQUIRE(::pipe(trigger_fds.data()) == 0);
     auto s = coro::io_scheduler::make_unique(
         coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
 
@@ -149,7 +149,7 @@ TEST_CASE("io_scheduler task with read poll", "[io_scheduler]")
 TEST_CASE("io_scheduler task with read poll with timeout", "[io_scheduler]")
 {
     auto trigger_fds = std::array<fd_t, 2>{};
-    ::pipe(trigger_fds.data());
+    REQUIRE(::pipe(trigger_fds.data()) == 0);
     auto s = coro::io_scheduler::make_unique(
         coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
 
@@ -184,7 +184,7 @@ TEST_CASE("io_scheduler task with read poll with timeout", "[io_scheduler]")
 TEST_CASE("io_scheduler task with read poll timeout", "[io_scheduler]")
 {
     auto trigger_fds = std::array<fd_t, 2>{};
-    ::pipe(trigger_fds.data());
+    REQUIRE(::pipe(trigger_fds.data()) == 0);
     auto s = coro::io_scheduler::make_unique(
         coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
 
@@ -648,7 +648,7 @@ TEST_CASE("io_scheduler self generating coroutine (stack overflow check)", "[io_
 TEST_CASE("io_scheduler manual process events thread pool", "[io_scheduler]")
 {
     auto trigger_fds = std::array<fd_t, 2>{};
-    ::pipe(trigger_fds.data());
+    REQUIRE(::pipe(trigger_fds.data()) == 0);
     auto s = coro::io_scheduler::make_unique(coro::io_scheduler::options{
         .thread_strategy = coro::io_scheduler::thread_strategy_t::manual,
         .pool            = coro::thread_pool::options{
@@ -707,7 +707,7 @@ TEST_CASE("io_scheduler manual process events thread pool", "[io_scheduler]")
 TEST_CASE("io_scheduler manual process events inline", "[io_scheduler]")
 {
     auto trigger_fds = std::array<fd_t, 2>{};
-    ::pipe(trigger_fds.data());
+    REQUIRE(::pipe(trigger_fds.data()) == 0);
     auto s = coro::io_scheduler::make_unique(coro::io_scheduler::options{
         .thread_strategy    = coro::io_scheduler::thread_strategy_t::manual,
         .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
