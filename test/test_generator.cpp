@@ -47,7 +47,7 @@ TEST_CASE("generator infinite incrementing integer yield", "[generator]")
     }
 }
 
-TEST_CASE("generator satisfies view concept for compatibility with std::views::take")
+TEST_CASE("generator satisfies view concept for compatibility with std::views::take", "[generator]")
 {
     auto counter = size_t{0};
     auto natural = [](size_t n) mutable -> coro::generator<size_t>
@@ -82,6 +82,63 @@ TEST_CASE("generator satisfies view concept for compatibility with std::views::t
             REQUIRE(n == counter); // expect 4, 5, 6 (4 may get lost if view is not enabled)
         }
         */
+    }
+}
+
+TEST_CASE("generator allow co_await internally", "[generator]")
+{
+    auto outer = []() -> coro::generator<int>
+    {
+        auto awaitable = []() -> coro::task<int>
+        {
+            co_return 5;
+        };
+
+        auto inner = []() -> coro::generator<int>
+        {
+            co_yield 1;
+            co_yield 2;
+            co_yield 3;
+        };
+
+        co_yield 100;
+        co_yield 200;
+        for (auto&& v : inner())
+        {
+            co_yield v;
+        }
+        co_yield co_await awaitable();
+        co_yield 300;
+    };
+
+    std::size_t i{0};
+    std::vector<int> expected{100, 200, 1, 2, 3, 5, 300};
+    for (auto&& actual : outer())
+    {
+        REQUIRE(actual == expected[i++]);
+    }
+}
+
+TEST_CASE("generator throws", "[generator]")
+{
+    std::string msg{"I always throw."};
+    auto make_throwing_generator = [](std::string& msg) -> coro::generator<int>
+    {
+        co_yield 1;
+        throw std::runtime_error{msg};
+        co_yield 2;
+    };
+
+    try
+    {
+        for (auto&& v : make_throwing_generator(msg))
+        {
+            REQUIRE(v == 1);
+        }
+    }
+    catch (std::exception& e)
+    {
+        REQUIRE(e.what() == msg);
     }
 }
 
