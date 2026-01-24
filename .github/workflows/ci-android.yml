@@ -14,7 +14,7 @@ jobs:
       matrix:
         abi: [arm64-v8a, armeabi-v7a, x86, x86_64]
     env:
-      TEST_FILTER: "~[benchmark] ~[bench] ~[semaphore] ~[io_scheduler] ~[ring_buffer] ~[thread_pool] ~[tcp_server] ~[tls_server] ~[dns] ~*net::* ~*udp* ~*ip_address* ~*wait_for* ~*wait_until*"
+      TEST_FILTER: "~[benchmark] ~[bench] ~[semaphore] ~[scheduler] ~[ring_buffer] ~[thread_pool] ~[tcp_server] ~[tls_server] ~[dns] ~*net::* ~*udp* ~*ip_address* ~*wait_for* ~*wait_until*"
       TEST_TIMEOUT: "600"
     steps:
       - name: Checkout

@@ -7,17 +7,17 @@ namespace coro::net::tls
 {
 using namespace std::chrono_literals;
 
-client::client(std::unique_ptr<coro::io_scheduler>& scheduler, std::shared_ptr<context> tls_ctx, options opts)
-    : m_io_scheduler(scheduler.get()),
+client::client(std::unique_ptr<coro::scheduler>& scheduler, std::shared_ptr<context> tls_ctx, options opts)
+    : m_scheduler(scheduler.get()),
       m_tls_ctx(std::move(tls_ctx)),
       m_options(std::move(opts)),
       m_socket(
           net::make_socket(
               net::socket::options{m_options.address.domain(), net::socket::type_t::tcp, net::socket::blocking_t::no}))
 {
-    if (m_io_scheduler == nullptr)
+    if (m_scheduler == nullptr)
     {
-        throw std::runtime_error{"tls::client cannot have nullptr io_scheduler"};
+        throw std::runtime_error{"tls::client cannot have nullptr scheduler"};
     }
 
     if (m_tls_ctx == nullptr)
@@ -27,15 +27,15 @@ client::client(std::unique_ptr<coro::io_scheduler>& scheduler, std::shared_ptr<c
 }
 
 client::client(
-    coro::io_scheduler* scheduler, std::shared_ptr<context> tls_ctx, net::socket socket, options opts)
-    : m_io_scheduler(scheduler),
+    coro::scheduler* scheduler, std::shared_ptr<context> tls_ctx, net::socket socket, options opts)
+    : m_scheduler(scheduler),
       m_tls_ctx(std::move(tls_ctx)),
       m_options(std::move(opts)),
       m_socket(std::move(socket)),
       m_connect_status(connection_status::connected),
       m_tls_info(tls_connection_type::accept)
 {
-    // io_scheduler is assumed good since it comes from a tls::server.
+    // scheduler is assumed good since it comes from a tls::server.
     // tls_ctx is assumed good since it comes from a tls::server.
 
     // Force the socket to be non-blocking.
@@ -43,7 +43,7 @@ client::client(
 }
 
 client::client(client&& other) noexcept
-    : m_io_scheduler(std::exchange(other.m_io_scheduler, nullptr)),
+    : m_scheduler(std::exchange(other.m_scheduler, nullptr)),
       m_tls_ctx(std::move(other.m_tls_ctx)),
       m_options(std::move(other.m_options)),
       m_socket(std::move(other.m_socket)),
@@ -65,7 +65,7 @@ auto client::operator=(client&& other) noexcept -> client&
 {
     if (std::addressof(other) != this)
     {
-        m_io_scheduler   = std::exchange(other.m_io_scheduler, nullptr);
+        m_scheduler   = std::exchange(other.m_scheduler, nullptr);
         m_tls_ctx        = std::move(other.m_tls_ctx);
         m_options        = std::move(other.m_options);
         m_socket         = std::move(other.m_socket);
@@ -113,7 +113,7 @@ auto client::connect(std::chrono::milliseconds timeout) -> coro::task<connection
         // when the connection is established.
         if (errno == EAGAIN || errno == EINPROGRESS)
         {
-            auto pstatus = co_await m_io_scheduler->poll(m_socket, poll_op::write, timeout);
+            auto pstatus = co_await m_scheduler->poll(m_socket, poll_op::write, timeout);
             if (pstatus == poll_status::write)
             {
                 int       result{0};
@@ -186,7 +186,7 @@ auto client::handshake(std::chrono::milliseconds timeout) -> coro::task<connecti
         }
 
         // TODO: adjust timeout based on elapsed time so far.
-        auto pstatus = co_await m_io_scheduler->poll(m_socket, op, timeout);
+        auto pstatus = co_await m_scheduler->poll(m_socket, op, timeout);
         switch (pstatus)
         {
             case poll_status::timeout:
@@ -236,7 +236,7 @@ auto client::tls_shutdown_and_free(
                 co_return;
             }
 
-            auto pstatus = co_await m_io_scheduler->poll(m_socket, op, timeout);
+            auto pstatus = co_await m_scheduler->poll(m_socket, op, timeout);
             switch (pstatus)
             {
                 case poll_status::timeout:

@@ -35,7 +35,7 @@ enum timeout_status
     timeout,
 };
 
-class io_scheduler
+class scheduler
 {
     using timed_events = detail::poll_info::timed_events;
 
@@ -89,15 +89,15 @@ public:
     };
 
     /**
-     * @see io_scheduler::make_unique
+     * @see scheduler::make_unique
      */
-    explicit io_scheduler(options&& opts, private_constructor);
+    explicit scheduler(options&& opts, private_constructor);
 
     /**
-     * @brief Creates an io_scheduler executor.
+     * @brief Creates an scheduler executor.
      *
      * @param opts The scheduler's options.
-     * @return std::unique_ptr<io_scheduler>
+     * @return std::unique_ptr<scheduler>
      */
     static auto make_unique(
         options opts = options{
@@ -109,14 +109,14 @@ public:
                      ((std::thread::hardware_concurrency() > 1) ? (std::thread::hardware_concurrency() - 1) : 1),
                  .on_thread_start_functor = nullptr,
                  .on_thread_stop_functor  = nullptr},
-            .execution_strategy = execution_strategy_t::process_tasks_on_thread_pool}) -> std::unique_ptr<io_scheduler>;
+            .execution_strategy = execution_strategy_t::process_tasks_on_thread_pool}) -> std::unique_ptr<scheduler>;
 
-    io_scheduler(const io_scheduler&)                    = delete;
-    io_scheduler(io_scheduler&&)                         = delete;
-    auto operator=(const io_scheduler&) -> io_scheduler& = delete;
-    auto operator=(io_scheduler&&) -> io_scheduler&      = delete;
+    scheduler(const scheduler&)                    = delete;
+    scheduler(scheduler&&)                         = delete;
+    auto operator=(const scheduler&) -> scheduler& = delete;
+    auto operator=(scheduler&&) -> scheduler&      = delete;
 
-    virtual ~io_scheduler();
+    virtual ~scheduler();
 
     /**
      * Given a thread_strategy_t::manual this function should be called at regular intervals to
@@ -132,8 +132,8 @@ public:
 
     class schedule_operation
     {
-        friend class io_scheduler;
-        explicit schedule_operation(io_scheduler& scheduler) noexcept : m_scheduler(scheduler) {}
+        friend class scheduler;
+        explicit schedule_operation(scheduler& scheduler) noexcept : m_scheduler(scheduler) {}
 
     public:
         /**
@@ -167,7 +167,7 @@ public:
                         sizeof(control));
                     if (written != sizeof(control))
                     {
-                        std::cerr << "libcoro::io_scheduler::schedule_operation failed to write to schedule pipe, bytes written=" << written << "\n";
+                        std::cerr << "libcoro::scheduler::schedule_operation failed to write to schedule pipe, bytes written=" << written << "\n";
                     }
                 }
             }
@@ -184,41 +184,41 @@ public:
 
     private:
         /// The thread pool that this operation will execute on.
-        io_scheduler& m_scheduler;
+        scheduler& m_scheduler;
     };
 
     /**
-     * Schedules the current task onto this io_scheduler for execution.
+     * Schedules the current task onto this scheduler for execution.
      */
     auto schedule() -> schedule_operation { return schedule_operation{*this}; }
 
     /**
-     * Spawns a task into the io_scheduler and moves ownership of the task to the io_scheduler.
+     * Spawns a task into the scheduler and moves ownership of the task to the scheduler.
      * Only void return type tasks can be spawned in this manner since the task submitter will no
      * longer have control over the spawned task, it is effectively detached.
-     * @param task The task to execute on this io_scheduler.  It's lifetime ownership will be transferred
-     *             to this io_scheduler.
-     * @return True if the task was succesfully spawned onto the io_scheduler. This can fail if the task
+     * @param task The task to execute on this scheduler.  It's lifetime ownership will be transferred
+     *             to this scheduler.
+     * @return True if the task was succesfully spawned onto the scheduler. This can fail if the task
      *         is already completed or does not contain a valid coroutine anymore.
      */
     auto spawn_detached(coro::task<void>&& task) -> bool;
 
     /**
-     * Spawns the given task to be run on this io_scheduler, the task returned must be joined in the future.
-     * @note The returned task shouldn't be co_await'ed immediately, the spawned task is started on the io_scheduler
+     * Spawns the given task to be run on this scheduler, the task returned must be joined in the future.
+     * @note The returned task shouldn't be co_await'ed immediately, the spawned task is started on the scheduler
      *       automatically but the returned join task *must* be co_await'ed at some point in the future.
      *       If you drop the returned task it will hang the thread until the spawned task completes so it is
      *       highly advisable to co_await the returned join task appropriately.
-     * @param task The task to spawn onto the io_scheduler.
+     * @param task The task to spawn onto the scheduler.
      * @return A task that can be co_await'ed (joined) in the future to know when the spawned task is complete.
      */
     auto spawn_joinable(coro::task<void>&& task) -> coro::task<void>;
 
     /**
-     * Schedules a task on the io_scheduler and returns another task that must be awaited on for completion.
+     * Schedules a task on the scheduler and returns another task that must be awaited on for completion.
      * This can be done via co_await in a coroutine context or coro::sync_wait() outside of coroutine context.
      * @tparam return_type The return value of the task.
-     * @param task The task to schedule on the io_scheduler.
+     * @param task The task to schedule on the scheduler.
      * @return The task to await for the input task to complete.
      */
     template<typename return_type>
@@ -229,13 +229,13 @@ public:
     }
 
     /**
-     * Schedules a task on the io_scheduler that must complete within the given timeout.
+     * Schedules a task on the scheduler that must complete within the given timeout.
      * NOTE: This version of schedule does *NOT* cancel the given task, it will continue executing even if it times
      * out. It is absolutely recommended to use the version of this schedule() function that takes an
      * std::stop_token and have the scheduled task check to see if its been cancelled due to timeout to not waste
      * resources.
      * @tparam return_type The return value of the task.
-     * @param task The task to schedule on the io_scheduler with the given timeout.
+     * @param task The task to schedule on the scheduler with the given timeout.
      * @param timeout How long should this task be given to complete before it times out?
      * @return The task to await for the input task to complete.
      */
@@ -280,12 +280,12 @@ public:
 
 #ifndef EMSCRIPTEN
     /**
-     * Schedules a task on the io_scheduler that must complete within the given timeout.
+     * Schedules a task on the scheduler that must complete within the given timeout.
      * NOTE: This version of the task will have the stop_source.request_stop() be called if the timeout triggers.
      *       It is up to you to check in the scheduled task if the stop has been requested to actually stop
      * executing the task.
      * @tparam return_type The return value of the task.
-     * @param task The task to schedule on the io_scheduler with the given timeout.
+     * @param task The task to schedule on the scheduler with the given timeout.
      * @param timeout How long should this task be given to complete before it times out?
      * @return The task to await for the input task to complete.
      */
@@ -482,7 +482,7 @@ private:
     /// or for tasks that are polling with timeouts.
     timed_events m_timed_events{};
 
-    /// Has the io_scheduler been requested to shut down?
+    /// Has the scheduler been requested to shut down?
     std::atomic<bool> m_shutdown_requested{false};
 
     auto yield_for_internal(std::chrono::nanoseconds amount) -> coro::task<void>;

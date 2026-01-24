@@ -3,13 +3,13 @@
 
 int main()
 {
-    auto scheduler = coro::io_scheduler::make_unique();
+    auto scheduler = coro::scheduler::make_unique();
     coro::condition_variable cv{};
     coro::mutex m{};
     std::atomic<uint64_t> condition{0};
     std::stop_source ss{};
 
-    auto make_waiter_task = [](std::unique_ptr<coro::io_scheduler>& scheduler, coro::condition_variable& cv, coro::mutex& m, std::stop_source& ss, std::atomic<uint64_t>& condition, int64_t id) -> coro::task<void>
+    auto make_waiter_task = [](std::unique_ptr<coro::scheduler>& scheduler, coro::condition_variable& cv, coro::mutex& m, std::stop_source& ss, std::atomic<uint64_t>& condition, int64_t id) -> coro::task<void>
     {
         co_await scheduler->schedule();
         while (true)
@@ -44,7 +44,7 @@ int main()
         }
     };
 
-    auto make_notifier_task = [](std::unique_ptr<coro::io_scheduler>& scheduler, coro::condition_variable& cv, coro::mutex& m, std::stop_source& ss, std::atomic<uint64_t>& condition) -> coro::task<void>
+    auto make_notifier_task = [](std::unique_ptr<coro::scheduler>& scheduler, coro::condition_variable& cv, coro::mutex& m, std::stop_source& ss, std::atomic<uint64_t>& condition) -> coro::task<void>
     {
         // To make this example more deterministic the notifier will wait between each notify event to showcase
         // how exactly the condition variable will behave with the condition in certain states and the notify_one or notify_all.

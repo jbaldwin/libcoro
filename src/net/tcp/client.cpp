@@ -6,33 +6,33 @@ namespace coro::net::tcp
 {
 using namespace std::chrono_literals;
 
-client::client(std::unique_ptr<coro::io_scheduler>& scheduler, options opts)
-    : m_io_scheduler(scheduler.get()),
+client::client(std::unique_ptr<coro::scheduler>& scheduler, options opts)
+    : m_scheduler(scheduler.get()),
       m_options(std::move(opts)),
       m_socket(
           net::make_socket(
               net::socket::options{m_options.address.domain(), net::socket::type_t::tcp, net::socket::blocking_t::no}))
 {
-    if (m_io_scheduler == nullptr)
+    if (m_scheduler == nullptr)
     {
-        throw std::runtime_error{"tcp::client cannot have nullptr io_scheduler"};
+        throw std::runtime_error{"tcp::client cannot have nullptr scheduler"};
     }
 }
 
-client::client(coro::io_scheduler* scheduler, net::socket socket, options opts)
-    : m_io_scheduler(scheduler),
+client::client(coro::scheduler* scheduler, net::socket socket, options opts)
+    : m_scheduler(scheduler),
       m_options(std::move(opts)),
       m_socket(std::move(socket)),
       m_connect_status(connect_status::connected)
 {
-    // io_scheduler is assumed good since it comes from a tcp::server.
+    // scheduler is assumed good since it comes from a tcp::server.
 
     // Force the socket to be non-blocking.
     m_socket.blocking(coro::net::socket::blocking_t::no);
 }
 
 client::client(const client& other)
-    : m_io_scheduler(other.m_io_scheduler),
+    : m_scheduler(other.m_scheduler),
       m_options(other.m_options),
       m_socket(other.m_socket),
       m_connect_status(other.m_connect_status)
@@ -40,7 +40,7 @@ client::client(const client& other)
 }
 
 client::client(client&& other) noexcept
-    : m_io_scheduler(other.m_io_scheduler),
+    : m_scheduler(other.m_scheduler),
       m_options(std::move(other.m_options)),
       m_socket(std::move(other.m_socket)),
       m_connect_status(std::exchange(other.m_connect_status, std::nullopt))
@@ -55,7 +55,7 @@ auto client::operator=(const client& other) noexcept -> client&
 {
     if (std::addressof(other) != this)
     {
-        m_io_scheduler   = other.m_io_scheduler;
+        m_scheduler   = other.m_scheduler;
         m_options        = other.m_options;
         m_socket         = other.m_socket;
         m_connect_status = other.m_connect_status;
@@ -67,7 +67,7 @@ auto client::operator=(client&& other) noexcept -> client&
 {
     if (std::addressof(other) != this)
     {
-        m_io_scheduler   = std::exchange(other.m_io_scheduler, nullptr);
+        m_scheduler   = std::exchange(other.m_scheduler, nullptr);
         m_options        = std::move(other.m_options);
         m_socket         = std::move(other.m_socket);
         m_connect_status = std::exchange(other.m_connect_status, std::nullopt);
@@ -107,7 +107,7 @@ auto client::connect(std::chrono::milliseconds timeout) -> coro::task<connect_st
         // when the connection is established.
         if (errno == EAGAIN || errno == EINPROGRESS)
         {
-            auto pstatus = co_await m_io_scheduler->poll(m_socket, poll_op::write, timeout);
+            auto pstatus = co_await m_scheduler->poll(m_socket, poll_op::write, timeout);
             if (pstatus == poll_status::write)
             {
                 int       result{0};

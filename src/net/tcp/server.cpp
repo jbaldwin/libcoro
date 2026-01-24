@@ -1,11 +1,11 @@
 #include "coro/net/tcp/server.hpp"
 
-#include "coro/io_scheduler.hpp"
+#include "coro/scheduler.hpp"
 
 namespace coro::net::tcp
 {
-server::server(std::unique_ptr<coro::io_scheduler>& scheduler, options opts)
-    : m_io_scheduler(scheduler.get()),
+server::server(std::unique_ptr<coro::scheduler>& scheduler, options opts)
+    : m_scheduler(scheduler.get()),
       m_options(std::move(opts)),
       m_accept_socket(
           net::make_accept_socket(
@@ -14,14 +14,14 @@ server::server(std::unique_ptr<coro::io_scheduler>& scheduler, options opts)
               m_options.port,
               m_options.backlog))
 {
-    if (m_io_scheduler == nullptr)
+    if (m_scheduler == nullptr)
     {
-        throw std::runtime_error{"tcp::server cannot have a nullptr io_scheduler"};
+        throw std::runtime_error{"tcp::server cannot have a nullptr scheduler"};
     }
 }
 
 server::server(server&& other)
-    : m_io_scheduler(std::exchange(other.m_io_scheduler, nullptr)),
+    : m_scheduler(std::exchange(other.m_scheduler, nullptr)),
       m_options(std::move(other.m_options)),
       m_accept_socket(std::move(other.m_accept_socket))
 {
@@ -31,7 +31,7 @@ auto server::operator=(server&& other) -> server&
 {
     if (std::addressof(other) != this)
     {
-        m_io_scheduler  = std::exchange(other.m_io_scheduler, nullptr);
+        m_scheduler  = std::exchange(other.m_scheduler, nullptr);
         m_options       = std::move(other.m_options);
         m_accept_socket = std::move(other.m_accept_socket);
     }
@@ -53,7 +53,7 @@ auto server::accept() -> coro::net::tcp::client
     };
 
     return tcp::client{
-        m_io_scheduler,
+        m_scheduler,
         std::move(s),
         client::options{
             .address = net::ip_address{ip_addr_view, static_cast<net::domain_t>(client.sin_family)},
