@@ -52,19 +52,21 @@ public:
     auto connect(std::chrono::milliseconds timeout = std::chrono::milliseconds{0}) -> coro::task<net::connect_status>;
 
     /**
-     * Polls for the given operation on this client's tcp socket.  This should be done prior to
-     * calling recv and after a send call that doesn't send the entire buffer.
-     * @param op The poll operation to perform, use read for incoming data and write for outgoing.
-     * @param timeout The amount of time to wait for the poll event to be ready.  Use zero for infinte timeout.
-     * @return The status result of th poll operation.  When poll_status::read or poll_status::write is returned then
-     *         this specific event operation is ready.
+     * Attempts to asynchronously read data from the socket into the provided buffer.
+     *
+     * The function may read fewer bytes than requested. In that case, the returned
+     * status will be 'ok' and the returned span will reference the prefix of the
+     * buffer that was filled with received data.
+     *
+     * @see read_exact()
+     * @param buffer Destination buffer to read data into.
+     * @param timeout Maximum time to wait for the socket to become readable
+     *                Use 0 for infinite timeout.
+     * @return A pair of:
+     *          - status of the operation
+     *          - span pointing to the read part of buffer
+     * @{
      */
-    auto poll(const coro::poll_op op, const std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
-        -> coro::task<poll_status>
-    {
-        return m_scheduler->poll(m_socket, op, timeout);
-    }
-
     auto read_some(std::span<std::byte> buffer, const std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
         -> coro::task<std::pair<io_status, std::span<std::byte>>>
     {
@@ -81,7 +83,24 @@ public:
     {
         return read_some(std::as_writable_bytes(std::span{buffer}), timeout);
     }
+    /** }@ */
 
+    /**
+     * Asynchronously reads exactly buffer.size() bytes from the socket.
+     *
+     * Repeatedly calls write_some until either:
+     * - buffer.size() bytes have been read, or
+     * - an error or timeout occurs.
+     *
+     * @see read_some()
+     * @param buffer Destination buffer to read data into.
+     * @param timeout Maximum time to wait for the socket to become readable
+     *                Use 0 for infinite timeout.
+     * @return A pair of:
+     *          - status of the operation
+     *          - span pointing to the read part of buffer
+     * @{
+     */
     auto read_exact(std::span<std::byte> buffer, const std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
         -> coro::task<std::pair<io_status, std::span<std::byte>>>
     {
@@ -123,43 +142,24 @@ public:
     {
         return read_exact(std::as_writable_bytes(std::span{buffer}), timeout);
     }
+    /** }@ */
+
     /**
-     * Receives incoming data into the given buffer. By default, since all tcp client sockets are set
-     * to non-blocking use co_await poll() to determine when data is ready to be received.
-     * @param buffer Received bytes are written into this buffer up to the buffers size.
-     * @return The status of the recv call and a span of the bytes received (if any). The span of
-     *         bytes will be a subspan or full span of the given input buffer.
+     * Attempts to asynchronously write data from the provided buffer to the socket.
+     *
+     * If only part of the buffer is written, the returned status will be 'ok' and
+     * the returned span will reference the portion of the original buffer that
+     * was not sent.
+     *
+     * @see write_all()
+     * @param buffer Buffer containing the data to write.
+     * @param timeout Maximum time to wait for the socket to become writable.
+     *                Use 0 for infinite timeout.
+     * @return A pair of:
+     *          - status of the operation
+     *          - span pointing to the unsent part of the buffer
+     * @{
      */
-    template<
-        concepts::mutable_buffer buffer_type,
-        typename element_type = typename concepts::mutable_buffer_traits<buffer_type>::element_type>
-    auto recv(buffer_type&& buffer) -> std::pair<io_status, std::span<element_type>>
-    {
-        // If the user requested zero bytes, just return.
-        if (buffer.empty())
-        {
-            return {io_status{io_status::kind::ok}, std::span<element_type>{}};
-        }
-
-        auto bytes_recv = ::recv(m_socket.native_handle(), buffer.data(), buffer.size(), 0);
-        if (bytes_recv > 0)
-        {
-            // Ok, we've received some data.
-            return {
-                io_status{io_status::kind::ok},
-                std::span<element_type>{buffer.data(), static_cast<size_t>(bytes_recv)}};
-        }
-
-        if (bytes_recv == 0)
-        {
-            // On TCP stream sockets 0 indicates the connection has been closed by the peer.
-            return {io_status{io_status::kind::closed}, std::span<element_type>{}};
-        }
-
-        // Report the error to the user.
-        return {make_io_status_from_native(errno), std::span<element_type>{}};
-    }
-
     auto write_some(
         std::span<const std::byte> buffer, const std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
         -> coro::task<std::pair<io_status, std::span<const std::byte>>>
@@ -167,7 +167,7 @@ public:
         auto poll_status = co_await poll(poll_op::write, timeout);
         if (poll_status != poll_status::write)
         {
-            co_return std::pair{make_io_status_poll_status(poll_status), std::span<std::byte>{}};
+            co_return std::pair{make_io_status_poll_status(poll_status), buffer};
         }
         co_return send(buffer);
     }
@@ -177,7 +177,22 @@ public:
     {
         return write_some(std::as_bytes(std::span{buffer}), timeout);
     }
+    /** }@ */
 
+    /**
+     * Asynchronously writes the entire contents of the provided buffer to the socket.
+     * Repeatedly call write_some until either:
+     * - all bytes have been sent, or
+     * - an error or timeout occurs.
+     *
+     * @see write_some()
+     * @param buffer The data to write on the tcp socket.
+     * @return A pair of:
+     *          - status of the operation
+     *          - span pointing to the unsent part of the buffer;
+     *            empty if all data was sent successfully
+     * @{
+     */
     auto write_all(
         std::span<const std::byte> buffer, const std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
         -> coro::task<std::pair<io_status, std::span<const std::byte>>>
@@ -222,12 +237,63 @@ public:
 
         co_return {io_status{io_status::kind::ok}, {}};
     }
-
     template<concepts::const_buffer buffer_type>
     auto write_all(const buffer_type& buffer, const std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
         -> coro::task<std::pair<io_status, std::span<const std::byte>>>
     {
         return write_all(std::as_bytes(std::span{buffer}), timeout);
+    }
+    /** }@ */
+
+    /**
+     * Polls for the given operation on this client's tcp socket.  This should be done prior to
+     * calling recv and after a send call that doesn't send the entire buffer.
+     * @param op The poll operation to perform, use read for incoming data and write for outgoing.
+     * @param timeout The amount of time to wait for the poll event to be ready.  Use zero for infinte timeout.
+     * @return The status result of th poll operation.  When poll_status::read or poll_status::write is returned then
+     *         this specific event operation is ready.
+     */
+    auto poll(const coro::poll_op op, const std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
+        -> coro::task<poll_status>
+    {
+        return m_scheduler->poll(m_socket, op, timeout);
+    }
+
+    /**
+     * Receives incoming data into the given buffer. By default, since all tcp client sockets are set
+     * to non-blocking use co_await poll() to determine when data is ready to be received.
+     * @param buffer Received bytes are written into this buffer up to the buffers size.
+     * @return The status of the recv call and a span of the bytes received (if any). The span of
+     *         bytes will be a subspan or full span of the given input buffer.
+     */
+    template<
+        concepts::mutable_buffer buffer_type,
+        typename element_type = typename concepts::mutable_buffer_traits<buffer_type>::element_type>
+    auto recv(buffer_type&& buffer) -> std::pair<io_status, std::span<element_type>>
+    {
+        // If the user requested zero bytes, just return.
+        if (buffer.empty())
+        {
+            return {io_status{io_status::kind::ok}, std::span<element_type>{}};
+        }
+
+        auto bytes_recv = ::recv(m_socket.native_handle(), buffer.data(), buffer.size(), 0);
+        if (bytes_recv > 0)
+        {
+            // Ok, we've received some data.
+            return {
+                io_status{io_status::kind::ok},
+                std::span<element_type>{buffer.data(), static_cast<size_t>(bytes_recv)}};
+        }
+
+        if (bytes_recv == 0)
+        {
+            // On TCP stream sockets 0 indicates the connection has been closed by the peer.
+            return {io_status{io_status::kind::closed}, std::span<element_type>{}};
+        }
+
+        // Report the error to the user.
+        return {make_io_status_from_native(errno), std::span<element_type>{}};
     }
 
     /**

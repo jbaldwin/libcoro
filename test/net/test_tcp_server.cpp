@@ -64,18 +64,14 @@ TEST_CASE("tcp_server ping server", "[tcp_server]")
         co_await scheduler->schedule();
         coro::net::tcp::server server{scheduler, endpoint};
 
-        // Poll for client connection.
-        std::cerr << "server poll(accept)\n";
-        auto pstatus = co_await server.poll();
-        REQUIRE(pstatus == coro::poll_status::read);
         std::cerr << "server accept()\n";
-        auto client = server.accept();
-        REQUIRE(client.socket().is_valid());
-
+        auto client = co_await server.accept();
+        REQUIRE(client.has_value());
+        REQUIRE(client->socket().is_valid());
 
         std::string buffer(256, '\0');
         std::cerr << "server read_some()\n";
-        auto [rstatus, rspan] = co_await client.read_some(buffer);
+        auto [rstatus, rspan] = co_await client->read_some(buffer);
         REQUIRE(rstatus.is_ok());
         REQUIRE(rspan.size() == client_msg.size());
         buffer.resize(rspan.size());
@@ -83,7 +79,7 @@ TEST_CASE("tcp_server ping server", "[tcp_server]")
 
         // Respond to client.
         std::cerr << "server send()\n";
-        auto [wstatus, remaining] = co_await client.write_some(server_msg);
+        auto [wstatus, remaining] = co_await client->write_some(server_msg);
         REQUIRE(wstatus.is_ok());
         REQUIRE(remaining.empty());
 
@@ -123,36 +119,21 @@ TEST_CASE("tcp_server concurrent polling on the same socket", "[tcp_server]")
         co_await scheduler->schedule();
         coro::net::tcp::server server{scheduler, endpoint};
 
-        auto poll_status = co_await server.poll();
-        REQUIRE(poll_status == coro::poll_status::read);
-
-        auto read_client = server.accept();
-        REQUIRE(read_client.socket().is_valid());
+        auto read_client = co_await server.accept();
+        REQUIRE(read_client.has_value());
+        REQUIRE(read_client->socket().is_valid());
 
         // make a copy so we can poll twice at the same time in different coroutines
-        auto write_client = read_client;
+        auto write_client = *read_client;
 
-        scheduler->spawn_detached(make_read_task(std::move(read_client)));
+        scheduler->spawn_detached(make_read_task(std::move(*read_client)));
 
         // Make sure the read op has completed.
         co_await scheduler->yield_for(500ms);
 
-        std::string           data(8096, 'A');
-        std::span<const char> remaining{data};
-        do
-        {
-            auto poll_status = co_await write_client.poll(coro::poll_op::write);
-            REQUIRE(poll_status == coro::poll_status::write);
-            auto [send_status, r] = write_client.send(remaining);
-            REQUIRE(send_status.is_ok());
-
-            if (r.empty())
-            {
-                break;
-            }
-
-            remaining = r;
-        } while (true);
+        std::string data(8096, 'A');
+        auto [send_status, r] = co_await write_client.write_all(data);
+        REQUIRE(send_status.is_ok());
 
         co_return data;
     };
@@ -213,10 +194,9 @@ TEST_CASE("tcp_server graceful shutdown via socket", "[tcp_server]")
     {
         std::cerr << "make accept task start\n";
         started.set();
-        auto poll_result = co_await server.poll();
-        REQUIRE(poll_result == coro::poll_status::cancelled);
-        auto client = server.accept();
-        REQUIRE_FALSE(client.socket().is_valid());
+        auto client = co_await server.accept();
+        REQUIRE_FALSE(client.has_value());
+        REQUIRE(client.error().type == coro::net::io_status::kind::cancelled);
         std::cerr << "make accept task completed\n";
     };
 

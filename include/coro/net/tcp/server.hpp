@@ -29,8 +29,9 @@ public:
     explicit server(
         std::unique_ptr<coro::scheduler>& scheduler,
         const net::socket_address&endpoint,
-        options                       opts = options{
-                                  .backlog = 128,
+        options                              opts = options{
+
+                                         .backlog = 128,
         });
 
     server(const server&) = delete;
@@ -38,6 +39,27 @@ public:
     auto operator=(const server&) -> server& = delete;
     auto operator=(server&& other) -> server&;
     ~server() = default;
+
+    /**
+     * Asynchronously waits for an incoming TCP connection and accepts it.
+     *
+     * Use the socket.is_valid() to verify the client was correctly accepted.
+     *
+     * @param timeout How long to wait for a new connection before timing out, zero waits indefinitely.
+     * @return The newly connected tcp client connection on success or an io_status describing the failure.
+     */
+    auto accept(std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
+        -> coro::task<expected<coro::net::tcp::client, io_status>>
+    {
+        auto pstatus = co_await poll(timeout);
+
+        if (pstatus != coro::poll_status::read)
+        {
+            co_return unexpected{make_io_status_poll_status(pstatus)};
+        }
+
+        co_return accept_now();
+    };
 
     /**
      * Polls for new incoming tcp connections.
@@ -55,7 +77,7 @@ public:
      * and invalid state, use the socket.is_valid() to verify the client was correctly accepted.
      * @return The newly connected tcp client connection.
      */
-    auto accept() -> coro::net::tcp::client;
+    auto accept_now() -> coro::net::tcp::client;
 
     /**
      * @return The tcp accept socket this server is using.
