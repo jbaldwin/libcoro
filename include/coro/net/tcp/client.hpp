@@ -2,9 +2,8 @@
 
 #include "coro/concepts/buffer.hpp"
 #include "coro/net/connect.hpp"
+#include "coro/net/io_status.hpp"
 #include "coro/net/ip_address.hpp"
-#include "coro/net/recv_status.hpp"
-#include "coro/net/send_status.hpp"
 #include "coro/net/socket.hpp"
 #include "coro/net/socket_address.hpp"
 #include "coro/poll.hpp"
@@ -66,6 +65,64 @@ public:
         return m_scheduler->poll(m_socket, op, timeout);
     }
 
+    auto read_some(std::span<std::byte> buffer, const std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
+        -> coro::task<std::pair<io_status, std::span<std::byte>>>
+    {
+        auto poll_status = co_await poll(poll_op::read, timeout);
+        if (poll_status != poll_status::read)
+        {
+            co_return std::pair{make_io_status_poll_status(poll_status), std::span<std::byte>{}};
+        }
+        co_return recv(buffer);
+    }
+    template<concepts::mutable_buffer buffer_type>
+    auto read_some(buffer_type&& buffer, const std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
+        -> coro::task<std::pair<io_status, std::span<std::byte>>>
+    {
+        return read_some(std::as_writable_bytes(std::span{buffer}), timeout);
+    }
+
+    auto read_exact(std::span<std::byte> buffer, const std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
+        -> coro::task<std::pair<io_status, std::span<std::byte>>>
+    {
+        const auto           start_time = std::chrono::steady_clock::now();
+        std::span<std::byte> remaining  = buffer;
+
+        while (!remaining.empty())
+        {
+            std::chrono::milliseconds remaining_timeout{0};
+            if (timeout.count() > 0)
+            {
+                auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::steady_clock::now() - start_time);
+
+                if (elapsed >= timeout)
+                {
+                    // Returning read prefix of the span
+                    co_return {
+                        io_status{io_status::kind::timeout}, buffer.subspan(0, buffer.size() - remaining.size())};
+                }
+                remaining_timeout = timeout - elapsed;
+            }
+
+            auto [status, read_span] = co_await read_some(remaining, remaining_timeout);
+            remaining                = remaining.subspan(read_span.size());
+
+            if (!status.is_ok())
+            {
+                co_return {status, buffer.subspan(0, buffer.size() - remaining.size())};
+            }
+        }
+
+        co_return {io_status{io_status::kind::ok}, buffer};
+    }
+
+    template<concepts::mutable_buffer buffer_type>
+    auto read_exact(buffer_type&& buffer, const std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
+        -> coro::task<std::pair<io_status, std::span<std::byte>>>
+    {
+        return read_exact(std::as_writable_bytes(std::span{buffer}), timeout);
+    }
     /**
      * Receives incoming data into the given buffer. By default, since all tcp client sockets are set
      * to non-blocking use co_await poll() to determine when data is ready to be received.
@@ -76,29 +133,101 @@ public:
     template<
         concepts::mutable_buffer buffer_type,
         typename element_type = typename concepts::mutable_buffer_traits<buffer_type>::element_type>
-    auto recv(buffer_type&& buffer) -> std::pair<recv_status, std::span<element_type>>
+    auto recv(buffer_type&& buffer) -> std::pair<io_status, std::span<element_type>>
     {
         // If the user requested zero bytes, just return.
         if (buffer.empty())
         {
-            return {recv_status::ok, std::span<element_type>{}};
+            return {io_status{io_status::kind::ok}, std::span<element_type>{}};
         }
 
         auto bytes_recv = ::recv(m_socket.native_handle(), buffer.data(), buffer.size(), 0);
         if (bytes_recv > 0)
         {
             // Ok, we've received some data.
-            return {recv_status::ok, std::span<element_type>{buffer.data(), static_cast<size_t>(bytes_recv)}};
+            return {
+                io_status{io_status::kind::ok},
+                std::span<element_type>{buffer.data(), static_cast<size_t>(bytes_recv)}};
         }
 
         if (bytes_recv == 0)
         {
             // On TCP stream sockets 0 indicates the connection has been closed by the peer.
-            return {recv_status::closed, std::span<element_type>{}};
+            return {io_status{io_status::kind::closed}, std::span<element_type>{}};
         }
 
         // Report the error to the user.
-        return {static_cast<recv_status>(errno), std::span<element_type>{}};
+        return {make_io_status_from_native(errno), std::span<element_type>{}};
+    }
+
+    auto write_some(
+        std::span<const std::byte> buffer, const std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
+        -> coro::task<std::pair<io_status, std::span<const std::byte>>>
+    {
+        auto poll_status = co_await poll(poll_op::write, timeout);
+        if (poll_status != poll_status::write)
+        {
+            co_return std::pair{make_io_status_poll_status(poll_status), std::span<std::byte>{}};
+        }
+        co_return send(buffer);
+    }
+    template<concepts::const_buffer buffer_type>
+    auto write_some(const buffer_type& buffer, const std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
+        -> coro::task<std::pair<io_status, std::span<const std::byte>>>
+    {
+        return write_some(std::as_bytes(std::span{buffer}), timeout);
+    }
+
+    auto write_all(
+        std::span<const std::byte> buffer, const std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
+        -> coro::task<std::pair<io_status, std::span<const std::byte>>>
+    {
+        const auto                 start_time = std::chrono::steady_clock::now();
+        std::span<const std::byte> remaining  = buffer;
+
+        // Trying to send something without polling
+        //        {
+        //            auto [status, unsent] = send(buffer);
+        //            remaining = unsent;
+        //
+        //            if (!status.is_ok() && status.type != io_status::kind::try_again)
+        //            {
+        //                co_return {status, remaining};
+        //            }
+        //        }
+
+        while (!remaining.empty())
+        {
+            std::chrono::milliseconds remaining_timeout{0};
+            if (timeout.count() > 0)
+            {
+                auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::steady_clock::now() - start_time);
+
+                if (elapsed >= timeout)
+                {
+                    co_return {io_status{io_status::kind::timeout}, remaining};
+                }
+                remaining_timeout = timeout - elapsed;
+            }
+
+            auto [status, unsent_span] = co_await write_some(remaining, remaining_timeout);
+            remaining                  = unsent_span;
+
+            if (!status.is_ok())
+            {
+                co_return {status, remaining};
+            }
+        }
+
+        co_return {io_status{io_status::kind::ok}, {}};
+    }
+
+    template<concepts::const_buffer buffer_type>
+    auto write_all(const buffer_type& buffer, const std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
+        -> coro::task<std::pair<io_status, std::span<const std::byte>>>
+    {
+        return write_all(std::as_bytes(std::span{buffer}), timeout);
     }
 
     /**
@@ -113,23 +242,25 @@ public:
     template<
         concepts::const_buffer buffer_type,
         typename element_type = typename concepts::const_buffer_traits<buffer_type>::element_type>
-    auto send(const buffer_type& buffer) -> std::pair<send_status, std::span<element_type>>
+    auto send(const buffer_type& buffer) -> std::pair<io_status, std::span<element_type>>
     {
         // If the user requested zero bytes, just return.
         if (buffer.empty())
         {
-            return {send_status::ok, std::span<element_type>{buffer.data(), buffer.size()}};
+            return {io_status{io_status::kind::ok}, std::span<element_type>{buffer.data(), buffer.size()}};
         }
 
         auto bytes_sent = ::send(m_socket.native_handle(), buffer.data(), buffer.size(), 0);
         if (bytes_sent >= 0)
         {
             // Some or all of the bytes were written.
-            return {send_status::ok, std::span<element_type>{buffer.data() + bytes_sent, buffer.size() - bytes_sent}};
+            return {
+                io_status{io_status::kind::ok},
+                std::span<element_type>{buffer.data() + bytes_sent, buffer.size() - bytes_sent}};
         }
 
         // Due to the error none of the bytes were written.
-        return {static_cast<send_status>(errno), std::span<element_type>{buffer.data(), buffer.size()}};
+        return {make_io_status_from_native(errno), std::span<element_type>{buffer.data(), buffer.size()}};
     }
 
 private:
