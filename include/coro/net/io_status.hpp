@@ -17,7 +17,7 @@ struct io_status
         connection_refused,
         timeout,
 
-        try_again,
+        would_block_or_try_again,
         polling_error,
         cancelled,
 
@@ -30,6 +30,7 @@ struct io_status
     [[nodiscard]] auto is_ok() const -> bool { return type == kind::ok; }
     [[nodiscard]] auto is_timeout() const -> bool { return type == kind::timeout; }
     [[nodiscard]] auto is_closed() const -> bool { return type == kind::closed; }
+    [[nodiscard]] auto would_block() const -> bool { return type == kind::would_block_or_try_again; }
 
     [[nodiscard]] auto is_native() const -> bool { return type == kind::native; }
 
@@ -42,5 +43,5 @@ struct io_status
 };
 
 auto make_io_status_from_native(int native_code) -> io_status;
-auto make_io_status_poll_status(coro::poll_status status) -> io_status;
+auto make_io_status_from_poll_status(coro::poll_status status) -> io_status;
 } // namespace coro::net

@@ -73,7 +73,7 @@ public:
         auto poll_status = co_await poll(poll_op::read, timeout);
         if (poll_status != poll_status::read)
         {
-            co_return std::pair{make_io_status_poll_status(poll_status), std::span<std::byte>{}};
+            co_return std::pair{make_io_status_from_poll_status(poll_status), std::span<std::byte>{}};
         }
         co_return recv(buffer);
     }
@@ -167,7 +167,7 @@ public:
         auto poll_status = co_await poll(poll_op::write, timeout);
         if (poll_status != poll_status::write)
         {
-            co_return std::pair{make_io_status_poll_status(poll_status), buffer};
+            co_return std::pair{make_io_status_from_poll_status(poll_status), buffer};
         }
         co_return send(buffer);
     }

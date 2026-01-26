@@ -25,8 +25,8 @@ std::string coro::net::io_status::message() const
                 return "Connection refused by target host";
             case kind::timeout:
                 return "Operation timed out";
-            case kind::try_again:
-                return "try_again";
+            case kind::would_block_or_try_again:
+                return "would_block_or_try_again";
             case kind::polling_error:
                 return "polling_error";
             case kind::cancelled:
@@ -92,7 +92,10 @@ auto coro::net::make_io_status_from_native(int native_code) -> coro::net::io_sta
             type = kind::connection_reset;
             break;
         case EAGAIN:
-            type = kind::try_again;
+#if defined(EWOULDBLOCK) && EWOULDBLOCK != EAGAIN
+        case EWOULDBLOCK:
+#endif
+            type = kind::would_block_or_try_again;
             break;
         default:
             type = kind::native;
@@ -101,7 +104,7 @@ auto coro::net::make_io_status_from_native(int native_code) -> coro::net::io_sta
     return coro::net::io_status{.type = type, .native_code = native_code};
 #endif
 }
-auto coro::net::make_io_status_poll_status(coro::poll_status status) -> coro::net::io_status
+auto coro::net::make_io_status_from_poll_status(coro::poll_status status) -> coro::net::io_status
 {
     switch (status)
     {

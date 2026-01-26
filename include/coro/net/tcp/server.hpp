@@ -55,7 +55,7 @@ public:
 
         if (pstatus != coro::poll_status::read)
         {
-            co_return unexpected{make_io_status_poll_status(pstatus)};
+            co_return unexpected{make_io_status_from_poll_status(pstatus)};
         }
 
         co_return accept_now();
