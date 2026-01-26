@@ -31,8 +31,12 @@ std::string coro::net::io_status::message() const
                 return "polling_error";
             case kind::cancelled:
                 return "cancelled";
+            case kind::udp_not_bound:
+                return "udp_not_bound";
             case kind::native:
                 return "native";
+            case kind::message_to_big:
+                return "message_to_big";
         }
     }
 
@@ -96,6 +100,9 @@ auto coro::net::make_io_status_from_native(int native_code) -> coro::net::io_sta
         case EWOULDBLOCK:
 #endif
             type = kind::would_block_or_try_again;
+            break;
+        case EMSGSIZE:
+            type = kind::message_to_big;
             break;
         default:
             type = kind::native;

@@ -58,7 +58,11 @@ public:
             co_return unexpected{make_io_status_from_poll_status(pstatus)};
         }
 
-        co_return accept_now();
+        auto client = accept_now();
+        if (!client.socket().is_valid()) {
+            co_return unexpected{make_io_status_from_native(errno)};
+        }
+        co_return client;
     };
 
     /**

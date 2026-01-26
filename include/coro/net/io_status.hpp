@@ -21,6 +21,9 @@ struct io_status
         polling_error,
         cancelled,
 
+        udp_not_bound,
+        message_to_big,
+
         native
     };
 

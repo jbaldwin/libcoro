@@ -20,9 +20,8 @@ TEST_CASE("udp one way", "[udp]")
         co_await scheduler->schedule();
         coro::net::udp::peer peer{scheduler};
 
-        auto [sstatus, remaining] = peer.sendto(endpoint, msg);
-        REQUIRE(sstatus == coro::net::send_status::ok);
-        REQUIRE(remaining.empty());
+        auto wstatus = co_await peer.write_to(endpoint, msg);
+        REQUIRE(wstatus.is_ok());
 
         co_return;
     };
@@ -36,12 +35,9 @@ TEST_CASE("udp one way", "[udp]")
 
         coro::net::udp::peer self{scheduler, listen_point};
 
-        auto pstatus = co_await self.poll(coro::poll_op::read);
-        REQUIRE(pstatus == coro::poll_status::read);
-
         std::string buffer(64, '\0');
-        auto [rstatus, peer_endpoint, rspan] = self.recvfrom(buffer);
-        REQUIRE(rstatus == coro::net::recv_status::ok);
+        auto [rstatus, peer_endpoint, rspan] = co_await self.read_from(buffer);
+        REQUIRE(rstatus.is_ok());
         REQUIRE(peer_endpoint.ip() == endpoint.ip());
         // The peer's port will be randomly picked by the kernel since it wasn't bound.
         REQUIRE(rspan.size() == msg.size());
@@ -78,19 +74,14 @@ TEST_CASE("udp echo peers", "[udp]")
         if (send_first)
         {
             // Send my message to my peer first.
-            auto [sstatus, remaining] = me.sendto(peer_endpoint, my_msg);
-            REQUIRE(sstatus == coro::net::send_status::ok);
-            REQUIRE(remaining.empty());
+            auto wstatus= co_await me.write_to(peer_endpoint, my_msg);
+            REQUIRE(wstatus.is_ok());
         }
         else
         {
-            // Poll for my peers message first.
-            auto pstatus = co_await me.poll(coro::poll_op::read);
-            REQUIRE(pstatus == coro::poll_status::read);
-
             std::string buffer(64, '\0');
-            auto [rstatus, recv_peer_endpoint, rspan] = me.recvfrom(buffer);
-            REQUIRE(rstatus == coro::net::recv_status::ok);
+            auto [rstatus, recv_peer_endpoint, rspan] = co_await me.read_from(buffer);
+            REQUIRE(rstatus.is_ok());
             REQUIRE(recv_peer_endpoint == peer_endpoint);
             REQUIRE(rspan.size() == peer_msg.size());
             buffer.resize(rspan.size());
@@ -100,12 +91,9 @@ TEST_CASE("udp echo peers", "[udp]")
         if (send_first)
         {
             // I sent first so now I need to await my peer's message.
-            auto pstatus = co_await me.poll(coro::poll_op::read);
-            REQUIRE(pstatus == coro::poll_status::read);
-
             std::string buffer(64, '\0');
-            auto [rstatus, recv_peer_endpoint, rspan] = me.recvfrom(buffer);
-            REQUIRE(rstatus == coro::net::recv_status::ok);
+            auto [rstatus, recv_peer_endpoint, rspan] = co_await me.read_from(buffer);
+            REQUIRE(rstatus.is_ok());
             REQUIRE(recv_peer_endpoint == peer_endpoint);
             REQUIRE(rspan.size() == peer_msg.size());
             buffer.resize(rspan.size());
@@ -113,9 +101,8 @@ TEST_CASE("udp echo peers", "[udp]")
         }
         else
         {
-            auto [sstatus, remaining] = me.sendto(peer_endpoint, my_msg);
-            REQUIRE(sstatus == coro::net::send_status::ok);
-            REQUIRE(remaining.empty());
+            auto sstatus = co_await me.write_to(peer_endpoint, my_msg);
+            REQUIRE(sstatus.is_ok());
         }
 
         co_return;
