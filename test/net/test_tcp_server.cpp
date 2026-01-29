@@ -234,6 +234,87 @@ TEST_CASE("tcp_server graceful shutdown via socket", "[tcp_server]")
     std::cerr << "END tcp_server graceful shutdown via socket\n";
 }
 
+TEST_CASE("tcp_server ipv6", "[tcp_server]")
+{
+    const auto address = coro::net::ip_address::from_string("::1", coro::net::domain_t::ipv6);
+
+    auto scheduler = coro::io_scheduler::make_unique(
+        coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
+
+    auto make_server_task = [](std::unique_ptr<coro::io_scheduler>& scheduler,
+                               const coro::net::ip_address&         address) -> coro::task<>
+    {
+        co_await scheduler->schedule();
+        auto server = coro::net::tcp::server{
+            scheduler,
+            {
+                .address = address,
+            }};
+
+        // Poll for client connection.
+        std::cerr << "server poll(accept)\n";
+        auto pstatus = co_await server.poll();
+        REQUIRE(pstatus == coro::poll_status::read);
+        std::cerr << "server accept()\n";
+        auto client = server.accept();
+        REQUIRE(client.socket().is_valid());
+
+        // Poll for client request.
+        std::cerr << "server poll(read)\n";
+        pstatus = co_await client.poll(coro::poll_op::read);
+        REQUIRE(pstatus == coro::poll_status::read);
+
+        std::string buffer(256, '\0');
+        std::cerr << "server recv()\n";
+        auto [rstatus, rspan] = client.recv(buffer);
+        REQUIRE(rstatus == coro::net::recv_status::ok);
+        buffer.resize(rspan.size());
+
+        // Respond to client.
+        std::cerr << "server send()\n";
+        auto [sstatus, remaining] = client.send(buffer);
+        REQUIRE(sstatus == coro::net::send_status::ok);
+        REQUIRE(remaining.empty());
+    };
+
+    auto make_client_task = [](std::unique_ptr<coro::io_scheduler>& scheduler,
+                               const coro::net::ip_address&         address) -> coro::task<>
+    {
+        co_await scheduler->schedule();
+        constexpr std::string_view client_msg{"Hello world!"};
+
+        auto client = coro::net::tcp::client{scheduler, {.address = address}};
+
+        auto status = co_await client.connect();
+        REQUIRE(status == coro::net::connect_status::connected);
+
+        auto [sstatus, remaining] = client.send(client_msg);
+        REQUIRE(sstatus == coro::net::send_status::ok);
+        REQUIRE(remaining.empty());
+
+        // Poll for the server's response.
+        std::cerr << "client poll(read)\n";
+        auto pstatus = co_await client.poll(coro::poll_op::read);
+        if (pstatus != coro::poll_status::read)
+        {
+            REQUIRE_THREAD_SAFE(pstatus == coro::poll_status::closed);
+            // the socket has been closed
+            co_return;
+        }
+        REQUIRE(pstatus == coro::poll_status::read);
+
+        std::string buffer(256, '\0');
+        std::cerr << "client recv()\n";
+        auto [rstatus, rspan] = client.recv(buffer);
+        REQUIRE(rstatus == coro::net::recv_status::ok);
+        REQUIRE(rspan.size() == client_msg.length());
+        buffer.resize(rspan.size());
+        REQUIRE(buffer == client_msg);
+    };
+
+    coro::sync_wait(coro::when_all(make_server_task(scheduler, address), make_client_task(scheduler, address)));
+}
+
 TEST_CASE("~tcp_server", "[tcp_server]")
 {
     std::cerr << "[~tcp_server]\n\n";
