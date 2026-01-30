@@ -4,7 +4,7 @@
 
 namespace coro::net::tcp
 {
-server::server(std::unique_ptr<coro::io_scheduler>& scheduler, const net::endpoint &endpoint, options opts)
+server::server(std::unique_ptr<coro::io_scheduler>& scheduler, const net::socket_address&endpoint, options opts)
     : m_io_scheduler(scheduler.get()),
       m_options(std::move(opts)),
       m_accept_socket(
@@ -39,7 +39,7 @@ auto server::operator=(server&& other) -> server&
 
 auto server::accept() -> coro::net::tcp::client
 {
-    auto client_endpoint = endpoint::make_uninitialised();
+    auto client_endpoint = socket_address::make_uninitialised();
     auto [sockaddr, socklen] = client_endpoint.native_mutable_data();
 
     net::socket s{::accept(m_accept_socket.native_handle(), sockaddr, socklen)};

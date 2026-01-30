@@ -14,7 +14,7 @@ peer::peer(std::unique_ptr<coro::io_scheduler>& scheduler, net::domain_t domain)
     }
 }
 
-peer::peer(std::unique_ptr<coro::io_scheduler>& scheduler, const net::endpoint& endpoint)
+peer::peer(std::unique_ptr<coro::io_scheduler>& scheduler, const net::socket_address& endpoint)
     : m_io_scheduler(scheduler.get()),
       m_socket(
           net::make_accept_socket(

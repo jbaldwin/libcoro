@@ -2,10 +2,10 @@
 
 #include "coro/concepts/buffer.hpp"
 #include "coro/io_scheduler.hpp"
-#include "coro/net/endpoint.hpp"
 #include "coro/net/recv_status.hpp"
 #include "coro/net/send_status.hpp"
 #include "coro/net/socket.hpp"
+#include "coro/net/socket_address.hpp"
 #include "coro/task.hpp"
 
 #include <chrono>
@@ -30,7 +30,7 @@ public:
     /**
      * Creates a udp peer that can send and receive packets.  This peer will bind to the given ip_port.
      */
-    explicit peer(std::unique_ptr<coro::io_scheduler>& scheduler, const net::endpoint& endpoint);
+    explicit peer(std::unique_ptr<coro::io_scheduler>& scheduler, const net::socket_address& endpoint);
 
     peer(const peer&) noexcept = default;
     peer(peer&&) noexcept;
@@ -69,7 +69,7 @@ public:
     template<
         concepts::const_buffer buffer_type,
         typename element_type = typename concepts::const_buffer_traits<buffer_type>::element_type>
-    auto sendto(const net::endpoint& endpoint, const buffer_type& buffer)
+    auto sendto(const net::socket_address& endpoint, const buffer_type& buffer)
         -> std::pair<send_status, std::span<element_type>>
     {
         if (buffer.empty())
@@ -101,22 +101,22 @@ public:
     template<
         concepts::mutable_buffer buffer_type,
         typename element_type = typename concepts::mutable_buffer_traits<buffer_type>::element_type>
-    auto recvfrom(buffer_type&& buffer) -> std::tuple<recv_status, net::endpoint, std::span<element_type>>
+    auto recvfrom(buffer_type&& buffer) -> std::tuple<recv_status, net::socket_address, std::span<element_type>>
     {
         // The user must bind locally to be able to receive packets.
         if (!m_bound)
         {
-            return {recv_status::udp_not_bound, net::endpoint::make_uninitialised(), std::span<element_type>{}};
+            return {recv_status::udp_not_bound, net::socket_address::make_uninitialised(), std::span<element_type>{}};
         }
 
-        auto endpoint            = net::endpoint::make_uninitialised();
+        auto endpoint            = net::socket_address::make_uninitialised();
         auto [sockaddr, socklen] = endpoint.native_mutable_data();
 
         auto bytes_read = ::recvfrom(m_socket.native_handle(), buffer.data(), buffer.size(), 0, sockaddr, socklen);
 
         if (bytes_read < 0)
         {
-            return {static_cast<recv_status>(errno), net::endpoint::make_uninitialised(), std::span<element_type>{}};
+            return {static_cast<recv_status>(errno), net::socket_address::make_uninitialised(), std::span<element_type>{}};
         }
 
         return {recv_status::ok, endpoint, std::span<element_type>{buffer.data(), static_cast<size_t>(bytes_read)}};

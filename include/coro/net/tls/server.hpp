@@ -31,7 +31,7 @@ public:
     explicit server(
         std::unique_ptr<coro::io_scheduler>& scheduler,
         std::shared_ptr<context>             tls_ctx,
-        const net::endpoint&                 endpoint,
+        const net::socket_address&                 endpoint,
         options                              opts = options{
                                          .backlog = 128,
         });

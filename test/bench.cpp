@@ -1,7 +1,7 @@
 #include "catch_amalgamated.hpp"
 #include "catch_extensions.hpp"
-#include "coro/net/endpoint.hpp"
 #include "coro/net/ip_address.hpp"
+#include "coro/net/socket_address.hpp"
 
 #include <coro/coro.hpp>
 
@@ -688,7 +688,7 @@ TEST_CASE("benchmark tcp::server echo server inline", "[benchmark]")
         std::map<std::chrono::milliseconds, uint64_t> histogram;
         coro::net::tcp::client                        client{
             c.scheduler,
-            coro::net::endpoint{coro::net::ip_address::from_string("127.0.0.1"), static_cast<uint16_t>(8080 + c.id)}};
+            coro::net::socket_address{coro::net::ip_address::from_string("127.0.0.1"), static_cast<uint16_t>(8080 + c.id)}};
 
         // Connect to server with some retry logic to ensure a connection is established
         coro::net::connect_status cstatus = coro::net::connect_status::error;

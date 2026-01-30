@@ -3,11 +3,11 @@
 #include "coro/concepts/buffer.hpp"
 #include "coro/io_scheduler.hpp"
 #include "coro/net/connect.hpp"
-#include "coro/net/endpoint.hpp"
 #include "coro/net/ip_address.hpp"
 #include "coro/net/recv_status.hpp"
 #include "coro/net/send_status.hpp"
 #include "coro/net/socket.hpp"
+#include "coro/net/socket_address.hpp"
 #include "coro/poll.hpp"
 #include "coro/task.hpp"
 
@@ -31,7 +31,7 @@ public:
      */
     explicit client(
         std::unique_ptr<coro::io_scheduler>& scheduler,
-        net::endpoint                       endpoint);
+        net::socket_address endpoint);
     client(const client& other);
     client(client&& other) noexcept;
     auto operator=(const client& other) noexcept -> client&;
@@ -137,12 +137,12 @@ public:
 private:
     /// The tcp::server creates already connected clients and provides a tcp socket pre-built.
     friend server;
-    client(coro::io_scheduler* scheduler, net::socket socket, net::endpoint endpoint);
+    client(coro::io_scheduler* scheduler, net::socket socket, net::socket_address endpoint);
 
     /// The scheduler that will drive this tcp client.
     coro::io_scheduler* m_io_scheduler{nullptr};
     /// Options for what server to connect to.
-    endpoint m_endpoint;
+    socket_address m_endpoint;
     /// The tcp socket.
     net::socket m_socket{-1};
     /// Cache the status of the connect call in the event the user calls connect() again.

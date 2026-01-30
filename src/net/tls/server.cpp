@@ -9,7 +9,7 @@ namespace coro::net::tls
 server::server(
     std::unique_ptr<coro::io_scheduler>& scheduler,
     std::shared_ptr<context>             tls_ctx,
-    const net::endpoint&                 endpoint,
+    const net::socket_address&                 endpoint,
     options                              opts)
     : m_io_scheduler(scheduler.get()),
       m_tls_ctx(std::move(tls_ctx)),
@@ -51,7 +51,7 @@ auto server::operator=(server&& other) -> server&
 
 auto server::accept(std::chrono::milliseconds timeout) -> coro::task<coro::net::tls::client>
 {
-    auto client_endpoint = net::endpoint::make_uninitialised();
+    auto client_endpoint = net::socket_address::make_uninitialised();
     auto [addr, len]     = client_endpoint.native_mutable_data();
 
     net::socket s{::accept(m_accept_socket.native_handle(), addr, len)};

@@ -4,7 +4,7 @@
 
     #include <coro/coro.hpp>
 
-TEST_CASE("net::endpoint", "[endpoint]")
+TEST_CASE("net::socket_address", "[socket_address]")
 {
     using namespace coro::net;
 
@@ -13,7 +13,7 @@ TEST_CASE("net::endpoint", "[endpoint]")
         const std::string ip_str = "127.0.0.1";
         const uint16_t    port   = 8080;
 
-        endpoint ep(ip_str, port, domain_t::ipv4);
+        socket_address ep(ip_str, port, domain_t::ipv4);
 
         CHECK(ep.domain() == domain_t::ipv4);
         CHECK(ep.port() == port);
@@ -33,7 +33,7 @@ TEST_CASE("net::endpoint", "[endpoint]")
         const std::string ip_str = "::1";
         const uint16_t    port   = 443;
 
-        endpoint ep(ip_str, port, domain_t::ipv6);
+        socket_address ep(ip_str, port, domain_t::ipv6);
 
         CHECK(ep.domain() == domain_t::ipv6);
         CHECK(ep.port() == port);
@@ -48,21 +48,30 @@ TEST_CASE("net::endpoint", "[endpoint]")
         CHECK(memcmp(&sin6->sin6_addr, &in6addr_loopback, sizeof(in6_addr)) == 0);
     }
 
-    SECTION("Equality operator")
+    SECTION("Common operators")
     {
-        endpoint ep1("192.168.0.1", 9000);
-        endpoint ep2("192.168.0.1", 9000);
-        endpoint ep3("192.168.0.1", 9001);
-        endpoint ep4("10.0.0.1", 9000);
+        socket_address ep1("192.168.0.1", 9000);
+        socket_address ep2("192.168.0.1", 9000);
+        socket_address ep3("192.168.0.1", 9001);
+        socket_address ep4("10.0.0.1", 9000);
 
-        CHECK(ep1 == ep2);
-        CHECK_FALSE(ep1 == ep3);
-        CHECK_FALSE(ep1 == ep4);
+        SECTION("Equality operator") {
+            CHECK(ep1 == ep2);
+            CHECK_FALSE(ep1 == ep3);
+            CHECK_FALSE(ep1 == ep4);
+        }
+
+        SECTION("to_string") {
+            CHECK(ep1.to_string() == "192.168.0.1:9000");
+            CHECK(ep2.to_string() == "192.168.0.1:9000");
+            CHECK(ep3.to_string() == "192.168.0.1:9001");
+            CHECK(ep4.to_string() == "10.0.0.1:9000");
+        }
     }
 
     SECTION("native_mutable_data (for accept/getsockname)")
     {
-        auto ep              = endpoint::make_uninitialised();
+        auto ep              = socket_address::make_uninitialised();
         auto [addr, len_ptr] = ep.native_mutable_data();
 
         REQUIRE(addr != nullptr);
@@ -81,7 +90,7 @@ TEST_CASE("net::endpoint", "[endpoint]")
 
     SECTION("Invalid domain handling/Uninitialised")
     {
-        auto ep = endpoint::make_uninitialised();
+        auto ep = socket_address::make_uninitialised();
 
         CHECK_THROWS_AS(ep.domain(), std::runtime_error);
         CHECK_THROWS_AS(ep.port(), std::runtime_error);

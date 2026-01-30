@@ -28,7 +28,7 @@ public:
 
     explicit server(
         std::unique_ptr<coro::io_scheduler>& scheduler,
-        const net::endpoint &endpoint,
+        const net::socket_address&endpoint,
         options                       opts = options{
                                   .backlog = 128,
         });

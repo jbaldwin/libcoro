@@ -1,6 +1,6 @@
 #pragma once
 
-#include "coro/net/endpoint.hpp"
+#include "coro/net/socket_address.hpp"
 #include "coro/poll.hpp"
 
 
@@ -104,6 +104,6 @@ auto make_socket(const socket::options& opts, domain_t) -> socket;
  *                for udp types.
  * TODO: docs
  */
-auto make_accept_socket(const socket::options& opts, const net::endpoint &endpoint, int32_t backlog) -> socket;
+auto make_accept_socket(const socket::options& opts, const net::socket_address&endpoint, int32_t backlog) -> socket;
 
 } // namespace coro::net

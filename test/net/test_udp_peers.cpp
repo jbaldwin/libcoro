@@ -1,5 +1,5 @@
 #include "catch_amalgamated.hpp"
-#include "coro/net/endpoint.hpp"
+#include "coro/net/socket_address.hpp"
 
 #ifdef LIBCORO_FEATURE_NETWORKING
 
@@ -8,14 +8,14 @@
 TEST_CASE("udp one way", "[udp]")
 {
     const std::string msg{"aaaaaaaaaaaaaaaaaaaaabbbbbbbbbbbbbbbbbcccccccccccccccccc"};
-    const auto        endpoint = coro::net::endpoint{"127.0.0.1", 8080};
+    const auto        endpoint = coro::net::socket_address{"127.0.0.1", 8080};
 
     auto scheduler = coro::io_scheduler::make_unique(
         coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
 
     auto make_send_task = [](std::unique_ptr<coro::io_scheduler>& scheduler,
                              const std::string&                   msg,
-                             const coro::net::endpoint&           endpoint) -> coro::task<void>
+                             const coro::net::socket_address&           endpoint) -> coro::task<void>
     {
         co_await scheduler->schedule();
         coro::net::udp::peer peer{scheduler};
@@ -29,10 +29,10 @@ TEST_CASE("udp one way", "[udp]")
 
     auto make_recv_task = [](std::unique_ptr<coro::io_scheduler>& scheduler,
                              const std::string&                   msg,
-                             const coro::net::endpoint&           endpoint) -> coro::task<void>
+                             const coro::net::socket_address&           endpoint) -> coro::task<void>
     {
         co_await scheduler->schedule();
-        const auto listen_point = coro::net::endpoint{"0.0.0.0", endpoint.port()};
+        const auto listen_point = coro::net::socket_address{"0.0.0.0", endpoint.port()};
 
         coro::net::udp::peer self{scheduler, listen_point};
 
@@ -70,8 +70,8 @@ TEST_CASE("udp echo peers", "[udp]")
                              const std::string                    peer_msg) -> coro::task<void>
     {
         co_await scheduler->schedule();
-        const auto my_endpoint   = coro::net::endpoint{"0.0.0.0", my_port};
-        const auto peer_endpoint = coro::net::endpoint{"127.0.0.1", peer_port};
+        const auto my_endpoint   = coro::net::socket_address{"0.0.0.0", my_port};
+        const auto peer_endpoint = coro::net::socket_address{"127.0.0.1", peer_port};
 
         coro::net::udp::peer me{scheduler, my_endpoint};
 

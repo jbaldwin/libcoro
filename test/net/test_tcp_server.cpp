@@ -1,6 +1,6 @@
 #include "catch_amalgamated.hpp"
 #include "catch_extensions.hpp"
-#include "coro/net/endpoint.hpp"
+#include "coro/net/socket_address.hpp"
 
 #ifdef LIBCORO_FEATURE_NETWORKING
 
@@ -20,9 +20,9 @@ TEST_CASE("tcp_server ping server", "[tcp_server]")
     const std::string server_msg{"Reply from server!"};
 
     const auto endpoint = GENERATE(
-        as<coro::net::endpoint>{},
-        coro::net::endpoint{"127.0.0.1", 8080},
-        coro::net::endpoint{"::1", 8080, coro::net::domain_t::ipv6});
+        as<coro::net::socket_address>{},
+        coro::net::socket_address{"127.0.0.1", 8080},
+        coro::net::socket_address{"::1", 8080, coro::net::domain_t::ipv6});
 
     auto scheduler = coro::io_scheduler::make_unique(
         coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
@@ -30,7 +30,7 @@ TEST_CASE("tcp_server ping server", "[tcp_server]")
     auto make_client_task = [](std::unique_ptr<coro::io_scheduler>& scheduler,
                                const std::string&                   client_msg,
                                const std::string&                   server_msg,
-                               const coro::net::endpoint&           endpoint) -> coro::task<void>
+                               const coro::net::socket_address&           endpoint) -> coro::task<void>
     {
         co_await scheduler->schedule();
         coro::net::tcp::client client{scheduler, endpoint};
@@ -72,7 +72,7 @@ TEST_CASE("tcp_server ping server", "[tcp_server]")
     auto make_server_task = [](std::unique_ptr<coro::io_scheduler>& scheduler,
                                const std::string&                   client_msg,
                                const std::string&                   server_msg,
-                               const coro::net::endpoint&           endpoint) -> coro::task<void>
+                               const coro::net::socket_address&           endpoint) -> coro::task<void>
     {
         co_await scheduler->schedule();
         coro::net::tcp::server server{scheduler, endpoint};
@@ -126,10 +126,10 @@ TEST_CASE("tcp_server concurrent polling on the same socket", "[tcp_server]")
     auto scheduler = coro::io_scheduler::make_unique(
         coro::io_scheduler::options{
             .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
-    const auto endpoint = coro::net::endpoint{"127.0.0.1", 8080};
+    const auto endpoint = coro::net::socket_address{"127.0.0.1", 8080};
 
     auto make_server_task = [](std::unique_ptr<coro::io_scheduler>& scheduler,
-                               const coro::net::endpoint&           endpoint) -> coro::task<std::string>
+                               const coro::net::socket_address&           endpoint) -> coro::task<std::string>
     {
         auto make_read_task = [](coro::net::tcp::client client) -> coro::task<void>
         {
@@ -175,7 +175,7 @@ TEST_CASE("tcp_server concurrent polling on the same socket", "[tcp_server]")
     };
 
     auto make_client_task = [](std::unique_ptr<coro::io_scheduler>& scheduler,
-                               const coro::net::endpoint&           endpoint) -> coro::task<std::string>
+                               const coro::net::socket_address&           endpoint) -> coro::task<std::string>
     {
         co_await scheduler->schedule();
         coro::net::tcp::client client{scheduler, endpoint};

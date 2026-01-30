@@ -36,7 +36,7 @@ public:
     explicit client(
         std::unique_ptr<coro::io_scheduler>& scheduler,
         std::shared_ptr<context>             tls_ctx,
-        const net::endpoint&                 endpoint);
+        const net::socket_address&                 endpoint);
     client(const client&) = delete;
     client(client&& other) noexcept;
     auto operator=(const client&) noexcept -> client& = delete;
@@ -353,14 +353,14 @@ private:
 
     /// The tls::server creates already connected clients and provides a tcp socket pre-built.
     friend server;
-    client(coro::io_scheduler* scheduler, std::shared_ptr<context> tls_ctx, net::socket socket, const net::endpoint &endpoint);
+    client(coro::io_scheduler* scheduler, std::shared_ptr<context> tls_ctx, net::socket socket, const net::socket_address&endpoint);
 
     /// The scheduler that will drive this tcp client.
     coro::io_scheduler* m_io_scheduler{nullptr};
     // The tls context.
     std::shared_ptr<context> m_tls_ctx{nullptr};
     /// Options for what server to connect to.
-    net::endpoint m_endpoint;
+    net::socket_address m_endpoint;
     /// The tcp socket.
     net::socket m_socket{-1};
     /// Cache the status of the connect in the event the user calls connect() again.

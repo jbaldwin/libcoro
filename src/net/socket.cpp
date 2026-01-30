@@ -1,5 +1,5 @@
 #include "coro/net/socket.hpp"
-#include "coro/net/endpoint.hpp"
+#include "coro/net/socket_address.hpp"
 #include <sys/socket.h>
 
 namespace coro::net
@@ -104,7 +104,7 @@ auto make_socket(const socket::options& opts, domain_t domain) -> socket
     return s;
 }
 
-auto make_accept_socket(const socket::options& opts, const net::endpoint &endpoint, int32_t backlog)
+auto make_accept_socket(const socket::options& opts, const net::socket_address&endpoint, int32_t backlog)
     -> socket
 {
     socket s = make_socket(opts, endpoint.domain());

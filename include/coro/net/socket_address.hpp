@@ -9,15 +9,15 @@ namespace coro::net
 /**
  * Represents IP address and port.
  */
-class endpoint
+class socket_address
 {
 public:
-    endpoint(std::string_view ip, std::uint16_t port, domain_t domain = domain_t::ipv4)
-        : endpoint(ip_address::from_string(ip, domain), port)
+    socket_address(std::string_view ip, std::uint16_t port, domain_t domain = domain_t::ipv4)
+        : socket_address(ip_address::from_string(ip, domain), port)
     {
     }
 
-    endpoint(const ip_address& ip, std::uint16_t port)
+    socket_address(const ip_address& ip, std::uint16_t port)
     {
         if (ip.domain() == domain_t::ipv4)
         {
@@ -83,7 +83,7 @@ public:
             return ip_address{
                 {reinterpret_cast<const uint8_t*>(&sin6->sin6_addr), sizeof(sin6->sin6_addr)}, domain_t::ipv6};
         }
-        throw std::runtime_error{"coro::net::endpoint::ip() Invalid domain"};
+        throw std::runtime_error{"coro::net::socket_address::ip() Invalid domain"};
     }
 
     /**
@@ -94,10 +94,14 @@ public:
     [[nodiscard]] auto domain() const -> domain_t
     {
         if (m_storage.ss_family == AF_INET)
+        {
             return domain_t::ipv4;
+        }
         if (m_storage.ss_family == AF_INET6)
+        {
             return domain_t::ipv6;
-        throw std::runtime_error{"coro::net::endpoint::domain() Invalid domain"};
+        }
+        throw std::runtime_error{"coro::net::socket_address::domain() Invalid domain"};
     }
 
     /**
@@ -108,13 +112,17 @@ public:
     [[nodiscard]] auto port() const -> std::uint16_t
     {
         if (m_storage.ss_family == AF_INET)
+        {
             return ntohs(reinterpret_cast<const sockaddr_in*>(&m_storage)->sin_port);
+        }
         if (m_storage.ss_family == AF_INET6)
+        {
             return ntohs(reinterpret_cast<const sockaddr_in6*>(&m_storage)->sin6_port);
-        throw std::runtime_error{"coro::net::endpoint::port() Invalid domain"};
+        }
+        throw std::runtime_error{"coro::net::socket_address::port() Invalid domain"};
     }
 
-    auto operator==(const endpoint& other) const -> bool
+    auto operator==(const socket_address& other) const -> bool
     {
         return m_len == other.m_len && std::memcmp(&m_storage, &other.m_storage, m_len) == 0;
     }
@@ -122,16 +130,21 @@ public:
     /**
      * @brief Creates an empty endpoint for late initialisation.
      */
-    static auto make_uninitialised() -> endpoint { return endpoint{}; }
+    static auto make_uninitialised() -> socket_address { return socket_address{}; }
 
-    auto to_string() const -> std::string { return ip().to_string() + std::to_string(port()); }
+    auto to_string() const -> std::string { return ip().to_string() + ":" + std::to_string(port()); }
 
 private:
     // It's private to avoid default empty initialisation and to make use more explicit make_uninitialised
-    endpoint() {}
+    socket_address() {}
 
     sockaddr_storage m_storage{};
     socklen_t        m_len = sizeof(sockaddr_storage);
 };
+
+inline auto operator<<(std::ostream& os, const socket_address& ep) -> std::ostream&
+{
+    return os << ep.to_string();
+}
 
 } // namespace coro::net

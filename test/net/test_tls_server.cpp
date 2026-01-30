@@ -1,6 +1,6 @@
 #include "catch_amalgamated.hpp"
 #include "catch_extensions.hpp"
-#include "coro/net/endpoint.hpp"
+#include "coro/net/socket_address.hpp"
 
 #ifdef LIBCORO_FEATURE_NETWORKING
     #ifdef LIBCORO_FEATURE_TLS
@@ -16,12 +16,12 @@ TEST_CASE("tls_server hello world server", "[tls_server]")
 
     const std::string client_msg = "Hello world from TLS client!";
     const std::string server_msg = "Hello world from TLS server!!";
-    const auto        endpoint   = coro::net::endpoint{"127.0.0.1", 8080};
+    const auto        endpoint   = coro::net::socket_address{"127.0.0.1", 8080};
 
     auto make_client_task = [](std::unique_ptr<coro::io_scheduler>& scheduler,
                                const std::string&                   client_msg,
                                const std::string&                   server_msg,
-                               const coro::net::endpoint&           endpoint) -> coro::task<void>
+                               const coro::net::socket_address&           endpoint) -> coro::task<void>
     {
         co_await scheduler->schedule();
 
@@ -64,7 +64,7 @@ TEST_CASE("tls_server hello world server", "[tls_server]")
     auto make_server_task = [](std::unique_ptr<coro::io_scheduler>& scheduler,
                                const std::string&                   client_msg,
                                const std::string&                   server_msg,
-                               const coro::net::endpoint&           endpoint) -> coro::task<void>
+                               const coro::net::socket_address&           endpoint) -> coro::task<void>
     {
         co_await scheduler->schedule();
 

@@ -6,7 +6,7 @@ namespace coro::net::tcp
 {
 using namespace std::chrono_literals;
 
-client::client(std::unique_ptr<coro::io_scheduler>& scheduler, net::endpoint endpoint)
+client::client(std::unique_ptr<coro::io_scheduler>& scheduler, net::socket_address endpoint)
     : m_io_scheduler(scheduler.get()),
       m_endpoint(std::move(endpoint)),
       m_socket(
@@ -18,7 +18,7 @@ client::client(std::unique_ptr<coro::io_scheduler>& scheduler, net::endpoint end
     }
 }
 
-client::client(coro::io_scheduler* scheduler, net::socket socket, net::endpoint endpoint)
+client::client(coro::io_scheduler* scheduler, net::socket socket, net::socket_address endpoint)
     : m_io_scheduler(scheduler),
       m_endpoint(std::move(endpoint)),
       m_socket(std::move(socket)),

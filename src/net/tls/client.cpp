@@ -8,7 +8,7 @@ namespace coro::net::tls
 using namespace std::chrono_literals;
 
 client::client(
-    std::unique_ptr<coro::io_scheduler>& scheduler, std::shared_ptr<context> tls_ctx, const net::endpoint& endpoint)
+    std::unique_ptr<coro::io_scheduler>& scheduler, std::shared_ptr<context> tls_ctx, const net::socket_address& endpoint)
     : m_io_scheduler(scheduler.get()),
       m_tls_ctx(std::move(tls_ctx)),
       m_endpoint(endpoint),
@@ -28,7 +28,7 @@ client::client(
 }
 
 client::client(
-    coro::io_scheduler* scheduler, std::shared_ptr<context> tls_ctx, net::socket socket, const net::endpoint& endpoint)
+    coro::io_scheduler* scheduler, std::shared_ptr<context> tls_ctx, net::socket socket, const net::socket_address& endpoint)
     : m_io_scheduler(scheduler),
       m_tls_ctx(std::move(tls_ctx)),
       m_endpoint(endpoint),
