@@ -33,6 +33,7 @@ endif()
 if(LIBCORO_FEATURE_NETWORKING)
     list(APPEND LIBCORO_TEST_SOURCE_FILES
         net/test_ip_address.cpp
+        net/test_endpoint.cpp
     )
 
     # These tests require coro::io_scheduler
