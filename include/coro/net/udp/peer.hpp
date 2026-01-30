@@ -2,7 +2,7 @@
 
 #include "coro/concepts/buffer.hpp"
 #include "coro/io_scheduler.hpp"
-#include "coro/net/ip_address.hpp"
+#include "coro/net/endpoint.hpp"
 #include "coro/net/recv_status.hpp"
 #include "coro/net/send_status.hpp"
 #include "coro/net/socket.hpp"
@@ -21,16 +21,6 @@ namespace coro::net::udp
 class peer
 {
 public:
-    struct info
-    {
-        /// The ip address of the peer.
-        net::ip_address address{net::ip_address::from_string("127.0.0.1")};
-        /// The port of the peer.
-        uint16_t port{8080};
-
-        auto operator<=>(const info& other) const = default;
-    };
-
     /**
      * Creates a udp peer that can send packets but not receive them.  This udp peer will not explicitly
      * bind to a local ip+port.
@@ -40,7 +30,7 @@ public:
     /**
      * Creates a udp peer that can send and receive packets.  This peer will bind to the given ip_port.
      */
-    explicit peer(std::unique_ptr<coro::io_scheduler>& scheduler, const info& bind_info);
+    explicit peer(std::unique_ptr<coro::io_scheduler>& scheduler, const net::endpoint& endpoint);
 
     peer(const peer&) noexcept = default;
     peer(peer&&) noexcept;
@@ -76,23 +66,20 @@ public:
      * @return The status of send call and a span view of any data that wasn't sent.  This data if
      *         un-sent will correspond to bytes at the end of the given buffer.
      */
-    template<concepts::const_buffer buffer_type, typename element_type = typename concepts::const_buffer_traits<buffer_type>::element_type>
-    auto sendto(const info& peer_info, const buffer_type& buffer) -> std::pair<send_status, std::span<element_type>>
+    template<
+        concepts::const_buffer buffer_type,
+        typename element_type = typename concepts::const_buffer_traits<buffer_type>::element_type>
+    auto sendto(const net::endpoint& endpoint, const buffer_type& buffer)
+        -> std::pair<send_status, std::span<element_type>>
     {
         if (buffer.empty())
         {
             return {send_status::ok, std::span<element_type>{}};
         }
 
-        sockaddr_in peer{};
-        peer.sin_family = static_cast<int>(peer_info.address.domain());
-        peer.sin_port   = htons(peer_info.port);
-        peer.sin_addr   = *reinterpret_cast<const in_addr*>(peer_info.address.data().data());
+        auto [sockaddr, socklen] = endpoint.data();
 
-        socklen_t peer_len{sizeof(peer)};
-
-        auto bytes_sent = ::sendto(
-            m_socket.native_handle(), buffer.data(), buffer.size(), 0, reinterpret_cast<sockaddr*>(&peer), peer_len);
+        auto bytes_sent = ::sendto(m_socket.native_handle(), buffer.data(), buffer.size(), 0, sockaddr, socklen);
 
         if (bytes_sent >= 0)
         {
@@ -111,37 +98,28 @@ public:
      *         always start at the beggining of the buffer but depending on how large the data was
      *         it might not fill the entire buffer.
      */
-    template<concepts::mutable_buffer buffer_type, typename element_type = typename concepts::mutable_buffer_traits<buffer_type>::element_type>
-    auto recvfrom(buffer_type&& buffer) -> std::tuple<recv_status, peer::info, std::span<element_type>>
+    template<
+        concepts::mutable_buffer buffer_type,
+        typename element_type = typename concepts::mutable_buffer_traits<buffer_type>::element_type>
+    auto recvfrom(buffer_type&& buffer) -> std::tuple<recv_status, net::endpoint, std::span<element_type>>
     {
         // The user must bind locally to be able to receive packets.
         if (!m_bound)
         {
-            return {recv_status::udp_not_bound, peer::info{}, std::span<element_type>{}};
+            return {recv_status::udp_not_bound, net::endpoint::make_uninitialised(), std::span<element_type>{}};
         }
 
-        sockaddr_in peer{};
-        socklen_t   peer_len{sizeof(peer)};
+        auto endpoint            = net::endpoint::make_uninitialised();
+        auto [sockaddr, socklen] = endpoint.native_mutable_data();
 
-        auto bytes_read = ::recvfrom(
-            m_socket.native_handle(), buffer.data(), buffer.size(), 0, reinterpret_cast<sockaddr*>(&peer), &peer_len);
+        auto bytes_read = ::recvfrom(m_socket.native_handle(), buffer.data(), buffer.size(), 0, sockaddr, socklen);
 
         if (bytes_read < 0)
         {
-            return {static_cast<recv_status>(errno), peer::info{}, std::span<element_type>{}};
+            return {static_cast<recv_status>(errno), net::endpoint::make_uninitialised(), std::span<element_type>{}};
         }
 
-        std::span<const uint8_t> ip_addr_view{
-            reinterpret_cast<uint8_t*>(&peer.sin_addr.s_addr),
-            sizeof(peer.sin_addr.s_addr),
-        };
-
-        return {
-            recv_status::ok,
-            peer::info{
-                .address = net::ip_address{ip_addr_view, static_cast<net::domain_t>(peer.sin_family)},
-                .port    = ntohs(peer.sin_port)},
-            std::span<element_type>{buffer.data(), static_cast<size_t>(bytes_read)}};
+        return {recv_status::ok, endpoint, std::span<element_type>{buffer.data(), static_cast<size_t>(bytes_read)}};
     }
 
 private:

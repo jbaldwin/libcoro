@@ -4,14 +4,13 @@
 
 namespace coro::net::tcp
 {
-server::server(std::unique_ptr<coro::io_scheduler>& scheduler, options opts)
+server::server(std::unique_ptr<coro::io_scheduler>& scheduler, const net::endpoint &endpoint, options opts)
     : m_io_scheduler(scheduler.get()),
       m_options(std::move(opts)),
       m_accept_socket(
           net::make_accept_socket(
-              net::socket::options{net::domain_t::ipv4, net::socket::type_t::tcp, net::socket::blocking_t::no},
-              m_options.address,
-              m_options.port,
+              net::socket::options{socket::type_t::tcp, net::socket::blocking_t::no},
+              endpoint,
               m_options.backlog))
 {
     if (m_io_scheduler == nullptr)
@@ -40,25 +39,12 @@ auto server::operator=(server&& other) -> server&
 
 auto server::accept() -> coro::net::tcp::client
 {
-    sockaddr_in         client{};
-    constexpr const int len = sizeof(struct sockaddr_in);
-    net::socket         s{::accept(
-        m_accept_socket.native_handle(),
-        reinterpret_cast<struct sockaddr*>(&client),
-        const_cast<socklen_t*>(reinterpret_cast<const socklen_t*>(&len)))};
+    auto client_endpoint = endpoint::make_uninitialised();
+    auto [sockaddr, socklen] = client_endpoint.native_mutable_data();
 
-    std::span<const uint8_t> ip_addr_view{
-        reinterpret_cast<uint8_t*>(&client.sin_addr.s_addr),
-        sizeof(client.sin_addr.s_addr),
-    };
+    net::socket s{::accept(m_accept_socket.native_handle(), sockaddr, socklen)};
 
-    return tcp::client{
-        m_io_scheduler,
-        std::move(s),
-        client::options{
-            .address = net::ip_address{ip_addr_view, static_cast<net::domain_t>(client.sin_family)},
-            .port    = ntohs(client.sin_port),
-        }};
+    return tcp::client{m_io_scheduler, std::move(s), client_endpoint};
 };
 
 } // namespace coro::net::tcp

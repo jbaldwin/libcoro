@@ -1,4 +1,5 @@
 #include "coro/net/socket.hpp"
+#include "coro/net/endpoint.hpp"
 #include <sys/socket.h>
 
 namespace coro::net
@@ -84,9 +85,9 @@ auto socket::close() -> void
     }
 }
 
-auto make_socket(const socket::options& opts) -> socket
+auto make_socket(const socket::options& opts, domain_t domain) -> socket
 {
-    socket s{::socket(static_cast<int>(opts.domain), socket::type_to_os(opts.type), 0)};
+    socket s{::socket(static_cast<int>(domain), socket::type_to_os(opts.type), 0)};
     if (s.native_handle() < 0)
     {
         throw std::runtime_error{"Failed to create socket."};
@@ -103,10 +104,10 @@ auto make_socket(const socket::options& opts) -> socket
     return s;
 }
 
-auto make_accept_socket(const socket::options& opts, const net::ip_address& address, uint16_t port, int32_t backlog)
+auto make_accept_socket(const socket::options& opts, const net::endpoint &endpoint, int32_t backlog)
     -> socket
 {
-    socket s = make_socket(opts);
+    socket s = make_socket(opts, endpoint.domain());
 
     int sock_opt{1};
 
@@ -123,12 +124,9 @@ auto make_accept_socket(const socket::options& opts, const net::ip_address& addr
         throw std::runtime_error{"Failed to setsockopt(SO_REUSEPORT)"};
     }
 
-    sockaddr_in server{};
-    server.sin_family = static_cast<int>(opts.domain);
-    server.sin_port   = htons(port);
-    server.sin_addr   = *reinterpret_cast<const in_addr*>(address.data().data());
+    auto [sockaddr, socklen] = endpoint.data();
 
-    if (bind(s.native_handle(), reinterpret_cast<sockaddr*>(&server), sizeof(server)) < 0)
+    if (bind(s.native_handle(), sockaddr, socklen) < 0)
     {
         throw std::runtime_error{"Failed to bind."};
     }

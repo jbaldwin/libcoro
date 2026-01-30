@@ -22,19 +22,14 @@ class server
 public:
     struct options
     {
-        /// The ip address for the tcp server to bind and listen on.
-        net::ip_address address{net::ip_address::from_string("0.0.0.0")};
-        /// The port for the tcp server to bind and listen on.
-        uint16_t port{8080};
         /// The kernel backlog of connections to buffer.
         int32_t backlog{128};
     };
 
     explicit server(
         std::unique_ptr<coro::io_scheduler>& scheduler,
+        const net::endpoint &endpoint,
         options                       opts = options{
-                                  .address = net::ip_address::from_string("0.0.0.0"),
-                                  .port    = 8080,
                                   .backlog = 128,
         });
 

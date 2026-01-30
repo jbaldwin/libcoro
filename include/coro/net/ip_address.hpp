@@ -57,7 +57,7 @@ public:
         }
     }
 
-    static auto from_string(const std::string& address, domain_t domain = domain_t::ipv4) -> ip_address
+    static auto from_string(std::string_view address, domain_t domain = domain_t::ipv4) -> ip_address
     {
         ip_address addr{};
         addr.m_domain = domain;

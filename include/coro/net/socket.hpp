@@ -1,7 +1,8 @@
 #pragma once
 
-#include "coro/net/ip_address.hpp"
+#include "coro/net/endpoint.hpp"
 #include "coro/poll.hpp"
+
 
 #include <arpa/inet.h>
 #include <fcntl.h>
@@ -34,8 +35,6 @@ public:
 
     struct options
     {
-        /// The domain for the socket.
-        domain_t domain;
         /// The type of socket.
         type_t type;
         /// If the socket should be blocking or non-blocking.
@@ -90,8 +89,9 @@ private:
  * Creates a socket with the given socket options, this typically is used for creating sockets to
  * use within client objects, e.g. tcp::client and udp::client.
  * @param opts See socket::options for more details.
+ * TODO: docs
  */
-auto make_socket(const socket::options& opts) -> socket;
+auto make_socket(const socket::options& opts, domain_t) -> socket;
 
 /**
  * Creates a socket that can accept connections or packets with the given socket options, address,
@@ -102,8 +102,8 @@ auto make_socket(const socket::options& opts) -> socket;
  * @param port The port to bind to.
  * @param backlog If the type of socket is tcp then the backlog of connections to allow.  Does nothing
  *                for udp types.
+ * TODO: docs
  */
-auto make_accept_socket(
-    const socket::options& opts, const net::ip_address& address, uint16_t port, int32_t backlog = 128) -> socket;
+auto make_accept_socket(const socket::options& opts, const net::endpoint &endpoint, int32_t backlog) -> socket;
 
 } // namespace coro::net

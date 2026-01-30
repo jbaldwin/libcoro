@@ -7,13 +7,14 @@ namespace coro::net::tls
 {
 using namespace std::chrono_literals;
 
-client::client(std::unique_ptr<coro::io_scheduler>& scheduler, std::shared_ptr<context> tls_ctx, options opts)
+client::client(
+    std::unique_ptr<coro::io_scheduler>& scheduler, std::shared_ptr<context> tls_ctx, const net::endpoint& endpoint)
     : m_io_scheduler(scheduler.get()),
       m_tls_ctx(std::move(tls_ctx)),
-      m_options(std::move(opts)),
+      m_endpoint(endpoint),
       m_socket(
           net::make_socket(
-              net::socket::options{m_options.address.domain(), net::socket::type_t::tcp, net::socket::blocking_t::no}))
+              net::socket::options{net::socket::type_t::tcp, net::socket::blocking_t::no}, endpoint.domain()))
 {
     if (m_io_scheduler == nullptr)
     {
@@ -27,10 +28,10 @@ client::client(std::unique_ptr<coro::io_scheduler>& scheduler, std::shared_ptr<c
 }
 
 client::client(
-    coro::io_scheduler* scheduler, std::shared_ptr<context> tls_ctx, net::socket socket, options opts)
+    coro::io_scheduler* scheduler, std::shared_ptr<context> tls_ctx, net::socket socket, const net::endpoint& endpoint)
     : m_io_scheduler(scheduler),
       m_tls_ctx(std::move(tls_ctx)),
-      m_options(std::move(opts)),
+      m_endpoint(endpoint),
       m_socket(std::move(socket)),
       m_connect_status(connection_status::connected),
       m_tls_info(tls_connection_type::accept)
@@ -45,7 +46,7 @@ client::client(
 client::client(client&& other) noexcept
     : m_io_scheduler(std::exchange(other.m_io_scheduler, nullptr)),
       m_tls_ctx(std::move(other.m_tls_ctx)),
-      m_options(std::move(other.m_options)),
+      m_endpoint(std::move(other.m_endpoint)),
       m_socket(std::move(other.m_socket)),
       m_connect_status(std::exchange(other.m_connect_status, std::nullopt)),
       m_tls_info(std::move(other.m_tls_info))
@@ -67,7 +68,7 @@ auto client::operator=(client&& other) noexcept -> client&
     {
         m_io_scheduler   = std::exchange(other.m_io_scheduler, nullptr);
         m_tls_ctx        = std::move(other.m_tls_ctx);
-        m_options        = std::move(other.m_options);
+        m_endpoint       = std::move(other.m_endpoint);
         m_socket         = std::move(other.m_socket);
         m_connect_status = std::exchange(other.m_connect_status, std::nullopt);
         m_tls_info       = std::move(other.m_tls_info);
@@ -97,12 +98,9 @@ auto client::connect(std::chrono::milliseconds timeout) -> coro::task<connection
         return s;
     };
 
-    sockaddr_in server{};
-    server.sin_family = static_cast<int>(m_options.address.domain());
-    server.sin_port   = htons(m_options.port);
-    server.sin_addr   = *reinterpret_cast<const in_addr*>(m_options.address.data().data());
+    auto [addr, len] = m_endpoint.data();
 
-    auto cret = ::connect(m_socket.native_handle(), (struct sockaddr*)&server, sizeof(server));
+    auto cret = ::connect(m_socket.native_handle(), addr, len);
     if (cret == 0)
     {
         co_return return_value(co_await handshake(timeout));
@@ -206,8 +204,7 @@ auto client::handshake(std::chrono::milliseconds timeout) -> coro::task<connecti
     co_return connection_status::connected;
 }
 
-auto client::tls_shutdown_and_free(
-    std::chrono::milliseconds     timeout) -> coro::task<void>
+auto client::tls_shutdown_and_free(std::chrono::milliseconds timeout) -> coro::task<void>
 {
     auto* tls_ptr = m_tls_info.m_tls_ptr.get();
 

@@ -6,12 +6,11 @@ namespace coro::net::tcp
 {
 using namespace std::chrono_literals;
 
-client::client(std::unique_ptr<coro::io_scheduler>& scheduler, options opts)
+client::client(std::unique_ptr<coro::io_scheduler>& scheduler, net::endpoint endpoint)
     : m_io_scheduler(scheduler.get()),
-      m_options(std::move(opts)),
+      m_endpoint(std::move(endpoint)),
       m_socket(
-          net::make_socket(
-              net::socket::options{m_options.address.domain(), net::socket::type_t::tcp, net::socket::blocking_t::no}))
+          net::make_socket(net::socket::options{socket::type_t::tcp, net::socket::blocking_t::no}, endpoint.domain()))
 {
     if (m_io_scheduler == nullptr)
     {
@@ -19,9 +18,9 @@ client::client(std::unique_ptr<coro::io_scheduler>& scheduler, options opts)
     }
 }
 
-client::client(coro::io_scheduler* scheduler, net::socket socket, options opts)
+client::client(coro::io_scheduler* scheduler, net::socket socket, net::endpoint endpoint)
     : m_io_scheduler(scheduler),
-      m_options(std::move(opts)),
+      m_endpoint(std::move(endpoint)),
       m_socket(std::move(socket)),
       m_connect_status(connect_status::connected)
 {
@@ -33,7 +32,7 @@ client::client(coro::io_scheduler* scheduler, net::socket socket, options opts)
 
 client::client(const client& other)
     : m_io_scheduler(other.m_io_scheduler),
-      m_options(other.m_options),
+      m_endpoint(other.m_endpoint),
       m_socket(other.m_socket),
       m_connect_status(other.m_connect_status)
 {
@@ -41,7 +40,7 @@ client::client(const client& other)
 
 client::client(client&& other) noexcept
     : m_io_scheduler(other.m_io_scheduler),
-      m_options(std::move(other.m_options)),
+      m_endpoint(std::move(other.m_endpoint)),
       m_socket(std::move(other.m_socket)),
       m_connect_status(std::exchange(other.m_connect_status, std::nullopt))
 {
@@ -56,7 +55,7 @@ auto client::operator=(const client& other) noexcept -> client&
     if (std::addressof(other) != this)
     {
         m_io_scheduler   = other.m_io_scheduler;
-        m_options        = other.m_options;
+        m_endpoint       = other.m_endpoint;
         m_socket         = other.m_socket;
         m_connect_status = other.m_connect_status;
     }
@@ -68,7 +67,7 @@ auto client::operator=(client&& other) noexcept -> client&
     if (std::addressof(other) != this)
     {
         m_io_scheduler   = std::exchange(other.m_io_scheduler, nullptr);
-        m_options        = std::move(other.m_options);
+        m_endpoint       = std::move(other.m_endpoint);
         m_socket         = std::move(other.m_socket);
         m_connect_status = std::exchange(other.m_connect_status, std::nullopt);
     }
@@ -91,18 +90,16 @@ auto client::connect(std::chrono::milliseconds timeout) -> coro::task<connect_st
         return s;
     };
 
-    sockaddr_in server{};
-    server.sin_family = static_cast<int>(m_options.address.domain());
-    server.sin_port   = htons(m_options.port);
-    server.sin_addr   = *reinterpret_cast<const in_addr*>(m_options.address.data().data());
+    auto [sockaddr, len] = m_endpoint.data();
 
-    auto cret = ::connect(m_socket.native_handle(), reinterpret_cast<struct sockaddr*>(&server), sizeof(server));
+    auto cret = ::connect(m_socket.native_handle(), sockaddr, len);
     if (cret == 0)
     {
         co_return return_value(connect_status::connected);
     }
     else if (cret == -1)
     {
+        std::cerr << strerror(errno) << std::endl;
         // If the connect is happening in the background poll for write on the socket to trigger
         // when the connection is established.
         if (errno == EAGAIN || errno == EINPROGRESS)
