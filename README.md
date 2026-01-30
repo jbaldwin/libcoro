@@ -1261,9 +1261,8 @@ int main()
     {
         // Start by creating a tcp server, we'll do this before putting it into the scheduler so
         // it is immediately available for the client to connect since this will create a socket,
-        // bind the socket and start listening on that socket.  See tcp::server for more details on
-        // how to specify the local address and port to bind to as well as enabling SSL/TLS.
-        coro::net::tcp::server server{scheduler};
+        // bind the socket and start listening on that socket.
+        coro::net::tcp::server server{scheduler, {"127.0.0.1", 8080}};
 
         // Now schedule this task onto the scheduler.
         co_await scheduler->schedule();
@@ -1350,9 +1349,8 @@ int main()
         // Immediately schedule onto the scheduler.
         co_await scheduler->schedule();
 
-        // Create the tcp::client with the default settings, see tcp::client for how to set the
-        // ip address, port, and optionally enabling SSL/TLS.
-        coro::net::tcp::client client{scheduler};
+        // Create the tcp::client
+        coro::net::tcp::client client{scheduler, {"127.0.0.1", 8888}};
 
         // Ommitting error checking code for the client, each step should check the status and
         // verify the number of bytes sent or received.
