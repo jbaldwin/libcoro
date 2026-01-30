@@ -24,6 +24,12 @@ public:
             auto* sin       = reinterpret_cast<sockaddr_in*>(&m_storage);
             sin->sin_family = AF_INET;
             sin->sin_port   = htons(port);
+
+            // BSD-specific field, redundant for input
+#if defined(__APPLE__) || defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__)
+            sin->sin_len = sizeof(sockaddr_in);
+#endif
+
             std::memcpy(&sin->sin_addr, ip.data().data(), sizeof(in_addr));
             m_len = sizeof(sockaddr_in);
         }
@@ -32,6 +38,12 @@ public:
             auto* sin6        = reinterpret_cast<sockaddr_in6*>(&m_storage);
             sin6->sin6_family = AF_INET6;
             sin6->sin6_port   = htons(port);
+
+            // BSD-specific field
+#if defined(__APPLE__) || defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__)
+            sin6->sin6_len = sizeof(sockaddr_in6);
+#endif
+
             std::memcpy(&sin6->sin6_addr, ip.data().data(), sizeof(in6_addr));
             m_len = sizeof(sockaddr_in6);
 
@@ -124,7 +136,7 @@ public:
 
     auto operator==(const socket_address& other) const -> bool
     {
-        return m_len == other.m_len && std::memcmp(&m_storage, &other.m_storage, m_len) == 0;
+        return m_len == other.m_len && domain() == other.domain() && port() == other.port() && ip() == other.ip();
     }
 
     /**
