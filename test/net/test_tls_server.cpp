@@ -1,5 +1,6 @@
 #include "catch_amalgamated.hpp"
 #include "catch_extensions.hpp"
+#include "coro/net/socket_address.hpp"
 
 #ifdef LIBCORO_FEATURE_NETWORKING
     #ifdef LIBCORO_FEATURE_TLS
@@ -15,15 +16,17 @@ TEST_CASE("tls_server hello world server", "[tls_server]")
 
     const std::string client_msg = "Hello world from TLS client!";
     const std::string server_msg = "Hello world from TLS server!!";
+    const auto        endpoint   = coro::net::socket_address{"127.0.0.1", 8080};
 
     auto make_client_task = [](std::unique_ptr<coro::scheduler>& scheduler,
                                const std::string&                   client_msg,
-                               const std::string&                   server_msg) -> coro::task<void>
+                               const std::string&                   server_msg,
+                               const coro::net::socket_address&           endpoint) -> coro::task<void>
     {
         co_await scheduler->schedule();
 
         coro::net::tls::client client{
-            scheduler, std::make_shared<coro::net::tls::context>(coro::net::tls::verify_peer_t::no)};
+            scheduler, std::make_shared<coro::net::tls::context>(coro::net::tls::verify_peer_t::no), endpoint};
 
         std::cerr << "client.connect()\n";
         auto cstatus = co_await client.connect();
@@ -60,14 +63,16 @@ TEST_CASE("tls_server hello world server", "[tls_server]")
 
     auto make_server_task = [](std::unique_ptr<coro::scheduler>& scheduler,
                                const std::string&                   client_msg,
-                               const std::string&                   server_msg) -> coro::task<void>
+                               const std::string&                   server_msg,
+                               const coro::net::socket_address&           endpoint) -> coro::task<void>
     {
         co_await scheduler->schedule();
 
         coro::net::tls::server server{
             scheduler,
             std::make_shared<coro::net::tls::context>(
-                "cert.pem", coro::net::tls::tls_file_type::pem, "key.pem", coro::net::tls::tls_file_type::pem)};
+                "cert.pem", coro::net::tls::tls_file_type::pem, "key.pem", coro::net::tls::tls_file_type::pem),
+            endpoint};
 
         std::cerr << "server.poll()\n";
         auto pstatus = co_await server.poll();
@@ -105,7 +110,8 @@ TEST_CASE("tls_server hello world server", "[tls_server]")
 
     coro::sync_wait(
         coro::when_all(
-            make_server_task(scheduler, client_msg, server_msg), make_client_task(scheduler, client_msg, server_msg)));
+            make_server_task(scheduler, client_msg, server_msg, endpoint),
+            make_client_task(scheduler, client_msg, server_msg, endpoint)));
 }
 
     #endif // LIBCORO_FEATURE_TLS

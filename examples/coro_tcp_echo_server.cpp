@@ -30,7 +30,7 @@ auto main() -> int
         };
 
         co_await scheduler->schedule();
-        coro::net::tcp::server server{scheduler, coro::net::tcp::server::options{.port = 8888}};
+        coro::net::tcp::server server{scheduler, {"127.0.0.1", 8080}};
 
         while (true)
         {

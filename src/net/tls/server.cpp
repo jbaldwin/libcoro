@@ -6,15 +6,17 @@
 
 namespace coro::net::tls
 {
-server::server(std::unique_ptr<coro::scheduler>& scheduler, std::shared_ptr<context> tls_ctx, options opts)
+server::server(
+    std::unique_ptr<coro::scheduler>& scheduler,
+    std::shared_ptr<context>             tls_ctx,
+    const net::socket_address&                 endpoint,
+    options                              opts)
     : m_scheduler(scheduler.get()),
       m_tls_ctx(std::move(tls_ctx)),
       m_options(std::move(opts)),
-      m_accept_socket(net::make_accept_socket(
-          net::socket::options{net::domain_t::ipv4, net::socket::type_t::tcp, net::socket::blocking_t::no},
-          m_options.address,
-          m_options.port,
-          m_options.backlog))
+      m_accept_socket(
+          net::make_accept_socket(
+              net::socket::options{net::socket::type_t::tcp, net::socket::blocking_t::no}, endpoint, m_options.backlog))
 {
     if (m_scheduler == nullptr)
     {
@@ -49,26 +51,12 @@ auto server::operator=(server&& other) -> server&
 
 auto server::accept(std::chrono::milliseconds timeout) -> coro::task<coro::net::tls::client>
 {
-    sockaddr_in         client{};
-    constexpr const int len = sizeof(struct sockaddr_in);
-    net::socket         s{::accept(
-        m_accept_socket.native_handle(),
-        reinterpret_cast<struct sockaddr*>(&client),
-        const_cast<socklen_t*>(reinterpret_cast<const socklen_t*>(&len)))};
+    auto client_endpoint = net::socket_address::make_uninitialised();
+    auto [addr, len]     = client_endpoint.native_mutable_data();
 
-    std::span<const uint8_t> ip_addr_view{
-        reinterpret_cast<uint8_t*>(&client.sin_addr.s_addr),
-        sizeof(client.sin_addr.s_addr),
-    };
+    net::socket s{::accept(m_accept_socket.native_handle(), addr, len)};
 
-    auto tls_client = tls::client{
-        m_scheduler,
-        m_tls_ctx,
-        std::move(s),
-        tls::client::options{
-            .address = net::ip_address{ip_addr_view, static_cast<net::domain_t>(client.sin_family)},
-            .port    = ntohs(client.sin_port),
-        }};
+    auto tls_client = tls::client{m_scheduler, m_tls_ctx, std::move(s), client_endpoint};
 
     auto hstatus = co_await tls_client.handshake(timeout);
     (void)hstatus; // user must check result.

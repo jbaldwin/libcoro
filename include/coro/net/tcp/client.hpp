@@ -1,13 +1,14 @@
 #pragma once
 
 #include "coro/concepts/buffer.hpp"
-#include "coro/scheduler.hpp"
 #include "coro/net/connect.hpp"
 #include "coro/net/ip_address.hpp"
 #include "coro/net/recv_status.hpp"
 #include "coro/net/send_status.hpp"
 #include "coro/net/socket.hpp"
+#include "coro/net/socket_address.hpp"
 #include "coro/poll.hpp"
+#include "coro/scheduler.hpp"
 #include "coro/task.hpp"
 
 #include <chrono>
@@ -21,14 +22,6 @@ class server;
 class client
 {
 public:
-    struct options
-    {
-        /// The  ip address to connect to.  Use a dns_resolver to turn hostnames into ip addresses.
-        net::ip_address address{net::ip_address::from_string("127.0.0.1")};
-        /// The port to connect to.
-        uint16_t port{8080};
-    };
-
     /**
      * Creates a new tcp client that can connect to an ip address + port. By default, the socket
      * created will be in non-blocking mode, meaning that any sending or receiving of data should
@@ -36,12 +29,7 @@ public:
      * @param scheduler The io scheduler to drive the tcp client.
      * @param opts See client::options for more information.
      */
-    explicit client(
-        std::unique_ptr<coro::scheduler>& scheduler,
-        options                       opts = options{
-                                  .address = {net::ip_address::from_string("127.0.0.1")},
-                                  .port    = 8080,
-        });
+    explicit client(std::unique_ptr<coro::scheduler>& scheduler, net::socket_address endpoint);
     client(const client& other);
     client(client&& other) noexcept;
     auto operator=(const client& other) noexcept -> client&;
@@ -147,12 +135,12 @@ public:
 private:
     /// The tcp::server creates already connected clients and provides a tcp socket pre-built.
     friend server;
-    client(coro::scheduler* scheduler, net::socket socket, options opts);
+    client(coro::scheduler* scheduler, net::socket socket, const net::socket_address& endpoint);
 
     /// The scheduler that will drive this tcp client.
     coro::scheduler* m_scheduler{nullptr};
     /// Options for what server to connect to.
-    options m_options{};
+    socket_address m_endpoint;
     /// The tcp socket.
     net::socket m_socket{-1};
     /// Cache the status of the connect call in the event the user calls connect() again.

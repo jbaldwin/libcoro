@@ -6,7 +6,7 @@ namespace coro::net::udp
 {
 peer::peer(std::unique_ptr<coro::scheduler>& scheduler, net::domain_t domain)
     : m_scheduler(scheduler.get()),
-      m_socket(net::make_socket(net::socket::options{domain, net::socket::type_t::udp, net::socket::blocking_t::no}))
+      m_socket(net::make_socket(net::socket::options{net::socket::type_t::udp, net::socket::blocking_t::no}, domain))
 {
     if (m_scheduler == nullptr)
     {
@@ -14,13 +14,11 @@ peer::peer(std::unique_ptr<coro::scheduler>& scheduler, net::domain_t domain)
     }
 }
 
-peer::peer(std::unique_ptr<coro::scheduler>& scheduler, const info& bind_info)
+peer::peer(std::unique_ptr<coro::scheduler>& scheduler, const net::socket_address& endpoint)
     : m_scheduler(scheduler.get()),
       m_socket(
           net::make_accept_socket(
-              net::socket::options{bind_info.address.domain(), net::socket::type_t::udp, net::socket::blocking_t::no},
-              bind_info.address,
-              bind_info.port)),
+              net::socket::options{net::socket::type_t::udp, net::socket::blocking_t::no}, endpoint, 32)),
       m_bound(true)
 {
     if (m_scheduler == nullptr)
