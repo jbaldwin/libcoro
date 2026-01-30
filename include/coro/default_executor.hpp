@@ -1,7 +1,7 @@
 #pragma once
 
 #ifdef LIBCORO_FEATURE_NETWORKING
-    #include "coro/io_scheduler.hpp"
+    #include "coro/scheduler.hpp"
 #else
     #include "coro/thread_pool.hpp"
 #endif
@@ -23,16 +23,16 @@ auto executor() -> std::unique_ptr<coro::thread_pool>&;
 
 #ifdef LIBCORO_FEATURE_NETWORKING
 /**
- * Set up default coro::io_scheduler::options before constructing a single instance of coro::io_scheduler in
+ * Set up default coro::scheduler::options before constructing a single instance of coro::scheduler in
  * coro::default_executor::io_executor()
- * @param io_scheduler_options io_scheduler options
+ * @param scheduler_options scheduler options
  */
-void set_io_executor_options(io_scheduler::options io_scheduler_options);
+void set_io_executor_options(scheduler::options scheduler_options);
 
 /**
- * Get default coro::io_scheduler
+ * Get default coro::scheduler
  */
-auto io_executor() -> std::unique_ptr<coro::io_scheduler>&;
+auto io_executor() -> std::unique_ptr<coro::scheduler>&;
 #endif
 
 /**
@@ -41,7 +41,7 @@ auto io_executor() -> std::unique_ptr<coro::io_scheduler>&;
  * This executor is ideal as a default argument in a library,
  * in a place where thread_pool functionality is sufficient,
  * but you don't want to have two executor instances per application for the same thing,
- * one thread_pool and one io_scheduler.
+ * one thread_pool and one scheduler.
  */
 template<typename return_type>
 inline auto perfect() -> return_type&

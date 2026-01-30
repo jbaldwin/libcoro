@@ -3,7 +3,7 @@
     #pragma once
 
     #include "coro/concepts/buffer.hpp"
-    #include "coro/io_scheduler.hpp"
+    #include "coro/scheduler.hpp"
     #include "coro/net/connect.hpp"
     #include "coro/net/ip_address.hpp"
     #include "coro/net/socket.hpp"
@@ -42,7 +42,7 @@ public:
      * @param opts See tls::client::options for more information.
      */
     explicit client(
-        std::unique_ptr<coro::io_scheduler>& scheduler,
+        std::unique_ptr<coro::scheduler>& scheduler,
         std::shared_ptr<context>      tls_ctx,
         options                       opts = options{
                                   .address = {net::ip_address::from_string("127.0.0.1")},
@@ -310,7 +310,7 @@ private:
     auto poll(coro::poll_op op, std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
         -> coro::task<poll_status>
     {
-        return m_io_scheduler->poll(m_socket, op, timeout);
+        return m_scheduler->poll(m_socket, op, timeout);
     }
 
     struct tls_deleter
@@ -367,10 +367,10 @@ private:
 
     /// The tls::server creates already connected clients and provides a tcp socket pre-built.
     friend server;
-    client(coro::io_scheduler* scheduler, std::shared_ptr<context> tls_ctx, net::socket socket, options opts);
+    client(coro::scheduler* scheduler, std::shared_ptr<context> tls_ctx, net::socket socket, options opts);
 
     /// The scheduler that will drive this tcp client.
-    coro::io_scheduler* m_io_scheduler{nullptr};
+    coro::scheduler* m_scheduler{nullptr};
     // The tls context.
     std::shared_ptr<context> m_tls_ctx{nullptr};
     /// Options for what server to connect to.

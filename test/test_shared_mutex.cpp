@@ -197,14 +197,14 @@ TEST_CASE("mutex single waiter not locked shared shared scope lock", "[shared_mu
 #ifdef LIBCORO_FEATURE_NETWORKING
 TEST_CASE("mutex many shared and exclusive waiters interleaved", "[shared_mutex]")
 {
-    auto s = coro::io_scheduler::make_unique(
-        coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 8}});
-    coro::shared_mutex<coro::io_scheduler> m{s};
+    auto s = coro::scheduler::make_unique(
+        coro::scheduler::options{.pool = coro::thread_pool::options{.thread_count = 8}});
+    coro::shared_mutex<coro::scheduler> m{s};
 
     std::atomic<bool> read_value{false};
 
-    auto make_exclusive_task = [](std::unique_ptr<coro::io_scheduler> &    s,
-                                  coro::shared_mutex<coro::io_scheduler>& m,
+    auto make_exclusive_task = [](std::unique_ptr<coro::scheduler> &    s,
+                                  coro::shared_mutex<coro::scheduler>& m,
                                   std::atomic<bool>&                      read_value) -> coro::task<void>
     {
         // Let some readers get through.
@@ -224,12 +224,12 @@ TEST_CASE("mutex many shared and exclusive waiters interleaved", "[shared_mutex]
         co_return;
     };
 
-    auto make_shared_tasks_task = [](std::unique_ptr<coro::io_scheduler> &    s,
-                                     coro::shared_mutex<coro::io_scheduler>& m,
+    auto make_shared_tasks_task = [](std::unique_ptr<coro::scheduler> &    s,
+                                     coro::shared_mutex<coro::scheduler>& m,
                                      std::atomic<bool>&                      read_value) -> coro::task<void>
     {
-        auto make_shared_task = [](std::unique_ptr<coro::io_scheduler> &    s,
-                                   coro::shared_mutex<coro::io_scheduler>& m,
+        auto make_shared_task = [](std::unique_ptr<coro::scheduler> &    s,
+                                   coro::shared_mutex<coro::scheduler>& m,
                                    std::atomic<bool>&                      read_value) -> coro::task<bool>
         {
             co_await s->schedule();

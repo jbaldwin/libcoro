@@ -11,7 +11,7 @@
 namespace coro
 {
 
-class io_scheduler;
+class scheduler;
 } // namespace coro
 
 namespace coro::net::tcp
@@ -31,7 +31,7 @@ public:
     };
 
     explicit server(
-        std::unique_ptr<coro::io_scheduler>& scheduler,
+        std::unique_ptr<coro::scheduler>& scheduler,
         options                       opts = options{
                                   .address = net::ip_address::from_string("0.0.0.0"),
                                   .port    = 8080,
@@ -52,7 +52,7 @@ public:
      */
     auto poll(std::chrono::milliseconds timeout = std::chrono::milliseconds{0}) -> coro::task<coro::poll_status>
     {
-        return m_io_scheduler->poll(m_accept_socket, coro::poll_op::read, timeout, m_cancel_trigger.get_token());
+        return m_scheduler->poll(m_accept_socket, coro::poll_op::read, timeout, m_cancel_trigger.get_token());
     }
 
     /**
@@ -79,7 +79,7 @@ public:
 private:
     friend client;
     /// The io scheduler for awaiting new connections.
-    coro::io_scheduler* m_io_scheduler{nullptr};
+    coro::scheduler* m_scheduler{nullptr};
     /// The bind and listen options for this server.
     options m_options;
     /// The socket for accepting new tcp connections on.

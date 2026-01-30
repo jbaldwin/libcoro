@@ -9,7 +9,7 @@
 #include "coro/expected.hpp"
 
 #ifdef LIBCORO_FEATURE_NETWORKING
-    #include "coro/io_scheduler.hpp"
+    #include "coro/scheduler.hpp"
     #include "coro/net/dns/resolver.hpp"
     #include "coro/net/tcp/client.hpp"
     #include "coro/net/tcp/server.hpp"

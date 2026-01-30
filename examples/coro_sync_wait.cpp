@@ -8,7 +8,7 @@ int main()
     auto make_task_inline = [](uint64_t x) -> coro::task<uint64_t> { co_return x + x; };
 
     // This will block the calling thread until the created task completes.
-    // Since this task isn't scheduled on any coro::thread_pool or coro::io_scheduler
+    // Since this task isn't scheduled on any coro::thread_pool or coro::scheduler
     // it will execute directly on the calling thread.
     auto result = coro::sync_wait(make_task_inline(5));
     std::cout << "Inline Result = " << result << "\n";

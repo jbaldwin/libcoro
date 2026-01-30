@@ -341,7 +341,7 @@ static int run_all_tests_with_output(const std::string& files_dir) noexcept
             argv.push_back("~[benchmark]"); // exclude benchmark tests
             argv.push_back("~[bench]");
             argv.push_back("~[semaphore]");    // exclude slow semaphore tests
-            argv.push_back("~[io_scheduler]"); // exclude slow io_scheduler tests
+            argv.push_back("~[scheduler]"); // exclude slow scheduler tests
             argv.push_back("~[ring_buffer]");
             argv.push_back("~[thread_pool]");
             argv.push_back("~[tcp_server]");
