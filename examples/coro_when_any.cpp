@@ -5,10 +5,10 @@ int main()
 {
     // Create a scheduler to execute all tasks in parallel and also so we can
     // suspend a task to act like a timeout event.
-    auto scheduler = coro::io_scheduler::make_unique();
+    auto scheduler = coro::scheduler::make_unique();
 
     // This task will behave like a long running task and will produce a valid result.
-    auto make_long_running_task = [](std::unique_ptr<coro::io_scheduler>& scheduler,
+    auto make_long_running_task = [](std::unique_ptr<coro::scheduler>& scheduler,
                                      std::chrono::milliseconds           execution_time) -> coro::task<int64_t>
     {
         // Schedule the task to execute in parallel.
@@ -19,7 +19,7 @@ int main()
         co_return 1;
     };
 
-    auto make_timeout_task = [](std::unique_ptr<coro::io_scheduler>& scheduler) -> coro::task<int64_t>
+    auto make_timeout_task = [](std::unique_ptr<coro::scheduler>& scheduler) -> coro::task<int64_t>
     {
         // Schedule a timer to be fired so we know the task timed out.
         co_await scheduler->schedule_after(std::chrono::milliseconds{100});

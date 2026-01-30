@@ -1,7 +1,6 @@
 #pragma once
 
 #include "coro/concepts/buffer.hpp"
-#include "coro/io_scheduler.hpp"
 #include "coro/net/connect.hpp"
 #include "coro/net/ip_address.hpp"
 #include "coro/net/recv_status.hpp"
@@ -9,6 +8,7 @@
 #include "coro/net/socket.hpp"
 #include "coro/net/socket_address.hpp"
 #include "coro/poll.hpp"
+#include "coro/scheduler.hpp"
 #include "coro/task.hpp"
 
 #include <chrono>
@@ -29,9 +29,7 @@ public:
      * @param scheduler The io scheduler to drive the tcp client.
      * @param opts See client::options for more information.
      */
-    explicit client(
-        std::unique_ptr<coro::io_scheduler>& scheduler,
-        net::socket_address endpoint);
+    explicit client(std::unique_ptr<coro::scheduler>& scheduler, net::socket_address endpoint);
     client(const client& other);
     client(client&& other) noexcept;
     auto operator=(const client& other) noexcept -> client&;
@@ -65,7 +63,7 @@ public:
     auto poll(const coro::poll_op op, const std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
         -> coro::task<poll_status>
     {
-        return m_io_scheduler->poll(m_socket, op, timeout);
+        return m_scheduler->poll(m_socket, op, timeout);
     }
 
     /**
@@ -137,10 +135,10 @@ public:
 private:
     /// The tcp::server creates already connected clients and provides a tcp socket pre-built.
     friend server;
-    client(coro::io_scheduler* scheduler, net::socket socket, net::socket_address endpoint);
+    client(coro::scheduler* scheduler, net::socket socket, const net::socket_address& endpoint);
 
     /// The scheduler that will drive this tcp client.
-    coro::io_scheduler* m_io_scheduler{nullptr};
+    coro::scheduler* m_scheduler{nullptr};
     /// Options for what server to connect to.
     socket_address m_endpoint;
     /// The tcp socket.

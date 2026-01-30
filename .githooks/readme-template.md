@@ -30,7 +30,7 @@
     - [coro::invoke(functor, args...) -> awaitable](#invoke)
 * Executors
     - [coro::thread_pool](#thread_pool) for coroutine cooperative multitasking
-    - [coro::io_scheduler](#io_scheduler) for driving i/o events
+    - [coro::scheduler](#scheduler) for driving i/o events
         - Can use `coro::thread_pool` for latency sensitive or long-lived tasks.
         - Can use inline task processing for thread per core or short-lived tasks.
         - Requires `LIBCORO_FEATURE_NETWORKING` to be supported.
@@ -38,8 +38,8 @@
 * Coroutine Networking
     - coro::net::dns::resolver for async dns
         - Uses libc-ares
-    - [coro::net::tcp::client](#io_scheduler)
-    - [coro::net::tcp::server](#io_scheduler)
+    - [coro::net::tcp::client](#scheduler)
+    - [coro::net::tcp::server](#scheduler)
       * [Example TCP/HTTP Echo Server](#tcp_echo_server)
     - coro::net::tls::client (OpenSSL)
     - coro::net::tls::server (OpenSSL)
@@ -54,7 +54,7 @@
 ## Usage
 
 ### A note on co_await and threads
-It's important to note with coroutines that _any_ `co_await` has the potential to switch the underlying thread that is executing the currently executing coroutine if the scheduler used has more than 1 thread. In general this shouldn't affect the way any user of the library would write code except for `thread_local`. Usage of `thread_local` should be extremely careful and _never_ used across any `co_await` boundary do to thread switching and work stealing on libcoro's schedulers. The only way this is safe is by using a `coro::thread_pool` with 1 thread or an inline `io_scheduler` which also only has 1 thread.
+It's important to note with coroutines that _any_ `co_await` has the potential to switch the underlying thread that is executing the currently executing coroutine if the scheduler used has more than 1 thread. In general this shouldn't affect the way any user of the library would write code except for `thread_local`. Usage of `thread_local` should be extremely careful and _never_ used across any `co_await` boundary do to thread switching and work stealing on libcoro's schedulers. The only way this is safe is by using a `coro::thread_pool` with 1 thread or an inline `scheduler` which also only has 1 thread.
 
 ### A note on lambda captures
 [C++ Core Guidelines - CP.51: Do no use capturing lambdas that are coroutines](https://isocpp.github.io/CppCoreGuidelines/CppCoreGuidelines#Rcoro-capture)
@@ -78,7 +78,7 @@ Offload Result = 20
 ```
 
 ### when_all
-The `when_all` construct can be used within coroutines to await a set of tasks, or it can be used outside coroutine context in conjunction with `sync_wait` to await multiple tasks. Each task passed into `when_all` will initially be executed serially by the calling thread so it is recommended to offload the tasks onto an executor like `coro::thread_pool` or `coro::io_scheduler` so they can execute in parallel.
+The `when_all` construct can be used within coroutines to await a set of tasks, or it can be used outside coroutine context in conjunction with `sync_wait` to await multiple tasks. Each task passed into `when_all` will initially be executed serially by the calling thread so it is recommended to offload the tasks onto an executor like `coro::thread_pool` or `coro::scheduler` so they can execute in parallel.
 
 ```C++
 ${EXAMPLE_CORO_WHEN_ALL}
@@ -96,7 +96,7 @@ first: 1.21 second: 20
 ```
 
 ### when_any
-The `when_any` construct can be used within coroutines to await a set of tasks and only return the result of the first task that completes. This can also be used outside of a coroutine context in conjunction with `sync_wait` to await the first result. Each task passed into `when_any` will initially be executed serially by the calling thread so it is recommended to offload the tasks onto an executor like `coro::thread_pool` or `coro::io_scheduler` so they can execute in parallel.
+The `when_any` construct can be used within coroutines to await a set of tasks and only return the result of the first task that completes. This can also be used outside of a coroutine context in conjunction with `sync_wait` to await the first result. Each task passed into `when_any` will initially be executed serially by the calling thread so it is recommended to offload the tasks onto an executor like `coro::thread_pool` or `coro::scheduler` so they can execute in parallel.
 
 ```C++
 ${EXAMPLE_CORO_WHEN_ANY}
@@ -402,48 +402,48 @@ thread pool worker 3 is shutting down.
 thread pool worker 0 is shutting down.
 ```
 
-### io_scheduler
-`coro::io_scheduler` is a i/o event scheduler execution context that can use two methods of task processing:
+### scheduler
+`coro::scheduler` is a i/o event scheduler execution context that can use two methods of task processing:
 
 * A background `coro::thread_pool`
-* Inline task processing on the `coro::io_scheduler`'s event loop
+* Inline task processing on the `coro::scheduler`'s event loop
 
 Using a background `coro::thread_pool` will default to using `(std::thread::hardware_concurrency() - 1)` threads to process tasks.  This processing strategy is best for longer tasks that would block the i/o scheduler or for tasks that are latency sensitive.
 
 Using the inline processing strategy will have the event loop i/o thread process the tasks inline on that thread when events are received.  This processing strategy is best for shorter task that will not block the i/o thread for long or for pure throughput by using thread per core architecture, e.g. spin up an inline i/o scheduler per core and inline process tasks on each scheduler.
 
-The `coro::io_scheduler` can use a dedicated spawned thread for processing events that are ready or it can be maually driven via its `process_events()` function for integration into existing event loops.  By default i/o schedulers will spawn a dedicated event thread and use a thread pool to process tasks.
+The `coro::scheduler` can use a dedicated spawned thread for processing events that are ready or it can be maually driven via its `process_events()` function for integration into existing event loops.  By default i/o schedulers will spawn a dedicated event thread and use a thread pool to process tasks.
 
-#### Ways to schedule tasks onto a `coro::io_scheduler`
-* `coro::io_scheduler::schedule()` Use `co_await` on this method inside a coroutine to transfer the tasks execution to the `coro::io_scheduler`.
-* `coro::io_scheduler::schedule(coro::task<T> task) -> coro::task<T>` schedules the task on the `coro::io_scheduler` and then returns the result in a task that must be awaited. This is useful if you want to schedule work on the `coro::io_scheduler` and want to wait for the result.
-* `coro::io_scheduler::schedule(std::stop_source st, coro::task<T> task, std::chrono::duration timeout) -> coro::expected<T, coro::timeout_status>` schedules the task on the `coro::io_scheduler` and then returns the result in a task that must be awaited. That task will then either return the completed task's value if it completes before the timeout, or a return value denoted the task timed out. If the task times out the `std::stop_source.request_stop()` will be invoked so the task can check for it and stop executing. This must be done by the user, the `coro::io_scheduler` cannot stop the execution of the task but it is able through the `std::stop_source` to signal to the task it should stop executing.
-* `coro::io_scheduler::scheduler_after(std::chrono::milliseconds amount)` schedules the current task to be rescheduled after a specified amount of time has passed.
-* `coro::io_scheduler::schedule_at(std::chrono::steady_clock::time_point time)` schedules the current task to be rescheduled at the specified timepoint.
-* `coro::io_scheduler::yield()` will yield execution of the current task and resume after other tasks have had a chance to execute. This effectively places the task at the back of the queue of waiting tasks.
-* `coro::io_scheduler::yield_for(std::chrono::milliseconds amount)` will yield for the given amount of time and then reschedule the task. This is a yield for at least this much time since it is placed in the waiting execution queue and might take additional time to start executing again.
-* `coro::io_scheduler::yield_until(std::chrono::steady_clock::time_point time)` will yield execution until the time point.
-* `coro::io_scheduler::spawn_detached(coro::task<void&& task>)` Spawns the task to be detached and owned by the `coro::io_scheduler`, use this if you want to fire and forget the task, the `coro::io_scheduler` will maintain the task's lifetime.
-* `coro::io_scheduler::spawn_joinable(coro::task<void>&& task) -> coro::task<void>` Spawns the task to be started immediately but can be joined at later time, use this if you want to start the task immediately but want to join it later.
-* `coro::task_group<coro::io_scheduler>(coro::task<void>&& task | range<coro::task<void>>)` schedules the task(s) on the `coro::io_scheduler`. Use this when you want to share a `coro::io_scheduler` while monitoring the progress of a subset of tasks.
+#### Ways to schedule tasks onto a `coro::scheduler`
+* `coro::scheduler::schedule()` Use `co_await` on this method inside a coroutine to transfer the tasks execution to the `coro::scheduler`.
+* `coro::scheduler::schedule(coro::task<T> task) -> coro::task<T>` schedules the task on the `coro::scheduler` and then returns the result in a task that must be awaited. This is useful if you want to schedule work on the `coro::scheduler` and want to wait for the result.
+* `coro::scheduler::schedule(std::stop_source st, coro::task<T> task, std::chrono::duration timeout) -> coro::expected<T, coro::timeout_status>` schedules the task on the `coro::scheduler` and then returns the result in a task that must be awaited. That task will then either return the completed task's value if it completes before the timeout, or a return value denoted the task timed out. If the task times out the `std::stop_source.request_stop()` will be invoked so the task can check for it and stop executing. This must be done by the user, the `coro::scheduler` cannot stop the execution of the task but it is able through the `std::stop_source` to signal to the task it should stop executing.
+* `coro::scheduler::scheduler_after(std::chrono::milliseconds amount)` schedules the current task to be rescheduled after a specified amount of time has passed.
+* `coro::scheduler::schedule_at(std::chrono::steady_clock::time_point time)` schedules the current task to be rescheduled at the specified timepoint.
+* `coro::scheduler::yield()` will yield execution of the current task and resume after other tasks have had a chance to execute. This effectively places the task at the back of the queue of waiting tasks.
+* `coro::scheduler::yield_for(std::chrono::milliseconds amount)` will yield for the given amount of time and then reschedule the task. This is a yield for at least this much time since it is placed in the waiting execution queue and might take additional time to start executing again.
+* `coro::scheduler::yield_until(std::chrono::steady_clock::time_point time)` will yield execution until the time point.
+* `coro::scheduler::spawn_detached(coro::task<void&& task>)` Spawns the task to be detached and owned by the `coro::scheduler`, use this if you want to fire and forget the task, the `coro::scheduler` will maintain the task's lifetime.
+* `coro::scheduler::spawn_joinable(coro::task<void>&& task) -> coro::task<void>` Spawns the task to be started immediately but can be joined at later time, use this if you want to start the task immediately but want to join it later.
+* `coro::task_group<coro::scheduler>(coro::task<void>&& task | range<coro::task<void>>)` schedules the task(s) on the `coro::scheduler`. Use this when you want to share a `coro::scheduler` while monitoring the progress of a subset of tasks.
 
 The example provided here shows an i/o scheduler that spins up a basic `coro::net::tcp::server` and a `coro::net::tcp::client` that will connect to each other and then send a request and a response.
 
 ```C++
-${EXAMPLE_CORO_IO_SCHEDULER_CPP}
+${EXAMPLE_CORO_SCHEDULER_CPP}
 ```
 
 Example output:
 ```bash
-$ ./examples/coro_io_scheduler
-io_scheduler::thread_pool worker 0 starting
-io_scheduler::process event thread start
-io_scheduler::thread_pool worker 1 starting
+$ ./examples/coro_scheduler
+scheduler::thread_pool worker 0 starting
+scheduler::process event thread start
+scheduler::thread_pool worker 1 starting
 server: Hello from client.
 client: Hello from server.
-io_scheduler::thread_pool worker 0 stopping
-io_scheduler::thread_pool worker 1 stopping
-io_scheduler::process event thread stop
+scheduler::thread_pool worker 0 stopping
+scheduler::thread_pool worker 1 stopping
+scheduler::process event thread stop
 ```
 
 ### tcp_echo_server
@@ -572,7 +572,7 @@ Tests are executed by launching the app, which loads a shared library `libcoroTe
 You can pass test options by pushing a simple properties file to the device:
 
 ```
-filter=~[benchmark] ~[bench] ~[semaphore] ~[io_scheduler]
+filter=~[benchmark] ~[bench] ~[semaphore] ~[scheduler]
 timeout=600
 ```
 

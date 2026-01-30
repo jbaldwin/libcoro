@@ -36,7 +36,7 @@ if(LIBCORO_FEATURE_NETWORKING)
         net/test_endpoint.cpp
     )
 
-    # These tests require coro::io_scheduler
+    # These tests require coro::scheduler
     list(APPEND LIBCORO_TEST_SOURCE_FILES
         net/test_dns_resolver.cpp
         net/test_tcp_server.cpp
@@ -48,7 +48,7 @@ endif()
 if(LIBCORO_FEATURE_NETWORKING)
     list(APPEND LIBCORO_TEST_SOURCE_FILES
         bench.cpp
-        test_io_scheduler.cpp
+        test_scheduler.cpp
     )
 endif()
 

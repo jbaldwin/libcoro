@@ -2,25 +2,25 @@
 
     #include "coro/net/tls/server.hpp"
 
-    #include "coro/io_scheduler.hpp"
+    #include "coro/scheduler.hpp"
 
 namespace coro::net::tls
 {
 server::server(
-    std::unique_ptr<coro::io_scheduler>& scheduler,
+    std::unique_ptr<coro::scheduler>& scheduler,
     std::shared_ptr<context>             tls_ctx,
     const net::socket_address&                 endpoint,
     options                              opts)
-    : m_io_scheduler(scheduler.get()),
+    : m_scheduler(scheduler.get()),
       m_tls_ctx(std::move(tls_ctx)),
       m_options(std::move(opts)),
       m_accept_socket(
           net::make_accept_socket(
               net::socket::options{net::socket::type_t::tcp, net::socket::blocking_t::no}, endpoint, m_options.backlog))
 {
-    if (m_io_scheduler == nullptr)
+    if (m_scheduler == nullptr)
     {
-        throw std::runtime_error{"tls::server cannot have a nullptr io_scheduler"};
+        throw std::runtime_error{"tls::server cannot have a nullptr scheduler"};
     }
 
     if (m_tls_ctx == nullptr)
@@ -30,7 +30,7 @@ server::server(
 }
 
 server::server(server&& other)
-    : m_io_scheduler(std::exchange(other.m_io_scheduler, nullptr)),
+    : m_scheduler(std::exchange(other.m_scheduler, nullptr)),
       m_tls_ctx(std::move(other.m_tls_ctx)),
       m_options(std::move(other.m_options)),
       m_accept_socket(std::move(other.m_accept_socket))
@@ -41,7 +41,7 @@ auto server::operator=(server&& other) -> server&
 {
     if (std::addressof(other) != this)
     {
-        m_io_scheduler  = std::exchange(other.m_io_scheduler, nullptr);
+        m_scheduler  = std::exchange(other.m_scheduler, nullptr);
         m_tls_ctx       = std::move(other.m_tls_ctx);
         m_options       = std::move(other.m_options);
         m_accept_socket = std::move(other.m_accept_socket);
@@ -56,7 +56,7 @@ auto server::accept(std::chrono::milliseconds timeout) -> coro::task<coro::net::
 
     net::socket s{::accept(m_accept_socket.native_handle(), addr, len)};
 
-    auto tls_client = tls::client{m_io_scheduler, m_tls_ctx, std::move(s), client_endpoint};
+    auto tls_client = tls::client{m_scheduler, m_tls_ctx, std::move(s), client_endpoint};
 
     auto hstatus = co_await tls_client.handshake(timeout);
     (void)hstatus; // user must check result.

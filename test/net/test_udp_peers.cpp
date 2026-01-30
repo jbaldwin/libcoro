@@ -10,10 +10,10 @@ TEST_CASE("udp one way", "[udp]")
     const std::string msg{"aaaaaaaaaaaaaaaaaaaaabbbbbbbbbbbbbbbbbcccccccccccccccccc"};
     const auto        endpoint = coro::net::socket_address{"127.0.0.1", 8080};
 
-    auto scheduler = coro::io_scheduler::make_unique(
-        coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
+    auto scheduler = coro::scheduler::make_unique(
+        coro::scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
 
-    auto make_send_task = [](std::unique_ptr<coro::io_scheduler>& scheduler,
+    auto make_send_task = [](std::unique_ptr<coro::scheduler>& scheduler,
                              const std::string&                   msg,
                              const coro::net::socket_address&           endpoint) -> coro::task<void>
     {
@@ -27,7 +27,7 @@ TEST_CASE("udp one way", "[udp]")
         co_return;
     };
 
-    auto make_recv_task = [](std::unique_ptr<coro::io_scheduler>& scheduler,
+    auto make_recv_task = [](std::unique_ptr<coro::scheduler>& scheduler,
                              const std::string&                   msg,
                              const coro::net::socket_address&           endpoint) -> coro::task<void>
     {
@@ -59,10 +59,10 @@ TEST_CASE("udp echo peers", "[udp]")
     const std::string peer1_msg{"Hello from peer1!"};
     const std::string peer2_msg{"Hello from peer2!!"};
 
-    auto scheduler = coro::io_scheduler::make_unique(
-        coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
+    auto scheduler = coro::scheduler::make_unique(
+        coro::scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
 
-    auto make_peer_task = [](std::unique_ptr<coro::io_scheduler>& scheduler,
+    auto make_peer_task = [](std::unique_ptr<coro::scheduler>& scheduler,
                              uint16_t                             my_port,
                              uint16_t                             peer_port,
                              bool                                 send_first,

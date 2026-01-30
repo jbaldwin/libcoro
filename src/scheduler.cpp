@@ -1,4 +1,4 @@
-#include "coro/io_scheduler.hpp"
+#include "coro/scheduler.hpp"
 #include "coro/detail/task_self_deleting.hpp"
 
 #include <atomic>
@@ -17,7 +17,7 @@ namespace coro
 namespace detail
 {
 static auto
-    make_spawned_joinable_wait_task(std::unique_ptr<coro::task_group<coro::io_scheduler>> group_ptr) -> coro::task<void>
+    make_spawned_joinable_wait_task(std::unique_ptr<coro::task_group<coro::scheduler>> group_ptr) -> coro::task<void>
 {
     co_await *group_ptr;
     co_return;
@@ -25,7 +25,7 @@ static auto
 
 } // namespace detail
 
-io_scheduler::io_scheduler(options&& opts, private_constructor)
+scheduler::scheduler(options&& opts, private_constructor)
     : m_opts(opts),
       m_io_notifier(),
       m_timer(static_cast<const void*>(&m_timer_object), m_io_notifier)
@@ -48,9 +48,9 @@ io_scheduler::io_scheduler(options&& opts, private_constructor)
     }
 }
 
-auto io_scheduler::make_unique(options opts) -> std::unique_ptr<io_scheduler>
+auto scheduler::make_unique(options opts) -> std::unique_ptr<scheduler>
 {
-    auto s = std::make_unique<io_scheduler>(std::move(opts), private_constructor{});
+    auto s = std::make_unique<scheduler>(std::move(opts), private_constructor{});
 
     // Spawn the dedicated event loop thread once the scheduler is fully constructed
     // so it has a full object to work with.
@@ -63,7 +63,7 @@ auto io_scheduler::make_unique(options opts) -> std::unique_ptr<io_scheduler>
     return s;
 }
 
-io_scheduler::~io_scheduler()
+scheduler::~scheduler()
 {
     shutdown();
 
@@ -76,13 +76,13 @@ io_scheduler::~io_scheduler()
     m_schedule_pipe.close();
 }
 
-auto io_scheduler::process_events(std::chrono::milliseconds timeout) -> std::size_t
+auto scheduler::process_events(std::chrono::milliseconds timeout) -> std::size_t
 {
     process_events_manual(timeout);
     return size();
 }
 
-auto io_scheduler::spawn_detached(coro::task<void>&& task) -> bool
+auto scheduler::spawn_detached(coro::task<void>&& task) -> bool
 {
     m_size.fetch_add(1, std::memory_order::release);
     auto wrapper_task = detail::make_task_self_deleting(std::move(task));
@@ -90,18 +90,18 @@ auto io_scheduler::spawn_detached(coro::task<void>&& task) -> bool
     return resume(wrapper_task.handle());
 }
 
-auto io_scheduler::spawn_joinable(coro::task<void>&& task) -> coro::task<void>
+auto scheduler::spawn_joinable(coro::task<void>&& task) -> coro::task<void>
 {
-    auto group_ptr = std::make_unique<coro::task_group<coro::io_scheduler>>(this, std::move(task));
+    auto group_ptr = std::make_unique<coro::task_group<coro::scheduler>>(this, std::move(task));
     return detail::make_spawned_joinable_wait_task(std::move(group_ptr));
 }
 
-auto io_scheduler::schedule_at(time_point time) -> coro::task<void>
+auto scheduler::schedule_at(time_point time) -> coro::task<void>
 {
     return yield_until(time);
 }
 
-auto io_scheduler::yield_until(time_point time) -> coro::task<void>
+auto scheduler::yield_until(time_point time) -> coro::task<void>
 {
     auto now = clock::now();
 
@@ -125,7 +125,7 @@ auto io_scheduler::yield_until(time_point time) -> coro::task<void>
     co_return;
 }
 
-auto io_scheduler::poll(
+auto scheduler::poll(
     fd_t fd, coro::poll_op op, std::chrono::milliseconds timeout, std::optional<poll_stop_token> cancel_trigger)
     -> coro::task<poll_status>
 {
@@ -159,7 +159,7 @@ auto io_scheduler::poll(
     co_return result;
 }
 
-auto io_scheduler::resume(std::coroutine_handle<> handle) -> bool
+auto scheduler::resume(std::coroutine_handle<> handle) -> bool
 {
     if (handle == nullptr || handle.done())
     {
@@ -187,7 +187,7 @@ auto io_scheduler::resume(std::coroutine_handle<> handle) -> bool
             ssize_t written = ::write(m_schedule_pipe.write_fd(), reinterpret_cast<const void*>(&value), sizeof(value));
             if (written != sizeof(value))
             {
-                std::cerr << "libcoro::io_scheduler::resume() failed to write to schedule pipe, bytes written=" << written << "\n";
+                std::cerr << "libcoro::scheduler::resume() failed to write to schedule pipe, bytes written=" << written << "\n";
             }
         }
 
@@ -199,7 +199,7 @@ auto io_scheduler::resume(std::coroutine_handle<> handle) -> bool
     }
 }
 
-auto io_scheduler::shutdown() noexcept -> void
+auto scheduler::shutdown() noexcept -> void
 {
     // Only allow shutdown to occur once.
     if (m_shutdown_requested.exchange(true, std::memory_order::acq_rel) == false)
@@ -209,7 +209,7 @@ auto io_scheduler::shutdown() noexcept -> void
         ssize_t written = ::write(m_shutdown_pipe.write_fd(), reinterpret_cast<const void*>(&value), sizeof(value));
         if (written != sizeof(value))
         {
-            std::cerr << "libcoro::io_scheduler::shutdown() failed to write to shutdown pipe, bytes written=" << written << "\n";
+            std::cerr << "libcoro::scheduler::shutdown() failed to write to shutdown pipe, bytes written=" << written << "\n";
         }
 
         if (m_io_thread.joinable())
@@ -224,7 +224,7 @@ auto io_scheduler::shutdown() noexcept -> void
     }
 }
 
-auto io_scheduler::yield_for_internal(std::chrono::nanoseconds amount) -> coro::task<void>
+auto scheduler::yield_for_internal(std::chrono::nanoseconds amount) -> coro::task<void>
 {
     if (amount <= 0ms)
     {
@@ -250,7 +250,7 @@ auto io_scheduler::yield_for_internal(std::chrono::nanoseconds amount) -> coro::
     co_return;
 }
 
-auto io_scheduler::process_events_manual(std::chrono::milliseconds timeout) -> void
+auto scheduler::process_events_manual(std::chrono::milliseconds timeout) -> void
 {
     bool expected{false};
     if (m_io_processing.compare_exchange_strong(expected, true, std::memory_order::release, std::memory_order::relaxed))
@@ -260,7 +260,7 @@ auto io_scheduler::process_events_manual(std::chrono::milliseconds timeout) -> v
     }
 }
 
-auto io_scheduler::process_events_dedicated_thread() -> void
+auto scheduler::process_events_dedicated_thread() -> void
 {
     if (m_opts.on_io_thread_start_functor != nullptr)
     {
@@ -281,7 +281,7 @@ auto io_scheduler::process_events_dedicated_thread() -> void
     }
 }
 
-auto io_scheduler::process_events_execute(std::chrono::milliseconds timeout) -> void
+auto scheduler::process_events_execute(std::chrono::milliseconds timeout) -> void
 {
     // Clear the recent events without decreasing the allocated capacity to reduce allocations
     m_recent_events.clear();
@@ -334,7 +334,7 @@ auto io_scheduler::process_events_execute(std::chrono::milliseconds timeout) -> 
     }
 }
 
-auto io_scheduler::process_scheduled_execute_inline() -> void
+auto scheduler::process_scheduled_execute_inline() -> void
 {
     std::vector<std::coroutine_handle<>> tasks{};
     {
@@ -385,7 +385,7 @@ auto io_scheduler::process_scheduled_execute_inline() -> void
     m_size.fetch_sub(tasks.size(), std::memory_order::release);
 }
 
-auto io_scheduler::process_event_execute(detail::poll_info* pi, poll_status status) -> void
+auto scheduler::process_event_execute(detail::poll_info* pi, poll_status status) -> void
 {
     if (!pi->m_processed)
     {
@@ -417,7 +417,7 @@ auto io_scheduler::process_event_execute(detail::poll_info* pi, poll_status stat
     }
 }
 
-auto io_scheduler::process_timeout_execute() -> void
+auto scheduler::process_timeout_execute() -> void
 {
     std::vector<detail::poll_info*> poll_infos{};
     auto                            now = clock::now();
@@ -470,7 +470,7 @@ auto io_scheduler::process_timeout_execute() -> void
     update_timeout(clock::now());
 }
 
-auto io_scheduler::add_timer_token(time_point tp, detail::poll_info& pi) -> timed_events::iterator
+auto scheduler::add_timer_token(time_point tp, detail::poll_info& pi) -> timed_events::iterator
 {
     std::scoped_lock lk{m_timed_events_mutex};
     auto             pos = m_timed_events.emplace(tp, &pi);
@@ -484,7 +484,7 @@ auto io_scheduler::add_timer_token(time_point tp, detail::poll_info& pi) -> time
     return pos;
 }
 
-auto io_scheduler::remove_timer_token(timed_events::iterator pos) -> void
+auto scheduler::remove_timer_token(timed_events::iterator pos) -> void
 {
     {
         std::scoped_lock lk{m_timed_events_mutex};
@@ -502,7 +502,7 @@ auto io_scheduler::remove_timer_token(timed_events::iterator pos) -> void
     }
 }
 
-auto io_scheduler::update_timeout(time_point now) -> void
+auto scheduler::update_timeout(time_point now) -> void
 {
     if (!m_timed_events.empty())
     {

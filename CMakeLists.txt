@@ -148,7 +148,7 @@ if(LIBCORO_FEATURE_NETWORKING)
         include/coro/detail/timer_handle.hpp src/detail/timer_handle.cpp
 
         include/coro/fd.hpp
-        include/coro/io_scheduler.hpp src/io_scheduler.cpp
+        include/coro/scheduler.hpp src/scheduler.cpp
         include/coro/io_notifier.hpp
         include/coro/poll.hpp src/poll.cpp
     )

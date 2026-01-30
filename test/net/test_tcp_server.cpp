@@ -24,10 +24,10 @@ TEST_CASE("tcp_server ping server", "[tcp_server]")
         coro::net::socket_address{"127.0.0.1", 8080},
         coro::net::socket_address{"::1", 8080, coro::net::domain_t::ipv6});
 
-    auto scheduler = coro::io_scheduler::make_unique(
-        coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
+    auto scheduler = coro::scheduler::make_unique(
+        coro::scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
 
-    auto make_client_task = [](std::unique_ptr<coro::io_scheduler>& scheduler,
+    auto make_client_task = [](std::unique_ptr<coro::scheduler>& scheduler,
                                const std::string&                   client_msg,
                                const std::string&                   server_msg,
                                const coro::net::socket_address&           endpoint) -> coro::task<void>
@@ -69,7 +69,7 @@ TEST_CASE("tcp_server ping server", "[tcp_server]")
         co_return;
     };
 
-    auto make_server_task = [](std::unique_ptr<coro::io_scheduler>& scheduler,
+    auto make_server_task = [](std::unique_ptr<coro::scheduler>& scheduler,
                                const std::string&                   client_msg,
                                const std::string&                   server_msg,
                                const coro::net::socket_address&           endpoint) -> coro::task<void>
@@ -123,12 +123,12 @@ TEST_CASE("tcp_server concurrent polling on the same socket", "[tcp_server]")
     // Issue 224: This test duplicates a client and issues two different poll operations per coroutine.
 
     using namespace std::chrono_literals;
-    auto scheduler = coro::io_scheduler::make_unique(
-        coro::io_scheduler::options{
-            .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
+    auto scheduler = coro::scheduler::make_unique(
+        coro::scheduler::options{
+            .execution_strategy = coro::scheduler::execution_strategy_t::process_tasks_inline});
     const auto endpoint = coro::net::socket_address{"127.0.0.1", 8080};
 
-    auto make_server_task = [](std::unique_ptr<coro::io_scheduler>& scheduler,
+    auto make_server_task = [](std::unique_ptr<coro::scheduler>& scheduler,
                                const coro::net::socket_address&           endpoint) -> coro::task<std::string>
     {
         auto make_read_task = [](coro::net::tcp::client client) -> coro::task<void>
@@ -174,7 +174,7 @@ TEST_CASE("tcp_server concurrent polling on the same socket", "[tcp_server]")
         co_return data;
     };
 
-    auto make_client_task = [](std::unique_ptr<coro::io_scheduler>& scheduler,
+    auto make_client_task = [](std::unique_ptr<coro::scheduler>& scheduler,
                                const coro::net::socket_address&           endpoint) -> coro::task<std::string>
     {
         co_await scheduler->schedule();
@@ -220,9 +220,9 @@ TEST_CASE("tcp_server concurrent polling on the same socket", "[tcp_server]")
 TEST_CASE("tcp_server graceful shutdown via socket", "[tcp_server]")
 {
     std::cerr << "BEGIN tcp_server graceful shutdown via socket\n";
-    auto scheduler = coro::io_scheduler::make_unique(
-        coro::io_scheduler::options{
-            .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline});
+    auto scheduler = coro::scheduler::make_unique(
+        coro::scheduler::options{
+            .execution_strategy = coro::scheduler::execution_strategy_t::process_tasks_inline});
     coro::net::tcp::server server{scheduler, {"127.0.0.1", 8080}};
     coro::event            started{};
 

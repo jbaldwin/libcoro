@@ -1,7 +1,7 @@
 #pragma once
 
 #include "coro/concepts/buffer.hpp"
-#include "coro/io_scheduler.hpp"
+#include "coro/scheduler.hpp"
 #include "coro/net/recv_status.hpp"
 #include "coro/net/send_status.hpp"
 #include "coro/net/socket.hpp"
@@ -11,10 +11,6 @@
 #include <chrono>
 #include <span>
 
-namespace coro
-{
-class io_scheduler;
-} // namespace coro
 
 namespace coro::net::udp
 {
@@ -25,12 +21,12 @@ public:
      * Creates a udp peer that can send packets but not receive them.  This udp peer will not explicitly
      * bind to a local ip+port.
      */
-    explicit peer(std::unique_ptr<coro::io_scheduler>& scheduler, net::domain_t domain = net::domain_t::ipv4);
+    explicit peer(std::unique_ptr<coro::scheduler>& scheduler, net::domain_t domain = net::domain_t::ipv4);
 
     /**
      * Creates a udp peer that can send and receive packets.  This peer will bind to the given ip_port.
      */
-    explicit peer(std::unique_ptr<coro::io_scheduler>& scheduler, const net::socket_address& endpoint);
+    explicit peer(std::unique_ptr<coro::scheduler>& scheduler, const net::socket_address& endpoint);
 
     peer(const peer&) noexcept = default;
     peer(peer&&) noexcept;
@@ -57,7 +53,7 @@ public:
     auto poll(poll_op op, std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
         -> coro::task<coro::poll_status>
     {
-        co_return co_await m_io_scheduler->poll(m_socket, op, timeout);
+        co_return co_await m_scheduler->poll(m_socket, op, timeout);
     }
 
     /**
@@ -124,7 +120,7 @@ public:
 
 private:
     /// The scheduler that will drive this udp client.
-    coro::io_scheduler* m_io_scheduler;
+    coro::scheduler* m_scheduler;
     /// The udp socket.
     net::socket m_socket{-1};
     /// Did the user request this udp socket is bound locally to receive packets?

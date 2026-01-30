@@ -11,14 +11,14 @@
 
 TEST_CASE("tls_server hello world server", "[tls_server]")
 {
-    auto scheduler = coro::io_scheduler::make_unique(
-        coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
+    auto scheduler = coro::scheduler::make_unique(
+        coro::scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
 
     const std::string client_msg = "Hello world from TLS client!";
     const std::string server_msg = "Hello world from TLS server!!";
     const auto        endpoint   = coro::net::socket_address{"127.0.0.1", 8080};
 
-    auto make_client_task = [](std::unique_ptr<coro::io_scheduler>& scheduler,
+    auto make_client_task = [](std::unique_ptr<coro::scheduler>& scheduler,
                                const std::string&                   client_msg,
                                const std::string&                   server_msg,
                                const coro::net::socket_address&           endpoint) -> coro::task<void>
@@ -61,7 +61,7 @@ TEST_CASE("tls_server hello world server", "[tls_server]")
         co_return;
     };
 
-    auto make_server_task = [](std::unique_ptr<coro::io_scheduler>& scheduler,
+    auto make_server_task = [](std::unique_ptr<coro::scheduler>& scheduler,
                                const std::string&                   client_msg,
                                const std::string&                   server_msg,
                                const coro::net::socket_address&           endpoint) -> coro::task<void>

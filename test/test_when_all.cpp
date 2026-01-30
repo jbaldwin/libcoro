@@ -233,6 +233,52 @@ TEST_CASE("when_all return void", "[when_all]")
     REQUIRE(counter == 1 + 2 + 3 + 4);
 }
 
+TEST_CASE("when_all move only object", "[when_all]")
+{
+    struct move_only
+    {
+        move_only() = default;
+        ~move_only() = default;
+
+        move_only(const move_only& other) = delete;
+        move_only(move_only&& other) = default;
+
+        auto operator=(const move_only&) noexcept -> move_only& = delete;
+        auto operator=(move_only&& other) noexcept -> move_only& = default;
+
+        std::string data{};
+    };
+
+    auto make_test = []() -> coro::task<void>
+    {
+        auto make_when_all_move_only = [](move_only value) -> coro::task<move_only>
+        {
+            co_return std::move(value);
+        };
+
+        move_only one{};
+        one.data = "hello";
+
+        move_only two{};
+        two.data = "world";
+
+        auto [task1, task2] = coro::sync_wait(coro::when_all(
+            make_when_all_move_only(std::move(one)),
+            make_when_all_move_only(std::move(two))
+        ));
+
+        auto result1 = std::move(task1.return_value());
+        auto result2 = std::move(task2).return_value();
+
+        REQUIRE(result1.data == "hello");
+        REQUIRE(result2.data == "world");
+
+        co_return;
+    };
+
+    coro::sync_wait(make_test());
+}
+
 TEST_CASE("~when_all", "[when_all]")
 {
     std::cerr << "[~when_all]\n\n";

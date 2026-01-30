@@ -70,9 +70,9 @@ if(LIBCORO_FEATURE_NETWORKING)
     target_link_libraries(coro_condition_variable PUBLIC libcoro)
     target_compile_options(coro_condition_variable PUBLIC ${LIBCORO_EXAMPLE_OPTIONS})
 
-    add_executable(coro_io_scheduler coro_io_scheduler.cpp)
-    target_link_libraries(coro_io_scheduler PUBLIC libcoro)
-    target_compile_options(coro_io_scheduler PUBLIC ${LIBCORO_EXAMPLE_OPTIONS})
+    add_executable(coro_scheduler coro_scheduler.cpp)
+    target_link_libraries(coro_scheduler PUBLIC libcoro)
+    target_compile_options(coro_scheduler PUBLIC ${LIBCORO_EXAMPLE_OPTIONS})
 
     add_executable(coro_tcp_echo_server coro_tcp_echo_server.cpp)
     target_link_libraries(coro_tcp_echo_server PUBLIC libcoro)

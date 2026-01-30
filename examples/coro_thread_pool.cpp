@@ -43,7 +43,7 @@ int main()
                 // yield control at certain points of execution.  Its important to never call the
                 // std::this_thread::sleep_for() within the context of a coroutine, that will block
                 // and other coroutines which are ready for execution from starting, always use yield()
-                // or within the context of a coro::io_scheduler you can use yield_for(amount).
+                // or within the context of a coro::scheduler you can use yield_for(amount).
                 if (i == 500'000)
                 {
                     std::cout << "Task " << child_idx << " is yielding()\n";

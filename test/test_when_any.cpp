@@ -130,10 +130,10 @@ TEST_CASE("when_any tuple return void", "[when_any]")
 TEST_CASE("when_any two tasks one long running", "[when_any]")
 {
     std::cerr << "BEGIN when_any two tasks one long running\n";
-    auto s = coro::io_scheduler::make_unique(
-        coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
+    auto s = coro::scheduler::make_unique(
+        coro::scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
 
-    auto make_task = [](std::unique_ptr<coro::io_scheduler> &s, uint64_t amount, std::chrono::milliseconds wait_for) -> coro::task<uint64_t>
+    auto make_task = [](std::unique_ptr<coro::scheduler> &s, uint64_t amount, std::chrono::milliseconds wait_for) -> coro::task<uint64_t>
     {
         co_await s->schedule();
         // Make sure both tasks are scheduled.
@@ -159,13 +159,13 @@ TEST_CASE("when_any two tasks one long running with cancellation", "[when_any]")
 {
     std::cerr << "BEGIN when_any two tasks one long running with cancellation\n";
     std::stop_source stop_source{};
-    auto             s = coro::io_scheduler::make_unique(
-        coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
+    auto             s = coro::scheduler::make_unique(
+        coro::scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
 
     std::atomic<bool> thrown{false};
 
     auto make_task =
-        [](std::unique_ptr<coro::io_scheduler> &s, std::stop_token stop_token, uint64_t amount, std::atomic<bool>& thrown) -> coro::task<uint64_t>
+        [](std::unique_ptr<coro::scheduler> &s, std::stop_token stop_token, uint64_t amount, std::atomic<bool>& thrown) -> coro::task<uint64_t>
     {
         co_await s->schedule();
         try
@@ -215,10 +215,10 @@ TEST_CASE("when_any two tasks one long running with cancellation", "[when_any]")
 TEST_CASE("when_any timeout", "[when_any]")
 {
     std::cerr << "BEGIN when_any timeout\n";
-    auto s = coro::io_scheduler::make_unique(
-        coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 2}});
+    auto s = coro::scheduler::make_unique(
+        coro::scheduler::options{.pool = coro::thread_pool::options{.thread_count = 2}});
 
-    auto make_long_running_task = [](std::unique_ptr<coro::io_scheduler> &s,
+    auto make_long_running_task = [](std::unique_ptr<coro::scheduler> &s,
                                      std::chrono::milliseconds           execution_time) -> coro::task<int64_t>
     {
         co_await s->schedule();
@@ -226,7 +226,7 @@ TEST_CASE("when_any timeout", "[when_any]")
         co_return 1;
     };
 
-    auto make_timeout_task = [](std::unique_ptr<coro::io_scheduler> &s,
+    auto make_timeout_task = [](std::unique_ptr<coro::scheduler> &s,
                                 std::chrono::milliseconds timeout) -> coro::task<int64_t>
     {
         co_await s->schedule_after(timeout);
@@ -257,13 +257,13 @@ TEST_CASE("when_any timeout", "[when_any]")
     }
 }
 
-TEST_CASE("when_any io_scheduler::schedule(task, timeout)", "[when_any]")
+TEST_CASE("when_any scheduler::schedule(task, timeout)", "[when_any]")
 {
-    std::cerr << "BEGIN when_any io_scheduler::schedule(task, timeout)\n";
-    auto s = coro::io_scheduler::make_unique(
-        coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 2}});
+    std::cerr << "BEGIN when_any scheduler::schedule(task, timeout)\n";
+    auto s = coro::scheduler::make_unique(
+        coro::scheduler::options{.pool = coro::thread_pool::options{.thread_count = 2}});
 
-    auto make_task = [](std::unique_ptr<coro::io_scheduler> &s,
+    auto make_task = [](std::unique_ptr<coro::scheduler> &s,
                         std::chrono::milliseconds           execution_time) -> coro::task<int64_t>
     {
         co_await s->yield_for(execution_time);
@@ -291,13 +291,13 @@ TEST_CASE("when_any io_scheduler::schedule(task, timeout)", "[when_any]")
 }
 
     #ifndef EMSCRIPTEN
-TEST_CASE("when_any io_scheduler::schedule(task, timeout stop_token)", "[when_any]")
+TEST_CASE("when_any scheduler::schedule(task, timeout stop_token)", "[when_any]")
 {
-    std::cerr << "BEGIN when_any io_scheduler::schedule(task, timeout stop_token)\n";
-    auto s = coro::io_scheduler::make_unique(
-        coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 2}});
+    std::cerr << "BEGIN when_any scheduler::schedule(task, timeout stop_token)\n";
+    auto s = coro::scheduler::make_unique(
+        coro::scheduler::options{.pool = coro::thread_pool::options{.thread_count = 2}});
 
-    auto make_task = [](std::unique_ptr<coro::io_scheduler> &s,
+    auto make_task = [](std::unique_ptr<coro::scheduler> &s,
                         std::chrono::milliseconds           execution_time,
                         std::stop_token                     stop_token) -> coro::task<int64_t>
     {
@@ -345,24 +345,24 @@ TEST_CASE("when_any tuple multiple", "[when_any]")
     std::cerr << "BEGIN when_any tuple multiple\n";
     using namespace std::chrono_literals;
 
-    auto s = coro::io_scheduler::make_unique(
-        coro::io_scheduler::options{.pool = coro::thread_pool::options{.thread_count = 4}});
+    auto s = coro::scheduler::make_unique(
+        coro::scheduler::options{.pool = coro::thread_pool::options{.thread_count = 4}});
 
-    auto make_task1 = [](std::unique_ptr<coro::io_scheduler> &s,
+    auto make_task1 = [](std::unique_ptr<coro::scheduler> &s,
                          std::chrono::milliseconds           execution_time) -> coro::task<int>
     {
         co_await s->schedule_after(execution_time);
         co_return 1;
     };
 
-    auto make_task2 = [](std::unique_ptr<coro::io_scheduler> &s,
+    auto make_task2 = [](std::unique_ptr<coro::scheduler> &s,
                          std::chrono::milliseconds           execution_time) -> coro::task<double>
     {
         co_await s->schedule_after(execution_time);
         co_return 3.14;
     };
 
-    auto make_task3 = [](std::unique_ptr<coro::io_scheduler> &s,
+    auto make_task3 = [](std::unique_ptr<coro::scheduler> &s,
                          std::chrono::milliseconds           execution_time) -> coro::task<std::string>
     {
         co_await s->schedule_after(execution_time);

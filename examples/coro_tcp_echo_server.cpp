@@ -2,7 +2,7 @@
 
 auto main() -> int
 {
-    auto make_tcp_echo_server = [](std::unique_ptr<coro::io_scheduler>& scheduler) -> coro::task<void>
+    auto make_tcp_echo_server = [](std::unique_ptr<coro::scheduler>& scheduler) -> coro::task<void>
     {
         auto make_on_connection_task = [](coro::net::tcp::client client) -> coro::task<void>
         {
@@ -59,7 +59,7 @@ auto main() -> int
         co_return;
     };
 
-    std::vector<std::unique_ptr<coro::io_scheduler>> schedulers;
+    std::vector<std::unique_ptr<coro::scheduler>> schedulers;
     std::vector<coro::task<void>>                    workers{};
 
     const std::size_t count = std::thread::hardware_concurrency();
@@ -69,8 +69,8 @@ auto main() -> int
 
     for (size_t i = 0; i < std::thread::hardware_concurrency(); ++i)
     {
-        auto& scheduler = schedulers.emplace_back(coro::io_scheduler::make_unique(coro::io_scheduler::options{
-            .execution_strategy = coro::io_scheduler::execution_strategy_t::process_tasks_inline}));
+        auto& scheduler = schedulers.emplace_back(coro::scheduler::make_unique(coro::scheduler::options{
+            .execution_strategy = coro::scheduler::execution_strategy_t::process_tasks_inline}));
 
         workers.emplace_back(make_tcp_echo_server(scheduler));
     }
