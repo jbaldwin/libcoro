@@ -298,13 +298,22 @@ public:
         return *m_return_value;
     }
 
+    auto result() const& -> const return_type&
+    {
+        if (m_exception_ptr)
+        {
+            std::rethrow_exception(m_exception_ptr);
+        }
+        return *m_return_value;
+    }
+
     auto result() && -> return_type&&
     {
         if (m_exception_ptr)
         {
             std::rethrow_exception(m_exception_ptr);
         }
-        return std::forward(*m_return_value);
+        return std::move(*m_return_value);
     }
 
     auto return_void() noexcept -> void
@@ -401,43 +410,61 @@ public:
         }
     }
 
-    auto return_value() & -> decltype(auto)
+    auto return_value() & -> return_type&
     {
-        if constexpr (std::is_void_v<return_type>)
+        return m_coroutine.promise().result();
+    }
+
+    auto return_value() const& -> const return_type&
+    {
+        return m_coroutine.promise().result();
+    }
+
+    auto return_value() && -> return_type&&
+    {
+        return std::move(m_coroutine.promise()).result();
+    }
+
+private:
+    auto start(when_all_latch& latch) noexcept -> void { m_coroutine.promise().start(latch); }
+
+    coroutine_handle_type m_coroutine;
+};
+
+template<>
+class when_all_task<void>
+{
+public:
+    // To be able to call start().
+    template<typename task_container_type>
+    friend class when_all_ready_awaitable;
+
+    using promise_type          = when_all_task_promise<void>;
+    using coroutine_handle_type = typename promise_type::coroutine_handle_type;
+
+    when_all_task(coroutine_handle_type coroutine) noexcept : m_coroutine(coroutine) {}
+
+    when_all_task(const when_all_task&) = delete;
+    when_all_task(when_all_task&& other) noexcept
+        : m_coroutine(std::exchange(other.m_coroutine, coroutine_handle_type{}))
+    {
+    }
+
+    auto operator=(const when_all_task&) -> when_all_task& = delete;
+    auto operator=(when_all_task&&) -> when_all_task&      = delete;
+
+    ~when_all_task()
+    {
+        if (m_coroutine != nullptr)
         {
-            m_coroutine.promise().result();
-            return void_value{};
-        }
-        else
-        {
-            return m_coroutine.promise().result();
+            m_coroutine.destroy();
         }
     }
 
-    auto return_value() const& -> decltype(auto)
+    auto return_value() -> void_value
     {
-        if constexpr (std::is_void_v<return_type>)
-        {
-            m_coroutine.promise().result();
-            return void_value{};
-        }
-        else
-        {
-            return m_coroutine.promise().result();
-        }
-    }
-
-    auto return_value() && -> decltype(auto)
-    {
-        if constexpr (std::is_void_v<return_type>)
-        {
-            m_coroutine.promise().result();
-            return void_value{};
-        }
-        else
-        {
-            return m_coroutine.promise().result();
-        }
+        m_coroutine.promise().result();
+        return void_value{};
     }
 
 private:
