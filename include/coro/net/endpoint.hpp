@@ -19,8 +19,6 @@ public:
 
     endpoint(const ip_address& ip, std::uint16_t port)
     {
-        std::memset(&m_storage, 0, sizeof(m_storage));
-
         if (ip.domain() == domain_t::ipv4)
         {
             auto* sin       = reinterpret_cast<sockaddr_in*>(&m_storage);
@@ -126,11 +124,14 @@ public:
      */
     static auto make_uninitialised() -> endpoint { return endpoint{}; }
 
+    auto to_string() const -> std::string { return ip().to_string() + std::to_string(port()); }
+
 private:
     // It's private to avoid default empty initialisation and to make use more explicit make_uninitialised
-    endpoint() { std::memset(&m_storage, 0, sizeof(m_storage)); }
+    endpoint() {}
 
     sockaddr_storage m_storage{};
-    socklen_t        m_len{};
+    socklen_t        m_len = sizeof(sockaddr_storage);
 };
+
 } // namespace coro::net

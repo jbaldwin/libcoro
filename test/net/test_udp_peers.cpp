@@ -42,7 +42,7 @@ TEST_CASE("udp one way", "[udp]")
         std::string buffer(64, '\0');
         auto [rstatus, peer_endpoint, rspan] = self.recvfrom(buffer);
         REQUIRE(rstatus == coro::net::recv_status::ok);
-        REQUIRE(peer_endpoint == endpoint);
+        REQUIRE(peer_endpoint.ip() == endpoint.ip());
         // The peer's port will be randomly picked by the kernel since it wasn't bound.
         REQUIRE(rspan.size() == msg.size());
         buffer.resize(rspan.size());
