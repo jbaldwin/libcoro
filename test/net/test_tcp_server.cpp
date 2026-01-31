@@ -14,30 +14,60 @@ TEST_CASE("tcp_server", "[tcp_server]")
     std::cerr << "[tcp_server]\n\n";
 }
 
+TEST_CASE("tcp_server basic checks", "[tcp_server]")
+{
+    SECTION("nullptr scheduler")
+    {
+        std::unique_ptr<coro::scheduler> scheduler;
+        const auto                       address = coro::net::socket_address{"127.0.0.1", 8080};
+
+        CHECK_THROWS_AS((coro::net::tcp::client{scheduler, address}), std::runtime_error);
+        CHECK_THROWS_AS((coro::net::tcp::server{scheduler, address}), std::runtime_error);
+    }
+
+    SECTION("bind server to system port")
+    {
+        auto       scheduler = coro::scheduler::make_unique();
+        const auto address   = coro::net::socket_address{"127.0.0.1", 22};
+
+        CHECK_THROWS_AS((coro::net::tcp::server{scheduler, address}), std::runtime_error);
+    }
+}
+
 TEST_CASE("tcp_server ping server", "[tcp_server]")
 {
-    std::cerr << "BEGIN tcp_server ping server\n";
-    const std::string client_msg{"Hello from client"};
-    const std::string server_msg{"Reply from server!"};
-
     const auto endpoint = GENERATE(
         as<coro::net::socket_address>{},
         coro::net::socket_address{"127.0.0.1", 8080},
         coro::net::socket_address{"::1", 8080, coro::net::domain_t::ipv6});
 
+    const auto [test_name, data_size, exact] = GENERATE(
+        table<std::string, size_t, bool>({
+            {"small data (read_some)", 32, false},         // small enough to fit into one write/read_some
+            {"large data (read_exact)", 1024 * 1024, true} // 1MB
+        }));
+
     auto scheduler =
         coro::scheduler::make_unique(coro::scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
+
+    std::string client_msg(data_size, 'C');
+    std::string server_msg(data_size, 'S');
 
     auto make_client_task = [](std::unique_ptr<coro::scheduler>& scheduler,
                                const std::string&                client_msg,
                                const std::string&                server_msg,
-                               const coro::net::socket_address&  endpoint) -> coro::task<void>
+                               const coro::net::socket_address&  endpoint,
+                               bool                              is_exact) -> coro::task<void>
     {
         co_await scheduler->schedule();
         coro::net::tcp::client client{scheduler, endpoint};
 
-        std::cerr << "client connect\n";
+        std::cerr << "client connect()\n";
         auto cstatus = co_await client.connect();
+
+        // should return the same status
+        auto cstatus_again = co_await client.connect();
+        CHECK(cstatus == cstatus_again);
         REQUIRE(cstatus == coro::net::connect_status::connected);
 
         std::cerr << "client write_all()\n";
@@ -45,13 +75,25 @@ TEST_CASE("tcp_server ping server", "[tcp_server]")
         REQUIRE_THAT(sstatus, IsOk());
         REQUIRE(remaining.empty());
 
-        std::string buffer(256, '\0');
-        std::cerr << "client read_some()\n";
-        auto [rstatus, rspan] = co_await client.read_some(buffer);
-        REQUIRE_THAT(rstatus, IsOk());
-        REQUIRE(rspan.size() == server_msg.length());
-        buffer.resize(rspan.size());
-        REQUIRE(buffer == server_msg);
+        if (is_exact)
+        {
+            std::string buffer(server_msg.size(), '\0');
+            std::cerr << "client read_exact()\n";
+            auto [rstatus, rspan] = co_await client.read_exact(buffer);
+            REQUIRE_THAT(rstatus, IsOk());
+            REQUIRE(rspan.size() == server_msg.size());
+            REQUIRE(buffer == server_msg);
+        }
+        else
+        {
+            std::string buffer(256, '\0');
+            std::cerr << "client read_some()\n";
+            auto [rstatus, rspan] = co_await client.read_some(buffer);
+            REQUIRE_THAT(rstatus, IsOk());
+            REQUIRE(rspan.size() == server_msg.length());
+            buffer.resize(rspan.size());
+            REQUIRE(buffer == server_msg);
+        }
 
         std::cerr << "client return\n";
         co_return;
@@ -60,7 +102,8 @@ TEST_CASE("tcp_server ping server", "[tcp_server]")
     auto make_server_task = [](std::unique_ptr<coro::scheduler>& scheduler,
                                const std::string&                client_msg,
                                const std::string&                server_msg,
-                               const coro::net::socket_address&  endpoint) -> coro::task<void>
+                               const coro::net::socket_address&  endpoint,
+                               bool                              is_exact) -> coro::task<void>
     {
         co_await scheduler->schedule();
         coro::net::tcp::server server{scheduler, endpoint};
@@ -70,13 +113,25 @@ TEST_CASE("tcp_server ping server", "[tcp_server]")
         REQUIRE(client.has_value());
         REQUIRE(client->socket().is_valid());
 
-        std::string buffer(256, '\0');
-        std::cerr << "server read_some()\n";
-        auto [rstatus, rspan] = co_await client->read_some(buffer);
-        REQUIRE_THAT(rstatus, IsOk());
-        REQUIRE(rspan.size() == client_msg.size());
-        buffer.resize(rspan.size());
-        REQUIRE(buffer == client_msg);
+        if (is_exact)
+        {
+            std::string buffer(client_msg.size(), '\0');
+            std::cerr << "server read_exact()\n";
+            auto [rstatus, rspan] = co_await client->read_exact(buffer);
+            REQUIRE_THAT(rstatus, IsOk());
+            REQUIRE(rspan.size() == client_msg.size());
+            REQUIRE(buffer == client_msg);
+        }
+        else
+        {
+            std::string buffer(256, '\0');
+            std::cerr << "server read_some()\n";
+            auto [rstatus, rspan] = co_await client->read_some(buffer);
+            REQUIRE_THAT(rstatus, IsOk());
+            REQUIRE(rspan.size() == client_msg.size());
+            buffer.resize(rspan.size());
+            REQUIRE(buffer == client_msg);
+        }
 
         // Respond to client.
         std::cerr << "server write_some()\n";
@@ -91,14 +146,79 @@ TEST_CASE("tcp_server ping server", "[tcp_server]")
         co_return;
     };
 
-    DYNAMIC_SECTION("Testing with domain: " << (endpoint.domain() == coro::net::domain_t::ipv4 ? "ipv4" : "ipv6"))
+    DYNAMIC_SECTION("Domain: " << to_string(endpoint.domain()) << " | " << test_name)
+    {
+        std::cerr << "BEGIN tcp_server, domain: " << to_string(endpoint.domain()) << " | " << test_name;
+
+        coro::sync_wait(
+            coro::when_all(
+                make_server_task(scheduler, client_msg, server_msg, endpoint, exact),
+                make_client_task(scheduler, client_msg, server_msg, endpoint, exact)));
+        std::cerr << "END tcp_server\n";
+    }
+}
+
+TEST_CASE("tcp_server timeout", "[tcp_server]")
+{
+    auto scheduler =
+        coro::scheduler::make_unique(coro::scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
+
+    coro::net::socket_address       address{"127.0.0.1", 8080};
+    const std::chrono::milliseconds timeout_duration{50};
+    auto                            exact = GENERATE(true, false);
+
+    auto server_task = [](std::unique_ptr<coro::scheduler>& scheduler,
+                          const coro::net::socket_address&  bound_address,
+                          const std::chrono::milliseconds&  timeout_duration) -> coro::task<void>
+    {
+        co_await scheduler->schedule();
+        coro::net::tcp::server server{scheduler, bound_address};
+
+        auto client_conn = co_await server.accept();
+        REQUIRE(client_conn.has_value());
+
+        co_await scheduler->yield_for(timeout_duration * 2);
+        co_return;
+    };
+
+    auto client_task = [](std::unique_ptr<coro::scheduler>& scheduler,
+                          const coro::net::socket_address&  addr,
+                          const std::chrono::milliseconds&  timeout_duration,
+                          bool                              is_exact) -> coro::task<void>
+    {
+        co_await scheduler->schedule();
+        coro::net::tcp::client client{scheduler, addr};
+
+        auto cstatus = co_await client.connect();
+        REQUIRE(cstatus == coro::net::connect_status::connected);
+
+        if (is_exact)
+        {
+            std::string buffer(100, '\0');
+            auto [status, rspan] = co_await client.read_exact(buffer, timeout_duration);
+
+            CHECK(status.type == coro::net::io_status::kind::timeout);
+            CHECK(rspan.empty());
+        }
+        else
+        {
+            std::string buffer(10, '\0');
+            auto [status, rspan] = co_await client.read_some(buffer, timeout_duration);
+
+            CHECK(status.type == coro::net::io_status::kind::timeout);
+            CHECK(rspan.empty());
+        }
+
+        co_return;
+    };
+
+    DYNAMIC_SECTION("exact: " << exact)
     {
         coro::sync_wait(
             coro::when_all(
-                make_server_task(scheduler, client_msg, server_msg, endpoint),
-                make_client_task(scheduler, client_msg, server_msg, endpoint)));
+                server_task(scheduler, address, timeout_duration),
+                client_task(scheduler, address, timeout_duration, exact)));
     }
-    std::cerr << "END tcp_server ping server\n";
 }
 
 TEST_CASE("tcp_server concurrent polling on the same socket", "[tcp_server]")
