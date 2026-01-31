@@ -37,7 +37,7 @@ auto server::operator=(server&& other) -> server&
     return *this;
 }
 
-auto server::accept() -> coro::net::tcp::client
+auto server::accept_now() -> coro::net::tcp::client
 {
     auto client_endpoint = socket_address::make_uninitialised();
     auto [sockaddr, socklen] = client_endpoint.native_mutable_data();

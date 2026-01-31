@@ -13,18 +13,11 @@ auto main() -> int
                 // Wait for data to be available to read.
                 co_await client.poll(coro::poll_op::read);
                 auto [rstatus, rspan] = client.recv(buf);
-                switch (rstatus)
-                {
-                    case coro::net::recv_status::ok:
-                        // Make sure the client socket can be written to.
-                        co_await client.poll(coro::poll_op::write);
-                        client.send(std::span<const char>{rspan});
-                        break;
-                    case coro::net::recv_status::would_block:
-                        break;
-                    case coro::net::recv_status::closed:
-                    default:
-                        co_return;
+                if (rstatus.is_ok()) {
+                    co_await client.poll(coro::poll_op::write);
+                    client.send(std::span<const char>{rspan});
+                } else if (rstatus.is_closed()) {
+                    co_return;
                 }
             }
         };
@@ -40,7 +33,7 @@ auto main() -> int
             {
                 case coro::poll_status::read:
                 {
-                    auto client = server.accept();
+                    auto client = server.accept_now();
                     if (client.socket().is_valid())
                     {
                         scheduler->spawn_detached(make_on_connection_task(std::move(client)));

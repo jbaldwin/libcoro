@@ -405,27 +405,26 @@ TEST_CASE("benchmark tcp::server echo server thread pool", "[benchmark]")
             // Echo the messages until the socket is closed.
             while (true)
             {
-                auto pstatus = co_await client.poll(coro::poll_op::read);
-                if (pstatus != coro::poll_status::read)
+                auto [rstatus, rspan] = co_await client.read_some(in);
+                if (!rstatus.is_ok())
                 {
-                    REQUIRE_THREAD_SAFE(pstatus == coro::poll_status::closed);
+                    REQUIRE_THREAD_SAFE(rstatus.is_closed());
                     // the socket has been closed
                     break;
                 }
-                REQUIRE_THREAD_SAFE(pstatus == coro::poll_status::read);
+                REQUIRE_THREAD_SAFE(rstatus.is_ok());
 
-                auto [rstatus, rspan] = client.recv(in);
-                if (rstatus == coro::net::recv_status::closed)
+                if (rstatus.is_closed())
                 {
                     REQUIRE_THREAD_SAFE(rspan.empty());
                     break;
                 }
-                REQUIRE_THREAD_SAFE(rstatus == coro::net::recv_status::ok);
+                REQUIRE_THREAD_SAFE(rstatus.is_ok());
 
                 in.resize(rspan.size());
 
-                auto [sstatus, remaining] = client.send(in);
-                REQUIRE_THREAD_SAFE(sstatus == coro::net::send_status::ok);
+                auto [sstatus, remaining] = co_await client.write_some(in);
+                REQUIRE_THREAD_SAFE(sstatus.is_ok());
                 REQUIRE_THREAD_SAFE(remaining.empty());
             }
 
@@ -443,15 +442,11 @@ TEST_CASE("benchmark tcp::server echo server thread pool", "[benchmark]")
 
         while (accepted.load(std::memory_order::acquire) < connections)
         {
-            auto pstatus = co_await server.poll(std::chrono::milliseconds{1});
-            if (pstatus == coro::poll_status::read)
+            auto c = co_await server.accept(std::chrono::milliseconds{1});
+            if (c && c->socket().is_valid())
             {
-                auto c = server.accept();
-                if (c.socket().is_valid())
-                {
-                    accepted.fetch_add(1, std::memory_order::release);
-                    server_scheduler->spawn_detached(make_on_connection_task(std::move(c), wait_for_clients));
-                }
+                accepted.fetch_add(1, std::memory_order::release);
+                server_scheduler->spawn_detached(make_on_connection_task(std::move(*c), wait_for_clients));
             }
         }
 
@@ -484,22 +479,20 @@ TEST_CASE("benchmark tcp::server echo server thread pool", "[benchmark]")
         for (size_t i = 1; i <= messages_per_connection; ++i)
         {
             auto req_start            = std::chrono::steady_clock::now();
-            auto [sstatus, remaining] = client.send(msg);
-            REQUIRE_THREAD_SAFE(sstatus == coro::net::send_status::ok);
+            auto [sstatus, remaining] = co_await client.write_some(msg);
+            REQUIRE_THREAD_SAFE(sstatus.is_ok());
             REQUIRE_THREAD_SAFE(remaining.empty());
 
-            auto pstatus = co_await client.poll(coro::poll_op::read);
-            if (pstatus != coro::poll_status::read)
+            std::string response(64, '\0');
+            auto [rstatus, rspan] = co_await client.read_some(response);
+            if (!rstatus.is_ok())
             {
-                REQUIRE_THREAD_SAFE(pstatus == coro::poll_status::closed);
+                REQUIRE_THREAD_SAFE(rstatus.is_closed());
                 // the socket has been closed
                 break;
             }
-            REQUIRE_THREAD_SAFE(pstatus == coro::poll_status::read);
 
-            std::string response(64, '\0');
-            auto [rstatus, rspan] = client.recv(response);
-            REQUIRE_THREAD_SAFE(rstatus == coro::net::recv_status::ok);
+            REQUIRE_THREAD_SAFE(rstatus.is_ok());
             REQUIRE_THREAD_SAFE(rspan.size() == msg.size());
             response.resize(rspan.size());
             REQUIRE_THREAD_SAFE(response == msg);
@@ -612,28 +605,20 @@ TEST_CASE("benchmark tcp::server echo server inline", "[benchmark]")
             // Echo the messages until the socket is closed.
             while (true)
             {
-                auto pstatus = co_await client.poll(coro::poll_op::read);
-                if (pstatus != coro::poll_status::read)
+                auto [rstatus, rspan] = co_await client.read_some(in);
+                if (!rstatus.is_ok())
                 {
-                    REQUIRE_THREAD_SAFE(pstatus == coro::poll_status::closed);
+                    REQUIRE_THREAD_SAFE(rstatus.is_closed());
                     // the socket has been closed
                     break;
                 }
 
-                REQUIRE_THREAD_SAFE(pstatus == coro::poll_status::read);
-
-                auto [rstatus, rspan] = client.recv(in);
-                if (rstatus == coro::net::recv_status::closed)
-                {
-                    REQUIRE_THREAD_SAFE(rspan.empty());
-                    break;
-                }
-                REQUIRE_THREAD_SAFE(rstatus == coro::net::recv_status::ok);
+                REQUIRE_THREAD_SAFE(rstatus.is_ok());
 
                 in.resize(rspan.size());
 
-                auto [sstatus, remaining] = client.send(in);
-                REQUIRE_THREAD_SAFE(sstatus == coro::net::send_status::ok);
+                auto [sstatus, remaining] = co_await client.write_some(in);
+                REQUIRE_THREAD_SAFE(sstatus.is_ok());
                 REQUIRE_THREAD_SAFE(remaining.empty());
             }
 
@@ -655,15 +640,11 @@ TEST_CASE("benchmark tcp::server echo server inline", "[benchmark]")
 
         while (accepted_clients < connections_per_client)
         {
-            auto pstatus = co_await server.poll(std::chrono::milliseconds{1000});
-            if (pstatus == coro::poll_status::read)
+            auto c = co_await server.accept(std::chrono::milliseconds{1000});
+            if (c && c->socket().is_valid())
             {
-                auto c = server.accept();
-                if (c.socket().is_valid())
-                {
-                    s.live_clients++;
-                    s.scheduler->spawn_detached(make_on_connection_task(s, std::move(c)));
-                }
+                s.live_clients++;
+                s.scheduler->spawn_detached(make_on_connection_task(s, std::move(*c)));
             }
         }
 
@@ -708,22 +689,19 @@ TEST_CASE("benchmark tcp::server echo server inline", "[benchmark]")
         for (size_t i = 1; i <= messages_per_connection; ++i)
         {
             auto req_start            = std::chrono::steady_clock::now();
-            auto [sstatus, remaining] = client.send(msg);
-            REQUIRE_THREAD_SAFE(sstatus == coro::net::send_status::ok);
+            auto [sstatus, remaining] = co_await client.write_some(msg);
+            REQUIRE_THREAD_SAFE(sstatus.is_ok());
             REQUIRE_THREAD_SAFE(remaining.empty());
 
-            auto pstatus = co_await client.poll(coro::poll_op::read);
-            if (pstatus != coro::poll_status::read)
+            std::string response(64, '\0');
+            auto [rstatus, rspan] = co_await client.read_some(response);
+            if (!rstatus.is_ok())
             {
-                REQUIRE_THREAD_SAFE(pstatus == coro::poll_status::closed);
+                REQUIRE_THREAD_SAFE(rstatus.is_closed());
                 // the socket has been closed
                 break;
             }
-            REQUIRE_THREAD_SAFE(pstatus == coro::poll_status::read);
 
-            std::string response(64, '\0');
-            auto [rstatus, rspan] = client.recv(response);
-            REQUIRE_THREAD_SAFE(rstatus == coro::net::recv_status::ok);
             REQUIRE_THREAD_SAFE(rspan.size() == msg.size());
             response.resize(rspan.size());
             REQUIRE_THREAD_SAFE(response == msg);

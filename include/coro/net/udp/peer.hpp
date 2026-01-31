@@ -1,16 +1,15 @@
 #pragma once
 
 #include "coro/concepts/buffer.hpp"
-#include "coro/scheduler.hpp"
-#include "coro/net/recv_status.hpp"
-#include "coro/net/send_status.hpp"
+#include "coro/net/io_status.hpp"
+#include "coro/net/ip_address.hpp"
 #include "coro/net/socket.hpp"
 #include "coro/net/socket_address.hpp"
+#include "coro/scheduler.hpp"
 #include "coro/task.hpp"
 
 #include <chrono>
 #include <span>
-
 
 namespace coro::net::udp
 {
@@ -44,6 +43,48 @@ public:
      */
     auto socket() const noexcept -> const net::socket& { return m_socket; }
 
+    auto write_to(
+        const socket_address&            address,
+        const std::span<const std::byte> buffer,
+        std::chrono::milliseconds        timeout = std::chrono::milliseconds{0}) -> coro::task<io_status>
+    {
+        auto pstatus = co_await poll(poll_op::write, timeout);
+        if (pstatus != poll_status::write)
+        {
+            co_return make_io_status_from_poll_status(pstatus);
+        }
+
+        co_return sendto(address, buffer);
+    }
+
+    template<concepts::const_buffer buffer_type>
+    auto write_to(
+        const socket_address&     address,
+        const buffer_type&        buffer,
+        std::chrono::milliseconds timeout = std::chrono::milliseconds{0}) -> coro::task<io_status>
+    {
+        return write_to(address, std::as_bytes(std::span{buffer}), timeout);
+    }
+
+    auto read_from(std::span<std::byte> buffer, std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
+        -> coro::task<std::tuple<io_status, socket_address, std::span<std::byte>>>
+    {
+        auto pstatus = co_await poll(poll_op::read, timeout);
+        if (pstatus != poll_status::read)
+        {
+            co_return {make_io_status_from_poll_status(pstatus), socket_address::make_uninitialised(), {}};
+        }
+
+        co_return recvfrom(buffer);
+    }
+
+    template<concepts::mutable_buffer buffer_type>
+    auto read_from(buffer_type&& buffer, std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
+        -> coro::task<std::tuple<io_status, socket_address, std::span<std::byte>>>
+    {
+        return read_from(std::as_writable_bytes(std::span{buffer}), timeout);
+    }
+
     /**
      * @param op The poll operation to perform on the udp socket. Note that if this is a send call only
      *           udp socket (did not bind) then polling for read will not work.
@@ -62,28 +103,25 @@ public:
      * @return The status of send call and a span view of any data that wasn't sent.  This data if
      *         un-sent will correspond to bytes at the end of the given buffer.
      */
-    template<
-        concepts::const_buffer buffer_type,
-        typename element_type = typename concepts::const_buffer_traits<buffer_type>::element_type>
-    auto sendto(const net::socket_address& endpoint, const buffer_type& buffer)
-        -> std::pair<send_status, std::span<element_type>>
+    template<concepts::const_buffer buffer_type>
+    auto sendto(const net::socket_address& endpoint, const buffer_type& buffer) -> io_status
     {
         if (buffer.empty())
         {
-            return {send_status::ok, std::span<element_type>{}};
+            return io_status{io_status::kind::ok};
         }
 
         auto [sockaddr, socklen] = endpoint.data();
 
         auto bytes_sent = ::sendto(m_socket.native_handle(), buffer.data(), buffer.size(), 0, sockaddr, socklen);
 
-        if (bytes_sent >= 0)
+        if (bytes_sent == std::ssize(buffer))
         {
-            return {send_status::ok, std::span<element_type>{buffer.data() + bytes_sent, buffer.size() - bytes_sent}};
+            return io_status{io_status::kind::ok};
         }
         else
         {
-            return {static_cast<send_status>(errno), std::span<element_type>{}};
+            return make_io_status_from_native(errno);
         }
     }
 
@@ -97,12 +135,15 @@ public:
     template<
         concepts::mutable_buffer buffer_type,
         typename element_type = typename concepts::mutable_buffer_traits<buffer_type>::element_type>
-    auto recvfrom(buffer_type&& buffer) -> std::tuple<recv_status, net::socket_address, std::span<element_type>>
+    auto recvfrom(buffer_type&& buffer) -> std::tuple<io_status, net::socket_address, std::span<element_type>>
     {
         // The user must bind locally to be able to receive packets.
         if (!m_bound)
         {
-            return {recv_status::udp_not_bound, net::socket_address::make_uninitialised(), std::span<element_type>{}};
+            return {
+                io_status{io_status::kind::udp_not_bound},
+                net::socket_address::make_uninitialised(),
+                std::span<element_type>{}};
         }
 
         auto endpoint            = net::socket_address::make_uninitialised();
@@ -112,10 +153,16 @@ public:
 
         if (bytes_read < 0)
         {
-            return {static_cast<recv_status>(errno), net::socket_address::make_uninitialised(), std::span<element_type>{}};
+            return {
+                make_io_status_from_native(errno),
+                net::socket_address::make_uninitialised(),
+                std::span<element_type>{}};
         }
 
-        return {recv_status::ok, endpoint, std::span<element_type>{buffer.data(), static_cast<size_t>(bytes_read)}};
+        return {
+            io_status{io_status::kind::ok},
+            endpoint,
+            std::span<element_type>{buffer.data(), static_cast<size_t>(bytes_read)}};
     }
 
 private:

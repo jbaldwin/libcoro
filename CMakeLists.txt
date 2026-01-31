@@ -171,8 +171,7 @@ if(LIBCORO_FEATURE_NETWORKING)
         include/coro/net/hostname.hpp
         include/coro/net/ip_address.hpp src/net/ip_address.cpp
         include/coro/net/socket_address.hpp
-        include/coro/net/recv_status.hpp src/net/recv_status.cpp
-        include/coro/net/send_status.hpp src/net/send_status.cpp
+        include/coro/net/io_status.hpp src/net/io_status.cpp
         include/coro/net/socket.hpp src/net/socket.cpp
         include/coro/net/tcp/client.hpp src/net/tcp/client.cpp
         include/coro/net/tcp/server.hpp src/net/tcp/server.cpp
