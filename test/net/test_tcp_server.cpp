@@ -134,8 +134,8 @@ TEST_CASE("tcp_server ping server", "[tcp_server]")
         }
 
         // Respond to client.
-        std::cerr << "server write_some()\n";
-        auto [wstatus, remaining] = co_await client->write_some(server_msg);
+        std::cerr << "server write_all()\n";
+        auto [wstatus, remaining] = co_await client->write_all(server_msg);
         REQUIRE_THAT(wstatus, IsOk());
         REQUIRE(remaining.empty());
 
