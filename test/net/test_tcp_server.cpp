@@ -84,6 +84,9 @@ TEST_CASE("tcp_server ping server", "[tcp_server]")
         REQUIRE_THAT(wstatus, IsOk());
         REQUIRE(remaining.empty());
 
+        // Wait a bit, so the connection doesn't get reset.
+        co_await scheduler->yield_for(std::chrono::milliseconds(15));
+
         std::cerr << "server return\n";
         co_return;
     };
