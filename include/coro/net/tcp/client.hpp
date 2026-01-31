@@ -78,7 +78,7 @@ public:
         co_return recv(buffer);
     }
     template<concepts::mutable_buffer buffer_type>
-    auto read_some(buffer_type&& buffer, const std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
+    auto read_some(buffer_type& buffer, const std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
         -> coro::task<std::pair<io_status, std::span<std::byte>>>
     {
         return read_some(std::as_writable_bytes(std::span{buffer}), timeout);
@@ -137,7 +137,7 @@ public:
     }
 
     template<concepts::mutable_buffer buffer_type>
-    auto read_exact(buffer_type&& buffer, const std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
+    auto read_exact(buffer_type& buffer, const std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
         -> coro::task<std::pair<io_status, std::span<std::byte>>>
     {
         return read_exact(std::as_writable_bytes(std::span{buffer}), timeout);
