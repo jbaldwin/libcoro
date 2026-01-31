@@ -70,10 +70,10 @@ if(${CMAKE_CXX_COMPILER_ID} MATCHES "GNU")
         $<$<COMPILE_LANGUAGE:CXX>:-fcoroutines>
         $<$<COMPILE_LANGUAGE:CXX>:-fconcepts>
         $<$<COMPILE_LANGUAGE:CXX>:-fexceptions>
-        $<$<COMPILE_LANGUAGE:CXX>:-fno-partial-inlining>
         $<$<COMPILE_LANGUAGE:CXX>:-Wall>
         $<$<COMPILE_LANGUAGE:CXX>:-Wextra>
         $<$<COMPILE_LANGUAGE:CXX>:-pipe>
+        $<$<COMPILE_LANGUAGE:CXX>:--no-gc-sections>
     )
 elseif(${CMAKE_CXX_COMPILER_ID} MATCHES "Clang")
     target_compile_options(${PROJECT_NAME} PRIVATE
