@@ -28,10 +28,10 @@ public:
 
     explicit server(
         std::unique_ptr<coro::scheduler>& scheduler,
-        const net::socket_address&endpoint,
-        options                              opts = options{
+        const net::socket_address&        endpoint,
+        options                           opts = options{
 
-                                         .backlog = 128,
+            .backlog = 128,
         });
 
     server(const server&) = delete;
@@ -55,12 +55,13 @@ public:
 
         if (pstatus != coro::poll_status::read)
         {
-            co_return unexpected{make_io_status_from_poll_status(pstatus)};
+            co_return unexpected<io_status>{make_io_status_from_poll_status(pstatus)};
         }
 
         auto client = accept_now();
-        if (!client.socket().is_valid()) {
-            co_return unexpected{make_io_status_from_native(errno)};
+        if (!client.socket().is_valid())
+        {
+            co_return unexpected<io_status>{make_io_status_from_native(errno)};
         }
         co_return client;
     };
