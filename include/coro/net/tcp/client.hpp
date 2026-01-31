@@ -67,8 +67,9 @@ public:
      *          - span pointing to the read part of buffer
      * @{
      */
-    auto read_some(std::span<std::byte> buffer, const std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
-        -> coro::task<std::pair<io_status, std::span<std::byte>>>
+    inline auto
+        read_some(std::span<std::byte> buffer, const std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
+            -> coro::task<std::pair<io_status, std::span<std::byte>>>
     {
         auto poll_status = co_await poll(poll_op::read, timeout);
         if (poll_status != poll_status::read)
@@ -78,7 +79,7 @@ public:
         co_return recv(buffer);
     }
     template<concepts::mutable_buffer buffer_type>
-    auto read_some(buffer_type& buffer, const std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
+    inline auto read_some(buffer_type&& buffer, const std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
         -> coro::task<std::pair<io_status, std::span<std::byte>>>
     {
         return read_some(std::as_writable_bytes(std::span{buffer}), timeout);
@@ -101,8 +102,9 @@ public:
      *          - span pointing to the read part of buffer
      * @{
      */
-    auto read_exact(std::span<std::byte> buffer, const std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
-        -> coro::task<std::pair<io_status, std::span<std::byte>>>
+    inline auto
+        read_exact(std::span<std::byte> buffer, const std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
+            -> coro::task<std::pair<io_status, std::span<std::byte>>>
     {
         const auto           start_time = std::chrono::steady_clock::now();
         std::span<std::byte> remaining  = buffer;
@@ -137,7 +139,7 @@ public:
     }
 
     template<concepts::mutable_buffer buffer_type>
-    auto read_exact(buffer_type& buffer, const std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
+    inline auto read_exact(buffer_type& buffer, const std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
         -> coro::task<std::pair<io_status, std::span<std::byte>>>
     {
         return read_exact(std::as_writable_bytes(std::span{buffer}), timeout);
@@ -160,7 +162,7 @@ public:
      *          - span pointing to the unsent part of the buffer
      * @{
      */
-    auto write_some(
+    inline auto write_some(
         std::span<const std::byte> buffer, const std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
         -> coro::task<std::pair<io_status, std::span<const std::byte>>>
     {
@@ -172,8 +174,9 @@ public:
         co_return send(buffer);
     }
     template<concepts::const_buffer buffer_type>
-    auto write_some(const buffer_type& buffer, const std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
-        -> coro::task<std::pair<io_status, std::span<const std::byte>>>
+    inline auto
+        write_some(const buffer_type& buffer, const std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
+            -> coro::task<std::pair<io_status, std::span<const std::byte>>>
     {
         return write_some(std::as_bytes(std::span{buffer}), timeout);
     }
@@ -193,7 +196,7 @@ public:
      *            empty if all data was sent successfully
      * @{
      */
-    auto write_all(
+    inline auto write_all(
         std::span<const std::byte> buffer, const std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
         -> coro::task<std::pair<io_status, std::span<const std::byte>>>
     {
@@ -238,8 +241,9 @@ public:
         co_return {io_status{io_status::kind::ok}, {}};
     }
     template<concepts::const_buffer buffer_type>
-    auto write_all(const buffer_type& buffer, const std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
-        -> coro::task<std::pair<io_status, std::span<const std::byte>>>
+    inline auto
+        write_all(const buffer_type& buffer, const std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
+            -> coro::task<std::pair<io_status, std::span<const std::byte>>>
     {
         return write_all(std::as_bytes(std::span{buffer}), timeout);
     }
