@@ -27,8 +27,8 @@ struct io_status
         native
     };
 
-    kind type{};
-    int  native_code{};
+    kind                 type{};
+    [[maybe_unused]] int native_code{};
 
     [[nodiscard]] auto is_ok() const -> bool { return type == kind::ok; }
     [[nodiscard]] auto is_timeout() const -> bool { return type == kind::timeout; }
