@@ -4,6 +4,7 @@
 
 #ifdef LIBCORO_FEATURE_NETWORKING
 
+    #include "catch_net_extensions.hpp"
     #include <coro/coro.hpp>
 
     #include <iostream>
@@ -24,13 +25,13 @@ TEST_CASE("tcp_server ping server", "[tcp_server]")
         coro::net::socket_address{"127.0.0.1", 8080},
         coro::net::socket_address{"::1", 8080, coro::net::domain_t::ipv6});
 
-    auto scheduler = coro::scheduler::make_unique(
-        coro::scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
+    auto scheduler =
+        coro::scheduler::make_unique(coro::scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
 
     auto make_client_task = [](std::unique_ptr<coro::scheduler>& scheduler,
-                               const std::string&                   client_msg,
-                               const std::string&                   server_msg,
-                               const coro::net::socket_address&           endpoint) -> coro::task<void>
+                               const std::string&                client_msg,
+                               const std::string&                server_msg,
+                               const coro::net::socket_address&  endpoint) -> coro::task<void>
     {
         co_await scheduler->schedule();
         coro::net::tcp::client client{scheduler, endpoint};
@@ -41,13 +42,13 @@ TEST_CASE("tcp_server ping server", "[tcp_server]")
 
         std::cerr << "client write_all()\n";
         auto [sstatus, remaining] = co_await client.write_all(client_msg);
-        REQUIRE(sstatus.is_ok());
+        REQUIRE_THAT(sstatus, IsOk());
         REQUIRE(remaining.empty());
 
         std::string buffer(256, '\0');
         std::cerr << "client read_some()\n";
         auto [rstatus, rspan] = co_await client.read_some(buffer);
-        REQUIRE(rstatus.is_ok());
+        REQUIRE_THAT(rstatus, IsOk());
         REQUIRE(rspan.size() == server_msg.length());
         buffer.resize(rspan.size());
         REQUIRE(buffer == server_msg);
@@ -57,9 +58,9 @@ TEST_CASE("tcp_server ping server", "[tcp_server]")
     };
 
     auto make_server_task = [](std::unique_ptr<coro::scheduler>& scheduler,
-                               const std::string&                   client_msg,
-                               const std::string&                   server_msg,
-                               const coro::net::socket_address&           endpoint) -> coro::task<void>
+                               const std::string&                client_msg,
+                               const std::string&                server_msg,
+                               const coro::net::socket_address&  endpoint) -> coro::task<void>
     {
         co_await scheduler->schedule();
         coro::net::tcp::server server{scheduler, endpoint};
@@ -72,22 +73,23 @@ TEST_CASE("tcp_server ping server", "[tcp_server]")
         std::string buffer(256, '\0');
         std::cerr << "server read_some()\n";
         auto [rstatus, rspan] = co_await client->read_some(buffer);
-        REQUIRE(rstatus.is_ok());
+        REQUIRE_THAT(rstatus, IsOk());
         REQUIRE(rspan.size() == client_msg.size());
         buffer.resize(rspan.size());
         REQUIRE(buffer == client_msg);
 
         // Respond to client.
-        std::cerr << "server send()\n";
+        std::cerr << "server write_some()\n";
         auto [wstatus, remaining] = co_await client->write_some(server_msg);
-        REQUIRE(wstatus.is_ok());
+        REQUIRE_THAT(wstatus, IsOk());
         REQUIRE(remaining.empty());
 
         std::cerr << "server return\n";
         co_return;
     };
 
-    DYNAMIC_SECTION("Testing with domain: " << (endpoint.domain() == coro::net::domain_t::ipv4 ? "ipv4" : "ipv6")) {
+    DYNAMIC_SECTION("Testing with domain: " << (endpoint.domain() == coro::net::domain_t::ipv4 ? "ipv4" : "ipv6"))
+    {
         coro::sync_wait(
             coro::when_all(
                 make_server_task(scheduler, client_msg, server_msg, endpoint),
@@ -103,12 +105,11 @@ TEST_CASE("tcp_server concurrent polling on the same socket", "[tcp_server]")
 
     using namespace std::chrono_literals;
     auto scheduler = coro::scheduler::make_unique(
-        coro::scheduler::options{
-            .execution_strategy = coro::scheduler::execution_strategy_t::process_tasks_inline});
+        coro::scheduler::options{.execution_strategy = coro::scheduler::execution_strategy_t::process_tasks_inline});
     const auto endpoint = coro::net::socket_address{"127.0.0.1", 8080};
 
     auto make_server_task = [](std::unique_ptr<coro::scheduler>& scheduler,
-                               const coro::net::socket_address&           endpoint) -> coro::task<std::string>
+                               const coro::net::socket_address&  endpoint) -> coro::task<std::string>
     {
         auto make_read_task = [](coro::net::tcp::client client) -> coro::task<void>
         {
@@ -133,13 +134,13 @@ TEST_CASE("tcp_server concurrent polling on the same socket", "[tcp_server]")
 
         std::string data(8096, 'A');
         auto [send_status, r] = co_await write_client.write_all(data);
-        REQUIRE(send_status.is_ok());
+        REQUIRE_THAT(send_status, IsOk());
 
         co_return data;
     };
 
     auto make_client_task = [](std::unique_ptr<coro::scheduler>& scheduler,
-                               const coro::net::socket_address&           endpoint) -> coro::task<std::string>
+                               const coro::net::socket_address&  endpoint) -> coro::task<std::string>
     {
         co_await scheduler->schedule();
         coro::net::tcp::client client{scheduler, endpoint};
@@ -185,8 +186,7 @@ TEST_CASE("tcp_server graceful shutdown via socket", "[tcp_server]")
 {
     std::cerr << "BEGIN tcp_server graceful shutdown via socket\n";
     auto scheduler = coro::scheduler::make_unique(
-        coro::scheduler::options{
-            .execution_strategy = coro::scheduler::execution_strategy_t::process_tasks_inline});
+        coro::scheduler::options{.execution_strategy = coro::scheduler::execution_strategy_t::process_tasks_inline});
     coro::net::tcp::server server{scheduler, {"127.0.0.1", 8080}};
     coro::event            started{};
 

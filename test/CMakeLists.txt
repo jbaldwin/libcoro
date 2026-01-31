@@ -34,6 +34,8 @@ if(LIBCORO_FEATURE_NETWORKING)
     list(APPEND LIBCORO_TEST_SOURCE_FILES
         net/test_ip_address.cpp
         net/test_endpoint.cpp
+
+        net/catch_net_extensions.hpp
     )
 
     # These tests require coro::scheduler
