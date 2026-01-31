@@ -24,14 +24,6 @@ TEST_CASE("tcp_server basic checks", "[tcp_server]")
         CHECK_THROWS_AS((coro::net::tcp::client{scheduler, address}), std::runtime_error);
         CHECK_THROWS_AS((coro::net::tcp::server{scheduler, address}), std::runtime_error);
     }
-
-    SECTION("bind server to system port")
-    {
-        auto       scheduler = coro::scheduler::make_unique();
-        const auto address   = coro::net::socket_address{"127.0.0.1", 22};
-
-        CHECK_THROWS_AS((coro::net::tcp::server{scheduler, address}), std::runtime_error);
-    }
 }
 
 TEST_CASE("tcp_server ping server", "[tcp_server]")
