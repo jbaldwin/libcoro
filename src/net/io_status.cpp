@@ -13,31 +13,7 @@ std::string coro::net::io_status::message() const
 {
     if (not is_native())
     {
-        switch (type)
-        {
-            case kind::ok:
-                return "Success";
-            case kind::closed:
-                return "Connection closed by peer";
-            case kind::connection_reset:
-                return "Connection reset by peer";
-            case kind::connection_refused:
-                return "Connection refused by target host";
-            case kind::timeout:
-                return "Operation timed out";
-            case kind::would_block_or_try_again:
-                return "would_block_or_try_again";
-            case kind::polling_error:
-                return "polling_error";
-            case kind::cancelled:
-                return "cancelled";
-            case kind::udp_not_bound:
-                return "udp_not_bound";
-            case kind::native:
-                return "native";
-            case kind::message_to_big:
-                return "message_to_big";
-        }
+        return std::string{to_string(type)};
     }
 
     if (native_code == 0)
@@ -96,9 +72,9 @@ auto coro::net::make_io_status_from_native(int native_code) -> coro::net::io_sta
             type = kind::connection_reset;
             break;
         case EAGAIN:
-#if defined(EWOULDBLOCK) && EWOULDBLOCK != EAGAIN
+    #if defined(EWOULDBLOCK) && EWOULDBLOCK != EAGAIN
         case EWOULDBLOCK:
-#endif
+    #endif
             type = kind::would_block_or_try_again;
             break;
         case EMSGSIZE:
@@ -126,5 +102,34 @@ auto coro::net::make_io_status_from_poll_status(coro::poll_status status) -> cor
             return io_status{io_status::kind::closed};
         case poll_status::cancelled:
             return io_status{io_status::kind::cancelled};
+    }
+}
+auto coro::net::to_string(coro::net::io_status::kind k) -> std::string_view
+{
+    using kind = io_status::kind;
+    switch (k)
+    {
+        case kind::ok:
+            return "Success";
+        case kind::closed:
+            return "Connection closed by peer";
+        case kind::connection_reset:
+            return "Connection reset by peer";
+        case kind::connection_refused:
+            return "Connection refused by target host";
+        case kind::timeout:
+            return "Operation timed out";
+        case kind::would_block_or_try_again:
+            return "would_block_or_try_again";
+        case kind::polling_error:
+            return "polling_error";
+        case kind::cancelled:
+            return "cancelled";
+        case kind::udp_not_bound:
+            return "udp_not_bound";
+        case kind::native:
+            return "native";
+        case kind::message_to_big:
+            return "message_to_big";
     }
 }

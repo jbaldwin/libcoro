@@ -45,6 +45,7 @@ struct io_status
     [[nodiscard]] auto message() const -> std::string;
 };
 
+auto to_string(io_status::kind kind) -> std::string_view;
 auto make_io_status_from_native(int native_code) -> io_status;
 auto make_io_status_from_poll_status(coro::poll_status status) -> io_status;
 } // namespace coro::net
