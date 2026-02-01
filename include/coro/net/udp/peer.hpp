@@ -43,11 +43,33 @@ public:
      */
     auto socket() const noexcept -> const net::socket& { return m_socket; }
 
+    template<concepts::const_buffer buffer_type>
     auto write_to(
+        const socket_address&     address,
+        const buffer_type&        buffer,
+        std::chrono::milliseconds timeout = std::chrono::milliseconds{0}) -> coro::task<io_status>
+    {
+        return write_to_impl(address, std::as_bytes(std::span{buffer}), timeout);
+    }
+
+    template<concepts::mutable_buffer buffer_type>
+    auto read_from(buffer_type& buffer, std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
+        -> coro::task<std::tuple<io_status, socket_address, std::span<std::byte>>>
+    {
+        return read_from_impl(std::as_writable_bytes(std::span{buffer}), timeout);
+    }
+
+private:
+    auto write_to_impl(
         const socket_address&            address,
         const std::span<const std::byte> buffer,
         std::chrono::milliseconds        timeout = std::chrono::milliseconds{0}) -> coro::task<io_status>
     {
+        if (buffer.empty())
+        {
+            co_return io_status{io_status::kind::ok};
+        }
+
         auto pstatus = co_await poll(poll_op::write, timeout);
         if (pstatus != poll_status::write)
         {
@@ -57,18 +79,14 @@ public:
         co_return sendto(address, buffer);
     }
 
-    template<concepts::const_buffer buffer_type>
-    auto write_to(
-        const socket_address&     address,
-        const buffer_type&        buffer,
-        std::chrono::milliseconds timeout = std::chrono::milliseconds{0}) -> coro::task<io_status>
-    {
-        return write_to(address, std::as_bytes(std::span{buffer}), timeout);
-    }
-
-    auto read_from(std::span<std::byte> buffer, std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
+    auto read_from_impl(std::span<std::byte> buffer, std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
         -> coro::task<std::tuple<io_status, socket_address, std::span<std::byte>>>
     {
+        if (!m_bound)
+        {
+            co_return {io_status{io_status::kind::udp_not_bound}, net::socket_address::make_uninitialised(), {}};
+        }
+
         auto pstatus = co_await poll(poll_op::read, timeout);
         if (pstatus != poll_status::read)
         {
@@ -76,13 +94,6 @@ public:
         }
 
         co_return recvfrom(buffer);
-    }
-
-    template<concepts::mutable_buffer buffer_type>
-    auto read_from(buffer_type&& buffer, std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
-        -> coro::task<std::tuple<io_status, socket_address, std::span<std::byte>>>
-    {
-        return read_from(std::as_writable_bytes(std::span{buffer}), timeout);
     }
 
     /**
