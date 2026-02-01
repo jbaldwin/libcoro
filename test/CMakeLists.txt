@@ -73,8 +73,8 @@ else ()
                 $<$<COMPILE_LANGUAGE:CXX>:-Wall>
                 $<$<COMPILE_LANGUAGE:CXX>:-Wextra>
                 $<$<COMPILE_LANGUAGE:CXX>:-pipe>
+                $<$<COMPILE_LANGUAGE:CXX>:-fno-ipa-icf>
         )
-        target_link_options(${PROJECT_NAME} PRIVATE -Wl,--no-gc-sections)
     elseif (${CMAKE_CXX_COMPILER_ID} MATCHES "Clang")
         target_compile_options(${PROJECT_NAME} PRIVATE
                 $<$<COMPILE_LANGUAGE:CXX>:-std=c++20>
