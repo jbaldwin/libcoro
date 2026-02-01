@@ -23,7 +23,8 @@ jobs:
                         gcc${{ matrix.gplusplus_version }} \
                         gcc${{ matrix.gplusplus_version }}-c++ \
                         openssl \
-                        openssl-devel
+                        openssl-devel \
+                        mold
             # Cannot run higher version of checkout, node isn't backwards compatible
             -   name: Checkout
                 uses: actions/checkout@v2
@@ -44,6 +45,8 @@ jobs:
                         -DCMAKE_CXX_STANDARD=${{ matrix.cxx_standard }} \
                         -DLIBCORO_FEATURE_NETWORKING=${{ matrix.libcoro_feature_networking.enabled }} \
                         -DLIBCORO_FEATURE_TLS=${{ matrix.libcoro_feature_networking.tls }} \
+                        -DCMAKE_EXE_LINKER_FLAGS="-fuse-ld=mold" \
+                        -DCMAKE_SHARED_LINKER_FLAGS="-fuse-ld=mold" \
                         ..
                     cmake --build . --config Release
             -   name: Test

@@ -73,7 +73,6 @@ else ()
                 $<$<COMPILE_LANGUAGE:CXX>:-Wall>
                 $<$<COMPILE_LANGUAGE:CXX>:-Wextra>
                 $<$<COMPILE_LANGUAGE:CXX>:-pipe>
-                $<$<COMPILE_LANGUAGE:CXX>:-fno-ipa-icf>
         )
     elseif (${CMAKE_CXX_COMPILER_ID} MATCHES "Clang")
         target_compile_options(${PROJECT_NAME} PRIVATE
