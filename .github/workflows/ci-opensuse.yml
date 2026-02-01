@@ -16,6 +16,8 @@ jobs:
         steps:
             -   name: zypper
                 run: |
+                    zypper addrepo https://download.opensuse.org/repositories/devel:tools:compiler/15.6/devel:tools:compiler.repo
+                    zypper --gpg-auto-import-keys refresh
                     zypper install -y \
                         cmake \
                         git \
