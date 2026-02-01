@@ -14,16 +14,13 @@ TEST_CASE("tcp_server", "[tcp_server]")
     std::cerr << "[tcp_server]\n\n";
 }
 
-TEST_CASE("tcp_server basic checks", "[tcp_server]")
+TEST_CASE("tcp_server nullptr scheduler", "[tcp_server]")
 {
-    SECTION("nullptr scheduler")
-    {
-        std::unique_ptr<coro::scheduler> scheduler;
-        const auto                       address = coro::net::socket_address{"127.0.0.1", 8080};
+    std::unique_ptr<coro::scheduler> scheduler;
+    const auto                       address = coro::net::socket_address{"127.0.0.1", 8080};
 
-        CHECK_THROWS_AS((coro::net::tcp::client{scheduler, address}), std::runtime_error);
-        CHECK_THROWS_AS((coro::net::tcp::server{scheduler, address}), std::runtime_error);
-    }
+    CHECK_THROWS_AS((coro::net::tcp::client{scheduler, address}), std::runtime_error);
+    CHECK_THROWS_AS((coro::net::tcp::server{scheduler, address}), std::runtime_error);
 }
 
 auto make_client_ping_task(
@@ -155,7 +152,8 @@ TEST_CASE("tcp_server ping server", "[tcp_server]")
 auto make_server_timeout_task(
     std::unique_ptr<coro::scheduler>& scheduler,
     const coro::net::socket_address&  bound_address,
-    const std::chrono::milliseconds&  timeout_duration) -> coro::task<void>
+    const std::chrono::milliseconds&  timeout_duration,
+    bool                              is_exact) -> coro::task<void>
 {
     co_await scheduler->schedule();
     coro::net::tcp::server server{scheduler, bound_address};
@@ -163,6 +161,15 @@ auto make_server_timeout_task(
     auto client_conn = co_await server.accept();
     REQUIRE(client_conn.has_value());
 
+    if (is_exact)
+    {
+        // Send some bytes, but not all of them
+        std::array<std::byte, 10> buf{};
+        buf.fill(static_cast<std::byte>(0xAA));
+        co_await client_conn->write_all(buf);
+    }
+
+    // Wait until client timeouts
     co_await scheduler->yield_for(timeout_duration * 2);
     co_return;
 };
@@ -212,7 +219,7 @@ TEST_CASE("tcp_server timeout", "[tcp_server]")
     {
         coro::sync_wait(
             coro::when_all(
-                make_server_timeout_task(scheduler, address, timeout_duration),
+                make_server_timeout_task(scheduler, address, timeout_duration, exact),
                 make_client_timeout_task(scheduler, address, timeout_duration, exact)));
     }
 }
