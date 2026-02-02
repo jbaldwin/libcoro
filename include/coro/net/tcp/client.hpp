@@ -65,26 +65,13 @@ public:
      * @return A pair of:
      *          - status of the operation
      *          - span pointing to the read part of buffer
-     * @{
      */
-    inline auto
-        read_some(std::span<std::byte> buffer, const std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
-            -> coro::task<std::pair<io_status, std::span<std::byte>>>
-    {
-        auto poll_status = co_await poll(poll_op::read, timeout);
-        if (poll_status != poll_status::read)
-        {
-            co_return std::pair{make_io_status_from_poll_status(poll_status), std::span<std::byte>{}};
-        }
-        co_return recv(buffer);
-    }
     template<concepts::mutable_buffer buffer_type>
-    inline auto read_some(buffer_type&& buffer, const std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
+    auto read_some(buffer_type& buffer, const std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
         -> coro::task<std::pair<io_status, std::span<std::byte>>>
     {
-        return read_some(std::as_writable_bytes(std::span{buffer}), timeout);
+        return read_some_impl(std::as_writable_bytes(std::span{buffer}), timeout);
     }
-    /** }@ */
 
     /**
      * Asynchronously reads exactly buffer.size() bytes from the socket.
@@ -100,11 +87,72 @@ public:
      * @return A pair of:
      *          - status of the operation
      *          - span pointing to the read part of buffer
-     * @{
      */
-    inline auto
-        read_exact(std::span<std::byte> buffer, const std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
-            -> coro::task<std::pair<io_status, std::span<std::byte>>>
+    template<concepts::mutable_buffer buffer_type>
+    auto read_exact(buffer_type& buffer, const std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
+        -> coro::task<std::pair<io_status, std::span<std::byte>>>
+    {
+        return read_exact_impl(std::as_writable_bytes(std::span{buffer}), timeout);
+    }
+
+    /**
+     * Attempts to asynchronously write data from the provided buffer to the socket.
+     *
+     * If only part of the buffer is written, the returned status will be 'ok' and
+     * the returned span will reference the portion of the original buffer that
+     * was not sent.
+     *
+     * @see write_all()
+     * @param buffer Buffer containing the data to write.
+     * @param timeout Maximum time to wait for the socket to become writable.
+     *                Use 0 for infinite timeout.
+     * @return A pair of:
+     *          - status of the operation
+     *          - span pointing to the unsent part of the buffer
+     */
+    template<concepts::const_buffer buffer_type>
+    auto write_some(const buffer_type& buffer, const std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
+        -> coro::task<std::pair<io_status, std::span<const std::byte>>>
+    {
+        return write_some_impl(std::as_bytes(std::span{buffer}), timeout);
+    }
+
+    /**
+     * Asynchronously writes the entire contents of the provided buffer to the socket.
+     * Repeatedly call write_some until either:
+     * - all bytes have been sent, or
+     * - an error or timeout occurs.
+     *
+     * @see write_some()
+     * @param buffer The data to write on the tcp socket.
+     * @return A pair of:
+     *          - status of the operation
+     *          - span pointing to the unsent part of the buffer;
+     *            empty if all data was sent successfully
+     */
+    template<concepts::const_buffer buffer_type>
+    auto write_all(const buffer_type& buffer, const std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
+        -> coro::task<std::pair<io_status, std::span<const std::byte>>>
+    {
+        return write_all_impl(std::as_bytes(std::span{buffer}), timeout);
+    }
+
+private:
+    auto read_some_impl(
+        std::span<std::byte> buffer, const std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
+        -> coro::task<std::pair<io_status, std::span<std::byte>>>
+    {
+        auto poll_status = co_await poll(poll_op::read, timeout);
+        if (poll_status != poll_status::read)
+        {
+            co_return std::pair{make_io_status_from_poll_status(poll_status), std::span<std::byte>{}};
+        }
+        co_return recv(buffer);
+    }
+
+    auto read_exact_impl(
+        std::span<std::byte> buffer, const std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
+        -> coro::task<std::pair<io_status, std::span<std::byte>>>
     {
         const auto           start_time = std::chrono::steady_clock::now();
         std::span<std::byte> remaining  = buffer;
@@ -138,31 +186,7 @@ public:
         co_return {io_status{io_status::kind::ok}, buffer};
     }
 
-    template<concepts::mutable_buffer buffer_type>
-    inline auto read_exact(buffer_type& buffer, const std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
-        -> coro::task<std::pair<io_status, std::span<std::byte>>>
-    {
-        return read_exact(std::as_writable_bytes(std::span{buffer}), timeout);
-    }
-    /** }@ */
-
-    /**
-     * Attempts to asynchronously write data from the provided buffer to the socket.
-     *
-     * If only part of the buffer is written, the returned status will be 'ok' and
-     * the returned span will reference the portion of the original buffer that
-     * was not sent.
-     *
-     * @see write_all()
-     * @param buffer Buffer containing the data to write.
-     * @param timeout Maximum time to wait for the socket to become writable.
-     *                Use 0 for infinite timeout.
-     * @return A pair of:
-     *          - status of the operation
-     *          - span pointing to the unsent part of the buffer
-     * @{
-     */
-    inline auto write_some(
+    auto write_some_impl(
         std::span<const std::byte> buffer, const std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
         -> coro::task<std::pair<io_status, std::span<const std::byte>>>
     {
@@ -173,30 +197,8 @@ public:
         }
         co_return send(buffer);
     }
-    template<concepts::const_buffer buffer_type>
-    inline auto
-        write_some(const buffer_type& buffer, const std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
-            -> coro::task<std::pair<io_status, std::span<const std::byte>>>
-    {
-        return write_some(std::as_bytes(std::span{buffer}), timeout);
-    }
-    /** }@ */
 
-    /**
-     * Asynchronously writes the entire contents of the provided buffer to the socket.
-     * Repeatedly call write_some until either:
-     * - all bytes have been sent, or
-     * - an error or timeout occurs.
-     *
-     * @see write_some()
-     * @param buffer The data to write on the tcp socket.
-     * @return A pair of:
-     *          - status of the operation
-     *          - span pointing to the unsent part of the buffer;
-     *            empty if all data was sent successfully
-     * @{
-     */
-    inline auto write_all(
+    auto write_all_impl(
         std::span<const std::byte> buffer, const std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
         -> coro::task<std::pair<io_status, std::span<const std::byte>>>
     {
@@ -240,15 +242,9 @@ public:
 
         co_return {io_status{io_status::kind::ok}, {}};
     }
-    template<concepts::const_buffer buffer_type>
-    inline auto
-        write_all(const buffer_type& buffer, const std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
-            -> coro::task<std::pair<io_status, std::span<const std::byte>>>
-    {
-        return write_all(std::as_bytes(std::span{buffer}), timeout);
-    }
-    /** }@ */
 
+    // TODO: make private & rewrite test "tcp_server concurrent polling on the same socket" since it uses poll
+public:
     /**
      * Polls for the given operation on this client's tcp socket.  This should be done prior to
      * calling recv and after a send call that doesn't send the entire buffer.
