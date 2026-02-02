@@ -149,6 +149,8 @@ TEST_CASE("tcp_server ping server", "[tcp_server]")
     }
 }
 
+constexpr static std::size_t timeout_buf_size = 10;
+
 auto make_server_timeout_task(
     std::unique_ptr<coro::scheduler>& scheduler,
     const coro::net::socket_address&  bound_address,
@@ -164,7 +166,7 @@ auto make_server_timeout_task(
     if (is_exact)
     {
         // Send some bytes, but not all of them
-        std::array<std::byte, 10> buf{};
+        std::array<std::byte, timeout_buf_size> buf{};
         buf.fill(static_cast<std::byte>(0xAA));
         co_await client_conn->write_all(buf);
     }
@@ -192,7 +194,7 @@ auto make_client_timeout_task(
         auto [status, rspan] = co_await client.read_exact(buffer, timeout_duration);
 
         CHECK(status.type == coro::net::io_status::kind::timeout);
-        CHECK(rspan.empty());
+        CHECK(rspan.size() == timeout_buf_size);
     }
     else
     {
