@@ -70,11 +70,25 @@ private:
             co_return io_status{io_status::kind::ok};
         }
 
+        if (m_is_write_ready.load(std::memory_order_acquire))
+        {
+            auto status = sendto(address, buffer);
+            if (status.try_again())
+            {
+                m_is_write_ready.store(false, std::memory_order_release);
+            }
+            else
+            {
+                co_return status;
+            }
+        }
+
         auto pstatus = co_await poll(poll_op::write, timeout);
         if (pstatus != poll_status::write)
         {
             co_return make_io_status_from_poll_status(pstatus);
         }
+        m_is_write_ready.store(true, std::memory_order_release);
 
         co_return sendto(address, buffer);
     }
@@ -82,9 +96,29 @@ private:
     auto read_from_impl(std::span<std::byte> buffer, std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
         -> coro::task<std::tuple<io_status, socket_address, std::span<std::byte>>>
     {
+        // The user must bind locally to be able to receive packets.
         if (!m_bound)
         {
             co_return {io_status{io_status::kind::udp_not_bound}, net::socket_address::make_uninitialised(), {}};
+        }
+
+        if (buffer.empty())
+        {
+            co_return {io_status{io_status::kind::ok}, net::socket_address::make_uninitialised(), {}};
+        }
+
+        if (m_is_read_ready.load(std::memory_order_acquire))
+        {
+            auto [status, addr, read] = recvfrom(buffer);
+
+            if (status.try_again())
+            {
+                m_is_read_ready.store(false, std::memory_order_release);
+            }
+            else
+            {
+                co_return {status, addr, read};
+            }
         }
 
         auto pstatus = co_await poll(poll_op::read, timeout);
@@ -92,6 +126,7 @@ private:
         {
             co_return {make_io_status_from_poll_status(pstatus), socket_address::make_uninitialised(), {}};
         }
+        m_is_read_ready.store(true, std::memory_order_release);
 
         co_return recvfrom(buffer);
     }
@@ -117,11 +152,6 @@ private:
     template<concepts::const_buffer buffer_type>
     auto sendto(const net::socket_address& endpoint, const buffer_type& buffer) -> io_status
     {
-        if (buffer.empty())
-        {
-            return io_status{io_status::kind::ok};
-        }
-
         auto [sockaddr, socklen] = endpoint.data();
 
         auto bytes_sent = ::sendto(m_socket.native_handle(), buffer.data(), buffer.size(), 0, sockaddr, socklen);
@@ -148,15 +178,6 @@ private:
         typename element_type = typename concepts::mutable_buffer_traits<buffer_type>::element_type>
     auto recvfrom(buffer_type&& buffer) -> std::tuple<io_status, net::socket_address, std::span<element_type>>
     {
-        // The user must bind locally to be able to receive packets.
-        if (!m_bound)
-        {
-            return {
-                io_status{io_status::kind::udp_not_bound},
-                net::socket_address::make_uninitialised(),
-                std::span<element_type>{}};
-        }
-
         auto endpoint            = net::socket_address::make_uninitialised();
         auto [sockaddr, socklen] = endpoint.native_mutable_data();
 
@@ -183,6 +204,22 @@ private:
     net::socket m_socket{-1};
     /// Did the user request this udp socket is bound locally to receive packets?
     bool m_bound{false};
+
+    /**
+     * Readiness flags for epoll Edge-Triggered (ET) mode.
+     * In ET mode, notifications are only sent when the descriptor state changes.
+     * These flags cache the readiness state to avoid unnecessary poll() calls.
+     */
+
+    /// True if the socket might have data to read.
+    /// Must only be set to false after recv() returns EAGAIN/EWOULDBLOCK.
+    /// false by default, because the socket is usually not ready for reading on creation
+    std::atomic<bool> m_is_read_ready{false};
+
+    /// True if the socket send buffer can accept data.
+    /// Must only be set to false after send() returns EAGAIN/EWOULDBLOCK.
+    /// true by default, because the socket is usually already ready for writing on creation
+    std::atomic<bool> m_is_write_ready{true};
 };
 
 } // namespace coro::net::udp
