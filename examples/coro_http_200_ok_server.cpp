@@ -16,10 +16,6 @@ auto main() -> int
                 {
                     co_await client.write_some(response);
                 }
-                else if (rstatus.would_block())
-                {
-                    break;
-                }
                 else
                 {
                     co_return;

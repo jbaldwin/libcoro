@@ -73,21 +73,6 @@ public:
         return read_some_impl(std::as_writable_bytes(std::span{buffer}), timeout);
     }
 
-    /**
-     * Asynchronously reads exactly buffer.size() bytes from the socket.
-     *
-     * Repeatedly calls write_some until either:
-     * - buffer.size() bytes have been read, or
-     * - an error or timeout occurs.
-     *
-     * @see read_some()
-     * @param buffer Destination buffer to read data into.
-     * @param timeout Maximum time to wait for the socket to become readable
-     *                Use 0 for infinite timeout.
-     * @return A pair of:
-     *          - status of the operation
-     *          - span pointing to the read part of buffer
-     */
     template<concepts::mutable_buffer buffer_type>
     auto read_exact(buffer_type& buffer, const std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
         -> coro::task<std::pair<io_status, std::span<std::byte>>>
@@ -98,17 +83,29 @@ public:
     /**
      * Attempts to asynchronously write data from the provided buffer to the socket.
      *
-     * If only part of the buffer is written, the returned status will be 'ok' and
-     * the returned span will reference the portion of the original buffer that
-     * was not sent.
+     * The operation may write only a portion of the provided buffer.
+     * In that case, the returned status will be 'ok' and the returned span
+     * will reference the portion of the original buffer that was not sent.
+     *
+     * This function performs at most one write attempt.
+     *
+     * @note
+     * - A successful readiness notification does not guarantee that the write
+     *   will succeed; partial writes and retry conditions are possible.
+     * - The returned span always refers to the original buffer.
+     * - This function is not safe to call concurrently from multiple coroutines
+     *   on the same socket.
      *
      * @see write_all()
-     * @param buffer Buffer containing the data to write.
-     * @param timeout Maximum time to wait for the socket to become writable.
-     *                Use 0 for infinite timeout.
+     * @param buffer
+     *        Buffer containing the data to write.
+     * @param timeout
+     *        Maximum time to wait for the socket to become writable.
+     *        A value of 0 results in infinite timeout.
      * @return A pair of:
-     *          - status of the operation
-     *          - span pointing to the unsent part of the buffer
+     *         - status of the operation
+     *         - span pointing to the unsent portion of the buffer;
+     *           empty if all data was sent successfully
      */
     template<concepts::const_buffer buffer_type>
     auto write_some(const buffer_type& buffer, const std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
@@ -119,16 +116,28 @@ public:
 
     /**
      * Asynchronously writes the entire contents of the provided buffer to the socket.
-     * Repeatedly call write_some until either:
-     * - all bytes have been sent, or
+     *
+     * This function repeatedly invokes write_some() until either:
+     * - all bytes have been sent successfully, or
      * - an error or timeout occurs.
      *
+     * The timeout is treated as a soft overall deadline for the entire operation.
+     *
+     * @note
+     *   This function is not safe to call concurrently from multiple coroutines
+     *   on the same socket.
+     *
      * @see write_some()
-     * @param buffer The data to write on the tcp socket.
+     *
+     * @param buffer
+     *        The data to write to the socket.
+     * @param timeout
+     *        Maximum total time allowed for the operation.
+     *        A value of 0 results in infinite timeout.
      * @return A pair of:
-     *          - status of the operation
-     *          - span pointing to the unsent part of the buffer;
-     *            empty if all data was sent successfully
+     *         - status of the operation
+     *         - span pointing to the unsent portion of the buffer;
+     *           empty if all data was sent successfully
      */
     template<concepts::const_buffer buffer_type>
     auto write_all(const buffer_type& buffer, const std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
@@ -142,12 +151,31 @@ private:
         std::span<std::byte> buffer, const std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
         -> coro::task<std::pair<io_status, std::span<std::byte>>>
     {
+        if (m_is_read_ready.load(std::memory_order_acquire) == true)
+        {
+            auto [status, read] = recv(buffer);
+
+            if (status.try_again())
+            {
+                // Failed to read, marking as unready and going to poll
+                m_is_read_ready.store(false, std::memory_order_release);
+            }
+            else
+            {
+                // Operation was successful (error is a success too)
+                co_return {status, read};
+            }
+        }
+
         auto poll_status = co_await poll(poll_op::read, timeout);
         if (poll_status != poll_status::read)
         {
             co_return std::pair{make_io_status_from_poll_status(poll_status), std::span<std::byte>{}};
         }
-        co_return recv(buffer);
+        m_is_read_ready.store(true, std::memory_order_release);
+
+        auto [status, read] = recv(buffer);
+        co_return {status, read};
     }
 
     auto read_exact_impl(
@@ -190,12 +218,33 @@ private:
         std::span<const std::byte> buffer, const std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
         -> coro::task<std::pair<io_status, std::span<const std::byte>>>
     {
-        auto poll_status = co_await poll(poll_op::write, timeout);
-        if (poll_status != poll_status::write)
+        // Fast path, trying to write without poll
+        if (m_is_write_ready.load(std::memory_order_acquire) == true)
         {
-            co_return std::pair{make_io_status_from_poll_status(poll_status), buffer};
+            auto [status, unsent] = send(buffer);
+
+            if (status.try_again())
+            {
+                // Failed to read, marking as unready and goint to poll
+                m_is_write_ready.store(false, std::memory_order_release);
+            }
+            else
+            {
+                // Operation was successful (error is a success too)
+                co_return {status, unsent};
+            }
         }
-        co_return send(buffer);
+
+        // Waiting for readiness
+        auto pstatus = co_await poll(poll_op::write, timeout);
+        if (pstatus != poll_status::write)
+        {
+            co_return std::pair{make_io_status_from_poll_status(pstatus), buffer};
+        }
+        m_is_write_ready.store(true, std::memory_order_release);
+
+        auto [status, unsent] = send(buffer);
+        co_return {status, unsent};
     }
 
     auto write_all_impl(
@@ -204,17 +253,6 @@ private:
     {
         const auto                 start_time = std::chrono::steady_clock::now();
         std::span<const std::byte> remaining  = buffer;
-
-        // Trying to send something without polling
-        //        {
-        //            auto [status, unsent] = send(buffer);
-        //            remaining = unsent;
-        //
-        //            if (!status.is_ok() && status.type != io_status::kind::try_again)
-        //            {
-        //                co_return {status, remaining};
-        //            }
-        //        }
 
         while (!remaining.empty())
         {
@@ -231,7 +269,7 @@ private:
                 remaining_timeout = timeout - elapsed;
             }
 
-            auto [status, unsent_span] = co_await write_some(remaining, remaining_timeout);
+            auto [status, unsent_span] = co_await write_some_impl(remaining, remaining_timeout);
             remaining                  = unsent_span;
 
             if (!status.is_ok())
@@ -271,12 +309,6 @@ public:
         typename element_type = typename concepts::mutable_buffer_traits<buffer_type>::element_type>
     auto recv(buffer_type&& buffer) -> std::pair<io_status, std::span<element_type>>
     {
-        // If the user requested zero bytes, just return.
-        if (buffer.empty())
-        {
-            return {io_status{io_status::kind::ok}, std::span<element_type>{}};
-        }
-
         auto bytes_recv = ::recv(m_socket.native_handle(), buffer.data(), buffer.size(), 0);
         if (bytes_recv > 0)
         {
@@ -310,12 +342,6 @@ public:
         typename element_type = typename concepts::const_buffer_traits<buffer_type>::element_type>
     auto send(const buffer_type& buffer) -> std::pair<io_status, std::span<element_type>>
     {
-        // If the user requested zero bytes, just return.
-        if (buffer.empty())
-        {
-            return {io_status{io_status::kind::ok}, std::span<element_type>{buffer.data(), buffer.size()}};
-        }
-
         auto bytes_sent = ::send(m_socket.native_handle(), buffer.data(), buffer.size(), 0);
         if (bytes_sent >= 0)
         {
@@ -342,6 +368,22 @@ private:
     net::socket m_socket{-1};
     /// Cache the status of the connect call in the event the user calls connect() again.
     std::optional<net::connect_status> m_connect_status{std::nullopt};
+
+    /**
+     * Readiness flags for epoll Edge-Triggered (ET) mode.
+     * In ET mode, notifications are only sent when the descriptor state changes.
+     * These flags cache the readiness state to avoid unnecessary poll() calls.
+     */
+
+    /// True if the socket might have data to read.
+    /// Must only be set to false after recv() returns EAGAIN/EWOULDBLOCK.
+    /// false by default, because the socket is usually not ready for reading on creation
+    std::atomic<bool> m_is_read_ready{false};
+
+    /// True if the socket send buffer can accept data.
+    /// Must only be set to false after send() returns EAGAIN/EWOULDBLOCK.
+    /// true by default, because the socket is usually already ready for writing on creation
+    std::atomic<bool> m_is_write_ready{true};
 };
 
 } // namespace coro::net::tcp

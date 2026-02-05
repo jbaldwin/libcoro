@@ -14,7 +14,7 @@ struct IoStatusMatcher : Catch::Matchers::MatcherBase<coro::net::io_status>
     std::string describe() const override
     {
         std::ostringstream ss;
-        ss << "is io_status::kind::" << to_string(expected_kind);
+        ss << "is " << to_string(expected_kind);
         return ss.str();
     }
 };

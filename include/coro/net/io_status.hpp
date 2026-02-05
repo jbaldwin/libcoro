@@ -34,6 +34,7 @@ struct io_status
     [[nodiscard]] auto is_timeout() const -> bool { return type == kind::timeout; }
     [[nodiscard]] auto is_closed() const -> bool { return type == kind::closed; }
     [[nodiscard]] auto would_block() const -> bool { return type == kind::would_block_or_try_again; }
+    [[nodiscard]] auto try_again() const -> bool { return type == kind::would_block_or_try_again; }
 
     [[nodiscard]] auto is_native() const -> bool { return type == kind::native; }
 
