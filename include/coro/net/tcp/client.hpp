@@ -151,7 +151,7 @@ private:
         std::span<std::byte> buffer, const std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
         -> coro::task<std::pair<io_status, std::span<std::byte>>>
     {
-        if (m_is_read_ready.load(std::memory_order_acquire) == true)
+        if (m_is_read_ready.load(std::memory_order_acquire))
         {
             auto [status, read] = recv(buffer);
 
@@ -219,7 +219,7 @@ private:
         -> coro::task<std::pair<io_status, std::span<const std::byte>>>
     {
         // Fast path, trying to write without poll
-        if (m_is_write_ready.load(std::memory_order_acquire) == true)
+        if (m_is_write_ready.load(std::memory_order_acquire))
         {
             auto [status, unsent] = send(buffer);
 
