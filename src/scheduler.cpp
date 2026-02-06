@@ -173,23 +173,27 @@ auto scheduler::resume(std::coroutine_handle<> handle) -> bool
 
     if (m_opts.execution_strategy == execution_strategy_t::process_tasks_inline)
     {
-        m_size.fetch_add(1, std::memory_order::release);
-        {
-            std::scoped_lock lk{m_scheduled_tasks_mutex};
-            m_scheduled_tasks.emplace_back(handle);
-        }
+        auto* schedule_op = new schedule_operation{*this};
+        schedule_op->m_allocated = true;
+        schedule_op->await_suspend(handle);
 
-        bool expected{false};
-        if (m_schedule_pipe_triggered.compare_exchange_strong(
-                expected, true, std::memory_order::release, std::memory_order::relaxed))
-        {
-            const int value = 1;
-            ssize_t written = ::write(m_schedule_pipe.write_fd(), reinterpret_cast<const void*>(&value), sizeof(value));
-            if (written != sizeof(value))
-            {
-                std::cerr << "libcoro::scheduler::resume() failed to write to schedule pipe, bytes written=" << written << "\n";
-            }
-        }
+        // m_size.fetch_add(1, std::memory_order::release);
+        // {
+        //     std::scoped_lock lk{m_scheduled_tasks_mutex};
+        //     m_scheduled_tasks.emplace_back(handle);
+        // }
+
+        // bool expected{false};
+        // if (m_schedule_pipe_triggered.compare_exchange_strong(
+        //         expected, true, std::memory_order::release, std::memory_order::relaxed))
+        // {
+        //     const int value = 1;
+        //     ssize_t written = ::write(m_schedule_pipe.write_fd(), reinterpret_cast<const void*>(&value), sizeof(value));
+        //     if (written != sizeof(value))
+        //     {
+        //         std::cerr << "libcoro::scheduler::resume() failed to write to schedule pipe, bytes written=" << written << "\n";
+        //     }
+        // }
 
         return true;
     }
@@ -336,11 +340,12 @@ auto scheduler::process_events_execute(std::chrono::milliseconds timeout) -> voi
 
 auto scheduler::process_scheduled_execute_inline() -> void
 {
-    std::vector<std::coroutine_handle<>> tasks{};
-    {
+    // std::vector<std::coroutine_handle<>> tasks{};
+    // {
         // Acquire the entire list, and then reset it.
-        std::scoped_lock lk{m_scheduled_tasks_mutex};
-        tasks.swap(m_scheduled_tasks);
+        // std::scoped_lock lk{m_scheduled_tasks_mutex};
+        // tasks.swap(m_scheduled_tasks);
+        auto* ops = detail::awaiter_list_pop_all(m_scheduled_tasks);
 
         // Clear the notification by reading until the pipe is cleared.
         while (true)
@@ -375,14 +380,37 @@ auto scheduler::process_scheduled_execute_inline() -> void
 
         // Clear the in memory flag to reduce eventfd_* calls on scheduling.
         m_schedule_pipe_triggered.exchange(false, std::memory_order::release);
+    // }
+
+    if (ops != nullptr)
+    {
+        std::size_t resumed{0};
+        ops = detail::awaiter_list_reverse(ops);
+
+        while (ops != nullptr)
+        {
+            auto* curr = ops;
+            ops->m_awaiting_coroutine.resume();
+            ++resumed;
+            ops = ops->m_next;
+
+            // coroutines resumed via `scheduler::resume(handle)` allocate a schedule_operation*
+            // clean it up now since its no longer needed.
+            if (curr->m_allocated)
+            {
+                delete curr;
+            }
+        }
+
+        m_size.fetch_sub(resumed, std::memory_order::release);
     }
 
-    // This set of handles can be safely resumed now since they do not have a corresponding timeout event.
-    for (auto& task : tasks)
-    {
-        task.resume();
-    }
-    m_size.fetch_sub(tasks.size(), std::memory_order::release);
+    // // This set of handles can be safely resumed now since they do not have a corresponding timeout event.
+    // for (auto& task : tasks)
+    // {
+    //     task.resume();
+    // }
+    // m_size.fetch_sub(tasks.size(), std::memory_order::release);
 }
 
 auto scheduler::process_event_execute(detail::poll_info* pi, poll_status status) -> void
