@@ -185,7 +185,7 @@ public:
             {
                 return static_cast<return_type>(*std::get<stored_type>(m_storage));
             }
-            else if constexpr (std::is_assignable_v<return_type, stored_type>)
+            else if constexpr (std::is_constructible_v<return_type, stored_type>)
             {
                 return static_cast<return_type&&>(std::get<stored_type>(m_storage));
             }
@@ -315,7 +315,7 @@ static auto make_sync_wait_task(awaitable_type&& a) -> sync_wait_task<return_typ
 template<
     concepts::awaitable awaitable_type,
     typename return_type = typename concepts::awaitable_traits<awaitable_type>::awaiter_return_type>
-auto sync_wait(awaitable_type&& a) -> decltype(auto)
+auto sync_wait(awaitable_type&& a) -> return_type
 {
     detail::sync_wait_event e{};
     auto                    task = detail::make_sync_wait_task(std::forward<awaitable_type>(a));
@@ -331,20 +331,9 @@ auto sync_wait(awaitable_type&& a) -> decltype(auto)
     {
         return task.promise().result();
     }
-    else if constexpr (std::is_move_assignable_v<return_type>)
+    else if constexpr (std::is_move_constructible_v<std::remove_const_t<return_type>>)
     {
-        // issue-242
-        // For non-trivial types (or possibly types that don't fit in a register)
-        // the compiler will end up calling the ~return_type() when the promise
-        // is destructed at the end of sync_wait(). This causes the return_type
-        // object to also be destructed causing the final return/move from
-        // sync_wait() to be a 'use after free' bug. To work around this the result
-        // must be moved off the promise object before the promise is destructed.
-        // Other solutions could be heap allocating the return_type but that has
-        // other downsides, for now it is determined that a double move is an
-        // acceptable solution to work around this bug.
-        auto result = std::move(task).promise().result();
-        return result;
+        return std::move(task).promise().result();
     }
     else
     {
