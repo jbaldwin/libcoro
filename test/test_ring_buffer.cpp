@@ -3,6 +3,7 @@
 #include <coro/coro.hpp>
 
 #include <iostream>
+#include <tuple>
 
 TEST_CASE("ring_buffer", "[ring_buffer]")
 {
@@ -48,6 +49,43 @@ TEST_CASE("ring_buffer single element", "[ring_buffer]")
     }
 
     REQUIRE(rb.empty());
+}
+
+TEST_CASE("ring_buffer max_size", "[ring_buffer]")
+{
+    coro::ring_buffer<uint64_t, 2> rb2{};
+    coro::ring_buffer<uint64_t, 16> rb16{};
+    coro::ring_buffer<uint64_t, 256> rb256{};
+    coro::ring_buffer<uint64_t, 12345> rb12345{};
+
+    REQUIRE(rb2.max_size() == 2);
+    REQUIRE(rb16.max_size() == 16);
+    REQUIRE(rb256.max_size() == 256);
+    REQUIRE(rb12345.max_size() == 12345);
+}
+
+TEST_CASE("ring_buffer is full", "[ring_buffer]")
+{
+    coro::ring_buffer<uint64_t, 2> rb{};
+
+    auto make_ring_buffer_task = [](coro::ring_buffer<uint64_t, 2>& rb) -> coro::task<void>
+    {
+        auto p1 = co_await rb.produce(1);
+        auto p2 = co_await rb.produce(2);
+
+        REQUIRE(p1 == coro::ring_buffer_result::produce::produced);
+        REQUIRE(p2 == coro::ring_buffer_result::produce::produced);
+
+        REQUIRE(rb.full());
+
+        auto c1 = co_await rb.consume();
+        REQUIRE(c1);
+        REQUIRE(*c1 == 1);
+
+        REQUIRE(!rb.full());
+    };
+
+    coro::sync_wait(make_ring_buffer_task(rb));
 }
 
 TEST_CASE("ring_buffer many elements many producers many consumers", "[ring_buffer]")
@@ -435,6 +473,84 @@ TEST_CASE("ring_buffer shutdown_drain non-empty consumer shutdown", "[ring_buffe
     std::ignore =
         coro::sync_wait(coro::when_all(exec->schedule(producer(buffer, exec)), exec->schedule(consumer(buffer))));
     std::cerr << "END ring_buffer issue-401\n";
+}
+
+TEST_CASE("ring_buffer notify producers", "[ring_buffer]")
+{
+    auto tp = coro::thread_pool::make_unique(coro::thread_pool::options{.thread_count = 1});
+    auto make_test_task = [](std::unique_ptr<coro::thread_pool>& tp) -> coro::task<void>
+    {
+        coro::ring_buffer<int, 1> rb{};
+
+        auto make_produce_task = [](coro::ring_buffer<int, 1>& rb, int i) -> coro::task<coro::ring_buffer_result::produce>
+        {
+            co_return co_await rb.produce(i);
+        };
+
+        auto make_notify_task = [](coro::ring_buffer<int, 1>& rb) -> coro::task<void>
+        {
+            co_await rb.notify_producers();
+            co_return;
+        };
+
+        // Fill the ring buffer so we can have some blocked producers to notify.
+        auto p1 = co_await rb.produce(1);
+        REQUIRE(p1 == coro::ring_buffer_result::produce::produced);
+
+        auto results = co_await coro::when_all(
+            tp->schedule(make_produce_task(rb, 2)),
+            tp->schedule(make_produce_task(rb, 3)),
+            tp->schedule(make_produce_task(rb, 4)),
+            tp->schedule(make_produce_task(rb, 5)),
+            tp->schedule(make_produce_task(rb, 6)),
+            tp->schedule(make_notify_task(rb))
+        );
+
+        REQUIRE(std::get<0>(results).return_value() == coro::ring_buffer_result::produce::notified);
+        REQUIRE(std::get<1>(results).return_value() == coro::ring_buffer_result::produce::notified);
+        REQUIRE(std::get<2>(results).return_value() == coro::ring_buffer_result::produce::notified);
+        REQUIRE(std::get<3>(results).return_value() == coro::ring_buffer_result::produce::notified);
+        REQUIRE(std::get<4>(results).return_value() == coro::ring_buffer_result::produce::notified);
+    };
+
+    coro::sync_wait(make_test_task(tp));
+}
+
+TEST_CASE("ring_buffer notify consumers", "[ring_buffer]")
+{
+    auto tp = coro::thread_pool::make_unique(coro::thread_pool::options{.thread_count = 1});
+    auto make_test_task = [](std::unique_ptr<coro::thread_pool>& tp) -> coro::task<void>
+    {
+        coro::ring_buffer<int, 1> rb{};
+
+        auto make_consume_task = [](coro::ring_buffer<int, 1>& rb) -> coro::task<coro::expected<int, coro::ring_buffer_result::consume>>
+        {
+            co_return co_await rb.consume();
+        };
+
+        auto make_notify_task = [](coro::ring_buffer<int, 1>& rb) -> coro::task<void>
+        {
+            co_await rb.notify_consumers();
+            co_return;
+        };
+
+        auto results = co_await coro::when_all(
+            tp->schedule(make_consume_task(rb)),
+            tp->schedule(make_consume_task(rb)),
+            tp->schedule(make_consume_task(rb)),
+            tp->schedule(make_consume_task(rb)),
+            tp->schedule(make_consume_task(rb)),
+            tp->schedule(make_notify_task(rb))
+        );
+
+        REQUIRE(std::get<0>(results).return_value().error() == coro::ring_buffer_result::consume::notified);
+        REQUIRE(std::get<1>(results).return_value().error() == coro::ring_buffer_result::consume::notified);
+        REQUIRE(std::get<2>(results).return_value().error() == coro::ring_buffer_result::consume::notified);
+        REQUIRE(std::get<3>(results).return_value().error() == coro::ring_buffer_result::consume::notified);
+        REQUIRE(std::get<4>(results).return_value().error() == coro::ring_buffer_result::consume::notified);
+    };
+
+    coro::sync_wait(make_test_task(tp));
 }
 
 TEST_CASE("~ring_buffer", "[ring_buffer]")

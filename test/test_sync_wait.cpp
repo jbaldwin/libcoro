@@ -247,6 +247,79 @@ TEST_CASE("issue-286", "[sync_wait]")
     REQUIRE(foo.m_moves == 2);
 }
 
+TEST_CASE("sync_wait move-only, non-move assignable", "[sync_wait]")
+{
+    struct move_constructible
+    {
+        explicit move_constructible(int data) : data(data) {};
+        move_constructible(const move_constructible&)            = delete;
+        move_constructible(move_constructible&&) noexcept        = default;
+        move_constructible& operator=(const move_constructible&) = delete;
+        move_constructible& operator=(move_constructible&&)      = delete;
+        ~move_constructible()                                    = default;
+
+        int data{};
+    };
+
+    {
+        struct move_constructible_awaitable : std::suspend_never
+        {
+            move_constructible await_resume() { return move_constructible(42); };
+        };
+
+        auto await_result = coro::sync_wait(move_constructible_awaitable{});
+
+        REQUIRE(await_result.data == 42);
+    }
+
+    auto make_test = [](move_constructible value) -> coro::task<move_constructible>
+    {
+        co_return std::move(value);
+    };
+
+    auto result = coro::sync_wait(make_test(move_constructible(42)));
+
+    REQUIRE(result.data == 42);
+}
+
+TEST_CASE("sync_wait copy-only, non-assignable", "[sync_wait]")
+{
+    struct copy_constructible
+    {
+        //copy_constructible() = default;
+        explicit copy_constructible(int data) : data(data) {};
+        copy_constructible(const copy_constructible&)            = default;
+        copy_constructible(copy_constructible&&) noexcept        = delete;
+        copy_constructible& operator=(const copy_constructible&) = delete;
+        copy_constructible& operator=(copy_constructible&&)      = delete;
+        ~copy_constructible()                                    = default;
+
+        int data{};
+    };
+
+    {
+        struct copy_constructible_awaitable : std::suspend_never
+        {
+            copy_constructible await_resume() { return copy_constructible(42); };
+        };
+
+        auto await_result = coro::sync_wait(copy_constructible_awaitable{});
+
+        REQUIRE(await_result.data == 42);
+    }
+
+    {
+        struct const_copy_constructible_awaitable : std::suspend_never
+        {
+            const copy_constructible await_resume() { return copy_constructible(42); };
+        };
+
+        auto await_result = coro::sync_wait(const_copy_constructible_awaitable{});
+
+        REQUIRE(await_result.data == 42);
+    }
+}
+
 TEST_CASE("~sync_wait", "[sync_wait]")
 {
     std::cerr << "[~sync_wait]\n\n";
