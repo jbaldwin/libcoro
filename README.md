@@ -1242,7 +1242,7 @@ int main()
             // event processor thread.
             .on_io_thread_start_functor = [] { std::cout << "scheduler::process event thread start\n"; },
             // If the scheduler is in spawn mode this functor is called upon stopping the dedicated
-            // event processes thread.
+            // event process thread.
             .on_io_thread_stop_functor = [] { std::cout << "scheduler::process event thread stop\n"; },
             // The io scheduler can use a coro::thread_pool to process the events or tasks it is given.
             // You can use an execution strategy of `process_tasks_inline` to have the event loop thread
@@ -1292,7 +1292,7 @@ int main()
         std::cout << "server: " << request << "\n";
 
         // Send the server response to the client.
-        std::string response   = "Hello from server.";
+        std::string response        = "Hello from server.";
         auto [write_status, unsent] = co_await client->write_all(response);
         if (!write_status.is_ok())
         {
@@ -1315,8 +1315,7 @@ int main()
         // verify the number of bytes sent or received.
 
         // Connect to the server.
-        auto s = co_await client.connect();
-        std::cout << to_string(s) << "\n";
+        co_await client.connect();
 
         // Send the request data.
         co_await client.write_all(std::string_view{"Hello from client."});

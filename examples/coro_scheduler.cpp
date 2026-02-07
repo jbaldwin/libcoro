@@ -43,6 +43,7 @@ int main()
         // Verify the incoming connection was accepted correctly.
         if (!client)
         {
+            std::cout << "server error: " << client.error().message() << "\n";
             co_return; // Handle error.
         }
 
@@ -53,6 +54,7 @@ int main()
         auto [read_status, read_bytes] = co_await client->read_some(request);
         if (!read_status.is_ok())
         {
+            std::cout << "server error: " << read_status.message() << "\n";
             co_return; // Handle error, see net::io_status for detailed error stats.
         }
 
@@ -60,10 +62,11 @@ int main()
         std::cout << "server: " << request << "\n";
 
         // Send the server response to the client.
-        std::string response   = "Hello from server.";
-        auto [wstatus, unsent] = co_await client->write_all(response);
-        if (!wstatus.is_ok())
+        std::string response        = "Hello from server.";
+        auto [write_status, unsent] = co_await client->write_all(response);
+        if (!write_status.is_ok())
         {
+            std::cout << "server error: " << write_status.message() << "\n";
             co_return; // Handle error, see net::io_status for detailed error stats.
         }
 
@@ -76,7 +79,7 @@ int main()
         co_await scheduler->schedule();
 
         // Create the tcp::client
-        coro::net::tcp::client client{scheduler, {"127.0.0.1", 8888}};
+        coro::net::tcp::client client{scheduler, {"127.0.0.1", 8080}};
 
         // Ommitting error checking code for the client, each step should check the status and
         // verify the number of bytes sent or received.
@@ -84,17 +87,13 @@ int main()
         // Connect to the server.
         co_await client.connect();
 
-        // Make sure the client socket can be written to.
-        co_await client.poll(coro::poll_op::write);
-
         // Send the request data.
-        client.send(std::string_view{"Hello from client."});
+        co_await client.write_all(std::string_view{"Hello from client."});
 
         // Wait for the response and receive it.
-        co_await client.poll(coro::poll_op::read);
         std::string response(256, '\0');
-        auto [recv_status, recv_bytes] = client.recv(response);
-        response.resize(recv_bytes.size());
+        auto [read_status, read_bytes] = co_await client.read_some(response);
+        response.resize(read_bytes.size());
 
         std::cout << "client: " << response << "\n";
         co_return;
