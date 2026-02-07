@@ -51,7 +51,7 @@ auto main() -> int
     schedulers.reserve(count);
     workers.reserve(count);
 
-    for (size_t i = 0; i < std::thread::hardware_concurrency(); ++i)
+    for (size_t i = 0; i < count; ++i)
     {
         auto& scheduler = schedulers.emplace_back(
             coro::scheduler::make_unique(

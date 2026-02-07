@@ -444,7 +444,7 @@ TEST_CASE("benchmark tcp::server echo server thread pool", "[benchmark][tcp]")
         while (accepted.load(std::memory_order::acquire) < connections)
         {
             auto c = co_await server.accept(std::chrono::milliseconds{1});
-            if (c && c->socket().is_valid())
+            if (c)
             {
                 accepted.fetch_add(1, std::memory_order::release);
                 server_scheduler->spawn_detached(make_on_connection_task(std::move(*c), wait_for_clients));
@@ -642,7 +642,7 @@ TEST_CASE("benchmark tcp::server echo server inline", "[benchmark][tcp]")
         while (accepted_clients < connections_per_client)
         {
             auto c = co_await server.accept(std::chrono::milliseconds{1000});
-            if (c && c->socket().is_valid())
+            if (c)
             {
                 s.live_clients++;
                 s.scheduler->spawn_detached(make_on_connection_task(s, std::move(*c)));
@@ -889,7 +889,7 @@ TEST_CASE("benchmark tls::server echo server thread pool", "[benchmark]")
             if (pstatus == coro::poll_status::read)
             {
                 auto c = co_await server.accept();
-                if (c.socket().is_valid())
+                if (c.socket().is_ok())
                 {
                     accepted.fetch_add(1, std::memory_order::release);
                     server_scheduler->spawn_detached(make_on_connection_task(std::move(c), wait_for_clients));

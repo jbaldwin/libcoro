@@ -3,7 +3,6 @@
 #include "coro/net/socket_address.hpp"
 #include "coro/poll.hpp"
 
-
 #include <arpa/inet.h>
 #include <fcntl.h>
 #include <span>
@@ -58,7 +57,9 @@ public:
      * not imply if the socket is still usable.
      * @return True if the socket file descriptor is > 0.
      */
-    auto is_valid() const -> bool { return m_fd != -1; }
+    [[nodiscard]] auto is_ok() const -> bool { return m_fd != -1; }
+
+    explicit operator bool() const { return is_ok(); }
 
     /**
      * @param block Sets the socket to the given blocking mode.
@@ -104,6 +105,6 @@ auto make_socket(const socket::options& opts, domain_t) -> socket;
  *                for udp types.
  * TODO: docs
  */
-auto make_accept_socket(const socket::options& opts, const net::socket_address&endpoint, int32_t backlog) -> socket;
+auto make_accept_socket(const socket::options& opts, const net::socket_address& endpoint, int32_t backlog) -> socket;
 
 } // namespace coro::net

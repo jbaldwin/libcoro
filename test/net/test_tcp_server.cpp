@@ -83,7 +83,6 @@ auto make_server_ping_task(
     std::cerr << "server accept()\n";
     auto client = co_await server.accept();
     REQUIRE(client.has_value());
-    REQUIRE(client->socket().is_valid());
 
     if (is_exact)
     {

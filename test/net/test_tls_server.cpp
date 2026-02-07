@@ -87,7 +87,7 @@ TEST_CASE("tls_server hello world server", "[tls_server]")
 
         std::cerr << "server.accept()\n";
         auto client = co_await server.accept();
-        REQUIRE(client.socket().is_valid());
+        REQUIRE(client.socket().is_ok());
 
         std::string buffer;
         buffer.resize(256, '\0');
