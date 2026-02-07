@@ -627,7 +627,7 @@ If you require TLS, provide OpenSSL for the target ABI (static or shared) and se
 
 Full feature supported operating systems:
  * ubuntu:22.04, 24.04
- * fedora:37-40
+ * fedora:37-43
  * MacOS 15
  * openSUSE/leap:15.6
 
