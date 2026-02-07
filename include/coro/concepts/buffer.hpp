@@ -18,8 +18,8 @@ concept const_buffer = requires(const type t)
     { t.empty() } -> std::same_as<bool>;
     { t.size() } -> std::same_as<std::size_t>;
 
-    // We check the return type of `data()` to be a const pointer to the underlying type
-    { t.data() } -> std::same_as<const typename std::remove_pointer_t<decltype(t.data())>*>;
+    // We check the return type of `data()` to be convertible to a const pointer to the underlying type
+    { t.data() } -> std::convertible_to<const typename std::remove_pointer_t<decltype(t.data())>*>;
 };
 
 template<const_buffer buffer_type>
