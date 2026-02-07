@@ -151,14 +151,15 @@ private:
         std::span<std::byte> buffer, const std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
         -> coro::task<std::pair<io_status, std::span<std::byte>>>
     {
-        if (m_is_read_ready.load(std::memory_order_acquire))
+        // Fast path
+        if (m_is_read_ready)
         {
             auto [status, read] = recv(buffer);
 
             if (status.try_again())
             {
                 // Failed to read, marking as unready and going to poll
-                m_is_read_ready.store(false, std::memory_order_release);
+                m_is_read_ready = false;
             }
             else
             {
@@ -172,7 +173,7 @@ private:
         {
             co_return std::pair{make_io_status_from_poll_status(poll_status), std::span<std::byte>{}};
         }
-        m_is_read_ready.store(true, std::memory_order_release);
+        m_is_read_ready = true;
 
         auto [status, read] = recv(buffer);
         co_return {status, read};
@@ -218,15 +219,15 @@ private:
         std::span<const std::byte> buffer, const std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
         -> coro::task<std::pair<io_status, std::span<const std::byte>>>
     {
-        // Fast path, trying to write without poll
-        if (m_is_write_ready.load(std::memory_order_acquire))
+        // Fast path
+        if (m_is_write_ready)
         {
             auto [status, unsent] = send(buffer);
 
             if (status.try_again())
             {
                 // Failed to read, marking as unready and goint to poll
-                m_is_write_ready.store(false, std::memory_order_release);
+                m_is_write_ready = false;
             }
             else
             {
@@ -241,7 +242,7 @@ private:
         {
             co_return std::pair{make_io_status_from_poll_status(pstatus), buffer};
         }
-        m_is_write_ready.store(true, std::memory_order_release);
+        m_is_write_ready = true;
 
         auto [status, unsent] = send(buffer);
         co_return {status, unsent};
@@ -376,14 +377,16 @@ private:
      */
 
     /// True if the socket might have data to read.
-    /// Must only be set to false after recv() returns EAGAIN/EWOULDBLOCK.
+    /// Must be set to true after polling.
+    /// Must be set to false after recv() returns EAGAIN/EWOULDBLOCK.
     /// false by default, because the socket is usually not ready for reading on creation
-    std::atomic<bool> m_is_read_ready{false};
+    bool m_is_read_ready{false};
 
     /// True if the socket send buffer can accept data.
-    /// Must only be set to false after send() returns EAGAIN/EWOULDBLOCK.
+    /// Must be set to true after polling.
+    /// Must be set to false after send() returns EAGAIN/EWOULDBLOCK.
     /// true by default, because the socket is usually already ready for writing on creation
-    std::atomic<bool> m_is_write_ready{true};
+    bool m_is_write_ready{true};
 };
 
 } // namespace coro::net::tcp

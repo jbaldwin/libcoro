@@ -70,15 +70,18 @@ private:
             co_return io_status{io_status::kind::ok};
         }
 
-        if (m_is_write_ready.load(std::memory_order_acquire))
+        // Fast path
+        if (m_is_write_ready)
         {
             auto status = sendto(address, buffer);
             if (status.try_again())
             {
-                m_is_write_ready.store(false, std::memory_order_release);
+                // Failed to write, marking as unready and going to poll
+                m_is_write_ready = false;
             }
             else
             {
+                // Operation was successful (error is a success too)
                 co_return status;
             }
         }
@@ -88,7 +91,7 @@ private:
         {
             co_return make_io_status_from_poll_status(pstatus);
         }
-        m_is_write_ready.store(true, std::memory_order_release);
+        m_is_write_ready = true;
 
         co_return sendto(address, buffer);
     }
@@ -107,16 +110,19 @@ private:
             co_return {io_status{io_status::kind::ok}, net::socket_address::make_uninitialised(), {}};
         }
 
-        if (m_is_read_ready.load(std::memory_order_acquire))
+        // Fast path
+        if (m_is_read_ready)
         {
             auto [status, addr, read] = recvfrom(buffer);
 
             if (status.try_again())
             {
-                m_is_read_ready.store(false, std::memory_order_release);
+                // Failed to read, marking as unready and going to poll
+                m_is_read_ready = false;
             }
             else
             {
+                // Operation was successful (error is a success too)
                 co_return {status, addr, read};
             }
         }
@@ -126,7 +132,7 @@ private:
         {
             co_return {make_io_status_from_poll_status(pstatus), socket_address::make_uninitialised(), {}};
         }
-        m_is_read_ready.store(true, std::memory_order_release);
+        m_is_read_ready = true;
 
         co_return recvfrom(buffer);
     }
@@ -212,14 +218,16 @@ private:
      */
 
     /// True if the socket might have data to read.
-    /// Must only be set to false after recv() returns EAGAIN/EWOULDBLOCK.
+    /// Must be set to true after polling.
+    /// Must be set to false after recv() returns EAGAIN/EWOULDBLOCK.
     /// false by default, because the socket is usually not ready for reading on creation
-    std::atomic<bool> m_is_read_ready{false};
+    bool m_is_read_ready{false};
 
     /// True if the socket send buffer can accept data.
-    /// Must only be set to false after send() returns EAGAIN/EWOULDBLOCK.
+    /// Must be set to true after polling.
+    /// Must be set to false after send() returns EAGAIN/EWOULDBLOCK.
     /// true by default, because the socket is usually already ready for writing on creation
-    std::atomic<bool> m_is_write_ready{true};
+    bool m_is_write_ready{true};
 };
 
 } // namespace coro::net::udp
