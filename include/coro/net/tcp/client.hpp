@@ -282,8 +282,6 @@ private:
         co_return {io_status{io_status::kind::ok}, {}};
     }
 
-    // TODO: make private & rewrite test "tcp_server concurrent polling on the same socket" since it uses poll
-public:
     /**
      * Polls for the given operation on this client's tcp socket.  This should be done prior to
      * calling recv and after a send call that doesn't send the entire buffer.
