@@ -49,14 +49,14 @@ public:
         const buffer_type&        buffer,
         std::chrono::milliseconds timeout = std::chrono::milliseconds{0}) -> coro::task<io_status>
     {
-        return write_to_impl(address, std::as_bytes(std::span{buffer}), timeout);
+        co_return co_await write_to_impl(address, std::as_bytes(std::span{buffer}), timeout);
     }
 
     template<concepts::mutable_buffer buffer_type>
     auto read_from(buffer_type& buffer, std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
         -> coro::task<std::tuple<io_status, socket_address, std::span<std::byte>>>
     {
-        return read_from_impl(std::as_writable_bytes(std::span{buffer}), timeout);
+        co_return co_await read_from_impl(std::as_writable_bytes(std::span{buffer}), timeout);
     }
 
 private:

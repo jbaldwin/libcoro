@@ -70,14 +70,14 @@ public:
     auto read_some(buffer_type& buffer, const std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
         -> coro::task<std::pair<io_status, std::span<std::byte>>>
     {
-        return read_some_impl(std::as_writable_bytes(std::span{buffer}), timeout);
+        co_return co_await read_some_impl(std::as_writable_bytes(std::span{buffer}), timeout);
     }
 
     template<concepts::mutable_buffer buffer_type>
     auto read_exact(buffer_type& buffer, const std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
         -> coro::task<std::pair<io_status, std::span<std::byte>>>
     {
-        return read_exact_impl(std::as_writable_bytes(std::span{buffer}), timeout);
+        co_return co_await read_exact_impl(std::as_writable_bytes(std::span{buffer}), timeout);
     }
 
     /**
@@ -111,7 +111,7 @@ public:
     auto write_some(const buffer_type& buffer, const std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
         -> coro::task<std::pair<io_status, std::span<const std::byte>>>
     {
-        return write_some_impl(std::as_bytes(std::span{buffer}), timeout);
+        co_return co_await write_some_impl(std::as_bytes(std::span{buffer}), timeout);
     }
 
     /**
@@ -143,7 +143,7 @@ public:
     auto write_all(const buffer_type& buffer, const std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
         -> coro::task<std::pair<io_status, std::span<const std::byte>>>
     {
-        return write_all_impl(std::as_bytes(std::span{buffer}), timeout);
+        co_return co_await write_all_impl(std::as_bytes(std::span{buffer}), timeout);
     }
 
 private:
