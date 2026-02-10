@@ -11,7 +11,7 @@ TEST_CASE("Mapping native codes", "[io_status]")
             {ECONNREFUSED, coro::net::io_status::kind::connection_refused},
             {ECONNRESET, coro::net::io_status::kind::connection_reset},
             {EAGAIN, coro::net::io_status::kind::would_block_or_try_again},
-            {EMSGSIZE, coro::net::io_status::kind::message_to_big},
+            {EMSGSIZE, coro::net::io_status::kind::message_too_big},
             {123456, coro::net::io_status::kind::native} // Covers default case
         }));
 

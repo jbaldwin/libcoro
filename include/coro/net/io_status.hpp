@@ -22,7 +22,7 @@ struct io_status
         cancelled,
 
         udp_not_bound,
-        message_to_big,
+        message_too_big,
 
         native
     };

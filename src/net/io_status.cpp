@@ -78,7 +78,7 @@ auto coro::net::make_io_status_from_native(int native_code) -> coro::net::io_sta
             type = kind::would_block_or_try_again;
             break;
         case EMSGSIZE:
-            type = kind::message_to_big;
+            type = kind::message_too_big;
             break;
         default:
             type = kind::native;
@@ -129,7 +129,7 @@ auto coro::net::to_string(coro::net::io_status::kind k) -> std::string_view
             return "udp_not_bound";
         case kind::native:
             return "native";
-        case kind::message_to_big:
-            return "message_to_big";
+        case kind::message_too_big:
+            return "message_too_big";
     }
 }
