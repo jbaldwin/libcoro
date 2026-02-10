@@ -120,16 +120,16 @@ auto coro::net::to_string(coro::net::io_status::kind k) -> std::string_view
         case kind::timeout:
             return "Operation timed out";
         case kind::would_block_or_try_again:
-            return "would_block_or_try_again";
+            return "Operation would block or try again";
         case kind::polling_error:
-            return "polling_error";
+            return "Polling error";
         case kind::cancelled:
-            return "cancelled";
+            return "Operation cancelled";
         case kind::udp_not_bound:
-            return "udp_not_bound";
+            return "Udp socket is not bound";
         case kind::native:
-            return "native";
+            return "Native error code";
         case kind::message_too_big:
-            return "message_too_big";
+            return "Message is too big";
     }
 }
