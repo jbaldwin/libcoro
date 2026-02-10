@@ -22,9 +22,7 @@ class client
 {
 public:
     /**
-     * Creates a new tcp client that can connect to an ip address + port. By default, the socket
-     * created will be in non-blocking mode, meaning that any sending or receiving of data should
-     * poll for event readiness prior.
+     * Creates a new tcp client that can connect to an ip address + port.
      * @param scheduler The io scheduler to drive the tcp client.
      * @param opts See client::options for more information.
      */
@@ -44,7 +42,7 @@ public:
     /** @} */
 
     /**
-     * Connects to the address+port with the given timeout.  Once connected calling this function
+     * Connects to the address+port with the given timeout. Once connected calling this function
      * only returns the connected status, it will not reconnect.
      * @param timeout How long to wait for the connection to establish? Timeout of zero is indefinite.
      * @return The result status of trying to connect.
@@ -58,7 +56,12 @@ public:
      * status will be 'ok' and the returned span will reference the prefix of the
      * buffer that was filled with received data.
      *
+     * @note
+     *   This function is not safe to call concurrently from multiple coroutines
+     *   on the same socket.
+     *
      * @see read_exact()
+     *
      * @param buffer Destination buffer to read data into.
      * @param timeout Maximum time to wait for the socket to become readable
      *                Use 0 for infinite timeout.
@@ -77,6 +80,30 @@ public:
         co_return co_await read_some_impl(std::as_writable_bytes(std::span{buffer}), timeout);
     }
 
+    /**
+     * Asynchronously reads data from the socket into the provided buffer.
+     *
+     * This function repeatedly invokes read_some() until either:
+     * - the whole buffer is filled, or
+     * - an error or timeout occurs.
+     *
+     * The timeout is treated as a soft overall deadline for the entire operation.
+     *
+     * @note
+     *   This function is not safe to call concurrently from multiple coroutines
+     *   on the same socket.
+     *
+     * @see read_some()
+     *
+     * @param buffer
+     *        Destination buffer to read data into.
+     * @param timeout
+     *        Maximum total time allowed for the operation.
+     *        A value of 0 results in infinite timeout.
+     * @return A pair of:
+     *         - status of the operation
+     *         - span pointing to the read part of buffer
+     */
     template<concepts::mutable_buffer buffer_type>
     auto read_exact(buffer_type& buffer, const std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
         -> coro::task<std::pair<io_status, std::span<std::byte>>>

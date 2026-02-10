@@ -43,6 +43,11 @@ public:
      */
     auto socket() const noexcept -> const net::socket& { return m_socket; }
 
+    /**
+     * @param peer_info The peer to send the data to.
+     * @param buffer The data to send.
+     * @return The status of operation
+     */
     template<concepts::const_buffer buffer_type>
     auto write_to(
         const socket_address&     address,
@@ -52,6 +57,13 @@ public:
         co_return co_await write_to_impl(address, std::as_bytes(std::span{buffer}), timeout);
     }
 
+    /**
+     * @param buffer The buffer to receive data into.
+     * @return The receive status, if ok then also the peer who sent the data and the data.
+     *         The span view of the data will be set to the size of the received data, this will
+     *         always start at the beggining of the buffer but depending on how large the data was
+     *         it might not fill the entire buffer.
+     */
     template<concepts::mutable_buffer buffer_type>
     auto read_from(buffer_type& buffer, std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
         -> coro::task<std::tuple<io_status, socket_address, std::span<std::byte>>>

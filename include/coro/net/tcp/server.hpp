@@ -43,8 +43,6 @@ public:
     /**
      * Asynchronously waits for an incoming TCP connection and accepts it.
      *
-     * Use the socket.is_valid() to verify the client was correctly accepted.
-     *
      * @param timeout How long to wait for a new connection before timing out, zero waits indefinitely.
      * @return The newly connected tcp client connection on success or an io_status describing the failure.
      */
@@ -105,8 +103,7 @@ private:
     }
 
     /**
-     * Accepts an incoming tcp client connection.  On failure the tls clients socket will be set to
-     * and invalid state, use the socket.is_valid() to verify the client was correctly accepted.
+     * Accepts an incoming tcp client connection.
      * @return The newly connected tcp client connection.
      */
     auto accept_now() -> expected<coro::net::tcp::client, io_status>
