@@ -162,7 +162,7 @@ private:
 
         auto bytes_sent = ::sendto(m_socket.native_handle(), buffer.data(), buffer.size(), 0, sockaddr, socklen);
 
-        if (bytes_sent == std::ssize(buffer))
+        if (bytes_sent != -1)
         {
             return io_status{io_status::kind::ok};
         }

@@ -70,6 +70,10 @@ public:
     auto read_some(buffer_type& buffer, const std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
         -> coro::task<std::pair<io_status, std::span<std::byte>>>
     {
+        if (buffer.empty())
+        {
+            co_return {io_status{io_status::kind::ok}, {}};
+        }
         co_return co_await read_some_impl(std::as_writable_bytes(std::span{buffer}), timeout);
     }
 
@@ -77,6 +81,10 @@ public:
     auto read_exact(buffer_type& buffer, const std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
         -> coro::task<std::pair<io_status, std::span<std::byte>>>
     {
+        if (buffer.empty())
+        {
+            co_return {io_status{io_status::kind::ok}, {}};
+        }
         co_return co_await read_exact_impl(std::as_writable_bytes(std::span{buffer}), timeout);
     }
 
@@ -111,6 +119,10 @@ public:
     auto write_some(const buffer_type& buffer, const std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
         -> coro::task<std::pair<io_status, std::span<const std::byte>>>
     {
+        if (buffer.empty())
+        {
+            co_return {io_status{io_status::kind::ok}, {}};
+        }
         co_return co_await write_some_impl(std::as_bytes(std::span{buffer}), timeout);
     }
 
@@ -143,6 +155,10 @@ public:
     auto write_all(const buffer_type& buffer, const std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
         -> coro::task<std::pair<io_status, std::span<const std::byte>>>
     {
+        if (buffer.empty())
+        {
+            co_return {io_status{io_status::kind::ok}, {}};
+        }
         co_return co_await write_all_impl(std::as_bytes(std::span{buffer}), timeout);
     }
 
@@ -203,7 +219,7 @@ private:
                 remaining_timeout = timeout - elapsed;
             }
 
-            auto [status, read_span] = co_await read_some(remaining, remaining_timeout);
+            auto [status, read_span] = co_await read_some_impl(remaining, remaining_timeout);
             remaining                = remaining.subspan(read_span.size());
 
             if (!status.is_ok())
