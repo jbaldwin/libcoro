@@ -69,15 +69,18 @@ public:
      *          - status of the operation
      *          - span pointing to the read part of buffer
      */
-    template<concepts::mutable_buffer buffer_type>
+    template<
+        concepts::mutable_buffer buffer_type,
+        typename element_type = typename concepts::mutable_buffer_traits<buffer_type>::element_type>
     auto read_some(buffer_type& buffer, const std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
-        -> coro::task<std::pair<io_status, std::span<std::byte>>>
+        -> coro::task<std::pair<io_status, std::span<element_type>>>
     {
         if (buffer.empty())
         {
             co_return {io_status{io_status::kind::ok}, {}};
         }
-        co_return co_await read_some_impl(std::as_writable_bytes(std::span{buffer}), timeout);
+        auto [status, buf] = co_await read_some_impl(std::as_writable_bytes(std::span{buffer}), timeout);
+        co_return {status, std::span<element_type>{reinterpret_cast<element_type*>(buf.data()), buf.size()}};
     }
 
     /**
@@ -104,15 +107,18 @@ public:
      *         - status of the operation
      *         - span pointing to the read part of buffer
      */
-    template<concepts::mutable_buffer buffer_type>
+    template<
+        concepts::mutable_buffer buffer_type,
+        typename element_type = typename concepts::mutable_buffer_traits<buffer_type>::element_type>
     auto read_exact(buffer_type& buffer, const std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
-        -> coro::task<std::pair<io_status, std::span<std::byte>>>
+        -> coro::task<std::pair<io_status, std::span<element_type>>>
     {
         if (buffer.empty())
         {
             co_return {io_status{io_status::kind::ok}, {}};
         }
-        co_return co_await read_exact_impl(std::as_writable_bytes(std::span{buffer}), timeout);
+        auto [status, buf] = co_await read_exact_impl(std::as_writable_bytes(std::span{buffer}), timeout);
+        co_return {status, std::span<element_type>{reinterpret_cast<element_type*>(buf.data()), buf.size()}};
     }
 
     /**
@@ -142,15 +148,20 @@ public:
      *         - span pointing to the unsent portion of the buffer;
      *           empty if all data was sent successfully
      */
-    template<concepts::const_buffer buffer_type>
+    template<
+        concepts::const_buffer buffer_type,
+        typename element_type = typename concepts::const_buffer_traits<buffer_type>::element_type>
     auto write_some(const buffer_type& buffer, const std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
-        -> coro::task<std::pair<io_status, std::span<const std::byte>>>
+        -> coro::task<std::pair<io_status, std::span<element_type>>>
     {
+        static_assert(sizeof(element_type) == 1);
+
         if (buffer.empty())
         {
             co_return {io_status{io_status::kind::ok}, {}};
         }
-        co_return co_await write_some_impl(std::as_bytes(std::span{buffer}), timeout);
+        auto [status, buf] = co_await write_some_impl(std::as_bytes(std::span{buffer}), timeout);
+        co_return {status, std::span<element_type>{reinterpret_cast<element_type*>(buf.data()), buf.size()}};
     }
 
     /**
@@ -178,15 +189,20 @@ public:
      *         - span pointing to the unsent portion of the buffer;
      *           empty if all data was sent successfully
      */
-    template<concepts::const_buffer buffer_type>
+    template<
+        concepts::const_buffer buffer_type,
+        typename element_type = typename concepts::const_buffer_traits<buffer_type>::element_type>
     auto write_all(const buffer_type& buffer, const std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
-        -> coro::task<std::pair<io_status, std::span<const std::byte>>>
+        -> coro::task<std::pair<io_status, std::span<element_type>>>
     {
+        static_assert(sizeof(element_type) == 1);
+
         if (buffer.empty())
         {
             co_return {io_status{io_status::kind::ok}, {}};
         }
-        co_return co_await write_all_impl(std::as_bytes(std::span{buffer}), timeout);
+        auto [status, buf] = co_await write_all_impl(std::as_bytes(std::span{buffer}), timeout);
+        co_return {status, std::span<element_type>{reinterpret_cast<element_type*>(buf.data()), buf.size()}};
     }
 
 private:
@@ -218,8 +234,7 @@ private:
         }
         m_is_read_ready = true;
 
-        auto [status, read] = recv(buffer);
-        co_return {status, read};
+        co_return recv(buffer);
     }
 
     auto read_exact_impl(
@@ -287,8 +302,7 @@ private:
         }
         m_is_write_ready = true;
 
-        auto [status, unsent] = send(buffer);
-        co_return {status, unsent};
+        co_return send(buffer);
     }
 
     auto write_all_impl(
@@ -427,7 +441,7 @@ private:
     /// Must be set to true after polling.
     /// Must be set to false after send() returns EAGAIN/EWOULDBLOCK.
     /// true by default, because the socket is usually already ready for writing on creation
-    bool m_is_write_ready{true};
+    bool m_is_write_ready{false};
 };
 
 } // namespace coro::net::tcp
