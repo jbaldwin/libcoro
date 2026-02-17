@@ -18,6 +18,7 @@ jobs:
             { enabled: OFF, tls: OFF },
           ]
         libcoro_build_shared_libs: [OFF, ON]
+        libcoro_feature_modules: [ON]
     steps:
       - name: Install Dependencies
         run: |
@@ -47,6 +48,7 @@ jobs:
               -DLIBCORO_FEATURE_NETWORKING=${{ matrix.libcoro_feature_networking.enabled }} \
               -DLIBCORO_FEATURE_TLS=${{ matrix.libcoro_feature_networking.tls }} \
               -DLIBCORO_BUILD_SHARED_LIBS=${{ matrix.libcoro_build_shared_libs }} \
+              -DLIBCORO_FEATURE_MODULES=${{ matrix.libcoro_feature_modules }} \
               ..
           cmake --build . --config Release
       - name: Test
