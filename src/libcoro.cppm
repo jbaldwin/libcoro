@@ -100,23 +100,27 @@ using net::socket;
 // socket_address.hpp
 using net::socket_address;
 
+// net/dns/resolver.hpp
 namespace dns
 {
 using dns::resolver;
 using dns::result;
 } // namespace dns
 
+// net/tcp/*
 namespace tcp
 {
 using tcp::client;
 using tcp::server;
 } // namespace tcp
 
+// net/udp/peer.hpp
 namespace udp
 {
 using udp::peer;
 }
 
+// net/tls/*
 namespace tls
 {
 using tls::client;

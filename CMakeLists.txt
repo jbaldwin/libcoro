@@ -61,7 +61,7 @@ option(LIBCORO_CODE_COVERAGE "Enable code coverage, tests must also be enabled, 
 option(LIBCORO_BUILD_EXAMPLES "Build the examples, Default=ON." ON)
 option(LIBCORO_RUN_GITCONFIG "Set the githooks directory to auto format and update the readme, Default=OFF." OFF)
 option(LIBCORO_BUILD_SHARED_LIBS "Build shared libraries, Default=OFF." OFF)
-option(LIBCORO_ENABLE_MODULES "Enable C++ 20 modules support, Default=OFF." OFF)
+option(LIBCORO_FEATURE_MODULES "Enable C++ 20 modules support, Default=OFF." OFF)
 
 # Set the githooks directory to auto format and update the readme.
 if (LIBCORO_RUN_GITCONFIG)
@@ -87,7 +87,7 @@ message(STATUS "LIBCORO_FEATURE_NETWORKING    = ${LIBCORO_FEATURE_NETWORKING}")
 message(STATUS "LIBCORO_FEATURE_TLS           = ${LIBCORO_FEATURE_TLS}")
 message(STATUS "LIBCORO_RUN_GITCONFIG         = ${LIBCORO_RUN_GITCONFIG}")
 message(STATUS "LIBCORO_BUILD_SHARED_LIBS     = ${LIBCORO_BUILD_SHARED_LIBS}")
-message(STATUS "LIBCORO_ENABLE_MODULES        = ${LIBCORO_ENABLE_MODULES}")
+message(STATUS "LIBCORO_FEATURE_MODULES        = ${LIBCORO_FEATURE_MODULES}")
 
 if(LIBCORO_EXTERNAL_DEPENDENCIES)
     if(LIBCORO_FEATURE_NETWORKING)
@@ -233,13 +233,15 @@ if(LIBCORO_ENABLE_USAN)
     add_link_options(-fsanitize=undefined)
 endif ()
 
-if(LIBCORO_ENABLE_MODULES)
+if(LIBCORO_FEATURE_MODULES)
+    target_compile_definitions(${PROJECT_NAME} PUBLIC LIBCORO_FEATURE_MODULES)
     target_sources(${PROJECT_NAME}
         PUBLIC
             FILE_SET CXX_MODULES
             FILES
                 src/libcoro.cppm
     )
+    set(CMAKE_CXX_SCAN_FOR_MODULES ON)
 endif()
 
 target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_20)
