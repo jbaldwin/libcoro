@@ -1,4 +1,4 @@
-#ifdef LIBCORO_FEATURE_MODULES
+#ifdef LIBCORO_FEATURE_MODULES // Using modules
     #include <coroutine>
     #include <iostream>
     #include <memory>
@@ -6,7 +6,7 @@
     #include <thread>
     #include <vector>
 import libcoro;
-#else
+#else // Using headers
     #include <coro/coro.hpp>
 #endif
 
