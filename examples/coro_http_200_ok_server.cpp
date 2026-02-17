@@ -1,4 +1,10 @@
-#include <coro/coro.hpp>
+#include <coroutine>
+#include <iostream>
+#include <memory>
+#include <string>
+#include <thread>
+#include <vector>
+import libcoro;
 
 auto main() -> int
 {

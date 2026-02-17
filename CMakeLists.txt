@@ -56,11 +56,12 @@ option(LIBCORO_ENABLE_MSAN           "Build with memory sanitizer")
 option(LIBCORO_ENABLE_TSAN           "Build with thread sanitizer")
 option(LIBCORO_ENABLE_USAN           "Build with undefined sanitizer")
 option(LIBCORO_EXTERNAL_DEPENDENCIES "Use Cmake find_package to resolve dependencies instead of embedded libraries, Default=OFF." OFF)
-option(LIBCORO_BUILD_TESTS           "Build the tests, Default=ON." ON)
-option(LIBCORO_CODE_COVERAGE         "Enable code coverage, tests must also be enabled, Default=OFF" OFF)
-option(LIBCORO_BUILD_EXAMPLES        "Build the examples, Default=ON." ON)
-option(LIBCORO_RUN_GITCONFIG         "Set the githooks directory to auto format and update the readme, Default=OFF." OFF)
-option(LIBCORO_BUILD_SHARED_LIBS     "Build shared libraries, Default=OFF." OFF)
+option(LIBCORO_BUILD_TESTS "Build the tests, Default=ON." ON)
+option(LIBCORO_CODE_COVERAGE "Enable code coverage, tests must also be enabled, Default=OFF" OFF)
+option(LIBCORO_BUILD_EXAMPLES "Build the examples, Default=ON." ON)
+option(LIBCORO_RUN_GITCONFIG "Set the githooks directory to auto format and update the readme, Default=OFF." OFF)
+option(LIBCORO_BUILD_SHARED_LIBS "Build shared libraries, Default=OFF." OFF)
+option(LIBCORO_ENABLE_MODULES "Enable C++ 20 modules support, Default=OFF." OFF)
 
 # Set the githooks directory to auto format and update the readme.
 if (LIBCORO_RUN_GITCONFIG)
@@ -86,6 +87,7 @@ message(STATUS "LIBCORO_FEATURE_NETWORKING    = ${LIBCORO_FEATURE_NETWORKING}")
 message(STATUS "LIBCORO_FEATURE_TLS           = ${LIBCORO_FEATURE_TLS}")
 message(STATUS "LIBCORO_RUN_GITCONFIG         = ${LIBCORO_RUN_GITCONFIG}")
 message(STATUS "LIBCORO_BUILD_SHARED_LIBS     = ${LIBCORO_BUILD_SHARED_LIBS}")
+message(STATUS "LIBCORO_ENABLE_MODULES        = ${LIBCORO_ENABLE_MODULES}")
 
 if(LIBCORO_EXTERNAL_DEPENDENCIES)
     if(LIBCORO_FEATURE_NETWORKING)
@@ -229,6 +231,15 @@ endif()
 if(LIBCORO_ENABLE_USAN)
     add_compile_options(-g -O0 -fno-omit-frame-pointer -fsanitize=undefined)
     add_link_options(-fsanitize=undefined)
+endif ()
+
+if(LIBCORO_ENABLE_MODULES)
+    target_sources(${PROJECT_NAME}
+        PUBLIC
+            FILE_SET CXX_MODULES
+            FILES
+                src/libcoro.cppm
+    )
 endif()
 
 target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_20)
