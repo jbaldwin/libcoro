@@ -1,3 +1,7 @@
+/**
+ * Library module interface
+ */
+
 module;
 #include "coro/coro.hpp"
 
