@@ -12,6 +12,7 @@ jobs:
                 cxx_standard: [20]
                 libcoro_feature_networking: [ {enabled: ON, tls: ON}, {enabled: ON, tls: OFF}, {enabled: OFF, tls: OFF} ]
                 libcoro_build_shared_libs: [OFF, ON]
+                libcoro_feature_modules: [ON]
         container:
             image: ubuntu:22.04
             env:
@@ -53,6 +54,7 @@ jobs:
                         -DLIBCORO_FEATURE_NETWORKING=${{ matrix.libcoro_feature_networking.enabled }} \
                         -DLIBCORO_FEATURE_TLS=${{ matrix.libcoro_feature_networking.tls }} \
                         -DLIBCORO_BUILD_SHARED_LIBS=${{ matrix.libcoro_build_shared_libs }} \
+                        -DLIBCORO_FEATURE_MODULES=${{ matrix.libcoro_feature_modules }} \
                         ..
                     ninja
             -   name: Test
@@ -67,6 +69,7 @@ jobs:
                 gplusplus_version: [11, 12, 13]
                 cxx_standard: [20, 23]
                 libcoro_feature_networking: [ {enabled: ON, tls: ON}]
+                libcoro_feature_modules: [ON]
         container:
             image: ubuntu:24.04
             env:
@@ -107,6 +110,7 @@ jobs:
                         -DCMAKE_CXX_STANDARD=${{ matrix.cxx_standard }} \
                         -DLIBCORO_FEATURE_NETWORKING=${{ matrix.libcoro_feature_networking.enabled }} \
                         -DLIBCORO_FEATURE_TLS=${{ matrix.libcoro_feature_networking.tls }} \
+                        -DLIBCORO_FEATURE_MODULES=${{ matrix.libcoro_feature_modules }} \
                         ..
                     ninja
             -   name: Test
@@ -121,6 +125,7 @@ jobs:
                 clang_version: [16, 17]
                 cxx_standard: [20, 23]
                 libcoro_feature_networking: [ {enabled: ON, tls: ON}]
+                libcoro_feature_modules: [ON]
         container:
             image: ubuntu:22.04
             env:
@@ -165,6 +170,7 @@ jobs:
                         -DCMAKE_CXX_STANDARD=${{ matrix.cxx_standard }} \
                         -DLIBCORO_FEATURE_NETWORKING=${{ matrix.libcoro_feature_networking.enabled }} \
                         -DLIBCORO_FEATURE_TLS=${{ matrix.libcoro_feature_networking.tls }} \
+                        -DLIBCORO_FEATURE_MODULES=${{ matrix.libcoro_feature_modules }} \
                         ..
                     cmake --build . --config Release
             -   name: Test
