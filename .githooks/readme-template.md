@@ -640,13 +640,30 @@ If you require TLS, provide OpenSSL for the target ABI (static or shared) and se
 
 Full feature supported operating systems:
  * ubuntu:22.04, 24.04
- * fedora:37-40
+ * fedora:37-43
  * MacOS 15
  * openSUSE/leap:15.6
 
 The following systems currently do not support `LIBCORO_FEATURE_NETWORKING` or `LIBCORO_FEATURE_TLS`:
  * Windows 2022
  * Emscripten 3.1.45
+
+#### Possible issues
+
+##### Linking error
+
+If you encounter a linker error similar to the one below:
+
+```text
+_ZN4coro3net3tcp6client9read_some...Frame.destroy referenced in section .rodata.cst8 defined in discarded section .text...Frame.destroy
+```
+
+This is a known compiler/linker bug related to coroutine frame destruction.
+Update your compiler to the latest version or switch to a modern linker like mold. You can specify the linker in your
+CMake configuration:
+
+    -DCMAKE_EXE_LINKER_FLAGS="-fuse-ld=mold" \
+    -DCMAKE_SHARED_LINKER_FLAGS="-fuse-ld=mold"
 
 #### Cloning the project
 This project uses git submodules, to properly checkout this project use:

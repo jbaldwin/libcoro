@@ -28,9 +28,10 @@ public:
 
     explicit server(
         std::unique_ptr<coro::scheduler>& scheduler,
-        const net::socket_address&endpoint,
-        options                       opts = options{
-                                  .backlog = 128,
+        const net::socket_address&        endpoint,
+        options                           opts = options{
+
+            .backlog = 128,
         });
 
     server(const server&) = delete;
@@ -40,22 +41,40 @@ public:
     ~server() = default;
 
     /**
-     * Polls for new incoming tcp connections.
+     * Asynchronously waits for an incoming TCP connection and accepts it.
+     *
      * @param timeout How long to wait for a new connection before timing out, zero waits indefinitely.
-     * @return The result of the poll, 'event' means the poll was successful and there is at least 1
-     *         connection ready to be accepted.
+     * @return The newly connected tcp client connection on success or an io_status describing the failure.
      */
-    auto poll(std::chrono::milliseconds timeout = std::chrono::milliseconds{0}) -> coro::task<coro::poll_status>
+    auto accept(std::chrono::milliseconds timeout = std::chrono::milliseconds{0})
+        -> coro::task<expected<coro::net::tcp::client, io_status>>
     {
-        return m_scheduler->poll(m_accept_socket, coro::poll_op::read, timeout, m_cancel_trigger.get_token());
-    }
+        // Fast path
+        if (m_is_read_ready)
+        {
+            auto client = accept_now();
+            if (!client && client.error().try_again())
+            {
+                // Failed to read, marking as unready and goint to poll
+                m_is_read_ready = false;
+            }
+            else
+            {
+                // Operation was successful (error is a success too)
+                co_return client;
+            }
+        }
 
-    /**
-     * Accepts an incoming tcp client connection.  On failure the tls clients socket will be set to
-     * and invalid state, use the socket.is_valid() to verify the client was correctly accepted.
-     * @return The newly connected tcp client connection.
-     */
-    auto accept() -> coro::net::tcp::client;
+        // Waiting for readiness
+        auto pstatus = co_await poll(timeout);
+        if (pstatus != coro::poll_status::read)
+        {
+            co_return unexpected<io_status>{make_io_status_from_poll_status(pstatus)};
+        }
+        m_is_read_ready = true;
+
+        co_return accept_now();
+    };
 
     /**
      * @return The tcp accept socket this server is using.
@@ -72,6 +91,36 @@ public:
     }
 
 private:
+    /**
+     * Polls for new incoming tcp connections.
+     * @param timeout How long to wait for a new connection before timing out, zero waits indefinitely.
+     * @return The result of the poll, 'event' means the poll was successful and there is at least 1
+     *         connection ready to be accepted.
+     */
+    auto poll(std::chrono::milliseconds timeout = std::chrono::milliseconds{0}) -> coro::task<coro::poll_status>
+    {
+        return m_scheduler->poll(m_accept_socket, coro::poll_op::read, timeout, m_cancel_trigger.get_token());
+    }
+
+    /**
+     * Accepts an incoming tcp client connection.
+     * @return The newly connected tcp client connection.
+     */
+    auto accept_now() -> expected<coro::net::tcp::client, io_status>
+    {
+        auto client_endpoint     = socket_address::make_uninitialised();
+        auto [sockaddr, socklen] = client_endpoint.native_mutable_data();
+
+        int sock_fd = ::accept(m_accept_socket.native_handle(), sockaddr, socklen);
+        if (sock_fd == -1)
+        {
+            return unexpected<io_status>{make_io_status_from_native(errno)};
+        }
+
+        return tcp::client{m_scheduler, net::socket{sock_fd}, client_endpoint};
+    };
+
+private:
     friend client;
     /// The io scheduler for awaiting new connections.
     coro::scheduler* m_scheduler{nullptr};
@@ -81,6 +130,18 @@ private:
     net::socket m_accept_socket{-1};
     /// Stop signal to trigger a cancellation of the async accept poll operation.
     poll_stop_source m_cancel_trigger{};
+
+    /**
+     * Readiness flags for epoll Edge-Triggered (ET) mode.
+     * In ET mode, notifications are only sent when the descriptor state changes.
+     * These flags cache the readiness state to avoid unnecessary poll() calls.
+     */
+
+    /// True if the socket might have connections to accept.
+    /// Must be set to true after polling.
+    /// Must be set to false after accept() returns EAGAIN/EWOULDBLOCK.
+    /// false by default, because the socket usually has no connections to accept creation
+    bool m_is_read_ready{false};
 };
 
 } // namespace coro::net::tcp

@@ -23,8 +23,7 @@
     #include "coro/net/connect.hpp"
     #include "coro/net/hostname.hpp"
     #include "coro/net/ip_address.hpp"
-    #include "coro/net/recv_status.hpp"
-    #include "coro/net/send_status.hpp"
+    #include "coro/net/io_status.hpp"
     #include "coro/net/socket.hpp"
     #include "coro/net/udp/peer.hpp"
 #endif

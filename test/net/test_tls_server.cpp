@@ -1,5 +1,6 @@
 #include "catch_amalgamated.hpp"
 #include "catch_extensions.hpp"
+#include "catch_net_extensions.hpp"
 #include "coro/net/socket_address.hpp"
 
 #ifdef LIBCORO_FEATURE_NETWORKING
@@ -11,17 +12,17 @@
 
 TEST_CASE("tls_server hello world server", "[tls_server]")
 {
-    auto scheduler = coro::scheduler::make_unique(
-        coro::scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
+    auto scheduler =
+        coro::scheduler::make_unique(coro::scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
 
     const std::string client_msg = "Hello world from TLS client!";
     const std::string server_msg = "Hello world from TLS server!!";
     const auto        endpoint   = coro::net::socket_address{"127.0.0.1", 8080};
 
     auto make_client_task = [](std::unique_ptr<coro::scheduler>& scheduler,
-                               const std::string&                   client_msg,
-                               const std::string&                   server_msg,
-                               const coro::net::socket_address&           endpoint) -> coro::task<void>
+                               const std::string&                client_msg,
+                               const std::string&                server_msg,
+                               const coro::net::socket_address&  endpoint) -> coro::task<void>
     {
         co_await scheduler->schedule();
 
@@ -62,9 +63,9 @@ TEST_CASE("tls_server hello world server", "[tls_server]")
     };
 
     auto make_server_task = [](std::unique_ptr<coro::scheduler>& scheduler,
-                               const std::string&                   client_msg,
-                               const std::string&                   server_msg,
-                               const coro::net::socket_address&           endpoint) -> coro::task<void>
+                               const std::string&                client_msg,
+                               const std::string&                server_msg,
+                               const coro::net::socket_address&  endpoint) -> coro::task<void>
     {
         co_await scheduler->schedule();
 
@@ -86,7 +87,7 @@ TEST_CASE("tls_server hello world server", "[tls_server]")
 
         std::cerr << "server.accept()\n";
         auto client = co_await server.accept();
-        REQUIRE(client.socket().is_valid());
+        REQUIRE(client.socket().is_ok());
 
         std::string buffer;
         buffer.resize(256, '\0');

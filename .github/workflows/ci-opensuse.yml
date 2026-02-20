@@ -16,6 +16,8 @@ jobs:
         steps:
             -   name: zypper
                 run: |
+                    zypper addrepo https://download.opensuse.org/repositories/devel:tools:compiler/15.6/devel:tools:compiler.repo
+                    zypper --gpg-auto-import-keys refresh
                     zypper install -y \
                         cmake \
                         git \
@@ -23,7 +25,8 @@ jobs:
                         gcc${{ matrix.gplusplus_version }} \
                         gcc${{ matrix.gplusplus_version }}-c++ \
                         openssl \
-                        openssl-devel
+                        openssl-devel \
+                        mold
             # Cannot run higher version of checkout, node isn't backwards compatible
             -   name: Checkout
                 uses: actions/checkout@v2
@@ -44,6 +47,8 @@ jobs:
                         -DCMAKE_CXX_STANDARD=${{ matrix.cxx_standard }} \
                         -DLIBCORO_FEATURE_NETWORKING=${{ matrix.libcoro_feature_networking.enabled }} \
                         -DLIBCORO_FEATURE_TLS=${{ matrix.libcoro_feature_networking.tls }} \
+                        -DCMAKE_EXE_LINKER_FLAGS="-fuse-ld=mold" \
+                        -DCMAKE_SHARED_LINKER_FLAGS="-fuse-ld=mold" \
                         ..
                     cmake --build . --config Release
             -   name: Test

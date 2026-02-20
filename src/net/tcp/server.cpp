@@ -4,14 +4,12 @@
 
 namespace coro::net::tcp
 {
-server::server(std::unique_ptr<coro::scheduler>& scheduler, const net::socket_address&endpoint, options opts)
+server::server(std::unique_ptr<coro::scheduler>& scheduler, const net::socket_address& endpoint, options opts)
     : m_scheduler(scheduler.get()),
       m_options(std::move(opts)),
       m_accept_socket(
           net::make_accept_socket(
-              net::socket::options{socket::type_t::tcp, net::socket::blocking_t::no},
-              endpoint,
-              m_options.backlog))
+              net::socket::options{socket::type_t::tcp, net::socket::blocking_t::no}, endpoint, m_options.backlog))
 {
     if (m_scheduler == nullptr)
     {
@@ -30,21 +28,11 @@ auto server::operator=(server&& other) -> server&
 {
     if (std::addressof(other) != this)
     {
-        m_scheduler  = std::exchange(other.m_scheduler, nullptr);
+        m_scheduler     = std::exchange(other.m_scheduler, nullptr);
         m_options       = std::move(other.m_options);
         m_accept_socket = std::move(other.m_accept_socket);
     }
     return *this;
 }
-
-auto server::accept() -> coro::net::tcp::client
-{
-    auto client_endpoint = socket_address::make_uninitialised();
-    auto [sockaddr, socklen] = client_endpoint.native_mutable_data();
-
-    net::socket s{::accept(m_accept_socket.native_handle(), sockaddr, socklen)};
-
-    return tcp::client{m_scheduler, std::move(s), client_endpoint};
-};
 
 } // namespace coro::net::tcp

@@ -9,7 +9,7 @@ jobs:
         strategy:
             fail-fast: false
             matrix:
-                fedora_version: [37, 38, 39, 40]
+                fedora_version: [37, 38, 39, 40, 41, 42, 43]
                 cxx_standard: [20, 23]
                 libcoro_feature_networking: [ {enabled: ON, tls: ON} ]
                 libcoro_build_shared_libs: [OFF]
@@ -24,7 +24,8 @@ jobs:
                         ninja-build \
                         gcc-c++ \
                         openssl \
-                        openssl-devel
+                        openssl-devel \
+                        mold
             -   name: Checkout
                 uses: actions/checkout@v4
                 with:
@@ -46,6 +47,8 @@ jobs:
                         -DLIBCORO_FEATURE_NETWORKING=${{ matrix.libcoro_feature_networking.enabled }} \
                         -DLIBCORO_FEATURE_TLS=${{ matrix.libcoro_feature_networking.tls }} \
                         -DLIBCORO_BUILD_SHARED_LIBS=${{ matrix.libcoro_build_shared_libs }} \
+                        -DCMAKE_EXE_LINKER_FLAGS="-fuse-ld=mold" \
+                        -DCMAKE_SHARED_LINKER_FLAGS="-fuse-ld=mold" \
                         ..
                     cmake --build . --config Release
             -   name: Test
