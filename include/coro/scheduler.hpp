@@ -14,7 +14,6 @@
     #include "coro/net/socket.hpp"
 #endif
 
-#include <type_traits>
 #include <chrono>
 #include <functional>
 #include <map>
@@ -22,6 +21,7 @@
 #include <optional>
 #include <stop_token>
 #include <thread>
+#include <type_traits>
 #include <vector>
 
 #include <unistd.h>
@@ -151,11 +151,13 @@ public:
                 m_awaiting_coroutine = awaiting_coroutine;
                 m_scheduler.m_size.fetch_add(1, std::memory_order::release);
 
-                schedule_operation* ptr = this;
-                auto written = m_scheduler.m_schedule_pipe.write(&ptr, sizeof(schedule_operation*));
+                schedule_operation* ptr     = this;
+                auto                written = m_scheduler.m_schedule_pipe.write(&ptr, sizeof(schedule_operation*));
                 if (written != sizeof(schedule_operation*))
                 {
-                    std::cerr << "libcoro::scheduler::schedule_operation failed to write to schedule pipe, bytes written=" << written << "\n";
+                    std::cerr
+                        << "libcoro::scheduler::schedule_operation failed to write to schedule pipe, bytes written="
+                        << written << "\n";
                 }
             }
             else
@@ -170,7 +172,7 @@ public:
         auto await_resume() noexcept -> void {}
 
         std::coroutine_handle<> m_awaiting_coroutine{nullptr};
-        bool m_allocated{false};
+        bool                    m_allocated{false};
 
     private:
         /// The thread pool that this operation will execute on.
@@ -276,7 +278,8 @@ public:
      * executing the task.
      * @tparam return_type The return value of the task.
      * @param task The task to schedule on the scheduler with the given timeout.
-     * @param timeout How long should this task be given to complete before it times out?
+     * @param timeout How long should this task be given to complete before it times out? Zero or negative timeout means
+     * no timeout.
      * @return The task to await for the input task to complete.
      */
     template<typename return_type, typename rep, typename period>
@@ -292,6 +295,7 @@ public:
         {
             if constexpr (std::is_void_v<return_type>)
             {
+                co_await schedule(std::move(task));
                 co_return coro::expected<return_type, timeout_status>();
             }
             else
@@ -483,7 +487,7 @@ private:
     auto              process_events_execute(std::chrono::milliseconds timeout) -> void;
     static auto       event_to_poll_status(uint32_t events) -> poll_status;
 
-    auto                                 process_scheduled_execute_inline() -> void;
+    auto process_scheduled_execute_inline() -> void;
 
     static constexpr const int   m_shutdown_object{0};
     static constexpr const void* m_shutdown_ptr = &m_shutdown_object;

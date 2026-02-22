@@ -119,15 +119,15 @@ auto scheduler::yield_until(time_point time) -> coro::task<void>
         detail::poll_info pi{};
         add_timer_token(now + amount, pi);
         co_await pi;
-
-        m_size.fetch_sub(1, std::memory_order::release);
     }
     co_return;
 }
 
 auto scheduler::poll(
-    fd_t fd, coro::poll_op op, std::chrono::milliseconds timeout, std::optional<poll_stop_token> cancel_trigger)
-    -> coro::task<poll_status>
+    fd_t                           fd,
+    coro::poll_op                  op,
+    std::chrono::milliseconds      timeout,
+    std::optional<poll_stop_token> cancel_trigger) -> coro::task<poll_status>
 {
     // Because the size will drop when this coroutine suspends every poll needs to undo the subtraction
     // on the number of active tasks in the scheduler.  When this task is resumed by the event loop.
@@ -155,7 +155,6 @@ auto scheduler::poll(
     // onto the thread poll its possible the other type of event could trigger while its waiting
     // to execute again, thus restarting the coroutine twice, that would be quite bad.
     auto result = co_await pi;
-    m_size.fetch_sub(1, std::memory_order::release);
     co_return result;
 }
 
@@ -173,7 +172,7 @@ auto scheduler::resume(std::coroutine_handle<> handle) -> bool
 
     if (m_opts.execution_strategy == execution_strategy_t::process_tasks_inline)
     {
-        auto* schedule_op = new schedule_operation{*this};
+        auto* schedule_op        = new schedule_operation{*this};
         schedule_op->m_allocated = true;
         schedule_op->await_suspend(handle);
         return true;
@@ -191,10 +190,11 @@ auto scheduler::shutdown() noexcept -> void
     {
         // Signal the event loop to stop asap.
         const int value{1};
-        ssize_t written = ::write(m_shutdown_pipe.write_fd(), reinterpret_cast<const void*>(&value), sizeof(value));
+        ssize_t   written = ::write(m_shutdown_pipe.write_fd(), reinterpret_cast<const void*>(&value), sizeof(value));
         if (written != sizeof(value))
         {
-            std::cerr << "libcoro::scheduler::shutdown() failed to write to shutdown pipe, bytes written=" << written << "\n";
+            std::cerr << "libcoro::scheduler::shutdown() failed to write to shutdown pipe, bytes written=" << written
+                      << "\n";
         }
 
         if (m_io_thread.joinable())
@@ -229,8 +229,6 @@ auto scheduler::yield_for_internal(std::chrono::nanoseconds amount) -> coro::tas
         detail::poll_info pi{};
         add_timer_token(clock::now() + amount, pi);
         co_await pi;
-
-        m_size.fetch_sub(1, std::memory_order::release);
     }
     co_return;
 }
@@ -305,14 +303,21 @@ auto scheduler::process_events_execute(std::chrono::milliseconds timeout) -> voi
     {
         if (m_opts.execution_strategy == execution_strategy_t::process_tasks_inline)
         {
+            std::size_t resumed{0};
             for (auto& handle : m_handles_to_resume)
             {
                 handle.resume();
+                ++resumed;
+            }
+            if (resumed > 0)
+            {
+                m_size.fetch_sub(resumed, std::memory_order::release);
             }
         }
         else
         {
             m_thread_pool->resume(m_handles_to_resume);
+            m_size.fetch_sub(m_handles_to_resume.size(), std::memory_order::release);
         }
 
         m_handles_to_resume.clear();
@@ -321,13 +326,13 @@ auto scheduler::process_events_execute(std::chrono::milliseconds timeout) -> voi
 
 auto scheduler::process_scheduled_execute_inline() -> void
 {
-    std::size_t resumed{0};
     while (true)
     {
-        const constexpr std::size_t       READ_COUNT{16};
-        const constexpr ssize_t           READ_COUNT_BYTES = READ_COUNT * sizeof(schedule_operation*);
+        const constexpr std::size_t                 READ_COUNT{16};
+        const constexpr ssize_t                     READ_COUNT_BYTES = READ_COUNT * sizeof(schedule_operation*);
         std::array<schedule_operation*, READ_COUNT> ops{};
-        const ssize_t bytes_read =::read(m_schedule_pipe.read_fd(), reinterpret_cast<void*>(ops.data()), READ_COUNT_BYTES);
+        const ssize_t                               bytes_read =
+            ::read(m_schedule_pipe.read_fd(), reinterpret_cast<void*>(ops.data()), READ_COUNT_BYTES);
 
         // Error or nothing to read.
         if (bytes_read <= 0)
@@ -336,11 +341,10 @@ auto scheduler::process_scheduled_execute_inline() -> void
         }
 
         auto count = bytes_read / sizeof(schedule_operation*);
-        for (auto i = 0; i < count; ++i)
+        for (uint64_t i = 0; i < count; ++i)
         {
             auto* op = ops[i];
-            op->m_awaiting_coroutine.resume();
-            ++resumed;
+            m_handles_to_resume.emplace_back(op->m_awaiting_coroutine);
 
             if (op->m_allocated)
             {
@@ -353,11 +357,6 @@ auto scheduler::process_scheduled_execute_inline() -> void
         {
             break;
         }
-    }
-
-    if (resumed > 0)
-    {
-        m_size.fetch_sub(resumed, std::memory_order::release);
     }
 }
 

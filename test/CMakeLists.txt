@@ -4,8 +4,6 @@ project(libcoro_test)
 set(LIBCORO_TEST_SOURCE_FILES
         concepts/test_concepts.cpp
 
-        detail/test_pipe.cpp
-
         test_condition_variable.cpp
         test_event.cpp
         test_generator.cpp
@@ -34,6 +32,8 @@ endif ()
 
 if (LIBCORO_FEATURE_NETWORKING)
     list(APPEND LIBCORO_TEST_SOURCE_FILES
+            detail/test_pipe.cpp
+
             net/test_ip_address.cpp
             net/test_io_status.cpp
             net/test_endpoint.cpp

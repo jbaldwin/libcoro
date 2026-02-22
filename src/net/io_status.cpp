@@ -102,8 +102,11 @@ auto coro::net::make_io_status_from_poll_status(coro::poll_status status) -> cor
             return io_status{io_status::kind::closed};
         case poll_status::cancelled:
             return io_status{io_status::kind::cancelled};
+        default:
+            return io_status{io_status::kind::unknown};
     }
 }
+
 auto coro::net::to_string(coro::net::io_status::kind k) -> std::string_view
 {
     using kind = io_status::kind;
@@ -131,5 +134,8 @@ auto coro::net::to_string(coro::net::io_status::kind k) -> std::string_view
             return "Native error code";
         case kind::message_too_big:
             return "Message is too big";
+        case kind::unknown:
+        default:
+            return "unknown";
     }
 }
