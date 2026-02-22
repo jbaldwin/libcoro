@@ -150,26 +150,12 @@ public:
             {
                 m_awaiting_coroutine = awaiting_coroutine;
                 m_scheduler.m_size.fetch_add(1, std::memory_order::release);
-                coro::detail::awaiter_list_push(m_scheduler.m_scheduled_tasks, this);
-                // {
-                    // std::scoped_lock lk{m_scheduler.m_scheduled_tasks_mutex};
-                    // m_scheduler.m_scheduled_tasks.emplace_back(awaiting_coroutine);
-                // }
 
-                // Trigger the event to wake-up the scheduler if this event isn't currently triggered.
-                bool expected{false};
-                if (m_scheduler.m_schedule_pipe_triggered.compare_exchange_strong(
-                        expected, true, std::memory_order::release, std::memory_order::relaxed))
+                schedule_operation* ptr = this;
+                auto written = m_scheduler.m_schedule_pipe.write(&ptr, sizeof(schedule_operation*));
+                if (written != sizeof(schedule_operation*))
                 {
-                    constexpr int control = 1;
-                    ssize_t written = ::write(
-                        m_scheduler.m_schedule_pipe.write_fd(),
-                        reinterpret_cast<const void*>(&control),
-                        sizeof(control));
-                    if (written != sizeof(control))
-                    {
-                        std::cerr << "libcoro::scheduler::schedule_operation failed to write to schedule pipe, bytes written=" << written << "\n";
-                    }
+                    std::cerr << "libcoro::scheduler::schedule_operation failed to write to schedule pipe, bytes written=" << written << "\n";
                 }
             }
             else
@@ -183,7 +169,6 @@ public:
          */
         auto await_resume() noexcept -> void {}
 
-        schedule_operation* m_next{nullptr};
         std::coroutine_handle<> m_awaiting_coroutine{nullptr};
         bool m_allocated{false};
 
@@ -499,9 +484,6 @@ private:
     static auto       event_to_poll_status(uint32_t events) -> poll_status;
 
     auto                                 process_scheduled_execute_inline() -> void;
-    // std::mutex                           m_scheduled_tasks_mutex{};
-    // std::vector<std::coroutine_handle<>> m_scheduled_tasks{};
-    std::atomic<schedule_operation*> m_scheduled_tasks{nullptr};
 
     static constexpr const int   m_shutdown_object{0};
     static constexpr const void* m_shutdown_ptr = &m_shutdown_object;

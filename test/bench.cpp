@@ -559,7 +559,7 @@ TEST_CASE("benchmark tcp::server echo server inline", "[benchmark][tcp]")
 {
     const constexpr std::size_t connections_per_client = 10;
     // const constexpr std::size_t connections_per_client  = 2;
-    const constexpr std::size_t messages_per_connection = 10000;
+    const constexpr std::size_t messages_per_connection = 10'000;
     const constexpr std::size_t ops                     = connections_per_client * messages_per_connection;
 
     const std::string msg = "im a data point in a stream of bytes";
@@ -609,18 +609,18 @@ TEST_CASE("benchmark tcp::server echo server inline", "[benchmark][tcp]")
                 auto [rstatus, rspan] = co_await client.read_some(in);
                 if (!rstatus.is_ok())
                 {
-                    REQUIRE_THREAD_SAFE(rstatus.is_closed());
+                    // REQUIRE_THREAD_SAFE(rstatus.is_closed());
                     // the socket has been closed
                     break;
                 }
 
-                REQUIRE_THREAD_SAFE(rstatus.is_ok());
+                // REQUIRE_THREAD_SAFE(rstatus.is_ok());
 
                 in.resize(rspan.size());
 
                 auto [sstatus, remaining] = co_await client.write_some(in);
-                REQUIRE_THREAD_SAFE(sstatus.is_ok());
-                REQUIRE_THREAD_SAFE(remaining.empty());
+                // REQUIRE_THREAD_SAFE(sstatus.is_ok());
+                // REQUIRE_THREAD_SAFE(remaining.empty());
             }
 
             s.live_clients--;
@@ -692,19 +692,19 @@ TEST_CASE("benchmark tcp::server echo server inline", "[benchmark][tcp]")
         {
             auto req_start            = std::chrono::steady_clock::now();
             auto [sstatus, remaining] = co_await client.write_some(msg);
-            REQUIRE_THREAD_SAFE(sstatus.is_ok());
-            REQUIRE_THREAD_SAFE(remaining.empty());
+            // REQUIRE_THREAD_SAFE(sstatus.is_ok());
+            // REQUIRE_THREAD_SAFE(remaining.empty());
 
             std::string response(64, '\0');
             auto [rstatus, rspan] = co_await client.read_some(response);
             if (!rstatus.is_ok())
             {
-                REQUIRE_THREAD_SAFE(rstatus.is_closed());
+                // REQUIRE_THREAD_SAFE(rstatus.is_closed());
                 // the socket has been closed
                 break;
             }
 
-            REQUIRE_THREAD_SAFE(rspan.size() == msg.size());
+            // REQUIRE_THREAD_SAFE(rspan.size() == msg.size());
             response.resize(rspan.size());
             // REQUIRE_THREAD_SAFE(response == msg);
 

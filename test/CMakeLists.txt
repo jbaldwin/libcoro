@@ -4,6 +4,8 @@ project(libcoro_test)
 set(LIBCORO_TEST_SOURCE_FILES
         concepts/test_concepts.cpp
 
+        detail/test_pipe.cpp
+
         test_condition_variable.cpp
         test_event.cpp
         test_generator.cpp
