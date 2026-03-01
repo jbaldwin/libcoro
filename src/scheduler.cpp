@@ -326,36 +326,33 @@ auto scheduler::process_events_execute(std::chrono::milliseconds timeout) -> voi
 
 auto scheduler::process_scheduled_execute_inline() -> void
 {
-    while (true)
+    // This could pull until the pipe is drained, however we want to pull a discreet
+    // amount of work on each pass, 16 tasks should be a good chunk to pull each time.
+    // Pulling until the pipe is drained could result in infinite growth if scheduling
+    // of tasks is faster than this scheduler can pull.
+
+    const constexpr std::size_t                 READ_COUNT{16};
+    const constexpr ssize_t                     READ_COUNT_BYTES = READ_COUNT * sizeof(schedule_operation*);
+    std::array<schedule_operation*, READ_COUNT> ops{};
+    const ssize_t bytes_read = m_schedule_pipe.read(reinterpret_cast<void*>(ops.data()), READ_COUNT_BYTES);
+
+    // Error or nothing to read.
+    if (bytes_read <= 0)
     {
-        const constexpr std::size_t                 READ_COUNT{16};
-        const constexpr ssize_t                     READ_COUNT_BYTES = READ_COUNT * sizeof(schedule_operation*);
-        std::array<schedule_operation*, READ_COUNT> ops{};
-        const ssize_t                               bytes_read =
-            ::read(m_schedule_pipe.read_fd(), reinterpret_cast<void*>(ops.data()), READ_COUNT_BYTES);
+        return;
+    }
 
-        // Error or nothing to read.
-        if (bytes_read <= 0)
+    auto count = bytes_read / sizeof(schedule_operation*);
+    for (uint64_t i = 0; i < count; ++i)
+    {
+        auto* op = ops[i];
+        m_handles_to_resume.emplace_back(op->m_awaiting_coroutine);
+
+        // Concern: the coroutine isn't resumed until it returns in the prior
+        // function, should this delete be moved there as well?
+        if (op->m_allocated)
         {
-            break;
-        }
-
-        auto count = bytes_read / sizeof(schedule_operation*);
-        for (uint64_t i = 0; i < count; ++i)
-        {
-            auto* op = ops[i];
-            m_handles_to_resume.emplace_back(op->m_awaiting_coroutine);
-
-            if (op->m_allocated)
-            {
-                delete op;
-            }
-        }
-
-        // If the buffer isn't full break out, nothing more to read for now.
-        if (bytes_read < READ_COUNT_BYTES)
-        {
-            break;
+            delete op;
         }
     }
 }

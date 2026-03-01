@@ -1,6 +1,5 @@
 #pragma once
 
-#include "coro/detail/awaiter_list.hpp"
 #include "coro/detail/pipe.hpp"
 #include "coro/detail/poll_info.hpp"
 #include "coro/detail/timer_handle.hpp"
