@@ -326,10 +326,8 @@ auto scheduler::process_events_execute(std::chrono::milliseconds timeout) -> voi
 
 auto scheduler::process_scheduled_execute_inline() -> void
 {
-    // Acquire the entire list, and then reset it.
-    auto* ops = detail::awaiter_list_pop_all(m_scheduled_ops);
-
-    // Clear the notification by reading until the pipe is cleared.
+    // Clear the notification by reading until the pipe is cleared, this is done before
+    // resetting the flag that writes to the pipe need to happen.
     while (true)
     {
         constexpr std::size_t       READ_COUNT{4};
@@ -359,7 +357,11 @@ auto scheduler::process_scheduled_execute_inline() -> void
         break;
     }
 
+    // Note to all producers that the pipe is cleared and any new additions need to trigger the pipe.
     m_schedule_pipe_triggered.exchange(false, std::memory_order::release);
+
+    // Now it is safe to acquire all scheduled ops.
+    auto* ops = detail::awaiter_list_pop_all(m_scheduled_ops);
 
     if (ops != nullptr)
     {
