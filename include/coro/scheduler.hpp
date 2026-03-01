@@ -150,9 +150,12 @@ public:
                 m_awaiting_coroutine = awaiting_coroutine;
                 m_scheduler.m_size.fetch_add(1, std::memory_order::release);
 
-                schedule_operation* ptr     = this;
-                auto                written = m_scheduler.m_schedule_pipe.write(&ptr, sizeof(schedule_operation*));
-                if (written != sizeof(schedule_operation*))
+                // schedule_operation* ptr     = this;
+                // auto                written = m_scheduler.m_schedule_pipe.write(&ptr, sizeof(schedule_operation*));
+                // if (written != sizeof(schedule_operation*))
+
+                auto written = m_scheduler.m_schedule_pipe.write(&awaiting_coroutine, sizeof(std::coroutine_handle<>));
+                if (written != sizeof(std::coroutine_handle<>))
                 {
                     std::cerr
                         << "libcoro::scheduler::schedule_operation failed to write to schedule pipe, bytes written="
