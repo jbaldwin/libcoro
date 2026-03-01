@@ -139,6 +139,8 @@ set(LIBCORO_SOURCE_FILES
     include/coro/time.hpp
     include/coro/when_all.hpp
     include/coro/when_any.hpp
+
+    include/coro/ranges/socket_stream.hpp
 )
 
 if(LIBCORO_FEATURE_NETWORKING)

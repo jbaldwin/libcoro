@@ -22,6 +22,7 @@ set(LIBCORO_TEST_SOURCE_FILES
 
         catch_amalgamated.hpp catch_amalgamated.cpp
         catch_extensions.hpp catch_extensions.cpp
+        test_ranges.cpp
 )
 
 if (NOT EMSCRIPTEN)
