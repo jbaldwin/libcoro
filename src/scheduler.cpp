@@ -172,11 +172,9 @@ auto scheduler::resume(std::coroutine_handle<> handle) -> bool
 
     if (m_opts.execution_strategy == execution_strategy_t::process_tasks_inline)
     {
-        // auto* schedule_op        = new schedule_operation{*this};
-        // schedule_op->m_allocated = true;
-        // schedule_op->await_suspend(handle);
-        schedule_operation op{*this};
-        op.await_suspend(handle);
+        auto* schedule_op        = new schedule_operation{*this};
+        schedule_op->m_allocated = true;
+        schedule_op->await_suspend(handle);
         return true;
     }
     else
@@ -191,8 +189,8 @@ auto scheduler::shutdown() noexcept -> void
     if (m_shutdown_requested.exchange(true, std::memory_order::acq_rel) == false)
     {
         // Signal the event loop to stop asap.
-        const int value{1};
-        ssize_t   written = ::write(m_shutdown_pipe.write_fd(), reinterpret_cast<const void*>(&value), sizeof(value));
+        const constexpr int value{1};
+        ssize_t             written = m_shutdown_pipe.write(&value, sizeof(value));
         if (written != sizeof(value))
         {
             std::cerr << "libcoro::scheduler::shutdown() failed to write to shutdown pipe, bytes written=" << written
@@ -328,27 +326,57 @@ auto scheduler::process_events_execute(std::chrono::milliseconds timeout) -> voi
 
 auto scheduler::process_scheduled_execute_inline() -> void
 {
-    // This could pull until the pipe is drained, however we want to pull a discreet
-    // amount of work on each pass, 16 tasks should be a good chunk to pull each time.
-    // Pulling until the pipe is drained could result in infinite growth if scheduling
-    // of tasks is faster than this scheduler can pull.
+    // Acquire the entire list, and then reset it.
+    auto* ops = detail::awaiter_list_pop_all(m_scheduled_ops);
 
-    const constexpr std::size_t READ_COUNT{16};
-    const constexpr ssize_t     READ_COUNT_BYTES = READ_COUNT * sizeof(std::coroutine_handle<>);
-
-    std::array<std::coroutine_handle<>, READ_COUNT> ops{};
-    const ssize_t                                   bytes_read = m_schedule_pipe.read(ops.data(), READ_COUNT_BYTES);
-
-    // Error or nothing to read.
-    if (bytes_read <= 0)
+    // Clear the notification by reading until the pipe is cleared.
+    while (true)
     {
-        return;
+        constexpr std::size_t       READ_COUNT{4};
+        constexpr ssize_t           READ_COUNT_BYTES = READ_COUNT * sizeof(int);
+        std::array<int, READ_COUNT> control{};
+        const ssize_t               read_bytes = m_schedule_pipe.read(control.data(), READ_COUNT_BYTES);
+        if (read_bytes == READ_COUNT_BYTES)
+        {
+            continue;
+        }
+
+        // If we got nothing, or we got a partial read break the loop since the pipe is empty.
+        if (read_bytes >= 0)
+        {
+            break;
+        }
+
+        // pipe is set to O_NONBLOCK so ignore empty blocking reads.
+        if (errno == EAGAIN)
+        {
+            break;
+        }
+
+        // Not much we can do here, we're in a very bad state, lets report to stderr.
+        std::cerr << "::read(m_schedule_pipe.read_fd()) error[" << errno << "] " << ::strerror(errno) << " fd=["
+                  << m_schedule_pipe.read_fd() << "]" << std::endl;
+        break;
     }
 
-    auto count = bytes_read / sizeof(std::coroutine_handle<>);
-    for (uint64_t i = 0; i < count; ++i)
+    m_schedule_pipe_triggered.exchange(false, std::memory_order::release);
+
+    if (ops != nullptr)
     {
-        m_handles_to_resume.emplace_back(ops[i]);
+        ops = detail::awaiter_list_reverse(ops);
+
+        while (ops != nullptr)
+        {
+            auto* next = ops->m_next;
+            m_handles_to_resume.emplace_back(ops->m_awaiting_coroutine);
+
+            if (ops->m_allocated)
+            {
+                delete ops;
+            }
+
+            ops = next;
+        }
     }
 }
 

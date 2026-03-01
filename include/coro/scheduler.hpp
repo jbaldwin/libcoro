@@ -1,5 +1,6 @@
 #pragma once
 
+#include "coro/detail/awaiter_list.hpp"
 #include "coro/detail/pipe.hpp"
 #include "coro/detail/poll_info.hpp"
 #include "coro/detail/timer_handle.hpp"
@@ -148,13 +149,22 @@ public:
             if (m_scheduler.m_opts.execution_strategy == execution_strategy_t::process_tasks_inline)
             {
                 m_scheduler.m_size.fetch_add(1, std::memory_order::release);
+                m_awaiting_coroutine = awaiting_coroutine;
+                detail::awaiter_list_push(m_scheduler.m_scheduled_ops, this);
 
-                auto written = m_scheduler.m_schedule_pipe.write(&awaiting_coroutine, sizeof(std::coroutine_handle<>));
-                if (written != sizeof(std::coroutine_handle<>))
+                // Trigger the event to wake-up the scheduler if this event isn't currently triggered.
+                bool expected{false};
+                if (m_scheduler.m_schedule_pipe_triggered.compare_exchange_strong(
+                        expected, true, std::memory_order::release, std::memory_order::relaxed))
                 {
-                    std::cerr
-                        << "libcoro::scheduler::schedule_operation failed to write to schedule pipe, bytes written="
-                        << written << "\n";
+                    constexpr int control = 1;
+                    ssize_t       written = m_scheduler.m_schedule_pipe.write(&control, sizeof(control));
+                    if (written != sizeof(control))
+                    {
+                        std::cerr
+                            << "libcoro::scheduler::schedule_operation failed to write to schedule pipe, bytes written="
+                            << written << "\n";
+                    }
                 }
             }
             else
@@ -167,6 +177,10 @@ public:
          * no-op as this is the function called first by the thread pool's executing thread.
          */
         auto await_resume() noexcept -> void {}
+
+        std::coroutine_handle<> m_awaiting_coroutine;
+        schedule_operation*     m_next{nullptr};
+        bool                    m_allocated{false};
 
     private:
         /// The thread pool that this operation will execute on.
@@ -455,6 +469,10 @@ private:
     detail::pipe_t m_shutdown_pipe{};
     /// The event loop schedule task pipe.
     detail::pipe_t m_schedule_pipe{};
+    /// @brief Scheduled operations waiting tasks has entries.
+    std::atomic<bool> m_schedule_pipe_triggered{false};
+    /// @brief Scheduled operations waiting to be resumed.
+    std::atomic<schedule_operation*> m_scheduled_ops{nullptr};
 
     /// The number of tasks executing or awaiting events in this io scheduler.
     std::atomic<std::size_t> m_size{0};
