@@ -460,8 +460,7 @@ private:
     /// The event loop pipe to trigger a shutdown.
     detail::pipe_t m_shutdown_pipe{};
     /// The event loop schedule task pipe.
-    detail::pipe_t    m_schedule_pipe{};
-    std::atomic<bool> m_schedule_pipe_triggered{false};
+    detail::pipe_t m_schedule_pipe{};
 
     /// The number of tasks executing or awaiting events in this io scheduler.
     std::atomic<std::size_t> m_size{0};
