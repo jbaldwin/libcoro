@@ -1,4 +1,5 @@
 #include "coro/ranges/join.hpp"
+#include "coro/ranges/transform.hpp"
 #include <catch_amalgamated.hpp>
 #include <coro/coro.hpp>
 #include <coro/ranges/socket_stream.hpp>
@@ -38,16 +39,14 @@ TEST_CASE("", "[async_ranges]")
         std::cerr << "client: connected\n";
 
         auto result = co_await (
-            coro::ranges::to_chunked_stream(client) | coro::ranges::join() |
-            coro::ranges::take_until([](auto f) -> bool { return static_cast<char>(f) == '0'; }) |
-            coro::ranges::to<std::vector<std::byte>>);
+            coro::ranges::to_chunked_stream(client) | coro::ranges::join |
+            coro::ranges::transform([](auto f) { return static_cast<char>(f); }) |
+            coro::ranges::take_until([](auto f) { return static_cast<char>(f) == '0'; }) |
+            coro::ranges::to<std::string>);
 
         std::cerr << "client: received data\n";
 
-        for (auto&& b : result)
-        {
-            std::cerr << static_cast<int>(b) << ' ';
-        }
+        std::cerr << result << ' ';
     };
 
     coro::sync_wait(coro::when_all(server_task(scheduler), client_task(scheduler)));
