@@ -143,9 +143,9 @@ set(LIBCORO_SOURCE_FILES
     include/coro/ranges/socket_stream.hpp # TODO: move to network sources
     include/coro/ranges/utils.hpp
     include/coro/ranges/take_until.hpp
-    include/coro/ranges/error_policy.hpp
     include/coro/ranges/to.hpp
     include/coro/ranges/join.hpp
+        include/coro/ranges/transform.hpp
 )
 
 if(LIBCORO_FEATURE_NETWORKING)
