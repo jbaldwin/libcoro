@@ -11,7 +11,8 @@ class join_view
 private:
     using awaiter_type = concepts::async_stream_awaiter_t<previous_stream_t>;
     using container_t  = concepts::async_stream_value_t<previous_stream_t>;
-    using value_t      = typename container_t::value_type;
+
+    using reference_t = decltype(std::declval<container_t&>()[0]);
 
     static_assert(std::ranges::sized_range<container_t>);
 
@@ -35,6 +36,7 @@ public:
             // Looping until it's not empty
             if (m_value->size() > 0)
             {
+                m_cursor = 0;
                 co_return true;
             }
         }
@@ -42,7 +44,7 @@ public:
         co_return false;
     }
 
-    auto get_value() noexcept -> value_t { return std::move((*m_value)[m_cursor]); }
+    auto get_value() noexcept -> reference_t { return std::move((*m_value)[m_cursor]); }
 
 private:
     previous_stream_t m_prev_stream;
@@ -58,9 +60,7 @@ struct _join
     {
         return join_view{std::forward<Rng>(rng)};
     }
-
-    constexpr auto operator()() const { return _partial<_join>{0}; }
 };
 
-inline constexpr _join join;
+inline constexpr auto join = _partial<_join>{0};
 } // namespace coro::ranges
