@@ -12,7 +12,7 @@ private:
     using awaiter_type = concepts::async_stream_awaiter_t<previous_stream_t>;
 
 public:
-    constexpr transform_view(previous_stream_t&& prev_stream, transform_fn&& transform)
+    constexpr transform_view(previous_stream_t prev_stream, transform_fn transform)
         : m_prev_stream(std::forward<previous_stream_t>(prev_stream)),
           m_transform(std::forward<transform_fn>(transform))
     {

@@ -14,7 +14,7 @@ private:
     using value_type = std::remove_reference_t<concepts::async_stream_value_t<previous_stream_t>>;
 
 public:
-    constexpr take_until_view(previous_stream_t&& prev_stream, Pred&& pred)
+    constexpr take_until_view(previous_stream_t prev_stream, Pred pred)
         : m_prev_stream(std::forward<previous_stream_t>(prev_stream)),
           m_pred(std::forward<Pred>(pred))
     {

@@ -17,9 +17,7 @@ private:
     static_assert(std::ranges::sized_range<container_t>);
 
 public:
-    constexpr join_view(previous_stream_t&& prev_stream) : m_prev_stream(std::forward<previous_stream_t>(prev_stream))
-    {
-    }
+    constexpr join_view(previous_stream_t prev_stream) : m_prev_stream(std::forward<previous_stream_t>(prev_stream)) {}
 
     auto advance() -> awaiter_type
     {
