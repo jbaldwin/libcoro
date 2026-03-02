@@ -9,7 +9,9 @@ class take_until_view
 {
 private:
     using awaiter_type = concepts::async_stream_awaiter_t<previous_stream_t>;
-    using value_type   = concepts::async_stream_value_t<previous_stream_t>;
+
+    // std::optional doesn't support reference
+    using value_type = std::remove_reference_t<concepts::async_stream_value_t<previous_stream_t>>;
 
 public:
     constexpr take_until_view(previous_stream_t&& prev_stream, Pred&& pred)
@@ -54,7 +56,7 @@ private:
 struct _take_until
 {
     template<concepts::async_streamable Rng, typename Pred>
-    constexpr auto operator()(Rng&& rng, Pred&& pred)
+    constexpr auto operator()(Rng&& rng, Pred&& pred) const
     {
         return take_until_view{std::forward<Rng>(rng), std::forward<Pred>(pred)};
     }
