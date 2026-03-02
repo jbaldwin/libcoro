@@ -24,7 +24,7 @@ TEST_CASE("", "[async_ranges]")
             throw std::runtime_error(client.error().message());
         }
 
-        std::string data{"Hello!"};
+        std::string data{"Hello!\0 Hidden"};
         co_await client->write_all(data);
         std::cerr << "server: sent message\n";
     };
@@ -37,20 +37,14 @@ TEST_CASE("", "[async_ranges]")
         co_await client.connect();
         std::cerr << "client: connected\n";
 
-        auto data_task = coro::ranges::to_stream(client) | coro::ranges::join() |
-                         coro::ranges::take_until([](auto f) -> bool { return false; }) |
-                         coro::ranges::to<std::vector<std::byte>>;
+        auto result = co_await (
+            coro::ranges::to_chunked_stream(client) | coro::ranges::join() |
+            coro::ranges::take_until([](auto f) -> bool { return static_cast<char>(f) == '0'; }) |
+            coro::ranges::to<std::vector<std::byte>>);
 
-        auto data = co_await data_task;
         std::cerr << "client: received data\n";
 
-        std::cerr << "Size: " << data.size() << '\n';
-
-        //        auto custom_socket = coro::ranges::to_stream(client1)
-        //                             | coro::ranges::transform(some_encryption_func)
-        //                             | coro::ranges::to_socket();
-
-        for (auto&& b : data)
+        for (auto&& b : result)
         {
             std::cerr << static_cast<int>(b) << ' ';
         }

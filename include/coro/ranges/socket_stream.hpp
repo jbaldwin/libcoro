@@ -40,12 +40,13 @@ private:
     std::size_t             m_current_size{};
 };
 
-auto to_stream(coro::net::tcp::client& client, std::size_t buffer_size = 4096) -> socket_stream<std::vector<std::byte>>
+auto to_chunked_stream(coro::net::tcp::client& client, std::size_t buffer_size = 4096)
+    -> socket_stream<std::vector<std::byte>>
 {
     return socket_stream{client, std::vector<std::byte>{buffer_size}};
 }
 
-auto to_stream(coro::net::tcp::client& client, std::span<std::byte> external_buffer)
+auto to_chunked_stream(coro::net::tcp::client& client, std::span<std::byte> external_buffer)
     -> socket_stream<std::span<std::byte>>
 {
     return socket_stream{client, std::move(external_buffer)};
