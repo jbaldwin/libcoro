@@ -1,6 +1,9 @@
+#include "coro/ranges/join.hpp"
 #include <catch_amalgamated.hpp>
 #include <coro/coro.hpp>
 #include <coro/ranges/socket_stream.hpp>
+#include <coro/ranges/take_until.hpp>
+#include <coro/ranges/to.hpp>
 #include <iostream>
 
 TEST_CASE("", "[async_ranges]")
@@ -34,14 +37,18 @@ TEST_CASE("", "[async_ranges]")
         co_await client.connect();
         std::cerr << "client: connected\n";
 
-        auto data_task = coro::ranges::to_stream(client) |
-                         coro::ranges::take_until([](auto f) -> bool { return static_cast<int>(f) == 0; }) |
-                         coro::ranges::to_vector;
+        auto data_task = coro::ranges::to_stream(client) | coro::ranges::join() |
+                         coro::ranges::take_until([](auto f) -> bool { return false; }) |
+                         coro::ranges::to<std::vector<std::byte>>;
 
         auto data = co_await data_task;
         std::cerr << "client: received data\n";
 
         std::cerr << "Size: " << data.size() << '\n';
+
+        //        auto custom_socket = coro::ranges::to_stream(client1)
+        //                             | coro::ranges::transform(some_encryption_func)
+        //                             | coro::ranges::to_socket();
 
         for (auto&& b : data)
         {

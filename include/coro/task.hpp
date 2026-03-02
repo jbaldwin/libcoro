@@ -230,11 +230,10 @@ private:
 
 } // namespace detail
 
-template<typename return_type_>
+template<typename return_type>
 class [[nodiscard]] task
 {
 public:
-    using return_type      = return_type_;
     using task_type        = task<return_type>;
     using promise_type     = detail::promise<return_type>;
     using coroutine_handle = std::coroutine_handle<promise_type>;
