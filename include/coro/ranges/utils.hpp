@@ -1,5 +1,7 @@
 #pragma once
 #include "coro/concepts/awaitable.hpp"
+#include "coro/task.hpp"
+#include <ranges>
 #include <tuple>
 #include <type_traits>
 
@@ -46,16 +48,19 @@ struct _partial : public concepts::_async_adaptor
 {
     std::tuple<Args...> m_args;
 
-    constexpr _partial(int, Args&&... args) : m_args(std::forward<Args>(args)...) {}
+    template<typename... ConstructorArgs>
+    constexpr explicit _partial(int, ConstructorArgs&&... args) : m_args(std::forward<ConstructorArgs>(args)...)
+    {
+    }
 
-    template<concepts::async_streamable range_t>
+    template<class range_t>
     constexpr auto operator()(range_t&& range) const&
     {
         auto forwarder = [&range](const auto&... args) { return Adaptor{}(std::forward<range_t>(range), args...); };
         return std::apply(forwarder, m_args);
     }
 
-    template<concepts::async_streamable range_t>
+    template<class range_t>
     constexpr auto operator()(range_t&& range) &&
     {
         auto forwarder = [&range](auto&... args)
@@ -63,13 +68,53 @@ struct _partial : public concepts::_async_adaptor
         return std::apply(forwarder, m_args);
     }
 
-    template<concepts::async_streamable range_t>
+    template<class range_t>
     constexpr auto operator()(range_t&& range) const&& = delete;
 };
 
-template<concepts::async_adaptor Adaptor, class Range>
+template<class Range, concepts::async_adaptor Adaptor>
 constexpr auto operator|(Range&& rng, Adaptor&& partial)
 {
     return std::forward<Adaptor>(partial)(std::forward<Range>(rng));
+}
+
+template<class Range, concepts::async_adaptor Adaptor>
+constexpr auto operator|(const Range& rng, Adaptor&& partial)
+{
+    return std::forward<Adaptor>(partial)(rng);
+}
+
+template<std::ranges::range Range>
+class sync_stream
+{
+public:
+    explicit constexpr sync_stream(Range range) : m_range(std::forward<Range>(range)), m_it(std::begin(m_range)) {}
+
+    auto advance() -> coro::task<bool>
+    {
+        if (m_it == std::end(m_range))
+        {
+            co_return false;
+        }
+        if (!m_first)
+        {
+            ++m_it;
+        }
+        m_first = false;
+        co_return m_it != std::end(m_range);
+    }
+
+    auto get_value() noexcept -> decltype(auto) { return *m_it; }
+
+private:
+    Range                          m_range;
+    std::ranges::iterator_t<Range> m_it;
+    bool                           m_first{true};
+};
+
+template<std::ranges::range Range, concepts::async_adaptor Adaptor>
+constexpr auto operator|(Range&& rng, Adaptor&& partial)
+{
+    return std::forward<Adaptor>(partial)(sync_stream{std::forward<Range>(rng)});
 }
 } // namespace coro::ranges

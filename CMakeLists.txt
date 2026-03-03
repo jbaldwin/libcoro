@@ -140,12 +140,14 @@ set(LIBCORO_SOURCE_FILES
     include/coro/when_all.hpp
     include/coro/when_any.hpp
 
-    include/coro/ranges/socket_stream.hpp # TODO: move to network sources
     include/coro/ranges/utils.hpp
     include/coro/ranges/take_until.hpp
     include/coro/ranges/to.hpp
     include/coro/ranges/join.hpp
-        include/coro/ranges/transform.hpp
+    include/coro/ranges/transform.hpp
+    include/coro/ranges/await.hpp
+    include/coro/ranges/drain.hpp
+    include/coro/ranges/take.hpp
 )
 
 if(LIBCORO_FEATURE_NETWORKING)
@@ -158,6 +160,8 @@ if(LIBCORO_FEATURE_NETWORKING)
         include/coro/scheduler.hpp src/scheduler.cpp
         include/coro/io_notifier.hpp
         include/coro/poll.hpp src/poll.cpp
+
+        include/coro/ranges/socket_stream.hpp
     )
 
     if(LINUX)

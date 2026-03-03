@@ -22,7 +22,6 @@ set(LIBCORO_TEST_SOURCE_FILES
 
         catch_amalgamated.hpp catch_amalgamated.cpp
         catch_extensions.hpp catch_extensions.cpp
-        test_ranges.cpp
 )
 
 if (NOT EMSCRIPTEN)
@@ -46,6 +45,8 @@ if (LIBCORO_FEATURE_NETWORKING)
             net/test_tcp_server.cpp
             net/test_tls_server.cpp
             net/test_udp_peers.cpp
+
+            test_ranges.cpp
     )
 endif ()
 

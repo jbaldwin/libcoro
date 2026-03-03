@@ -42,7 +42,7 @@ public:
         co_return false;
     }
 
-    auto get_value() noexcept -> reference_t { return std::move((*m_value)[m_cursor]); }
+    auto get_value() noexcept -> reference_t { return (*m_value)[m_cursor]; }
 
 private:
     previous_stream_t m_prev_stream;
