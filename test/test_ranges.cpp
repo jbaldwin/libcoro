@@ -1,3 +1,4 @@
+#include "catch_extensions.hpp"
 #include "coro/ranges/await.hpp"
 #include "coro/ranges/drain.hpp"
 #include "coro/ranges/join.hpp"
@@ -19,11 +20,11 @@ auto make_server_task(
     auto server = coro::net::tcp::server(scheduler, address);
 
     auto client = co_await server.accept();
-    REQUIRE(client);
+    REQUIRE_THREAD_SAFE(client);
     std::cerr << "server: accepted\n";
 
     auto [wstatus, written] = co_await client->write_all(message);
-    REQUIRE_THAT(wstatus, IsOk());
+    REQUIRE_THAT_THREAD_SAFE(wstatus, IsOk());
     std::cerr << "server: sent message\n";
 }
 
@@ -35,8 +36,10 @@ auto make_client_stream(std::unique_ptr<coro::scheduler>& scheduler, const coro:
     co_await scheduler->schedule();
     auto client = coro::net::tcp::client{scheduler, address};
 
+    co_await scheduler->yield_for(std::chrono::milliseconds(20)); // wait a bit until server wakes up
+
     auto cstatus = co_await client.connect();
-    REQUIRE(cstatus == coro::net::connect_status::connected);
+    REQUIRE_THREAD_SAFE(cstatus == coro::net::connect_status::connected);
     std::cerr << "client: connected\n";
 
     co_return std::move(client) | coro::ranges::with_buffer();
@@ -100,16 +103,16 @@ TEST_CASE("Stream to string", "[async_ranges]")
     {
         auto server = make_server_task(scheduler, local_address, message);
 
-        auto client = [&](std::unique_ptr<coro::scheduler>& sched) -> coro::task<void>
+        auto client = [](auto&& sched, auto&& pipe, auto&& expectd) -> coro::task<void>
         {
             co_await sched->schedule();
 
             auto stream = co_await make_client_stream(sched, local_address);
 
-            std::string result = co_await pipeline_func(std::move(stream));
+            std::string result = co_await pipe(std::move(stream));
 
-            CHECK(result == expected);
-        }(scheduler);
+            CHECK_THREAD_SAFE(result == expectd);
+        }(scheduler, pipeline_func, expected);
 
         coro::sync_wait(coro::when_all(std::move(server), std::move(client)));
     }
