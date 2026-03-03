@@ -1,3 +1,5 @@
+#include "coro/ranges/await.hpp"
+#include "coro/ranges/drain.hpp"
 #include "coro/ranges/join.hpp"
 #include "coro/ranges/take_until.hpp"
 #include "coro/ranges/transform.hpp"
@@ -37,8 +39,10 @@ auto make_client_stream(std::unique_ptr<coro::scheduler>& scheduler, const coro:
     REQUIRE(cstatus == coro::net::connect_status::connected);
     std::cerr << "client: connected\n";
 
-    co_return coro::ranges::to_chunked_stream(std::move(client));
+    co_return std::move(client) | coro::ranges::with_buffer();
 }
+
+static auto local_address = coro::net::socket_address{"127.0.0.1", 8080};
 
 // Helper adaptors
 constexpr auto as_chars   = coro::ranges::transform([](auto byte) { return static_cast<char>(byte); });
@@ -48,8 +52,6 @@ constexpr auto only_upper =
 
 TEST_CASE("Stream to string", "[async_ranges]")
 {
-    static auto address = coro::net::socket_address{"127.0.0.1", 8080};
-
     // clang-format off
     auto [name, message, expected, pipeline_func] = GENERATE(
         table<
@@ -96,13 +98,13 @@ TEST_CASE("Stream to string", "[async_ranges]")
 
     DYNAMIC_SECTION(name)
     {
-        auto server = make_server_task(scheduler, address, message);
+        auto server = make_server_task(scheduler, local_address, message);
 
         auto client = [&](std::unique_ptr<coro::scheduler>& sched) -> coro::task<void>
         {
             co_await sched->schedule();
 
-            auto stream = co_await make_client_stream(sched, address);
+            auto stream = co_await make_client_stream(sched, local_address);
 
             std::string result = co_await pipeline_func(std::move(stream));
 
@@ -112,3 +114,117 @@ TEST_CASE("Stream to string", "[async_ranges]")
         coro::sync_wait(coro::when_all(std::move(server), std::move(client)));
     }
 }
+
+TEST_CASE("Sync stream to TCP pipeline", "[async_ranges]")
+{
+    auto                          scheduler = coro::scheduler::make_unique();
+    std::vector<std::string_view> messages  = {"Hello", "world!"};
+
+    auto server_task = [](std::unique_ptr<coro::scheduler>& scheduler,
+                          std::span<std::string_view>       msgs) -> coro::task<void>
+    {
+        co_await scheduler->schedule();
+
+        coro::net::tcp::server server{scheduler, local_address};
+        auto                   client = co_await server.accept();
+
+        REQUIRE(client);
+
+        // clang-format off
+        co_await (
+            msgs
+            | coro::ranges::transform([&](std::string_view msg) -> coro::task<void> {
+                                          co_await client->write_all(msg);
+                                      })
+            | coro::ranges::await
+            | coro::ranges::drain
+        );
+        // clang-format on
+    }(scheduler, messages);
+
+    auto client_task = [](std::unique_ptr<coro::scheduler>& scheduler) -> coro::task<void>
+    {
+        co_await scheduler->schedule();
+
+        coro::net::tcp::client client{scheduler, local_address};
+        auto                   connect_status = co_await client.connect();
+        REQUIRE(connect_status == coro::net::connect_status::connected);
+
+        // clang-format off
+        std::string result = co_await (
+            client
+            | coro::ranges::with_buffer()
+            | coro::ranges::join
+            | as_chars
+            | coro::ranges::to<std::string>
+        );
+        // clang-format on
+
+        CHECK(result == "Helloworld!");
+    }(scheduler);
+
+    coro::sync_wait(coro::when_all(std::move(server_task), std::move(client_task)));
+}
+
+// TEST_CASE("Partial reading", "[async_ranges]")
+//{
+//     auto                          scheduler = coro::scheduler::make_unique();
+//
+//     char msg1[] {"Hello"};
+//     char msg2[] {"world!"};
+//
+//     std::vector<std::span<char>> messages {std::span{msg1}, std::span{msg2}};
+//
+//     auto server_task = [](std::unique_ptr<coro::scheduler>& scheduler,
+//                           std::span<std::span<char>>       msgs) -> coro::task<void>
+//     {
+//         co_await scheduler->schedule();
+//
+//         coro::net::tcp::server server{scheduler, local_address};
+//         auto                   client = co_await server.accept();
+//
+//         REQUIRE(client);
+//
+//         // clang-format off
+//         co_await (
+//             msgs
+//             | coro::ranges::transform([&](auto &&msg) -> coro::task<void> {
+//                                           co_await client->write_all(msg);
+//                                       })
+//             | coro::ranges::await
+//             | coro::ranges::drain
+//         );
+//         // clang-format on
+//     }(scheduler, messages);
+//
+//     auto client_task = [](std::unique_ptr<coro::scheduler>& scheduler) -> coro::task<void>
+//     {
+//         co_await scheduler->schedule();
+//
+//         coro::net::tcp::client client{scheduler, local_address};
+//         auto                   connect_status = co_await client.connect();
+//         REQUIRE(connect_status == coro::net::connect_status::connected);
+//
+//         auto buffered_stream = client | coro::ranges::with_buffer() | coro::ranges::join;
+//
+//         // clang-format off
+//         std::string hello = co_await (
+//             buffered_stream
+//             | as_chars | until_zero
+//             | coro::ranges::to<std::string>
+//         );
+//         CHECK(hello == "Hello");
+//
+//         std::string world = co_await (
+//             buffered_stream
+//             | as_chars | until_zero
+//             | coro::ranges::to<std::string>
+//         );
+//         CHECK(world == "world!");
+//
+//         std::cout << "client: got " << hello << world << '\n';
+//         // clang-format on
+//     }(scheduler);
+//
+//     coro::sync_wait(coro::when_all(std::move(server_task), std::move(client_task)));
+// }
