@@ -12,8 +12,10 @@
 #include <iostream>
 
 auto make_server_task(
-    std::unique_ptr<coro::scheduler>& scheduler, const coro::net::socket_address& address, std::string_view message)
-    -> coro::task<void>
+    std::unique_ptr<coro::scheduler>& scheduler,
+    const coro::net::socket_address&  address,
+    std::string_view                  message,
+    coro::latch&                      latch) -> coro::task<void>
 {
     co_await scheduler->schedule();
 
@@ -26,6 +28,8 @@ auto make_server_task(
     auto [wstatus, written] = co_await client->write_all(message);
     REQUIRE_THAT_THREAD_SAFE(wstatus, IsOk());
     std::cerr << "server: sent message\n";
+
+    co_await scheduler->yield_for(std::chrono::milliseconds(20)); // wait a bit until client reads data
 }
 
 using socket_stream = coro::ranges::socket_stream<coro::net::tcp::client, std::vector<std::byte>>;
@@ -56,54 +60,56 @@ constexpr auto only_upper =
 TEST_CASE("Stream to string", "[async_ranges]")
 {
     // clang-format off
-     auto [name, message, expected, pipeline_func] = GENERATE(
-         table<
-             std::string_view,
-             std::string_view,
-             std::string_view,
-             std::function<coro::task<std::string>(socket_stream ss)>>(
-             {
-                 {"Simple pipe",
-                  "Hello world!",
-                  "Hello world!",
-                  [](auto ss) -> coro::task<std::string>
-                  { return std::move(ss) | coro::ranges::join | as_chars | coro::ranges::to<std::string>; }},
+      auto [name, message, expected, pipeline_func] = GENERATE(
+          table<
+              std::string_view,
+              std::string_view,
+              std::string_view,
+              std::function<coro::task<std::string>(socket_stream ss)>>(
+              {
+                  {"Simple pipe",
+                   "Hello world!",
+                   "Hello world!",
+                   [](auto ss) -> coro::task<std::string>
+                   { return std::move(ss) | coro::ranges::join | as_chars | coro::ranges::to<std::string>; }},
 
-                 {"Empty stream",
-                  "",
-                  "",
-                  [](auto ss) -> coro::task<std::string>
-                  { return std::move(ss) | coro::ranges::join | as_chars | coro::ranges::to<std::string>; }},
+                  {"Empty stream",
+                   "",
+                   "",
+                   [](auto ss) -> coro::task<std::string>
+                   { return std::move(ss) | coro::ranges::join | as_chars | coro::ranges::to<std::string>; }},
 
-                 {"Stop at null",
-                  "Part 1\0Part 2",
-                  "Part 1",
-                  [](auto ss) -> coro::task<std::string>
-                  {
-                      return std::move(ss) | coro::ranges::join | as_chars
-                             | until_zero
-                             | coro::ranges::to<std::string>;
-                  }},
+                  {"Stop at null",
+                   "Part 1\0Part 2",
+                   "Part 1",
+                   [](auto ss) -> coro::task<std::string>
+                   {
+                       return std::move(ss) | coro::ranges::join | as_chars
+                              | until_zero
+                              | coro::ranges::to<std::string>;
+                   }},
 
-                 {"Transformation (Uppercase)",
-                  "libcoro",
-                  "LIBCORO",
-                  [](auto ss) -> coro::task<std::string>
-                  {
-                      return std::move(ss) | coro::ranges::join | as_chars
-                             | only_upper
-                             | coro::ranges::to<std::string>;
-                  }}
-             }));
+                  {"Transformation (Uppercase)",
+                   "libcoro",
+                   "LIBCORO",
+                   [](auto ss) -> coro::task<std::string>
+                   {
+                       return std::move(ss) | coro::ranges::join | as_chars
+                              | only_upper
+                              | coro::ranges::to<std::string>;
+                   }}
+              }));
     // clang-format on
 
     auto scheduler = coro::scheduler::make_unique();
 
     DYNAMIC_SECTION(name)
     {
-        auto server = make_server_task(scheduler, local_address, message);
+        coro::latch l{2};
+        std::cerr << "--- starting " << name << " ---\n";
+        auto server = make_server_task(scheduler, local_address, message, l);
 
-        auto client = [](auto&& sched, auto&& pipe, auto&& expectd) -> coro::task<void>
+        auto client = [](auto&& sched, auto&& pipe, auto&& expectd, auto&& latch) -> coro::task<void>
         {
             co_await sched->schedule();
 
@@ -112,9 +118,10 @@ TEST_CASE("Stream to string", "[async_ranges]")
             std::string result = co_await pipe(std::move(stream));
 
             CHECK_THREAD_SAFE(result == expectd);
-        }(scheduler, pipeline_func, expected);
+        }(scheduler, pipeline_func, expected, l);
 
         coro::sync_wait(coro::when_all(std::move(server), std::move(client)));
+        std::cerr << "--- ending " << name << " ---\n";
     }
 }
 
@@ -134,14 +141,14 @@ TEST_CASE("Sync stream to TCP pipeline", "[async_ranges]")
         REQUIRE(client);
 
         // clang-format off
-         co_await (
-             msgs
-             | coro::ranges::transform([&](std::string_view msg) -> coro::task<void> {
-                                           co_await client->write_all(msg);
-                                       })
-             | coro::ranges::await
-             | coro::ranges::drain
-         );
+          co_await (
+              msgs
+              | coro::ranges::transform([&](std::string_view msg) -> coro::task<void> {
+                                            co_await client->write_all(msg);
+                                        })
+              | coro::ranges::await
+              | coro::ranges::drain
+          );
         // clang-format on
     }(scheduler, messages);
 
@@ -154,13 +161,13 @@ TEST_CASE("Sync stream to TCP pipeline", "[async_ranges]")
         REQUIRE(connect_status == coro::net::connect_status::connected);
 
         // clang-format off
-         std::string result = co_await (
-             client
-             | coro::ranges::with_buffer()
-             | coro::ranges::join
-             | as_chars
-             | coro::ranges::to<std::string>
-         );
+          std::string result = co_await (
+              client
+              | coro::ranges::with_buffer()
+              | coro::ranges::join
+              | as_chars
+              | coro::ranges::to<std::string>
+          );
         // clang-format on
 
         CHECK(result == "Helloworld!");

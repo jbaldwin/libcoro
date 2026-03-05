@@ -5,6 +5,8 @@
 #include <tuple>
 #include <type_traits>
 
+#define LIBCORO_ALWAYS_INLINE [[gnu::always_inline]]
+
 namespace coro::ranges
 {
 namespace concepts
@@ -49,14 +51,19 @@ template<concepts::async_streamable Stream>
 class ref_view
 {
 public:
-    explicit ref_view(Stream& stream) noexcept : m_stream(std::addressof(stream)) {}
+    constexpr explicit ref_view(Stream& stream) noexcept : m_stream(stream) {}
 
-    auto advance() -> concepts::async_stream_awaiter_t<Stream> { return m_stream->advance(); }
+    LIBCORO_ALWAYS_INLINE
+    auto advance() noexcept(noexcept(m_stream.advance())) -> concepts::async_stream_awaiter_t<Stream>
+    {
+        return m_stream.advance();
+    }
 
-    auto get_value() noexcept(noexcept(m_stream->get_value())) -> decltype(auto) { return m_stream->get_value(); }
+    LIBCORO_ALWAYS_INLINE
+    auto get_value() noexcept(noexcept(m_stream.get_value())) -> decltype(auto) { return m_stream.get_value(); }
 
 private:
-    Stream* m_stream;
+    Stream& m_stream;
 };
 
 // template<concepts::async_streamable Stream>

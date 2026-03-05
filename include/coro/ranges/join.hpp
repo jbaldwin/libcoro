@@ -10,7 +10,7 @@ class join_view
 {
 private:
     using awaiter_type = concepts::async_stream_awaiter_t<previous_stream_t>;
-    using container_t  = concepts::async_stream_value_t<previous_stream_t>;
+    using container_t  = std::remove_cvref_t<concepts::async_stream_value_t<previous_stream_t>>;
 
     using reference_t = decltype(std::declval<container_t&>()[0]);
 
