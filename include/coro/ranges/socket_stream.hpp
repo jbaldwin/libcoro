@@ -16,8 +16,12 @@ public:
     socket_stream(socket_stream&)            = delete;
     socket_stream& operator=(socket_stream&) = delete;
 
-    socket_stream(socket_stream&& other) : m_client(std::move(other.m_client)), m_buffer(std::move(other.m_buffer)) {}
-    socket_stream& operator=(socket_stream&& other)
+    socket_stream(socket_stream&& other) noexcept
+        : m_client(std::move(other.m_client)),
+          m_buffer(std::move(other.m_buffer))
+    {
+    }
+    socket_stream& operator=(socket_stream&& other) noexcept
     {
         if (std::addressof(other) != this)
         {
@@ -57,6 +61,7 @@ private:
 struct _with_buffer
 {
     template<class client_t>
+        requires std::is_same_v<std::remove_cvref_t<client_t>, coro::net::tcp::client>
     constexpr auto operator()(client_t&& client, std::size_t buffer_size = 4096) const
     {
         return socket_stream{std::forward<client_t>(client), std::vector<std::byte>{buffer_size}};
@@ -69,4 +74,10 @@ struct _with_buffer
 };
 
 inline constexpr _with_buffer with_buffer;
+
+template<class client_t>
+constexpr auto operator|(client_t&& client, _partial<_with_buffer, std::size_t>&& with_buf)
+{
+    return with_buf(client);
+}
 } // namespace coro::ranges

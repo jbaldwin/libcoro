@@ -43,6 +43,52 @@ template<class T>
 concept async_adaptor = std::derived_from<std::decay_t<T>, _async_adaptor>;
 } // namespace concepts
 
+// This lets a named lvalue stream  be reused
+// without being moved-from. Exactly how std::ranges::ref_view works.
+template<concepts::async_streamable Stream>
+class ref_view
+{
+public:
+    explicit ref_view(Stream& stream) noexcept : m_stream(std::addressof(stream)) {}
+
+    auto advance() -> concepts::async_stream_awaiter_t<Stream> { return m_stream->advance(); }
+
+    auto get_value() noexcept(noexcept(m_stream->get_value())) -> decltype(auto) { return m_stream->get_value(); }
+
+private:
+    Stream* m_stream;
+};
+
+// template<concepts::async_streamable Stream>
+// struct concepts::async_stream_traits<ref_view<Stream>>
+//     : concepts::async_stream_traits<Stream> {};
+
+// struct _ref
+//{
+//     template<concepts::async_streamable Rng>
+//     constexpr auto operator()(Rng& rng) const noexcept
+//     {
+//         return ref_view<Rng>{rng};
+//     }
+// };
+// inline constexpr _ref ref{};
+
+template<class Rng, concepts::async_adaptor Adaptor>
+    requires concepts::async_streamable<std::remove_cvref_t<Rng>>
+constexpr auto operator|(Rng&& rng, Adaptor&& partial)
+{
+    // lvalue -> wrap in ref_view
+    // rvalue -> move ownership
+    if constexpr (std::is_lvalue_reference_v<decltype(rng)>)
+    {
+        return std::forward<Adaptor>(partial)(ref_view<std::remove_cvref_t<decltype(rng)>>{rng});
+    }
+    else
+    {
+        return std::forward<Adaptor>(partial)(std::forward<Rng>(rng));
+    }
+}
+
 template<typename Adaptor, typename... Args>
 struct _partial : public concepts::_async_adaptor
 {
@@ -72,18 +118,7 @@ struct _partial : public concepts::_async_adaptor
     constexpr auto operator()(range_t&& range) const&& = delete;
 };
 
-template<class Range, concepts::async_adaptor Adaptor>
-constexpr auto operator|(Range&& rng, Adaptor&& partial)
-{
-    return std::forward<Adaptor>(partial)(std::forward<Range>(rng));
-}
-
-template<class Range, concepts::async_adaptor Adaptor>
-constexpr auto operator|(const Range& rng, Adaptor&& partial)
-{
-    return std::forward<Adaptor>(partial)(rng);
-}
-
+// sync_stream (unchanged - already at the bottom of your file)
 template<std::ranges::range Range>
 class sync_stream
 {
@@ -112,6 +147,7 @@ private:
     bool                           m_first{true};
 };
 
+// Sync range overload
 template<std::ranges::range Range, concepts::async_adaptor Adaptor>
 constexpr auto operator|(Range&& rng, Adaptor&& partial)
 {
