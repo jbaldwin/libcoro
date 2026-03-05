@@ -17,6 +17,7 @@ set(LIBCORO_TEST_SOURCE_FILES
         test_sync_wait.cpp
         test_task.cpp
         test_task_group.cpp
+        test_thread_pool_ws.cpp
         test_thread_pool.cpp
         test_when_all.cpp
 
