@@ -46,6 +46,8 @@ endif()
 
 include(GNUInstallDirs)
 include(GenerateExportHeader)
+include(cmake/CPM.cmake)
+CPMAddPackage("gh:ConorWilliams/ConcurrentDeque#v2.0.0")
 
 if (NOT "$ENV{version}" STREQUAL "")
     set(PROJECT_VERSION "$ENV{version}" CACHE INTERNAL "Copied from environment variable")
@@ -135,6 +137,7 @@ set(LIBCORO_SOURCE_FILES
     include/coro/sync_wait.hpp src/sync_wait.cpp
     include/coro/task.hpp
     include/coro/task_group.hpp
+    include/coro/thread_pool_ws.hpp src/thread_pool_ws.cpp
     include/coro/thread_pool.hpp src/thread_pool.cpp
     include/coro/time.hpp
     include/coro/when_all.hpp
@@ -220,6 +223,7 @@ endif()
 
 add_library(${PROJECT_NAME} ${LIBCORO_SOURCE_FILES})
 set_target_properties(${PROJECT_NAME} PROPERTIES LINKER_LANGUAGE CXX PREFIX "" VERSION ${PROJECT_VERSION} SOVERSION ${PROJECT_VERSION_MAJOR})
+target_link_libraries(${PROJECT_NAME} PUBLIC RiftenDeque::RiftenDeque)
 
 if(LIBCORO_ENABLE_ASAN)
     add_compile_options(-g -O0 -fno-omit-frame-pointer -fsanitize=address)
