@@ -66,6 +66,16 @@ auto pipe_t::operator=(pipe_t&& other) noexcept -> pipe_t&
     return *this;
 }
 
+auto pipe_t::write(const void* bytes, std::size_t n) -> long
+{
+    return ::write(write_fd(), bytes, n);
+}
+
+auto pipe_t::read(void* buffer, std::size_t n) -> long
+{
+    return ::read(read_fd(), buffer, n);
+}
+
 auto pipe_t::read_fd() const -> const fd_t&
 {
     return m_fds[0];

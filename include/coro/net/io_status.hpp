@@ -24,7 +24,9 @@ struct io_status
         udp_not_bound,
         message_too_big,
 
-        native
+        native,
+
+        unknown
     };
 
     kind                 type{};
