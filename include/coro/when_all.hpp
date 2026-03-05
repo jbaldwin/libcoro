@@ -47,12 +47,14 @@ public:
         return m_count.fetch_sub(1, std::memory_order::acq_rel) > 1;
     }
 
-    auto notify_awaitable_completed() noexcept -> void
+    auto notify_awaitable_completed() noexcept -> std::coroutine_handle<>
     {
         if (m_count.fetch_sub(1, std::memory_order::acq_rel) == 1)
         {
-            m_awaiting_coroutine.resume();
+            return m_awaiting_coroutine;
         }
+
+        return std::noop_coroutine();
     }
 
 private:
@@ -185,7 +187,7 @@ public:
     }
 
     auto operator=(const when_all_ready_awaitable&) -> when_all_ready_awaitable& = delete;
-    auto operator=(when_all_ready_awaitable&&) -> when_all_ready_awaitable&       = delete;
+    auto operator=(when_all_ready_awaitable&&) -> when_all_ready_awaitable&      = delete;
 
     auto operator co_await() & noexcept
     {
@@ -265,9 +267,9 @@ public:
         struct completion_notifier
         {
             auto await_ready() const noexcept -> bool { return false; }
-            auto await_suspend(coroutine_handle_type coroutine) const noexcept -> void
+            auto await_suspend(coroutine_handle_type coroutine) const noexcept -> std::coroutine_handle<>
             {
-                coroutine.promise().m_latch->notify_awaitable_completed();
+                return coroutine.promise().m_latch->notify_awaitable_completed();
             }
             auto await_resume() const noexcept {}
         };
@@ -347,9 +349,9 @@ public:
         struct completion_notifier
         {
             auto await_ready() const noexcept -> bool { return false; }
-            auto await_suspend(coroutine_handle_type coroutine) const noexcept -> void
+            auto await_suspend(coroutine_handle_type coroutine) const noexcept -> std::coroutine_handle<>
             {
-                coroutine.promise().m_latch->notify_awaitable_completed();
+                return coroutine.promise().m_latch->notify_awaitable_completed();
             }
             auto await_resume() const noexcept -> void {}
         };
@@ -410,20 +412,11 @@ public:
         }
     }
 
-    auto return_value() & -> return_type&
-    {
-        return m_coroutine.promise().result();
-    }
+    auto return_value() & -> return_type& { return m_coroutine.promise().result(); }
 
-    auto return_value() const& -> const return_type&
-    {
-        return m_coroutine.promise().result();
-    }
+    auto return_value() const& -> const return_type& { return m_coroutine.promise().result(); }
 
-    auto return_value() && -> return_type&&
-    {
-        return std::move(m_coroutine.promise()).result();
-    }
+    auto return_value() && -> return_type&& { return std::move(m_coroutine.promise()).result(); }
 
 private:
     auto start(when_all_latch& latch) noexcept -> void { m_coroutine.promise().start(latch); }
@@ -506,8 +499,8 @@ template<
     std::ranges::range  range_type,
     concepts::awaitable awaitable_type = std::ranges::range_value_t<range_type>,
     typename return_type               = typename concepts::awaitable_traits<awaitable_type>::awaiter_return_type>
-[[nodiscard]] auto when_all(range_type awaitables)
-    -> detail::when_all_ready_awaitable<std::vector<detail::when_all_task<return_type>>>
+[[nodiscard]] auto
+    when_all(range_type awaitables) -> detail::when_all_ready_awaitable<std::vector<detail::when_all_task<return_type>>>
 {
     std::vector<detail::when_all_task<return_type>> output_tasks;
 
