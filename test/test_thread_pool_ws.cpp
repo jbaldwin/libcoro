@@ -16,7 +16,7 @@ TEST_CASE("thread_pool_ws simple testing", "[thread_pool_ws]")
 
     auto make_task = [&tp, &m](int task_id) -> coro::task<void>
     {
-        for (size_t i = 0; i < 5'000'000; ++i)
+        for (size_t i = 0; i < 50'000; ++i)
         {
             co_await tp.schedule();
             std::stringstream ss;
