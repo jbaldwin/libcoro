@@ -5,7 +5,13 @@
 #include <tuple>
 #include <type_traits>
 
-#define LIBCORO_ALWAYS_INLINE [[gnu::always_inline]]
+#if defined(_MSC_VER)
+    #define LIBCORO_ALWAYS_INLINE __forceinline
+#elif defined(__GNUC__) || defined(__clang__)
+    #define LIBCORO_ALWAYS_INLINE [[gnu::always_inline]] inline
+#else
+    #define LIBCORO_ALWAYS_INLINE inline
+#endif
 
 namespace coro::ranges
 {
@@ -125,8 +131,7 @@ struct _partial : public concepts::_async_adaptor
     constexpr auto operator()(range_t&& range) const&& = delete;
 };
 
-// sync_stream (unchanged - already at the bottom of your file)
-template<std::ranges::range Range>
+template<std::ranges::viewable_range Range>
 class sync_stream
 {
 public:
@@ -155,7 +160,7 @@ private:
 };
 
 // Sync range overload
-template<std::ranges::range Range, concepts::async_adaptor Adaptor>
+template<std::ranges::viewable_range Range, concepts::async_adaptor Adaptor>
 constexpr auto operator|(Range&& rng, Adaptor&& partial)
 {
     return std::forward<Adaptor>(partial)(sync_stream{std::forward<Range>(rng)});

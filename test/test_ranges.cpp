@@ -12,10 +12,8 @@
 #include <iostream>
 
 auto make_server_task(
-    std::unique_ptr<coro::scheduler>& scheduler,
-    const coro::net::socket_address&  address,
-    std::string_view                  message,
-    coro::latch&                      latch) -> coro::task<void>
+    std::unique_ptr<coro::scheduler>& scheduler, const coro::net::socket_address& address, std::string_view message)
+    -> coro::task<void>
 {
     co_await scheduler->schedule();
 
@@ -29,7 +27,7 @@ auto make_server_task(
     REQUIRE_THAT_THREAD_SAFE(wstatus, IsOk());
     std::cerr << "server: sent message\n";
 
-    co_await scheduler->yield_for(std::chrono::milliseconds(20)); // wait a bit until client reads data
+    co_await scheduler->yield_for(std::chrono::milliseconds(50)); // wait a bit until client reads data
 }
 
 using socket_stream = coro::ranges::socket_stream<coro::net::tcp::client, std::vector<std::byte>>;
@@ -105,11 +103,10 @@ TEST_CASE("Stream to string", "[async_ranges]")
 
     DYNAMIC_SECTION(name)
     {
-        coro::latch l{2};
         std::cerr << "--- starting " << name << " ---\n";
-        auto server = make_server_task(scheduler, local_address, message, l);
+        auto server = make_server_task(scheduler, local_address, message);
 
-        auto client = [](auto&& sched, auto&& pipe, auto&& expectd, auto&& latch) -> coro::task<void>
+        auto client = [](auto&& sched, auto&& pipe, auto&& expectd) -> coro::task<void>
         {
             co_await sched->schedule();
 
@@ -118,7 +115,7 @@ TEST_CASE("Stream to string", "[async_ranges]")
             std::string result = co_await pipe(std::move(stream));
 
             CHECK_THREAD_SAFE(result == expectd);
-        }(scheduler, pipeline_func, expected, l);
+        }(scheduler, pipeline_func, expected);
 
         coro::sync_wait(coro::when_all(std::move(server), std::move(client)));
         std::cerr << "--- ending " << name << " ---\n";
