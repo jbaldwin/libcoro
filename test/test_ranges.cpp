@@ -193,14 +193,14 @@ TEST_CASE("Partial reading", "[async_ranges]")
         REQUIRE(client);
 
         // clang-format off
-         co_await (
-             msgs
-             | coro::ranges::transform([&](auto &&msg) -> coro::task<void> {
-                                           co_await client->write_all(msg);
-                                       })
-             | coro::ranges::await
-             | coro::ranges::drain
-         );
+        auto pipe = msgs
+            | coro::ranges::transform([&](auto &&msg) -> coro::task<void> {
+                                          co_await client->write_all(msg);
+                                      })
+            | coro::ranges::await
+            | coro::ranges::drain;
+
+        co_await std::move(pipe);
         // clang-format on
     }(scheduler, messages);
 
@@ -218,20 +218,14 @@ TEST_CASE("Partial reading", "[async_ranges]")
             | coro::ranges::with_buffer(4096) // buffered reading
             | coro::ranges::join; // byte by byte
 
-         std::string hello = co_await (
-             buffered_stream
-             | as_chars
-             | until_zero
-             | coro::ranges::to<std::string>
-         );
+        auto get_word = buffered_stream
+            | as_chars
+            | until_zero;
+
+         std::string hello = co_await (get_word | coro::ranges::to<std::string>);
          CHECK(hello == "Hello");
 
-         std::string world = co_await (
-             buffered_stream
-             | as_chars
-             | until_zero
-             | coro::ranges::to<std::string>
-         );
+         std::string world = co_await (get_word | coro::ranges::to<std::string>);
          CHECK(world == "world!");
 
          std::cout << "client: got " << hello << ' ' << world << '\n';

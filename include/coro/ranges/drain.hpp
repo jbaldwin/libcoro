@@ -10,7 +10,7 @@ public:
     template<concepts::async_streamable Rng>
     auto operator()(Rng rng) const -> coro::task<void>
     {
-        while (co_await rng.advance()) {}
+        while (co_await rng.next()) {}
     }
 };
 

@@ -31,7 +31,9 @@ public:
         return *this;
     }
 
-    auto advance() -> coro::task<bool>
+    // Should be safe, because socket_stream gets moved
+    // into further pipe objects
+    auto next() -> coro::task<std::optional<std::span<const std::byte>>>
     {
         auto [status, read] = co_await m_client.read_some(m_buffer);
         m_current_size      = read.size();
@@ -41,16 +43,12 @@ public:
             if (status.is_closed())
             {
                 m_current_size = 0;
-                co_return false;
+                co_return std::nullopt;
             }
             throw std::runtime_error(status.message());
         }
-        co_return true;
+        co_return std::span{m_buffer}.subspan(0, m_current_size);
     }
-
-    // Should be safe, because socket_stream gets moved
-    // into further pipe objects
-    auto get_value() const noexcept -> std::span<const std::byte> { return {m_buffer.data(), m_current_size}; }
 
 private:
     client_t    m_client;

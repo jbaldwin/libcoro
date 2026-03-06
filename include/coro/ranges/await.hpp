@@ -10,63 +10,55 @@ class await_view_base
 protected:
     using awaiter_type = concepts::async_stream_awaiter_t<previous_stream_t>;
 
-    previous_stream_t      m_prev_stream;
-    std::optional<value_t> m_value;
+    previous_stream_t m_prev_stream;
 
 public:
-    constexpr explicit await_view_base(previous_stream_t&& prev_stream)
-        : m_prev_stream(std::forward<previous_stream_t>(prev_stream))
-    {
-    }
+    constexpr explicit await_view_base(previous_stream_t prev_stream) : m_prev_stream(prev_stream) {}
 
-    auto advance() -> coro::task<bool>
+    auto next() -> awaiter_type
     {
-        if (co_await m_prev_stream.advance())
+        auto awaitable = co_await m_prev_stream.next();
+        if (awaitable)
         {
-            m_value = co_await m_prev_stream.get_value();
-            co_return true;
+            co_return co_await std::move(*awaitable);
         }
-        co_return false;
+        co_return std::nullopt;
     }
-
-    auto get_value() noexcept -> value_t { return std::move(*m_value); }
 };
 
 template<concepts::async_streamable previous_stream_t>
 class await_view_base<previous_stream_t, void>
 {
 protected:
+    using awaiter_type = concepts::async_stream_awaiter_t<previous_stream_t>;
+
     previous_stream_t m_prev_stream;
 
 public:
-    constexpr explicit await_view_base(previous_stream_t&& prev_stream)
+    constexpr explicit await_view_base(previous_stream_t prev_stream)
         : m_prev_stream(std::forward<previous_stream_t>(prev_stream))
     {
     }
 
-    auto advance() -> coro::task<bool>
+    auto next() -> coro::task<std::optional<std::monostate>>
     {
-        if (co_await m_prev_stream.advance())
+        auto awaitable = co_await m_prev_stream.next();
+        if (awaitable)
         {
-            co_await m_prev_stream.get_value();
-            co_return true;
+            co_await *awaitable;
+            co_return std::monostate{};
         }
-        co_return false;
+        co_return std::nullopt;
     }
-
-    void get_value() noexcept {}
 };
 
-template<concepts::async_streamable previous_stream_t>
-class await_view : public await_view_base<
-                       previous_stream_t,
-                       typename coro::concepts::awaitable_traits<
-                           concepts::async_stream_value_t<previous_stream_t>>::awaiter_return_type>
+template<
+    concepts::async_streamable previous_stream_t,
+    typename value_t = typename coro::concepts::awaitable_traits<
+        concepts::async_stream_return_t<previous_stream_t>>::awaiter_return_type>
+class await_view : public await_view_base<previous_stream_t, value_t>
 {
-    using base_t = await_view_base<
-        previous_stream_t,
-        typename coro::concepts::awaitable_traits<
-            concepts::async_stream_value_t<previous_stream_t>>::awaiter_return_type>;
+    using base_t = await_view_base<previous_stream_t, value_t>;
 
 public:
     using base_t::base_t;

@@ -10,39 +10,35 @@ class join_view
 {
 private:
     using awaiter_type = concepts::async_stream_awaiter_t<previous_stream_t>;
-    using container_t  = std::remove_cvref_t<concepts::async_stream_value_t<previous_stream_t>>;
+    using container_t  = std::remove_cvref_t<concepts::async_stream_return_t<previous_stream_t>>;
 
-    using reference_t = decltype(std::declval<container_t&>()[0]);
+    using value_type = std::ranges::range_value_t<container_t>;
 
     static_assert(std::ranges::sized_range<container_t>);
 
 public:
-    constexpr join_view(previous_stream_t prev_stream) : m_prev_stream(std::forward<previous_stream_t>(prev_stream)) {}
+    constexpr explicit join_view(previous_stream_t prev_stream)
+        : m_prev_stream(std::forward<previous_stream_t>(prev_stream))
+    {
+    }
 
-    auto advance() -> awaiter_type
+    auto next() -> coro::task<std::optional<value_type>>
     {
         if (m_value && m_cursor + 1 < m_value->size())
         {
             m_cursor += 1;
-            co_return true;
+            co_return std::move((*m_value)[m_cursor]);
         }
 
-        while (co_await m_prev_stream.advance())
+        m_value = co_await m_prev_stream.next();
+        if (m_value && m_value->size() > 0)
         {
-            m_value = std::move(m_prev_stream.get_value());
-
-            // Looping until it's not empty
-            if (m_value->size() > 0)
-            {
-                m_cursor = 0;
-                co_return true;
-            }
+            m_cursor = 0;
+            co_return std::move((*m_value)[m_cursor]);
         }
 
-        co_return false;
+        co_return std::nullopt;
     }
-
-    auto get_value() noexcept -> reference_t { return (*m_value)[m_cursor]; }
 
 private:
     previous_stream_t m_prev_stream;

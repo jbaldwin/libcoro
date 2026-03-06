@@ -12,9 +12,17 @@ public:
     auto operator()(Rng rng) const -> coro::task<container_t>
     {
         container_t result;
-        while (co_await rng.advance())
+        while (true)
         {
-            result.emplace_back(std::move(rng.get_value()));
+            auto value = co_await rng.advance();
+            if (value)
+            {
+                result.emplace_back(std::move(*value));
+            }
+            else
+            {
+                break;
+            }
         }
         co_return result;
     }
@@ -32,9 +40,17 @@ public:
     auto operator()(Rng rng) const -> coro::task<container_t>
     {
         container_t result;
-        while (co_await rng.advance())
+        while (true)
         {
-            result.push_back(std::move(rng.get_value()));
+            auto value = co_await rng.next();
+            if (value)
+            {
+                result.push_back(std::move(*value));
+            }
+            else
+            {
+                break;
+            }
         }
         co_return result;
     }

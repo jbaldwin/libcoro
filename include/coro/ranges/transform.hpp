@@ -9,7 +9,10 @@ template<concepts::async_streamable previous_stream_t, class transform_fn>
 class transform_view
 {
 private:
-    using awaiter_type = concepts::async_stream_awaiter_t<previous_stream_t>;
+    using awaiter_type        = concepts::async_stream_awaiter_t<previous_stream_t>;
+    using awaiter_return_type = concepts::async_stream_return_t<previous_stream_t>;
+    using return_type         = wrap_return_value_for_optional_t<decltype(std::declval<transform_fn&>()(
+        unwrap_return_value(std::declval<awaiter_return_type>())))>;
 
 public:
     constexpr transform_view(previous_stream_t prev_stream, transform_fn transform)
@@ -18,16 +21,21 @@ public:
     {
     }
 
-    auto advance() -> awaiter_type { co_return co_await m_prev_stream.advance(); }
-
-    auto get_value() noexcept(noexcept(m_transform(m_prev_stream.get_value()))) -> decltype(auto)
+    auto next() -> coro::task<std::optional<return_type>>
     {
-        return m_transform(m_prev_stream.get_value());
+        auto value = co_await m_prev_stream.next();
+        if (value)
+        {
+            auto result = m_transform(unwrap_return_value(*value));
+            co_return std::forward<decltype(result)>(result);
+        }
+        co_return std::nullopt;
     }
 
 private:
     previous_stream_t m_prev_stream;
-    transform_fn      m_transform;
+    [[no_unique_address]]
+    transform_fn m_transform;
 };
 
 struct _transform

@@ -10,9 +10,6 @@ class take_until_view
 private:
     using awaiter_type = concepts::async_stream_awaiter_t<previous_stream_t>;
 
-    // std::optional doesn't support reference
-    using value_type = std::remove_reference_t<concepts::async_stream_value_t<previous_stream_t>>;
-
 public:
     constexpr take_until_view(previous_stream_t prev_stream, Pred pred)
         : m_prev_stream(std::forward<previous_stream_t>(prev_stream)),
@@ -20,37 +17,19 @@ public:
     {
     }
 
-    auto advance() -> awaiter_type
+    auto next() -> awaiter_type
     {
-        // Got the next value from the stream
-        auto has_value = co_await m_prev_stream.advance();
-        if (!has_value)
+        auto value = co_await m_prev_stream.next();
+        if (value && !m_pred(*value))
         {
-            co_return false;
+            co_return std::move(value);
         }
-
-        // Save it
-        m_value.emplace(std::move(m_prev_stream.get_value()));
-
-        // Check it. true means stop
-        if (m_pred(*m_value))
-        {
-            m_value.reset();
-            co_return false;
-        }
-
-        co_return true;
+        co_return std::nullopt;
     }
 
-    auto get_value() const& noexcept -> const value_type& { return *m_value; }
-    auto get_value() & noexcept -> value_type& { return *m_value; }
-
-    auto get_value() && noexcept -> value_type { return std::move(*m_value); }
-
 private:
-    previous_stream_t         m_prev_stream;
-    Pred                      m_pred;
-    std::optional<value_type> m_value;
+    previous_stream_t          m_prev_stream;
+    [[no_unique_address]] Pred m_pred;
 };
 
 struct _take_until

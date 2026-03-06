@@ -22,25 +22,23 @@ template<typename T>
 struct async_stream_traits;
 
 template<typename T>
-    requires requires(T& t) {
-        t.advance();
-        t.get_value();
-    }
+    requires requires(T& t) { t.next(); }
 struct async_stream_traits<T>
 {
-    using awaiter_type = decltype(std::declval<T>().advance());
-    using value_type   = decltype(std::declval<T>().get_value());
+    using awaiter_type = decltype(std::declval<T>().next());
+    using optional_type =
+        std::remove_cvref_t<typename coro::concepts::awaitable_traits<awaiter_type>::awaiter_return_type>;
+    using return_type = typename optional_type::value_type;
 };
 
 template<class T>
-using async_stream_value_t = typename async_stream_traits<T>::value_type;
+using async_stream_return_t = typename async_stream_traits<T>::return_type;
 template<class T>
 using async_stream_awaiter_t = typename async_stream_traits<T>::awaiter_type;
 
 template<class T>
 concept async_streamable = requires(T& stream) {
-    { stream.advance() } -> coro::concepts::awaitable;
-    { stream.get_value() };
+    { stream.next() } -> coro::concepts::awaitable;
 };
 
 // Concept for piping
@@ -60,13 +58,7 @@ public:
     constexpr explicit ref_view(Stream& stream) noexcept : m_stream(stream) {}
 
     LIBCORO_ALWAYS_INLINE
-    auto advance() noexcept(noexcept(m_stream.advance())) -> concepts::async_stream_awaiter_t<Stream>
-    {
-        return m_stream.advance();
-    }
-
-    LIBCORO_ALWAYS_INLINE
-    auto get_value() noexcept(noexcept(m_stream.get_value())) -> decltype(auto) { return m_stream.get_value(); }
+    auto next() -> concepts::async_stream_awaiter_t<Stream> { return m_stream.next(); }
 
 private:
     Stream& m_stream;
@@ -135,28 +127,25 @@ template<std::ranges::viewable_range Range>
 class sync_stream
 {
 public:
+    using value_type = std::ranges::range_value_t<Range>;
+
     explicit constexpr sync_stream(Range range) : m_range(std::forward<Range>(range)), m_it(std::begin(m_range)) {}
 
-    auto advance() -> coro::task<bool>
+    auto next() -> coro::task<std::optional<value_type>>
     {
         if (m_it == std::end(m_range))
         {
-            co_return false;
+            co_return std::nullopt;
         }
-        if (!m_first)
-        {
-            ++m_it;
-        }
-        m_first = false;
-        co_return m_it != std::end(m_range);
-    }
 
-    auto get_value() noexcept -> decltype(auto) { return *m_it; }
+        value_type current = *m_it;
+        ++m_it;
+        co_return std::move(current);
+    }
 
 private:
     Range                          m_range;
     std::ranges::iterator_t<Range> m_it;
-    bool                           m_first{true};
 };
 
 // Sync range overload
@@ -164,5 +153,33 @@ template<std::ranges::viewable_range Range, concepts::async_adaptor Adaptor>
 constexpr auto operator|(Range&& rng, Adaptor&& partial)
 {
     return std::forward<Adaptor>(partial)(sync_stream{std::forward<Range>(rng)});
+}
+
+namespace detail
+{
+template<class T>
+struct _wrap_return_value_for_optional
+{
+    using type = T;
+};
+template<class T>
+struct _wrap_return_value_for_optional<T&>
+{
+    using type = std::reference_wrapper<T>;
+};
+
+} // namespace detail
+template<class T>
+using wrap_return_value_for_optional_t = typename detail::_wrap_return_value_for_optional<T>::type;
+
+template<class T>
+constexpr auto unwrap_return_value(T&& value) noexcept -> decltype(auto)
+{
+    return std::forward<T>(value);
+}
+template<class T>
+constexpr auto unwrap_return_value(std::reference_wrapper<T> value) noexcept -> T&
+{
+    return value.get();
 }
 } // namespace coro::ranges
