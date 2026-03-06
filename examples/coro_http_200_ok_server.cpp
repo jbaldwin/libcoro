@@ -1,4 +1,14 @@
-#include <coro/coro.hpp>
+#ifdef LIBCORO_FEATURE_MODULES // Using modules
+    #include <coroutine>
+    #include <iostream>
+    #include <memory>
+    #include <string>
+    #include <thread>
+    #include <vector>
+import libcoro;
+#else // Using headers
+    #include <coro/coro.hpp>
+#endif
 
 auto main() -> int
 {
