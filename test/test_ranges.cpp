@@ -11,6 +11,7 @@
 #include <coro/ranges/to.hpp>
 #include <iostream>
 
+#ifdef LIBCORO_FEATURE_NETWORKING
 auto make_server_task(
     std::unique_ptr<coro::scheduler>& scheduler, const coro::net::socket_address& address, std::string_view message)
     -> coro::task<void>
@@ -138,15 +139,18 @@ TEST_CASE("Sync stream to TCP pipeline", "[async_ranges]")
         REQUIRE(client);
 
         // clang-format off
-          co_await (
-              msgs
-              | coro::ranges::transform([&](std::string_view msg) -> coro::task<void> {
+        co_await (
+            msgs // Sync stream
+            | coro::ranges::transform([&](std::string_view msg) -> coro::task<void> {
                                             co_await client->write_all(msg);
-                                        })
-              | coro::ranges::await
-              | coro::ranges::drain
-          );
+                                        }) // Creating tasks
+            | coro::ranges::await // co_awaiting them
+            | coro::ranges::drain // Making the whole pipe a single task
+        );
         // clang-format on
+
+        // let the client catch up (BSD only)
+        co_await scheduler->yield_for(std::chrono::milliseconds{40});
     }(scheduler, messages);
 
     auto client_task = [](std::unique_ptr<coro::scheduler>& scheduler) -> coro::task<void>
@@ -157,15 +161,34 @@ TEST_CASE("Sync stream to TCP pipeline", "[async_ranges]")
         auto                   connect_status = co_await client.connect();
         REQUIRE(connect_status == coro::net::connect_status::connected);
 
-        // clang-format off
-          std::string result = co_await (
-              client
-              | coro::ranges::with_buffer()
-              | coro::ranges::join
-              | as_chars
-              | coro::ranges::to<std::string>
-          );
-        // clang-format on
+        std::string result;
+
+        SECTION("Dynamic buffer")
+        {
+            // clang-format off
+            result = co_await (
+                client
+                | coro::ranges::with_buffer()
+                | coro::ranges::join
+                | as_chars
+                | coro::ranges::to<std::string>
+            );
+            // clang-format on
+        }
+
+        SECTION("Custom buffer")
+        {
+            std::array<char, 4096> buffer{};
+            // clang-format off
+            result = co_await (
+                client
+                | coro::ranges::with_buffer(std::as_writable_bytes(std::span{buffer}))
+                | coro::ranges::join
+                | as_chars
+                | coro::ranges::to<std::string>
+            );
+            // clang-format on
+        }
 
         CHECK(result == "Helloworld!");
     }(scheduler);
@@ -234,3 +257,5 @@ TEST_CASE("Partial reading", "[async_ranges]")
 
     coro::sync_wait(coro::when_all(std::move(server_task), std::move(client_task)));
 }
+
+#endif

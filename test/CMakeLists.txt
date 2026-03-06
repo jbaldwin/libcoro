@@ -19,6 +19,7 @@ set(LIBCORO_TEST_SOURCE_FILES
         test_task_group.cpp
         test_thread_pool.cpp
         test_when_all.cpp
+        test_ranges.cpp
 
         catch_amalgamated.hpp catch_amalgamated.cpp
         catch_extensions.hpp catch_extensions.cpp
@@ -45,8 +46,6 @@ if (LIBCORO_FEATURE_NETWORKING)
             net/test_tcp_server.cpp
             net/test_tls_server.cpp
             net/test_udp_peers.cpp
-
-            test_ranges.cpp
     )
 endif ()
 
