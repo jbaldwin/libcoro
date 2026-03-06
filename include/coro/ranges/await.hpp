@@ -15,7 +15,7 @@ protected:
 public:
     constexpr explicit await_view_base(previous_stream_t prev_stream) : m_prev_stream(prev_stream) {}
 
-    auto next() -> awaiter_type
+    auto next() -> coro::task<std::optional<std::remove_cvref_t<value_t>>>
     {
         auto awaitable = co_await m_prev_stream.next();
         if (awaitable)
@@ -54,11 +54,11 @@ public:
 
 template<
     concepts::async_streamable previous_stream_t,
-    typename value_t = typename coro::concepts::awaitable_traits<
+    typename value_type = typename coro::concepts::awaitable_traits<
         concepts::async_stream_return_t<previous_stream_t>>::awaiter_return_type>
-class await_view : public await_view_base<previous_stream_t, value_t>
+class await_view : public await_view_base<previous_stream_t, value_type>
 {
-    using base_t = await_view_base<previous_stream_t, value_t>;
+    using base_t = await_view_base<previous_stream_t, value_type>;
 
 public:
     using base_t::base_t;

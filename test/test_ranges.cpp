@@ -1,13 +1,236 @@
 #include "catch_extensions.hpp"
 #include "coro/ranges/await.hpp"
 #include "coro/ranges/drain.hpp"
+#include "coro/ranges/filter.hpp"
 #include "coro/ranges/join.hpp"
+#include "coro/ranges/take.hpp"
 #include "coro/ranges/take_until.hpp"
 #include "coro/ranges/transform.hpp"
 #include <catch_amalgamated.hpp>
 #include <coro/coro.hpp>
 #include <coro/ranges/to.hpp>
 #include <iostream>
+
+TEST_CASE("coro::ranges::take_until basic", "[async_ranges]")
+{
+    std::vector<int> input = {1, 2, 3, 4, 5, 6};
+
+    // Take until we hit 4
+    // 4 should be excluded
+    auto task = input | coro::ranges::take_until([](int i) { return i == 4; }) | coro::ranges::to<std::vector<int>>;
+
+    auto result = coro::sync_wait(task);
+
+    CHECK(result == std::vector{1, 2, 3});
+}
+
+TEST_CASE("coro::ranges::take basic", "[async_ranges]")
+{
+    std::vector<int>  input = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
+    const std::size_t limit = 4;
+
+    auto task = input | coro::ranges::take(limit) | coro::ranges::to<std::vector<int>>;
+
+    auto result = coro::sync_wait(task);
+
+    CHECK(result.size() == limit);
+    CHECK(result == std::vector{1, 2, 3, 4});
+}
+
+TEST_CASE("coro::ranges::take boundary conditions", "[async_ranges]")
+{
+    std::vector<int> input = {1, 2, 3};
+
+    auto [name, n, expected_size] = GENERATE(
+        table<std::string, std::size_t, std::size_t>(
+            {{"take zero", 0, 0}, {"take exact", 3, 3}, {"take more", 5, 3}, {"take one", 1, 1}}));
+
+    DYNAMIC_SECTION("Testing: " << name)
+    {
+        auto task = input | coro::ranges::take(n) | coro::ranges::to<std::vector<int>>;
+
+        auto result = coro::sync_wait(task);
+        CHECK(result.size() == expected_size);
+    }
+}
+
+TEST_CASE("coro::ranges::transform basic", "[async_ranges]")
+{
+    std::vector<int> input = {1, 2, 3, 4, 5};
+
+    auto task = input | coro::ranges::transform([](int i) { return i * 2; }) | coro::ranges::to<std::vector<int>>;
+
+    auto result = coro::sync_wait(task);
+
+    CHECK(result == std::vector{2, 4, 6, 8, 10});
+}
+
+TEST_CASE("coro::ranges::transform", "[async_ranges]")
+{
+    auto [name, input, expected] = GENERATE(
+        table<std::string, std::vector<int>, std::vector<std::string>>(
+            {{"multiple elements", {1, 2, 3}, {"1", "2", "3"}},
+             {"empty stream", {}, {}},
+             {"single element", {42}, {"42"}}}));
+
+    DYNAMIC_SECTION("Testing: " << name)
+    {
+        auto task = input | coro::ranges::transform([](int i) { return std::to_string(i); }) |
+                    coro::ranges::to<std::vector<std::string>>;
+
+        auto result = coro::sync_wait(task);
+        CHECK(result == expected);
+    }
+}
+
+TEST_CASE("coro::ranges::transform with capture", "[async_ranges]")
+{
+    std::vector<int> input       = {10, 10, 10};
+    int              running_sum = 0;
+
+    auto task = input |
+                coro::ranges::transform(
+                    [&running_sum](int i)
+                    {
+                        running_sum += i;
+                        return running_sum;
+                    }) |
+                coro::ranges::to<std::vector<int>>;
+
+    auto result = coro::sync_wait(task);
+
+    CHECK(result == std::vector{10, 20, 30});
+    CHECK(running_sum == 30);
+}
+
+// TEST_CASE("coro::ranges::transform returning references", "[async_ranges]") {
+//     struct Point { int x; int y; };
+//     std::vector<Point> points = {{1, 2}, {3, 4}};
+//
+//     auto task = points
+//                 | coro::ranges::transform([](Point& p) -> int& { return p.x; })
+//                 | coro::ranges::transform([](int& x) { x += 1; });
+//
+//     coro::sync_wait(task | coro::ranges::drain);
+//
+//     CHECK(points[0].x == 2);
+//     CHECK(points[1].x == 4);
+// }
+
+TEST_CASE("coro::ranges::await with value tasks", "[async_ranges]")
+{
+    // A simple function that returns a task
+    auto make_task = [](int val) -> coro::task<int> { co_return val * 2; };
+
+    std::vector<int> inputs = {1, 2, 3};
+
+    auto task_stream = inputs | coro::ranges::transform(make_task);
+
+    auto result_task = task_stream | coro::ranges::await | coro::ranges::to<std::vector<int>>;
+
+    auto results = coro::sync_wait(result_task);
+
+    std::vector<int> expected = {2, 4, 6};
+    CHECK(results == expected);
+}
+
+TEST_CASE("coro::ranges::await with void tasks", "[async_ranges]")
+{
+    int execution_count = 0;
+
+    auto make_void_task = [&](int) -> coro::task<void>
+    {
+        execution_count++;
+        co_return;
+    };
+
+    std::vector<int> inputs = {1, 2, 3, 4, 5};
+
+    auto pipeline = inputs | coro::ranges::transform(make_void_task) | coro::ranges::await;
+
+    coro::sync_wait(pipeline | coro::ranges::drain);
+
+    CHECK(execution_count == 5);
+}
+
+TEST_CASE("coro::ranges::await empty stream", "[async_ranges]")
+{
+    std::vector<coro::task<int>> empty_input;
+
+    auto result_task = empty_input | coro::ranges::await | coro::ranges::to<std::vector<int>>;
+
+    auto results = coro::sync_wait(result_task);
+
+    CHECK(results.empty());
+}
+
+TEST_CASE("coro::ranges::drain", "[async_ranges]")
+{
+    // To verify how many elements were processed
+    std::size_t processed_count = 0;
+
+    auto [name, input_size] =
+        GENERATE(table<std::string, size_t>({{"empty stream", 0}, {"small stream", 5}, {"large stream", 100}}));
+
+    DYNAMIC_SECTION("Draining a " << name)
+    {
+        std::vector<int> data(input_size, 1);
+
+        auto stream = data | coro::ranges::transform(
+                                 [&](int)
+                                 {
+                                     processed_count++;
+                                     return 0; // dummy value
+                                 });
+
+        coro::sync_wait(stream | coro::ranges::drain);
+
+        CHECK(processed_count == input_size);
+    }
+}
+
+TEST_CASE("coro::ranges::join", "[async_ranges]")
+{
+    using TestData = std::vector<std::vector<int>>;
+
+    auto [name, input_chunks, expected] = GENERATE(
+        table<std::string, TestData, std::vector<int>>(
+            {{"standard chunks", {{1, 2}, {3, 4}, {5}}, {1, 2, 3, 4, 5}},
+             {"empty chunks in between", {{1}, {}, {2, 3}, {}, {4}}, {1, 2, 3, 4}},
+             {"all empty chunks", {{}, {}, {}}, {}},
+             {"single large chunk", {{10, 20, 30, 40}}, {10, 20, 30, 40}}}));
+
+    DYNAMIC_SECTION("Joining " << name)
+    {
+        auto joined_task = input_chunks | coro::ranges::join | coro::ranges::to<std::vector<int>>;
+
+        auto result = coro::sync_wait(joined_task);
+        CHECK(result == expected);
+    }
+}
+
+TEST_CASE("coro::ranges::filter", "[async_ranges]")
+{
+    std::vector input = {1, 2, 3, 4, 5, 6, 7, 8};
+
+    auto [name, predicate] = GENERATE(
+        table<std::string, std::function<bool(int)>>(
+            {{"even numbers", [](int i) { return i % 2 == 0; }},
+             {"odd numbers", [](int i) { return i % 2 != 0; }},
+             {"greater than 5", [](int i) { return i > 5; }}}));
+
+    DYNAMIC_SECTION("Filtering for " << name)
+    {
+        auto             expected_view = input | std::views::filter(predicate);
+        std::vector<int> expected(expected_view.begin(), expected_view.end());
+
+        auto task = input | coro::ranges::filter(predicate) | coro::ranges::to<std::vector<int>>;
+
+        auto result = coro::sync_wait(task);
+
+        CHECK(std::ranges::equal(expected, result));
+    }
+}
 
 #ifdef LIBCORO_FEATURE_NETWORKING
     #include "net/catch_net_extensions.hpp"
@@ -218,7 +441,7 @@ TEST_CASE("Partial reading", "[async_ranges]")
 
         // clang-format off
         auto pipe = msgs
-            | coro::ranges::transform([&](auto &&msg) -> coro::task<void> {
+            | coro::ranges::transform([&](auto msg) -> coro::task<void> {
                                           co_await client->write_all(msg);
                                       })
             | coro::ranges::await

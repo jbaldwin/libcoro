@@ -11,8 +11,8 @@ class transform_view
 private:
     using awaiter_type        = concepts::async_stream_awaiter_t<previous_stream_t>;
     using awaiter_return_type = concepts::async_stream_return_t<previous_stream_t>;
-    using return_type         = wrap_return_value_for_optional_t<decltype(std::declval<transform_fn&>()(
-        unwrap_return_value(std::declval<awaiter_return_type>())))>;
+    using return_type         = concepts::wrap_return_value_for_optional_t<decltype(std::declval<transform_fn&>()(
+        concepts::unwrap_return_value(std::declval<awaiter_return_type>())))>;
 
 public:
     constexpr transform_view(previous_stream_t prev_stream, transform_fn transform)
@@ -26,7 +26,7 @@ public:
         auto value = co_await m_prev_stream.next();
         if (value)
         {
-            auto result = m_transform(unwrap_return_value(*value));
+            auto result = m_transform(concepts::unwrap_return_value(*value));
             co_return std::forward<decltype(result)>(result);
         }
         co_return std::nullopt;

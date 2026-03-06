@@ -14,7 +14,7 @@ public:
         container_t result;
         while (true)
         {
-            auto value = co_await rng.advance();
+            auto value = co_await rng.next();
             if (value)
             {
                 result.emplace_back(std::move(*value));

@@ -18,7 +18,7 @@ public:
 
     auto next() -> awaiter_type
     {
-        if (m_current + 1 < m_count)
+        if (m_current < m_count)
         {
             m_current += 1;
             co_return co_await m_prev_stream.next();
@@ -35,12 +35,12 @@ private:
 struct _take
 {
     template<concepts::async_streamable Rng>
-    constexpr auto operator()(Rng&& rng, std::size_t N)
+    constexpr auto operator()(Rng&& rng, std::size_t N) const
     {
         return take_view{std::forward<Rng>(rng), N};
     }
 
-    constexpr auto operator()(std::size_t N) { return _partial<_take, std::size_t>{0, N}; }
+    constexpr auto operator()(std::size_t N) const { return _partial<_take, std::size_t>{0, N}; }
 };
 
 inline constexpr _take take;

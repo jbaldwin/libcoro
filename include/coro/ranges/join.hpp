@@ -30,14 +30,23 @@ public:
             co_return std::move((*m_value)[m_cursor]);
         }
 
-        m_value = co_await m_prev_stream.next();
-        if (m_value && m_value->size() > 0)
+        // Until we find non-empty chunk
+        while (true)
         {
-            m_cursor = 0;
-            co_return std::move((*m_value)[m_cursor]);
-        }
+            m_value = co_await m_prev_stream.next();
+            if (!m_value)
+            {
+                co_return std::nullopt; // source exhausted
+            }
 
-        co_return std::nullopt;
+            if (m_value->size() > 0)
+            {
+                m_cursor = 0;
+                co_return std::move((*m_value)[m_cursor]);
+            }
+
+            // get next chunk
+        }
     }
 
 private:

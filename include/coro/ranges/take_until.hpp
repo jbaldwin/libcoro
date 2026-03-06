@@ -28,8 +28,9 @@ public:
     }
 
 private:
-    previous_stream_t          m_prev_stream;
-    [[no_unique_address]] Pred m_pred;
+    previous_stream_t m_prev_stream;
+    [[no_unique_address]]
+    Pred m_pred;
 };
 
 struct _take_until

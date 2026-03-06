@@ -148,6 +148,7 @@ set(LIBCORO_SOURCE_FILES
     include/coro/ranges/await.hpp
     include/coro/ranges/drain.hpp
     include/coro/ranges/take.hpp
+    include/coro/ranges/filter.hpp
 )
 
 if(LIBCORO_FEATURE_NETWORKING)
