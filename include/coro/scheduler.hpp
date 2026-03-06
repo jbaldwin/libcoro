@@ -1,5 +1,7 @@
 #pragma once
 
+#include "coro/detail/awaiter_list.hpp"
+#include "coro/detail/pipe.hpp"
 #include "coro/detail/poll_info.hpp"
 #include "coro/detail/timer_handle.hpp"
 #include "coro/expected.hpp"
@@ -7,14 +9,10 @@
 #include "coro/io_notifier.hpp"
 #include "coro/poll.hpp"
 #include "coro/thread_pool.hpp"
-#include <type_traits>
-#include <unistd.h>
 
 #ifdef LIBCORO_FEATURE_NETWORKING
     #include "coro/net/socket.hpp"
 #endif
-
-#include "detail/pipe.hpp"
 
 #include <chrono>
 #include <functional>
@@ -23,6 +21,7 @@
 #include <optional>
 #include <stop_token>
 #include <thread>
+#include <type_traits>
 #include <vector>
 
 #include <unistd.h>
@@ -150,10 +149,8 @@ public:
             if (m_scheduler.m_opts.execution_strategy == execution_strategy_t::process_tasks_inline)
             {
                 m_scheduler.m_size.fetch_add(1, std::memory_order::release);
-                {
-                    std::scoped_lock lk{m_scheduler.m_scheduled_tasks_mutex};
-                    m_scheduler.m_scheduled_tasks.emplace_back(awaiting_coroutine);
-                }
+                m_awaiting_coroutine = awaiting_coroutine;
+                detail::awaiter_list_push(m_scheduler.m_scheduled_ops, this);
 
                 // Trigger the event to wake-up the scheduler if this event isn't currently triggered.
                 bool expected{false};
@@ -161,13 +158,12 @@ public:
                         expected, true, std::memory_order::release, std::memory_order::relaxed))
                 {
                     constexpr int control = 1;
-                    ssize_t written = ::write(
-                        m_scheduler.m_schedule_pipe.write_fd(),
-                        reinterpret_cast<const void*>(&control),
-                        sizeof(control));
+                    ssize_t       written = m_scheduler.m_schedule_pipe.write(&control, sizeof(control));
                     if (written != sizeof(control))
                     {
-                        std::cerr << "libcoro::scheduler::schedule_operation failed to write to schedule pipe, bytes written=" << written << "\n";
+                        std::cerr
+                            << "libcoro::scheduler::schedule_operation failed to write to schedule pipe, bytes written="
+                            << written << "\n";
                     }
                 }
             }
@@ -181,6 +177,10 @@ public:
          * no-op as this is the function called first by the thread pool's executing thread.
          */
         auto await_resume() noexcept -> void {}
+
+        std::coroutine_handle<> m_awaiting_coroutine;
+        schedule_operation*     m_next{nullptr};
+        bool                    m_allocated{false};
 
     private:
         /// The thread pool that this operation will execute on.
@@ -286,7 +286,8 @@ public:
      * executing the task.
      * @tparam return_type The return value of the task.
      * @param task The task to schedule on the scheduler with the given timeout.
-     * @param timeout How long should this task be given to complete before it times out?
+     * @param timeout How long should this task be given to complete before it times out? Zero or negative timeout means
+     * no timeout.
      * @return The task to await for the input task to complete.
      */
     template<typename return_type, typename rep, typename period>
@@ -302,6 +303,7 @@ public:
         {
             if constexpr (std::is_void_v<return_type>)
             {
+                co_await schedule(std::move(task));
                 co_return coro::expected<return_type, timeout_status>();
             }
             else
@@ -466,8 +468,11 @@ private:
     /// The event loop pipe to trigger a shutdown.
     detail::pipe_t m_shutdown_pipe{};
     /// The event loop schedule task pipe.
-    detail::pipe_t    m_schedule_pipe{};
+    detail::pipe_t m_schedule_pipe{};
+    /// @brief Scheduled operations waiting tasks has entries.
     std::atomic<bool> m_schedule_pipe_triggered{false};
+    /// @brief Scheduled operations waiting to be resumed.
+    std::atomic<schedule_operation*> m_scheduled_ops{nullptr};
 
     /// The number of tasks executing or awaiting events in this io scheduler.
     std::atomic<std::size_t> m_size{0};
@@ -493,9 +498,7 @@ private:
     auto              process_events_execute(std::chrono::milliseconds timeout) -> void;
     static auto       event_to_poll_status(uint32_t events) -> poll_status;
 
-    auto                                 process_scheduled_execute_inline() -> void;
-    std::mutex                           m_scheduled_tasks_mutex{};
-    std::vector<std::coroutine_handle<>> m_scheduled_tasks{};
+    auto process_scheduled_execute_inline() -> void;
 
     static constexpr const int   m_shutdown_object{0};
     static constexpr const void* m_shutdown_ptr = &m_shutdown_object;

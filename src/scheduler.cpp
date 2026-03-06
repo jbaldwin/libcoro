@@ -119,15 +119,15 @@ auto scheduler::yield_until(time_point time) -> coro::task<void>
         detail::poll_info pi{};
         add_timer_token(now + amount, pi);
         co_await pi;
-
-        m_size.fetch_sub(1, std::memory_order::release);
     }
     co_return;
 }
 
 auto scheduler::poll(
-    fd_t fd, coro::poll_op op, std::chrono::milliseconds timeout, std::optional<poll_stop_token> cancel_trigger)
-    -> coro::task<poll_status>
+    fd_t                           fd,
+    coro::poll_op                  op,
+    std::chrono::milliseconds      timeout,
+    std::optional<poll_stop_token> cancel_trigger) -> coro::task<poll_status>
 {
     // Because the size will drop when this coroutine suspends every poll needs to undo the subtraction
     // on the number of active tasks in the scheduler.  When this task is resumed by the event loop.
@@ -155,7 +155,6 @@ auto scheduler::poll(
     // onto the thread poll its possible the other type of event could trigger while its waiting
     // to execute again, thus restarting the coroutine twice, that would be quite bad.
     auto result = co_await pi;
-    m_size.fetch_sub(1, std::memory_order::release);
     co_return result;
 }
 
@@ -173,24 +172,9 @@ auto scheduler::resume(std::coroutine_handle<> handle) -> bool
 
     if (m_opts.execution_strategy == execution_strategy_t::process_tasks_inline)
     {
-        m_size.fetch_add(1, std::memory_order::release);
-        {
-            std::scoped_lock lk{m_scheduled_tasks_mutex};
-            m_scheduled_tasks.emplace_back(handle);
-        }
-
-        bool expected{false};
-        if (m_schedule_pipe_triggered.compare_exchange_strong(
-                expected, true, std::memory_order::release, std::memory_order::relaxed))
-        {
-            const int value = 1;
-            ssize_t written = ::write(m_schedule_pipe.write_fd(), reinterpret_cast<const void*>(&value), sizeof(value));
-            if (written != sizeof(value))
-            {
-                std::cerr << "libcoro::scheduler::resume() failed to write to schedule pipe, bytes written=" << written << "\n";
-            }
-        }
-
+        auto* schedule_op        = new schedule_operation{*this};
+        schedule_op->m_allocated = true;
+        schedule_op->await_suspend(handle);
         return true;
     }
     else
@@ -205,11 +189,12 @@ auto scheduler::shutdown() noexcept -> void
     if (m_shutdown_requested.exchange(true, std::memory_order::acq_rel) == false)
     {
         // Signal the event loop to stop asap.
-        const int value{1};
-        ssize_t written = ::write(m_shutdown_pipe.write_fd(), reinterpret_cast<const void*>(&value), sizeof(value));
+        const constexpr int value{1};
+        ssize_t             written = m_shutdown_pipe.write(&value, sizeof(value));
         if (written != sizeof(value))
         {
-            std::cerr << "libcoro::scheduler::shutdown() failed to write to shutdown pipe, bytes written=" << written << "\n";
+            std::cerr << "libcoro::scheduler::shutdown() failed to write to shutdown pipe, bytes written=" << written
+                      << "\n";
         }
 
         if (m_io_thread.joinable())
@@ -244,8 +229,6 @@ auto scheduler::yield_for_internal(std::chrono::nanoseconds amount) -> coro::tas
         detail::poll_info pi{};
         add_timer_token(clock::now() + amount, pi);
         co_await pi;
-
-        m_size.fetch_sub(1, std::memory_order::release);
     }
     co_return;
 }
@@ -320,14 +303,21 @@ auto scheduler::process_events_execute(std::chrono::milliseconds timeout) -> voi
     {
         if (m_opts.execution_strategy == execution_strategy_t::process_tasks_inline)
         {
+            std::size_t resumed{0};
             for (auto& handle : m_handles_to_resume)
             {
                 handle.resume();
+                ++resumed;
+            }
+            if (resumed > 0)
+            {
+                m_size.fetch_sub(resumed, std::memory_order::release);
             }
         }
         else
         {
             m_thread_pool->resume(m_handles_to_resume);
+            m_size.fetch_sub(m_handles_to_resume.size(), std::memory_order::release);
         }
 
         m_handles_to_resume.clear();
@@ -336,53 +326,60 @@ auto scheduler::process_events_execute(std::chrono::milliseconds timeout) -> voi
 
 auto scheduler::process_scheduled_execute_inline() -> void
 {
-    std::vector<std::coroutine_handle<>> tasks{};
+    // Clear the notification by reading until the pipe is cleared, this is done before
+    // resetting the flag that writes to the pipe need to happen.
+    while (true)
     {
-        // Acquire the entire list, and then reset it.
-        std::scoped_lock lk{m_scheduled_tasks_mutex};
-        tasks.swap(m_scheduled_tasks);
-
-        // Clear the notification by reading until the pipe is cleared.
-        while (true)
+        constexpr std::size_t       READ_COUNT{4};
+        constexpr ssize_t           READ_COUNT_BYTES = READ_COUNT * sizeof(int);
+        std::array<int, READ_COUNT> control{};
+        const ssize_t               read_bytes = m_schedule_pipe.read(control.data(), READ_COUNT_BYTES);
+        if (read_bytes == READ_COUNT_BYTES)
         {
-            constexpr std::size_t       READ_COUNT{4};
-            constexpr ssize_t           READ_COUNT_BYTES = READ_COUNT * sizeof(int);
-            std::array<int, READ_COUNT> control{};
-            const ssize_t               result =
-                ::read(m_schedule_pipe.read_fd(), reinterpret_cast<void*>(control.data()), READ_COUNT_BYTES);
-            if (result == READ_COUNT_BYTES)
-            {
-                continue;
-            }
+            continue;
+        }
 
-            // If we got nothing, or we got a partial read break the loop since the pipe is empty.
-            if (result >= 0)
-            {
-                break;
-            }
-
-            // pipe is set to O_NONBLOCK so ignore empty blocking reads.
-            if (errno == EAGAIN)
-            {
-                break;
-            }
-
-            // Not much we can do here, we're in a very bad state, lets report to stderr.
-            std::cerr << "::read(m_schedule_pipe.read_fd()) error[" << errno << "] " << ::strerror(errno) << " fd=["
-                      << m_schedule_pipe.read_fd() << "]" << std::endl;
+        // If we got nothing, or we got a partial read break the loop since the pipe is empty.
+        if (read_bytes >= 0)
+        {
             break;
         }
 
-        // Clear the in memory flag to reduce eventfd_* calls on scheduling.
-        m_schedule_pipe_triggered.exchange(false, std::memory_order::release);
+        // pipe is set to O_NONBLOCK so ignore empty blocking reads.
+        if (errno == EAGAIN)
+        {
+            break;
+        }
+
+        // Not much we can do here, we're in a very bad state, lets report to stderr.
+        std::cerr << "::read(m_schedule_pipe.read_fd()) error[" << errno << "] " << ::strerror(errno) << " fd=["
+                  << m_schedule_pipe.read_fd() << "]" << std::endl;
+        break;
     }
 
-    // This set of handles can be safely resumed now since they do not have a corresponding timeout event.
-    for (auto& task : tasks)
+    // Note to all producers that the pipe is cleared and any new additions need to trigger the pipe.
+    m_schedule_pipe_triggered.exchange(false, std::memory_order::release);
+
+    // Now it is safe to acquire all scheduled ops.
+    auto* ops = detail::awaiter_list_pop_all(m_scheduled_ops);
+
+    if (ops != nullptr)
     {
-        task.resume();
+        ops = detail::awaiter_list_reverse(ops);
+
+        while (ops != nullptr)
+        {
+            auto* next = ops->m_next;
+            m_handles_to_resume.emplace_back(ops->m_awaiting_coroutine);
+
+            if (ops->m_allocated)
+            {
+                delete ops;
+            }
+
+            ops = next;
+        }
     }
-    m_size.fetch_sub(tasks.size(), std::memory_order::release);
 }
 
 auto scheduler::process_event_execute(detail::poll_info* pi, poll_status status) -> void

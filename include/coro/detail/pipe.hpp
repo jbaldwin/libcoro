@@ -19,6 +19,9 @@ public:
     auto operator=(const pipe_t& other) -> pipe_t&;
     auto operator=(pipe_t&& other) noexcept -> pipe_t&;
 
+    [[nodiscard]] auto write(const void* bytes, std::size_t n) -> long;
+    [[nodiscard]] auto read(void* buffer, std::size_t n) -> long;
+
     [[nodiscard]] auto read_fd() const -> const fd_t&;
     [[nodiscard]] auto write_fd() const -> const fd_t&;
 

@@ -33,6 +33,8 @@ endif ()
 
 if (LIBCORO_FEATURE_NETWORKING)
     list(APPEND LIBCORO_TEST_SOURCE_FILES
+            detail/test_pipe.cpp
+
             net/test_ip_address.cpp
             net/test_io_status.cpp
             net/test_endpoint.cpp
