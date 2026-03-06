@@ -123,7 +123,7 @@ struct _partial : public concepts::_async_adaptor
     constexpr auto operator()(range_t&& range) &&
     {
         auto forwarder = [&range](auto&... args)
-        { return Adaptor{}(std::forward<range_t>(range), std::move(args)...); };
+        { return Adaptor{}(std::forward<range_t>(range), std::forward<decltype(args)>(args)...); };
         return std::apply(forwarder, m_args);
     }
 
