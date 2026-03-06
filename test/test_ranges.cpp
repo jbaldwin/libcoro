@@ -4,14 +4,15 @@
 #include "coro/ranges/join.hpp"
 #include "coro/ranges/take_until.hpp"
 #include "coro/ranges/transform.hpp"
-#include "net/catch_net_extensions.hpp"
 #include <catch_amalgamated.hpp>
 #include <coro/coro.hpp>
-#include <coro/ranges/socket_stream.hpp>
 #include <coro/ranges/to.hpp>
 #include <iostream>
 
 #ifdef LIBCORO_FEATURE_NETWORKING
+    #include "net/catch_net_extensions.hpp"
+    #include <coro/ranges/socket_stream.hpp>
+
 auto make_server_task(
     std::unique_ptr<coro::scheduler>& scheduler, const coro::net::socket_address& address, std::string_view message)
     -> coro::task<void>
