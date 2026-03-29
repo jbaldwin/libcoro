@@ -1,5 +1,4 @@
 #include "coro/thread_pool_ws.hpp"
-#include "coro/detail/task_self_deleting.hpp"
 #include "coro/task_group.hpp"
 
 #include <iostream>

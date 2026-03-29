@@ -1,6 +1,7 @@
 #pragma once
 
 #include "coro/detail/awaiter_list.hpp"
+#include "coro/detail/task_self_deleting.hpp"
 #include "coro/task.hpp"
 
 #include <chrono>
