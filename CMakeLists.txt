@@ -257,7 +257,6 @@ if(${CMAKE_CXX_COMPILER_ID} MATCHES "GNU")
         $<$<COMPILE_LANGUAGE:CXX>:-fexceptions>
         $<$<COMPILE_LANGUAGE:CXX>:-Wall>
         $<$<COMPILE_LANGUAGE:CXX>:-Wextra>
-        $<$<COMPILE_LANGUAGE:CXX>:-pipe>
     )
 elseif(${CMAKE_CXX_COMPILER_ID} MATCHES "Clang")
     if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "16.0.0")
@@ -268,7 +267,6 @@ elseif(${CMAKE_CXX_COMPILER_ID} MATCHES "Clang")
         $<$<COMPILE_LANGUAGE:CXX>:-fexceptions>
         $<$<COMPILE_LANGUAGE:CXX>:-Wall>
         $<$<COMPILE_LANGUAGE:CXX>:-Wextra>
-        $<$<COMPILE_LANGUAGE:CXX>:-pipe>
     )
 elseif(MSVC)
     target_compile_options(${PROJECT_NAME} PUBLIC
