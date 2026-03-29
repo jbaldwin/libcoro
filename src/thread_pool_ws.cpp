@@ -21,7 +21,7 @@ thread_local std::optional<uint32_t> thread_pool_ws::m_thread_pool_queue_idx{std
 thread_pool_ws::worker_info::worker_info(thread_pool_ws& tp, uint32_t i)
 {
     // Start the thread after all of the worker_info fields have been initialized.
-    m_thread = std::jthread([&tp, i](std::stop_token st) -> void { tp.execute(std::move(st), i); });
+    m_thread = std::thread([&tp, i]() -> void { tp.execute(i); });
 }
 
 thread_pool_ws::thread_pool_ws(options opts, private_constructor) : m_opts(std::move(opts))
@@ -124,7 +124,6 @@ auto thread_pool_ws::shutdown() noexcept -> void
     {
         for (auto& worker : m_workers)
         {
-            worker->m_thread.request_stop();
             std::unique_lock<std::mutex> lk{worker->m_wait_mutex};
             worker->m_wait_cv.notify_one();
         }
@@ -135,7 +134,7 @@ auto thread_pool_ws::shutdown() noexcept -> void
     }
 }
 
-auto thread_pool_ws::execute(std::stop_token st, uint32_t idx) -> void
+auto thread_pool_ws::execute(uint32_t idx) -> void
 {
     m_thread_pool_queue_idx = {idx};
 
@@ -149,7 +148,7 @@ auto thread_pool_ws::execute(std::stop_token st, uint32_t idx) -> void
     auto&  wait_cv      = info->m_wait_cv;
     auto&  thread_queue = info->m_queue;
     size_t spin_counter{0};
-    while (!st.stop_requested())
+    while (!m_shutdown_requested.load(std::memory_order::acquire))
     {
         bool had_tasks = drain_thread_queue(thread_queue);
         had_tasks |= try_steal(idx);

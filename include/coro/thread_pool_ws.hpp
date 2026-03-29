@@ -33,7 +33,7 @@ public:
         auto operator=(const worker_info&) noexcept -> worker_info& = delete;
         auto operator=(worker_info&&) noexcept -> worker_info&      = delete;
 
-        std::jthread                       m_thread;
+        std::thread                        m_thread;
         std::mutex                         m_wait_mutex{};
         std::condition_variable_any        m_wait_cv{};
         riften::Deque<schedule_operation*> m_queue{};
@@ -120,7 +120,7 @@ private:
     std::atomic<uint32_t>                       m_sleeping{0};
     static thread_local std::optional<uint32_t> m_thread_pool_queue_idx;
 
-    auto execute(std::stop_token st, uint32_t idx) -> void;
+    auto execute(uint32_t idx) -> void;
     auto drain_thread_queue(riften::Deque<schedule_operation*>& queue) -> bool;
     auto try_steal(uint32_t my_idx) -> bool;
     auto drain_peer_queue(riften::Deque<schedule_operation*>& queue) -> bool;
