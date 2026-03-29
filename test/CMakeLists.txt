@@ -67,7 +67,7 @@ else ()
     target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
     target_link_libraries(${PROJECT_NAME} PRIVATE libcoro)
 
-    if (NOT ${CMAKE_CXX_COMPILER_ID} MATCHES "GNU|Clang|MSVC")
+    if (NOT (${CMAKE_CXX_COMPILER_ID} MATCHES "GNU|Clang" OR MSVC))
         message(FATAL_ERROR "Unsupported compiler.")
     endif ()
 
