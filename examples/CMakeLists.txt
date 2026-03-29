@@ -1,9 +1,9 @@
 cmake_minimum_required(VERSION 3.12)
 project(libcoro_examples)
 
-if(${CMAKE_CXX_COMPILER_ID} MATCHES "GNU")
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
     set(LIBCORO_EXAMPLE_OPTIONS -fcoroutines -Wall -Wextra)
-elseif(${CMAKE_CXX_COMPILER_ID} MATCHES "Clang")
+elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     set(LIBCORO_EXAMPLE_OPTIONS -Wall -Wextra)
 elseif(MSVC)
     set(LIBCORO_EXAMPLE_OPTIONS /W4)

@@ -207,7 +207,7 @@ if(DEFINED EMSCRIPTEN)
     add_link_options(-sEXIT_RUNTIME)
 endif()
 
-if(${CMAKE_CXX_COMPILER_ID} MATCHES "GNU|Clang")
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     add_compile_options(
         $<$<COMPILE_LANGUAGE:CXX>:-Wall>
         $<$<COMPILE_LANGUAGE:CXX>:-Wextra>
@@ -259,7 +259,7 @@ if(LIBCORO_FEATURE_NETWORKING)
     endif()
 endif()
 
-if(${CMAKE_CXX_COMPILER_ID} MATCHES "GNU")
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
     if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "10.2.0")
         message(FATAL_ERROR "g++ version ${CMAKE_CXX_COMPILER_VERSION} is unsupported, please upgrade to at least 10.2.0")
     endif()
@@ -267,7 +267,7 @@ if(${CMAKE_CXX_COMPILER_ID} MATCHES "GNU")
     target_compile_options(${PROJECT_NAME} PUBLIC
         $<$<COMPILE_LANGUAGE:CXX>:-fexceptions>
     )
-elseif(${CMAKE_CXX_COMPILER_ID} MATCHES "Clang")
+elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "16.0.0")
         message(FATAL_ERROR "Clang version ${CMAKE_CXX_COMPILER_VERSION} is unsupported, please upgrade to at least 16.0.0")
     endif()
