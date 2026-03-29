@@ -54,8 +54,7 @@ thread_pool_ws::schedule_operation::schedule_operation(thread_pool_ws& tp) noexc
 
 auto thread_pool_ws::schedule_operation::await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept -> void
 {
-    m_awaiting_coroutine = awaiting_coroutine;
-    m_atomic_coroutine.store(awaiting_coroutine, std::memory_order::release);
+    m_awaiting_coroutine.store(awaiting_coroutine, std::memory_order::release);
     // See if we are running on a thread pool worker to enqueue locally.
     auto& idx = thread_pool_ws::m_thread_pool_queue_idx;
     if (idx.has_value())
@@ -264,8 +263,7 @@ auto thread_pool_ws::resume_task(std::optional<schedule_operation*> op) -> bool
     {
         m_queue_size.fetch_sub(1, std::memory_order::release);
         auto v = op.value();
-        // v->m_awaiting_coroutine.resume();
-        v->m_atomic_coroutine.load(std::memory_order::acquire).resume();
+        v->m_awaiting_coroutine.load(std::memory_order::acquire).resume();
         m_size.fetch_sub(1, std::memory_order::release);
         if (v->m_allocated.load(std::memory_order::acquire))
         {
@@ -279,12 +277,11 @@ auto thread_pool_ws::resume_task(std::optional<schedule_operation*> op) -> bool
 auto thread_pool_ws::try_wake_worker() noexcept -> void
 {
     // Attempt to wake a sleeper if there are any.
-    auto sleeping = m_sleeping.load(std::memory_order::acquire);
-    if (sleeping > 0)
+    if (m_sleeping.load(std::memory_order::acquire) > 0)
     {
         std::unique_lock<std::mutex> lk{m_wait_mutex};
-        sleeping = m_sleeping.load(std::memory_order::acquire);
-        if (sleeping == 0)
+        // Check again after acquiring the lock to see if there are any sleeping workers.
+        if (m_sleeping.load(std::memory_order::acquire) == 0)
         {
             return;
         }

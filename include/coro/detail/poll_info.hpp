@@ -53,8 +53,7 @@ struct poll_info
         auto await_ready() const noexcept -> bool { return false; }
         auto await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept -> void
         {
-            m_pi.m_awaiting_coroutine = awaiting_coroutine;
-            std::atomic_thread_fence(std::memory_order::release);
+            m_pi.m_awaiting_coroutine.store(awaiting_coroutine, std::memory_order::release);
         }
         auto await_resume() noexcept -> coro::poll_status { return m_pi.m_poll_status; }
 
@@ -73,7 +72,7 @@ struct poll_info
     /// the timeout within epoll.
     std::optional<timed_events::iterator> m_timer_pos{std::nullopt};
     /// The awaiting coroutine for this poll info to resume upon event or timeout.
-    std::coroutine_handle<> m_awaiting_coroutine;
+    std::atomic<std::coroutine_handle<>> m_awaiting_coroutine;
     /// The status of the poll operation.
     coro::poll_status m_poll_status{coro::poll_status::error};
     /// Did the timeout and event trigger at the same time on the same epoll_wait call?

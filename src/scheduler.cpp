@@ -370,7 +370,7 @@ auto scheduler::process_scheduled_execute_inline() -> void
         while (ops != nullptr)
         {
             auto* next = ops->m_next;
-            m_handles_to_resume.emplace_back(ops->m_awaiting_coroutine);
+            m_handles_to_resume.emplace_back(ops->m_awaiting_coroutine.load(std::memory_order::acquire));
 
             if (ops->m_allocated)
             {
@@ -410,7 +410,7 @@ auto scheduler::process_event_execute(detail::poll_info* pi, poll_status status)
             std::atomic_thread_fence(std::memory_order::acquire);
         }
 
-        m_handles_to_resume.emplace_back(pi->m_awaiting_coroutine);
+        m_handles_to_resume.emplace_back(pi->m_awaiting_coroutine.load(std::memory_order::acquire));
     }
 }
 
@@ -457,7 +457,7 @@ auto scheduler::process_timeout_execute() -> void
                 std::atomic_thread_fence(std::memory_order::acquire);
             }
 
-            m_handles_to_resume.emplace_back(pi->m_awaiting_coroutine);
+            m_handles_to_resume.emplace_back(pi->m_awaiting_coroutine.load(std::memory_order::acquire));
             pi->m_poll_status = coro::poll_status::timeout;
         }
     }

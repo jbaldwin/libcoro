@@ -60,8 +60,7 @@ public:
         auto await_resume() noexcept -> void {}
 
         schedule_operation*                  m_next{nullptr};
-        std::coroutine_handle<>              m_awaiting_coroutine{nullptr};
-        std::atomic<std::coroutine_handle<>> m_atomic_coroutine{nullptr};
+        std::atomic<std::coroutine_handle<>> m_awaiting_coroutine{nullptr};
 
     private:
         thread_pool_ws&   m_thread_pool;

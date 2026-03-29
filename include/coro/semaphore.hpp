@@ -37,11 +37,12 @@ template<std::ptrdiff_t max_value>
 class acquire_operation
 {
 public:
-    explicit acquire_operation(semaphore<max_value>& s) : m_semaphore(s) { }
+    explicit acquire_operation(semaphore<max_value>& s) : m_semaphore(s) {}
 
     [[nodiscard]] auto await_ready() const noexcept -> bool
     {
-        // If the semaphore is shutdown or a resources can be acquired without suspending release the lock and resume execution.
+        // If the semaphore is shutdown or a resources can be acquired without suspending release the lock and resume
+        // execution.
         if (m_semaphore.m_shutdown.load(std::memory_order::acquire) || m_semaphore.try_acquire())
         {
             m_semaphore.m_mutex.unlock();
@@ -59,7 +60,7 @@ public:
             return false;
         }
 
-        m_awaiting_coroutine = awaiting_coroutine;
+        m_awaiting_coroutine.store(awaiting_coroutine, std::memory_order::release);
         detail::awaiter_list_push(m_semaphore.m_acquire_waiters, this);
         m_semaphore.m_mutex.unlock();
         return true;
@@ -74,9 +75,9 @@ public:
         return semaphore_acquire_result::acquired;
     }
 
-    acquire_operation<max_value>* m_next{nullptr};
-    semaphore<max_value>&         m_semaphore;
-    std::coroutine_handle<>       m_awaiting_coroutine;
+    acquire_operation<max_value>*        m_next{nullptr};
+    std::atomic<std::coroutine_handle<>> m_awaiting_coroutine;
+    semaphore<max_value>&                m_semaphore;
 };
 
 } // namespace detail
@@ -85,9 +86,7 @@ template<std::ptrdiff_t max_value>
 class semaphore
 {
 public:
-    explicit semaphore(const std::ptrdiff_t starting_value)
-        : m_counter(starting_value)
-    { }
+    explicit semaphore(const std::ptrdiff_t starting_value) : m_counter(starting_value) {}
 
     ~semaphore() { coro::sync_wait(shutdown()); }
 
@@ -108,7 +107,8 @@ public:
     }
 
     /**
-     * @brief Releases a resources back to the semaphore, if the semaphore is already at value() == max() this does nothing.
+     * @brief Releases a resources back to the semaphore, if the semaphore is already at value() == max() this does
+     * nothing.
      * @return
      */
     [[nodiscard]] auto release() -> coro::task<void>
@@ -126,7 +126,7 @@ public:
         if (waiter != nullptr)
         {
             m_mutex.unlock();
-            waiter->m_awaiting_coroutine.resume();
+            waiter->m_awaiting_coroutine.load(std::memory_order::acquire).resume();
         }
         else
         {
@@ -149,7 +149,8 @@ public:
             {
                 return false;
             }
-        } while (!m_counter.compare_exchange_weak(expected, expected - 1, std::memory_order::acq_rel, std::memory_order::acquire));
+        } while (!m_counter.compare_exchange_weak(
+            expected, expected - 1, std::memory_order::acq_rel, std::memory_order::acquire));
 
         return true;
     }
@@ -184,7 +185,7 @@ public:
             while (waiter != nullptr)
             {
                 auto* next = waiter->m_next;
-                waiter->m_awaiting_coroutine.resume();
+                waiter->m_awaiting_coroutine.load(std::memory_order::acquire).resume();
                 waiter = next;
             }
         }

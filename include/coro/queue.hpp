@@ -99,9 +99,9 @@ public:
         auto await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept -> bool
         {
             // No element is ready, put ourselves on the waiter list and suspend.
-            this->m_next         = m_queue.m_waiters;
-            m_queue.m_waiters    = this;
-            m_awaiting_coroutine = awaiting_coroutine;
+            this->m_next      = m_queue.m_waiters;
+            m_queue.m_waiters = this;
+            m_awaiting_coroutine.store(awaiting_coroutine, std::memory_order::release);
             m_queue.m_mutex.unlock();
             return true;
         }
@@ -126,17 +126,14 @@ public:
             }
         }
 
-        std::optional<element_type> m_element{std::nullopt};
-        queue&                      m_queue;
-        std::coroutine_handle<>     m_awaiting_coroutine{nullptr};
-        awaiter*                    m_next{nullptr};
+        std::optional<element_type>          m_element{std::nullopt};
+        queue&                               m_queue;
+        awaiter*                             m_next{nullptr};
+        std::atomic<std::coroutine_handle<>> m_awaiting_coroutine{nullptr};
     };
 
     queue() {}
-    ~queue()
-    {
-        coro::sync_wait(shutdown());
-    }
+    ~queue() { coro::sync_wait(shutdown()); }
 
     queue(const queue&)  = delete;
     queue(queue&& other) = delete;
@@ -190,7 +187,7 @@ public:
 
             // Transfer the element directly to the awaiter.
             waiter->m_element = element;
-            waiter->m_awaiting_coroutine.resume();
+            waiter->m_awaiting_coroutine.load(std::memory_order::acquire).resume();
         }
         else
         {
@@ -224,7 +221,7 @@ public:
 
             // Transfer the element directly to the awaiter.
             waiter->m_element = std::move(element);
-            waiter->m_awaiting_coroutine.resume();
+            waiter->m_awaiting_coroutine.load(std::memory_order::acquire).resume();
         }
         else
         {
@@ -257,7 +254,7 @@ public:
             lock.unlock();
 
             waiter->m_element.emplace(std::forward<args_type>(args)...);
-            waiter->m_awaiting_coroutine.resume();
+            waiter->m_awaiting_coroutine.load(std::memory_order::acquire).resume();
         }
         else
         {
@@ -348,12 +345,12 @@ public:
         }
 
         auto* waiters = m_waiters;
-        m_waiters = nullptr;
+        m_waiters     = nullptr;
         lk.unlock();
         while (waiters != nullptr)
         {
             auto* next = waiters->m_next;
-            waiters->m_awaiting_coroutine.resume();
+            waiters->m_awaiting_coroutine.load(std::memory_order::acquire).resume();
             waiters = next;
         }
     }
@@ -370,7 +367,7 @@ public:
     template<coro::concepts::executor executor_type>
     auto shutdown_drain(std::unique_ptr<executor_type>& e) -> coro::task<void>
     {
-        auto lk = co_await m_mutex.scoped_lock();
+        auto lk       = co_await m_mutex.scoped_lock();
         auto expected = running_state_t::running;
         if (!m_running_state.compare_exchange_strong(
                 expected, running_state_t::draining, std::memory_order::acq_rel, std::memory_order::relaxed))
@@ -391,7 +388,10 @@ public:
      * Returns true if shutdown() or shutdown_drain() have been called on this coro::queue.
      * @return True if the coro::queue has been shutdown.
      */
-    [[nodiscard]] auto is_shutdown() const -> bool { return m_running_state.load(std::memory_order::acquire) != running_state_t::running; }
+    [[nodiscard]] auto is_shutdown() const -> bool
+    {
+        return m_running_state.load(std::memory_order::acquire) != running_state_t::running;
+    }
 
 private:
     friend awaiter;
