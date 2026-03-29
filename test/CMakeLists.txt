@@ -67,25 +67,7 @@ else ()
     target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
     target_link_libraries(${PROJECT_NAME} PRIVATE libcoro)
 
-    if (${CMAKE_CXX_COMPILER_ID} MATCHES "GNU")
-        target_compile_options(${PROJECT_NAME} PRIVATE
-                $<$<COMPILE_LANGUAGE:CXX>:-std=c++20>
-                $<$<COMPILE_LANGUAGE:CXX>:-fcoroutines>
-                $<$<COMPILE_LANGUAGE:CXX>:-fconcepts>
-                $<$<COMPILE_LANGUAGE:CXX>:-fexceptions>
-                $<$<COMPILE_LANGUAGE:CXX>:-Wall>
-                $<$<COMPILE_LANGUAGE:CXX>:-Wextra>
-        )
-    elseif (${CMAKE_CXX_COMPILER_ID} MATCHES "Clang")
-        target_compile_options(${PROJECT_NAME} PRIVATE
-                $<$<COMPILE_LANGUAGE:CXX>:-std=c++20>
-                $<$<COMPILE_LANGUAGE:CXX>:-fexceptions>
-                $<$<COMPILE_LANGUAGE:CXX>:-Wall>
-                $<$<COMPILE_LANGUAGE:CXX>:-Wextra>
-        )
-    elseif (MSVC)
-        target_compile_options(${PROJECT_NAME} PRIVATE /W4)
-    else ()
+    if (NOT ${CMAKE_CXX_COMPILER_ID} MATCHES "GNU|Clang|MSVC")
         message(FATAL_ERROR "Unsupported compiler.")
     endif ()
 
