@@ -59,12 +59,13 @@ public:
         auto await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept -> void;
         auto await_resume() noexcept -> void {}
 
-        schedule_operation*     m_next{nullptr};
-        std::coroutine_handle<> m_awaiting_coroutine{nullptr};
+        schedule_operation*                  m_next{nullptr};
+        std::coroutine_handle<>              m_awaiting_coroutine{nullptr};
+        std::atomic<std::coroutine_handle<>> m_atomic_coroutine{nullptr};
 
     private:
-        thread_pool_ws& m_thread_pool;
-        bool            m_allocated{false};
+        thread_pool_ws&   m_thread_pool;
+        std::atomic<bool> m_allocated{false};
     };
 
     /**

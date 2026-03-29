@@ -252,7 +252,7 @@ TEST_CASE("thread_pool_ws high cpu usage when threadcount is greater than the nu
 
 TEST_CASE("issue-287", "[thread_pool_ws]")
 {
-    const int ITERATIONS = 200000;
+    const int ITERATIONS = 200'000;
 
     std::atomic<uint32_t> g_count = 0;
     auto                  tp      = coro::thread_pool_ws::make_unique(coro::thread_pool_ws::options{.thread_count = 1});

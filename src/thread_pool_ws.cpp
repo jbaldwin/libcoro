@@ -55,6 +55,7 @@ thread_pool_ws::schedule_operation::schedule_operation(thread_pool_ws& tp) noexc
 auto thread_pool_ws::schedule_operation::await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept -> void
 {
     m_awaiting_coroutine = awaiting_coroutine;
+    m_atomic_coroutine.store(awaiting_coroutine, std::memory_order::release);
     // See if we are running on a thread pool worker to enqueue locally.
     auto& idx = thread_pool_ws::m_thread_pool_queue_idx;
     if (idx.has_value())
@@ -113,8 +114,8 @@ auto thread_pool_ws::resume(std::coroutine_handle<> handle) noexcept -> bool
         return false;
     }
 
-    auto* op        = new schedule_operation{*this};
-    op->m_allocated = true;
+    auto* op = new schedule_operation{*this};
+    op->m_allocated.store(true, std::memory_order::release);
     op->await_suspend(handle);
     return true;
 }
@@ -263,9 +264,10 @@ auto thread_pool_ws::resume_task(std::optional<schedule_operation*> op) -> bool
     {
         m_queue_size.fetch_sub(1, std::memory_order::release);
         auto v = op.value();
-        v->m_awaiting_coroutine.resume();
+        // v->m_awaiting_coroutine.resume();
+        v->m_atomic_coroutine.load(std::memory_order::acquire).resume();
         m_size.fetch_sub(1, std::memory_order::release);
-        if (v->m_allocated)
+        if (v->m_allocated.load(std::memory_order::acquire))
         {
             delete v;
         }
