@@ -182,7 +182,7 @@ auto thread_pool_ws::execute(uint32_t idx) -> void
         had_tasks |= drain_global_queue(thread_queue);
 
         // If there were no tasks left to work on, this thread can exit.
-        if (had_tasks)
+        if (!had_tasks)
         {
             break;
         }

@@ -88,8 +88,8 @@ public:
     auto get_return_object() noexcept -> task_type;
 
     template<typename value_type>
-        requires(return_type_is_reference and std::is_constructible_v<return_type, value_type &&>) or
-                    (not return_type_is_reference and std::is_constructible_v<stored_type, value_type &&>)
+        requires(return_type_is_reference && std::is_constructible_v<return_type, value_type &&>) or
+                    (not return_type_is_reference && std::is_constructible_v<stored_type, value_type &&>)
     auto return_value(value_type&& value) -> void
     {
         if constexpr (return_type_is_reference)

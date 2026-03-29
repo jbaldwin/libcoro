@@ -274,7 +274,7 @@ TEST_CASE("issue-287", "[thread_pool_ws]")
     REQUIRE(g_count.load() == ITERATIONS);
 }
 
-TEST_CASE("thread_pool_ws::spawn", "[thread_pool_ws]")
+TEST_CASE("thread_pool_ws::spawn_detached", "[thread_pool_ws]")
 {
     auto                  tp = coro::thread_pool_ws::make_unique(coro::thread_pool_ws::options{.thread_count = 2});
     std::atomic<uint64_t> counter{0};
