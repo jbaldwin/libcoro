@@ -75,7 +75,6 @@ else ()
                 $<$<COMPILE_LANGUAGE:CXX>:-fexceptions>
                 $<$<COMPILE_LANGUAGE:CXX>:-Wall>
                 $<$<COMPILE_LANGUAGE:CXX>:-Wextra>
-                $<$<COMPILE_LANGUAGE:CXX>:-pipe>
         )
     elseif (${CMAKE_CXX_COMPILER_ID} MATCHES "Clang")
         target_compile_options(${PROJECT_NAME} PRIVATE
@@ -83,7 +82,6 @@ else ()
                 $<$<COMPILE_LANGUAGE:CXX>:-fexceptions>
                 $<$<COMPILE_LANGUAGE:CXX>:-Wall>
                 $<$<COMPILE_LANGUAGE:CXX>:-Wextra>
-                $<$<COMPILE_LANGUAGE:CXX>:-pipe>
         )
     elseif (MSVC)
         target_compile_options(${PROJECT_NAME} PRIVATE /W4)
