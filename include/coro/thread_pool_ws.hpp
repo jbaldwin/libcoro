@@ -34,10 +34,7 @@ public:
         auto operator=(worker_info&&) noexcept -> worker_info&      = delete;
 
         std::thread                        m_thread;
-        std::mutex                         m_wait_mutex{};
-        std::condition_variable_any        m_wait_cv{};
         riften::Deque<schedule_operation*> m_queue{};
-        std::atomic<bool>                  m_asleep{false};
     };
 
     struct options
@@ -115,9 +112,12 @@ private:
     options                                     m_opts;
     std::atomic<bool>                           m_shutdown_requested{false};
     std::atomic<uint64_t>                       m_size{0};
+    std::atomic<uint64_t>                       m_queue_size{0};
     std::vector<std::unique_ptr<worker_info>>   m_workers{};
     std::atomic<schedule_operation*>            m_global_queue{nullptr};
     std::atomic<uint32_t>                       m_sleeping{0};
+    std::mutex                                  m_wait_mutex{};
+    std::condition_variable_any                 m_wait_cv{};
     static thread_local std::optional<uint32_t> m_thread_pool_queue_idx;
 
     auto execute(uint32_t idx) -> void;

@@ -48,6 +48,7 @@ thread_pool_ws::~thread_pool_ws()
 
 thread_pool_ws::schedule_operation::schedule_operation(thread_pool_ws& tp) noexcept : m_thread_pool(tp)
 {
+    m_thread_pool.m_queue_size.fetch_add(1, std::memory_order::release);
     m_thread_pool.m_size.fetch_add(1, std::memory_order::release);
 }
 
@@ -122,14 +123,17 @@ auto thread_pool_ws::shutdown() noexcept -> void
 {
     if (m_shutdown_requested.exchange(true, std::memory_order::acq_rel) == false)
     {
-        for (auto& worker : m_workers)
         {
-            std::unique_lock<std::mutex> lk{worker->m_wait_mutex};
-            worker->m_wait_cv.notify_one();
+            std::unique_lock<std::mutex> lk{m_wait_mutex};
+            m_wait_cv.notify_all();
         }
+
         for (auto& worker : m_workers)
         {
-            worker->m_thread.join();
+            if (worker->m_thread.joinable())
+            {
+                worker->m_thread.join();
+            }
         }
     }
 }
@@ -144,8 +148,6 @@ auto thread_pool_ws::execute(uint32_t idx) -> void
     }
 
     auto&  info         = m_workers[idx];
-    auto&  wait_mutex   = info->m_wait_mutex;
-    auto&  wait_cv      = info->m_wait_cv;
     auto&  thread_queue = info->m_queue;
     size_t spin_counter{0};
     while (!m_shutdown_requested.load(std::memory_order::acquire))
@@ -165,14 +167,15 @@ auto thread_pool_ws::execute(uint32_t idx) -> void
             continue;
         }
 
-        // Set our internal state to sleeping.
-        info->m_asleep.store(true, std::memory_order::release);
-        // Notify any schedule operations we are going to sleep.
-        m_sleeping.fetch_add(1, std::memory_order::release);
-
         // Go to sleep until a task is scheduled.
-        std::unique_lock<std::mutex> lk{wait_mutex};
-        wait_cv.wait(lk);
+        std::unique_lock<std::mutex> lk{m_wait_mutex};
+        m_sleeping.fetch_add(1, std::memory_order::release);
+        m_wait_cv.wait(
+            lk,
+            [&]() {
+                return m_queue_size.load(std::memory_order::acquire) > 0 ||
+                       m_shutdown_requested.load(std::memory_order::acquire);
+            });
     }
 
     while (m_size.load(std::memory_order::acquire) > 0)
@@ -258,6 +261,7 @@ auto thread_pool_ws::resume_task(std::optional<schedule_operation*> op) -> bool
 {
     if (op.has_value())
     {
+        m_queue_size.fetch_sub(1, std::memory_order::release);
         auto v = op.value();
         v->m_awaiting_coroutine.resume();
         m_size.fetch_sub(1, std::memory_order::release);
@@ -272,31 +276,19 @@ auto thread_pool_ws::resume_task(std::optional<schedule_operation*> op) -> bool
 
 auto thread_pool_ws::try_wake_worker() noexcept -> void
 {
-    // If there are any workers currently sleeping
-    auto expected_sleeping = m_sleeping.load(std::memory_order::acquire);
-    while (expected_sleeping > 0)
+    // Attempt to wake a sleeper if there are any.
+    auto sleeping = m_sleeping.load(std::memory_order::acquire);
+    if (sleeping > 0)
     {
-        // Attempt to "acquire" one to wake-up.
-        if (m_sleeping.compare_exchange_strong(
-                expected_sleeping, expected_sleeping - 1, std::memory_order::acq_rel, std::memory_order::acquire))
+        std::unique_lock<std::mutex> lk{m_wait_mutex};
+        sleeping = m_sleeping.load(std::memory_order::acquire);
+        if (sleeping == 0)
         {
-            for (auto& worker : m_workers)
-            {
-                bool expected_asleep{true};
-                if (worker->m_asleep.compare_exchange_strong(
-                        expected_asleep, false, std::memory_order::acq_rel, std::memory_order::relaxed))
-                {
-                    std::unique_lock<std::mutex> lk{worker->m_wait_mutex};
-                    worker->m_wait_cv.notify_one();
-                    return;
-                }
-            }
-
-            // If we get here without waking up.. not good!
-            std::cerr
-                << "thread_pool_ws::try_wake_worker() acquired thread to wake but failed to find a sleeping thread.\n";
             return;
         }
+
+        m_sleeping.fetch_sub(1, std::memory_order::release);
+        m_wait_cv.notify_one();
     }
 }
 
