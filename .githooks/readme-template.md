@@ -13,6 +13,7 @@
 ## Overview
 * C++20 coroutines!
 * Modern Safe C++20 API
+* Module support
 * Higher level coroutine constructs
     - [coro::sync_wait(awaitable)](#sync_wait)
     - [coro::when_all(awaitable...) -> awaitable](#when_all)
@@ -62,6 +63,18 @@ It's important to note with coroutines that _any_ `co_await` has the potential t
 The recommendation is to not use lambda captures and instead pass any data into the coroutine via its function arguments by value to guarantee the argument lifetimes. Lambda captures will be destroyed at the coroutines first suspension point so if they are used past that point it will result in a use after free bug.
 
 If you must use lambda captures with your coroutines then libcoro offers [coro::invoke](#invoke) to create a stable coroutine frame to hold the captures for the duration of the user's coroutine.
+
+### Module support
+This reduces compilation times and improves encapsulation. To use the module set `LIBCORO_FEATURE_MODULES=ON` and simply write:
+
+```C++
+#include <coroutine> // still required
+import libcoro;
+```
+
+Requirements:
+  - CMake 3.28+
+  ### TODO
 
 ### sync_wait
 The `sync_wait` construct is meant to be used outside a coroutine context to block the calling thread until the coroutine has completed. The coroutine can be executed on the calling thread or scheduled on one of libcoro's schedulers.
