@@ -199,6 +199,9 @@ if(LIBCORO_FEATURE_NETWORKING)
 endif()
 
 if(DEFINED EMSCRIPTEN)
+    # For WebAssembly, set a compatible cache line size that's a power of 2
+    add_compile_definitions(RIFTEN_HARDWARE_DESTRUCTIVE_INTERFERENCE_SIZE=64)
+
     add_compile_options(-fwasm-exceptions)
     add_compile_options(-pthread)
     add_compile_options(-matomics)

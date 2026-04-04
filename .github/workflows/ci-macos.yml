@@ -53,4 +53,4 @@ jobs:
         run: |
           cd Release
           lldb -b -o r -- ctest --build-config RelWithDebInfo -VV
-          # ctest --build-config Release -VV
+          ctest --build-config Release -VV
