@@ -1,13 +1,14 @@
 #pragma once
 
 #include "coro/detail/awaiter_list.hpp"
+#include "coro/detail/riften_deque.hpp"
 #include "coro/detail/task_self_deleting.hpp"
 #include "coro/task.hpp"
 
 #include <chrono>
 #include <condition_variable>
 #include <functional>
-#include <riften/deque.hpp>
+// #include <riften/deque.hpp>
 #include <thread>
 
 namespace coro

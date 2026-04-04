@@ -286,6 +286,12 @@ auto thread_pool_ws::resume_task(std::optional<schedule_operation*> op) -> bool
 
 auto thread_pool_ws::try_wake_worker() noexcept -> void
 {
+    // We're shutting down, no need to even attempt to wake any workers.
+    if (m_shutdown_requested.load(std::memory_order::acquire))
+    {
+        return;
+    }
+
     // Attempt to wake a sleeper if there are any.
     if (m_sleeping.load(std::memory_order::acquire) > 0)
     {
