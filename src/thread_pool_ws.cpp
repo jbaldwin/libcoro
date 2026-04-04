@@ -18,15 +18,20 @@ static auto make_spawned_joinable_wait_task(std::unique_ptr<coro::task_group<cor
 
 thread_local std::optional<uint32_t> thread_pool_ws::m_thread_pool_queue_idx{std::nullopt};
 
-thread_pool_ws::worker_info::worker_info(thread_pool_ws& tp, uint32_t i)
+thread_pool_ws::worker_info::worker_info(thread_pool_ws& tp, uint32_t i) : m_thread_pool(tp), m_idx(i)
 {
-    // Start the thread after all of the worker_info fields have been initialized.
-    m_thread = std::thread([&tp, i]() -> void { tp.execute(i); });
 }
 
 thread_pool_ws::thread_pool_ws(options opts, private_constructor) : m_opts(std::move(opts))
 {
     m_workers.reserve(m_opts.thread_count);
+}
+
+auto thread_pool_ws::worker_info::start() -> void
+{
+    // Each worker's thread is only started after *all* worker_info structures are initialized
+    // since they all reference each other's queues for stealing.
+    m_thread = std::thread([this]() -> void { m_thread_pool.execute(m_idx); });
 }
 
 auto thread_pool_ws::make_unique(options opts) -> std::unique_ptr<thread_pool_ws>
@@ -36,6 +41,11 @@ auto thread_pool_ws::make_unique(options opts) -> std::unique_ptr<thread_pool_ws
     for (uint32_t i = 0; i < tp->m_opts.thread_count; ++i)
     {
         tp->m_workers.emplace_back(std::make_unique<worker_info>(*tp, i));
+    }
+
+    for (auto& worker : tp->m_workers)
+    {
+        worker->start();
     }
 
     return tp;

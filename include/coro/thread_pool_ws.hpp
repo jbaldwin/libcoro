@@ -35,6 +35,12 @@ public:
 
         std::thread                        m_thread;
         riften::Deque<schedule_operation*> m_queue{};
+
+        auto start() -> void;
+
+    private:
+        thread_pool_ws& m_thread_pool;
+        uint32_t        m_idx;
     };
 
     struct options
