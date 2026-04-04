@@ -202,7 +202,9 @@ TEST_CASE("thread_pool_ws event jump threads", "[thread_pool_ws]")
         co_return;
     };
 
-    coro::sync_wait(coro::when_all(make_tp1_task(tp1, e), make_tp2_task(tp2, e)));
+    auto task1 = tp1->spawn_joinable(make_tp1_task(tp1, e));
+
+    coro::sync_wait(coro::when_all(std::move(task1), make_tp2_task(tp2, e)));
 }
 
 TEST_CASE("thread_pool_ws high cpu usage when threadcount is greater than the number of tasks", "[thread_pool_ws]")
