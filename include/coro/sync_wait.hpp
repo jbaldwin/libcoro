@@ -52,7 +52,7 @@ public:
     auto initial_suspend() noexcept -> std::suspend_always { return {}; }
 
 protected:
-    sync_wait_event*   m_event{nullptr};
+    sync_wait_event* m_event{nullptr};
 
     virtual ~sync_wait_task_promise_base() = default;
 };
@@ -86,8 +86,8 @@ public:
     auto get_return_object() noexcept { return coroutine_type::from_promise(*this); }
 
     template<typename value_type>
-        requires(return_type_is_reference and std::is_constructible_v<return_type, value_type &&>) or
-                (not return_type_is_reference and std::is_constructible_v<stored_type, value_type &&>)
+        requires(return_type_is_reference && std::is_constructible_v<return_type, value_type &&>) ||
+                    (!return_type_is_reference && std::is_constructible_v<stored_type, value_type &&>)
     auto return_value(value_type&& value) -> void
     {
         if constexpr (return_type_is_reference)
@@ -102,7 +102,7 @@ public:
     }
 
     auto return_value(stored_type value) -> void
-        requires(not return_type_is_reference)
+        requires(!return_type_is_reference)
     {
         if constexpr (std::is_move_constructible_v<stored_type>)
         {

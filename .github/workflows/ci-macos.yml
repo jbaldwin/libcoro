@@ -40,7 +40,7 @@ jobs:
           cd Release
           cmake \
               -GNinja \
-              -DCMAKE_BUILD_TYPE=Release \
+              -DCMAKE_BUILD_TYPE=RelWithDebInfo \
               -DCMAKE_C_COMPILER=$(brew --prefix llvm@${{ matrix.clang_version }})/bin/clang-${{ matrix.clang_version }} \
               -DCMAKE_CXX_COMPILER=$(brew --prefix llvm@${{ matrix.clang_version }})/bin/clang-${{ matrix.clang_version }} \
               -DCMAKE_CXX_STANDARD=${{ matrix.cxx_standard }} \
@@ -52,5 +52,5 @@ jobs:
       - name: Test
         run: |
           cd Release
-          # lldb -b -o r -- ctest --build-config Release -VV
-          ctest --build-config Release -VV
+          lldb -b -o r -- ctest --build-config RelWithDebInfo -VV
+          # ctest --build-config Release -VV

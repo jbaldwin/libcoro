@@ -31,7 +31,8 @@ jobs:
                         git \
                         ninja-build \
                         g++-${{ matrix.gplusplus_version }} \
-                        libssl-dev
+                        libssl-dev \
+                        gdb
             -   name: Checkout
                 uses: actions/checkout@v4
                 with:
@@ -46,7 +47,7 @@ jobs:
                     cd Release
                     cmake \
                         -GNinja \
-                        -DCMAKE_BUILD_TYPE=Release \
+                        -DCMAKE_BUILD_TYPE=RelWithDebInfo \
                         -DCMAKE_C_COMPILER=gcc-${{ matrix.gplusplus_version }} \
                         -DCMAKE_CXX_COMPILER=g++-${{ matrix.gplusplus_version }} \
                         -DCMAKE_CXX_STANDARD=${{ matrix.cxx_standard }} \
@@ -58,7 +59,8 @@ jobs:
             -   name: Test
                 run: |
                     cd Release
-                    ctest -VV
+                    # ctest -VV
+                    gdb -ex run ./test/libcoro_test
     ci-ubuntu-24-04-gplusplus:
         name: ci-ubuntu-24.04-g++
         runs-on: ubuntu-latest
@@ -86,7 +88,8 @@ jobs:
                         git \
                         ninja-build \
                         g++-${{ matrix.gplusplus_version }} \
-                        libssl-dev
+                        libssl-dev \
+                        gdb
             -   name: Checkout
                 uses: actions/checkout@v4
                 with:
@@ -101,7 +104,7 @@ jobs:
                     cd Release
                     cmake \
                         -GNinja \
-                        -DCMAKE_BUILD_TYPE=Release \
+                        -DCMAKE_BUILD_TYPE=RelWithDebInfo \
                         -DCMAKE_C_COMPILER=gcc-${{ matrix.gplusplus_version }} \
                         -DCMAKE_CXX_COMPILER=g++-${{ matrix.gplusplus_version }} \
                         -DCMAKE_CXX_STANDARD=${{ matrix.cxx_standard }} \
@@ -112,7 +115,8 @@ jobs:
             -   name: Test
                 run: |
                     cd Release
-                    ctest -VV
+                    # ctest -VV
+                    gdb -ex run ./test/libcoro_test
     ci-ubuntu-22-04-clang:
         name: ci-ubuntu-22.04-clang
         runs-on: ubuntu-latest
@@ -139,7 +143,8 @@ jobs:
                         cmake \
                         git \
                         ninja-build \
-                        libssl-dev
+                        libssl-dev \
+                        gdb
             -   name: install-clang
                 run: |
                     wget https://apt.llvm.org/llvm.sh
@@ -159,7 +164,7 @@ jobs:
                     cd Release
                     cmake \
                         -GNinja \
-                        -DCMAKE_BUILD_TYPE=Release \
+                        -DCMAKE_BUILD_TYPE=RelWithDebInfo \
                         -DCMAKE_C_COMPILER=clang-${{ matrix.clang_version }} \
                         -DCMAKE_CXX_COMPILER=clang++-${{ matrix.clang_version }} \
                         -DCMAKE_CXX_STANDARD=${{ matrix.cxx_standard }} \
@@ -170,4 +175,5 @@ jobs:
             -   name: Test
                 run: |
                     cd Release
-                    ctest --build-config Release -VV
+                    # ctest --build-config Release -VV
+                    gdb -ex run ./test/libcoro_test
