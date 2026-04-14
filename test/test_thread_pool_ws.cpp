@@ -11,7 +11,11 @@ TEST_CASE("thread_pool_ws", "[thread_pool_ws]")
 
 TEST_CASE("thread_pool_ws simple testing", "[thread_pool_ws]")
 {
-    auto        tp = coro::thread_pool_ws::make_unique(coro::thread_pool_ws::options{.thread_count = 8});
+    auto tp = coro::thread_pool_ws::make_unique(coro::thread_pool_ws::options{
+        .thread_count = 8,
+    });
+    //    .on_thread_start_functor = [](std::size_t i) -> void { std::cerr << "thread " << i << " starting\n"; },
+    //    .on_thread_stop_functor  = [](std::size_t i) -> void { std::cerr << "thread " << i << " starting\n"; }});
     coro::mutex m{};
 
     auto make_task = [&tp, &m](int task_id) -> coro::task<void>

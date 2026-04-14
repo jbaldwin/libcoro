@@ -8,7 +8,6 @@
 #include <chrono>
 #include <condition_variable>
 #include <functional>
-// #include <riften/deque.hpp>
 #include <thread>
 
 namespace coro
@@ -125,6 +124,9 @@ private:
     std::atomic<uint32_t>                       m_sleeping{0};
     std::mutex                                  m_wait_mutex{};
     std::condition_variable_any                 m_wait_cv{};
+    std::atomic<uint32_t>                       m_workers_started{0};
+    std::atomic<uint32_t>                       m_workers_stopped{0};
+    std::atomic<uint64_t>                       m_try_wake_workers_size{0};
     static thread_local std::optional<uint32_t> m_thread_pool_queue_idx;
 
     auto execute(uint32_t idx) -> void;

@@ -32,12 +32,12 @@ jobs:
           fetch-tags: true
       - name: Mark repository as safe
         run: git config --global --add safe.directory "*"
-      - name: Release
+      - name: RelWithDebInfo
         run: |
           brew --prefix llvm@${{ matrix.clang_version }}
           ls $(brew --prefix llvm@${{ matrix.clang_version }})/bin
-          mkdir Release
-          cd Release
+          mkdir RelWithDebInfo
+          cd RelWithDebInfo
           cmake \
               -GNinja \
               -DCMAKE_BUILD_TYPE=RelWithDebInfo \
@@ -48,9 +48,9 @@ jobs:
               -DLIBCORO_FEATURE_TLS=${{ matrix.libcoro_feature_networking.tls }} \
               -DLIBCORO_BUILD_SHARED_LIBS=${{ matrix.libcoro_build_shared_libs }} \
               ..
-          cmake --build . --config Release
+          cmake --build . --config RelWithDebInfo
       - name: Test
         run: |
-          cd Release
-          lldb -b -o r -- ctest --build-config RelWithDebInfo -VV
-          ctest --build-config Release -VV
+          cd RelWithDebInfo
+          lldb  -b --one-line-on-crash 'thread backtrace all' -o r -- ctest --build-config RelWithDebInfo -VV
+          # ctest --build-config RelWithDebInfo -VV

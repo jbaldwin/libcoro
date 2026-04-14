@@ -59,8 +59,8 @@ jobs:
             -   name: Test
                 run: |
                     cd Release
-                    ctest -VV
-                    gdb -ex run ./test/libcoro_test
+                    gdb -ex run -ex "bt" ./test/libcoro_test
+                    # ctest -VV
     ci-ubuntu-24-04-gplusplus:
         name: ci-ubuntu-24.04-g++
         runs-on: ubuntu-latest
@@ -115,8 +115,8 @@ jobs:
             -   name: Test
                 run: |
                     cd Release
-                    ctest -VV
-                    gdb -ex run ./test/libcoro_test
+                    gdb -ex run -ex "bt" ./test/libcoro_test
+                    # ctest -VV
     ci-ubuntu-22-04-clang:
         name: ci-ubuntu-22.04-clang
         runs-on: ubuntu-latest
@@ -175,5 +175,5 @@ jobs:
             -   name: Test
                 run: |
                     cd Release
-                    ctest --build-config Release -VV
-                    gdb -ex run ./test/libcoro_test
+                    gdb -ex run -ex "bt" ./test/libcoro_test
+                    # ctest --build-config Release -VV

@@ -73,20 +73,20 @@ private:
 } // namespace detail
 
 #ifdef RIFTEN_HARDWARE_DESTRUCTIVE_INTERFERENCE_SIZE
-inline constexpr std::size_t hardware_destructive_interference_size = RIFTEN_HARDWARE_DESTRUCTIVE_INTERFERENCE_SIZE
-#elifdef __cpp_lib_hardware_interference_size
+inline constexpr std::size_t hardware_destructive_interference_size = RIFTEN_HARDWARE_DESTRUCTIVE_INTERFERENCE_SIZE;
+#elif defined(__cpp_lib_hardware_interference_size)
 using std::hardware_destructive_interference_size;
 #else
 // 64 bytes on x86-64 │ L1_CACHE_BYTES │ L1_CACHE_SHIFT │ __cacheline_aligned │ ...
 inline constexpr std::size_t hardware_destructive_interference_size = 2 * sizeof(std::max_align_t);
 #endif
 
-    // Lock-free single-producer multiple-consumer deque. Only the deque owner can perform pop and push
-    // operations where the deque behaves like a stack. Others can (only) steal data from the deque, they see
-    // a FIFO queue. All threads must have finished using the deque before it is destructed. T must be
-    // default initializable, trivially destructible and have nothrow move constructor/assignment operators.
-    template<Simple T>
-    class Deque
+// Lock-free single-producer multiple-consumer deque. Only the deque owner can perform pop and push
+// operations where the deque behaves like a stack. Others can (only) steal data from the deque, they see
+// a FIFO queue. All threads must have finished using the deque before it is destructed. T must be
+// default initializable, trivially destructible and have nothrow move constructor/assignment operators.
+template<Simple T>
+class Deque
 {
 public:
     // Constructs the deque with a given capacity the capacity of the deque (must be power of 2)
