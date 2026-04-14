@@ -158,18 +158,6 @@ auto thread_pool_ws::shutdown() noexcept -> void
             std::this_thread::yield();
         }
 
-        if (m_size.load(std::memory_order::acquire) > 0)
-        {
-            std::string msg = "shutdown() m_size = " + m_size.load() + '\n';
-            throw std::runtime_error{msg};
-        }
-
-        if (m_queue_size.load(std::memory_order::acquire) > 0)
-        {
-            std::string msg = "shutdown() m_queue_size = " + m_queue_size.load() + '\n';
-            throw std::runtime_error{msg};
-        }
-
         for (auto& worker : m_workers)
         {
             if (worker->m_thread.joinable())

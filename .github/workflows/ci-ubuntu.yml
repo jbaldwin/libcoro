@@ -47,7 +47,7 @@ jobs:
                     cd Release
                     cmake \
                         -GNinja \
-                        -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+                        -DCMAKE_BUILD_TYPE=Release \
                         -DCMAKE_C_COMPILER=gcc-${{ matrix.gplusplus_version }} \
                         -DCMAKE_CXX_COMPILER=g++-${{ matrix.gplusplus_version }} \
                         -DCMAKE_CXX_STANDARD=${{ matrix.cxx_standard }} \
@@ -59,8 +59,8 @@ jobs:
             -   name: Test
                 run: |
                     cd Release
-                    gdb -ex run -ex "bt" ./test/libcoro_test
-                    # ctest -VV
+                    # gdb -ex run -ex "bt" ./test/libcoro_test
+                    ctest --build-config Release -VV
     ci-ubuntu-24-04-gplusplus:
         name: ci-ubuntu-24.04-g++
         runs-on: ubuntu-latest
@@ -104,7 +104,7 @@ jobs:
                     cd Release
                     cmake \
                         -GNinja \
-                        -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+                        -DCMAKE_BUILD_TYPE=Release \
                         -DCMAKE_C_COMPILER=gcc-${{ matrix.gplusplus_version }} \
                         -DCMAKE_CXX_COMPILER=g++-${{ matrix.gplusplus_version }} \
                         -DCMAKE_CXX_STANDARD=${{ matrix.cxx_standard }} \
@@ -115,8 +115,8 @@ jobs:
             -   name: Test
                 run: |
                     cd Release
-                    gdb -ex run -ex "bt" ./test/libcoro_test
-                    # ctest -VV
+                    # gdb -ex run -ex "bt" ./test/libcoro_test
+                    ctest --build-config Release -VV
     ci-ubuntu-22-04-clang:
         name: ci-ubuntu-22.04-clang
         runs-on: ubuntu-latest
@@ -164,7 +164,7 @@ jobs:
                     cd Release
                     cmake \
                         -GNinja \
-                        -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+                        -DCMAKE_BUILD_TYPE=Release \
                         -DCMAKE_C_COMPILER=clang-${{ matrix.clang_version }} \
                         -DCMAKE_CXX_COMPILER=clang++-${{ matrix.clang_version }} \
                         -DCMAKE_CXX_STANDARD=${{ matrix.cxx_standard }} \
@@ -175,5 +175,5 @@ jobs:
             -   name: Test
                 run: |
                     cd Release
-                    gdb -ex run -ex "bt" ./test/libcoro_test
-                    # ctest --build-config Release -VV
+                    # gdb -ex run -ex "bt" ./test/libcoro_test
+                    ctest --build-config Release -VV

@@ -52,5 +52,5 @@ jobs:
       - name: Test
         run: |
           cd RelWithDebInfo
-          lldb  -b --one-line-on-crash 'thread backtrace all' -o r -- ctest --build-config RelWithDebInfo -VV
-          # ctest --build-config RelWithDebInfo -VV
+          # lldb  -b --one-line-on-crash 'thread backtrace all' -o r -- ctest --build-config RelWithDebInfo -VV
+          ctest --build-config RelWithDebInfo -VV
