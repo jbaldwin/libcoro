@@ -12,6 +12,14 @@ TEST_CASE("task_group", "[task_group]")
 
 using namespace std::chrono_literals;
 
+TEST_CASE("task_group schedule no tasks", "[task_group]")
+{
+    auto s = coro::thread_pool::make_unique(coro::thread_pool::options{.thread_count = 1});
+    coro::task_group<coro::thread_pool> tc{s};
+    REQUIRE(tc.empty());
+    coro::sync_wait(tc);
+}
+
 TEST_CASE("task_group schedule single task", "[task_group]")
 {
     auto        s = coro::thread_pool::make_unique(coro::thread_pool::options{.thread_count = 1});

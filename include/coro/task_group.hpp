@@ -134,7 +134,7 @@ private:
     /// The number of alive tasks.
     std::atomic<uint64_t> m_size{};
     /// Event to trigger if m_size goes to zero.
-    coro::event m_on_empty_event{};
+    coro::event m_on_empty_event{true};
 
     auto count_down() -> void
     {
