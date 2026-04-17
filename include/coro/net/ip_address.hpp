@@ -1,18 +1,12 @@
 #pragma once
 
 #include <algorithm>
+#include <arpa/inet.h>
 #include <array>
 #include <cstring>
 #include <span>
 #include <stdexcept>
 #include <string>
-
-#include "coro/detail/platform.hpp"
-#if defined(LIBCORO_PLATFORM_WINDOWS)
-    #include "coro/detail/win32_headers.hpp"
-#elif defined(LIBCORO_PLATFORM_UNIX)
-    #include <arpa/inet.h>
-#endif
 
 namespace coro::net
 {
@@ -68,7 +62,6 @@ public:
         ip_address addr{};
         addr.m_domain = domain;
 
-        // FIXME: inet_pton expects a null-terminated string, std::string_view doesn't guarantee it
         auto success = inet_pton(static_cast<int>(addr.m_domain), address.data(), addr.m_data.data());
         if (success != 1)
         {
