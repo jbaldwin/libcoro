@@ -163,13 +163,6 @@ if(LIBCORO_FEATURE_NETWORKING)
             include/coro/detail/io_notifier_kqueue.hpp src/detail/io_notifier_kqueue.cpp
         )
     endif()
-    if (WIN32)
-        list(APPEND LIBCORO_SOURCE_FILES
-            include/coro/detail/win32_headers.hpp
-            include/coro/detail/platform.hpp
-            include/coro/detail/io_notifier_iocp.hpp src/detail/io_notifier_iocp.cpp
-        )
-    endif()
 
 
     list(APPEND LIBCORO_SOURCE_FILES
