@@ -72,7 +72,7 @@ if (LIBCORO_RUN_GITCONFIG)
 endif()
 
 cmake_dependent_option(LIBCORO_FEATURE_NETWORKING "Include networking features, Default=ON." ON "NOT EMSCRIPTEN; NOT MSVC" OFF)
-cmake_dependent_option(LIBCORO_FEATURE_TLS "Include TLS encryption features, Default=ON." ON "NOT EMSCRIPTEN; NOT MSVC; NOT MINGW" OFF)
+cmake_dependent_option(LIBCORO_FEATURE_TLS "Include TLS encryption features, Default=ON." ON "NOT EMSCRIPTEN; NOT MSVC" OFF)
 
 message(STATUS "LIBCORO_ENABLE_ASAN           = ${LIBCORO_ENABLE_ASAN}")
 message(STATUS "LIBCORO_ENABLE_MSAN           = ${LIBCORO_ENABLE_MSAN}")
