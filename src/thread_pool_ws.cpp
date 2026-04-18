@@ -298,9 +298,10 @@ auto thread_pool_ws::resume_task(std::optional<schedule_operation*> op) -> bool
     {
         m_queue_size.fetch_sub(1, std::memory_order::release);
         auto v = op.value();
+        auto allocated = v->m_allocated.load(std::memory_order::acquire);
         v->m_awaiting_coroutine.load(std::memory_order::acquire).resume();
         m_size.fetch_sub(1, std::memory_order::release);
-        if (v->m_allocated.load(std::memory_order::acquire))
+        if (allocated)
         {
             delete v;
         }

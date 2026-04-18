@@ -47,6 +47,7 @@ jobs:
               -DLIBCORO_FEATURE_NETWORKING=${{ matrix.libcoro_feature_networking.enabled }} \
               -DLIBCORO_FEATURE_TLS=${{ matrix.libcoro_feature_networking.tls }} \
               -DLIBCORO_BUILD_SHARED_LIBS=${{ matrix.libcoro_build_shared_libs }} \
+              -DLIBCORO_ENABLE_ASAN=ON \
               ..
           cmake --build . --config RelWithDebInfo
       - name: Test
