@@ -4,12 +4,12 @@ on: [pull_request, workflow_dispatch]
 
 jobs:
   macos:
-    name: macos-15
+    name: macos-15-${{ matrix.clang_version }}-${{ matrix.cxx_standard }}-${{ matrix.libcoro_feature_networking.enabled }}-${{ matrix.libcoro_feature_networking.tls }}-${{ matrix.libcoro_build_shared_libs }}
     runs-on: macos-15
     strategy:
       fail-fast: false
       matrix:
-        clang_version: [20]
+        clang_version: [21]
         cxx_standard: [20, 23]
         libcoro_feature_networking:
           [
@@ -32,26 +32,39 @@ jobs:
           fetch-tags: true
       - name: Mark repository as safe
         run: git config --global --add safe.directory "*"
-      - name: RelWithDebInfo
+      - name: Release build clang
         run: |
           brew --prefix llvm@${{ matrix.clang_version }}
-          ls $(brew --prefix llvm@${{ matrix.clang_version }})/bin
-          mkdir RelWithDebInfo
-          cd RelWithDebInfo
+
+          mkdir Release
+          cd Release
           cmake \
               -GNinja \
-              -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+              -DCMAKE_BUILD_TYPE=Release \
               -DCMAKE_C_COMPILER=$(brew --prefix llvm@${{ matrix.clang_version }})/bin/clang-${{ matrix.clang_version }} \
               -DCMAKE_CXX_COMPILER=$(brew --prefix llvm@${{ matrix.clang_version }})/bin/clang-${{ matrix.clang_version }} \
               -DCMAKE_CXX_STANDARD=${{ matrix.cxx_standard }} \
               -DLIBCORO_FEATURE_NETWORKING=${{ matrix.libcoro_feature_networking.enabled }} \
               -DLIBCORO_FEATURE_TLS=${{ matrix.libcoro_feature_networking.tls }} \
               -DLIBCORO_BUILD_SHARED_LIBS=${{ matrix.libcoro_build_shared_libs }} \
-              -DLIBCORO_ENABLE_ASAN=ON \
+              -DLIBCORO_MACOS_LLVM_VERSION=${{ matrix.clang_version }} \
               ..
-          cmake --build . --config RelWithDebInfo
-      - name: Test
+          cmake --build . --config Release
+      - name: Test clang
         run: |
-          cd RelWithDebInfo
-          # lldb  -b --one-line-on-crash 'thread backtrace all' -o r -- ctest --build-config RelWithDebInfo -VV
-          ctest --build-config RelWithDebInfo -VV
+          cd Release
+          ctest --build-config Release -VV
+
+          # Run in lldb and capture the backtrace on crash.
+          #lldb  -b --one-line-on-crash 'thread backtrace all' -o r -- ctest --build-config Release -VV
+
+          # Run, crash, and then backtrace the core file.
+          #sudo chmod 1777 /cores
+          #sudo sysctl kern.coredump=1
+          #cd Release/test
+          #/usr/libexec/PlistBuddy -c "Add :com.apple.security.get-task-allow bool true" debug.entitlements
+          #codesign -s - -f --entitlements debug.entitlements ./libcoro_test
+          #ulimit -c unlimited
+          #./libcoro_test "[thread_pool_ws]" || true
+          #ls -lha /cores
+          #lldb -b -o "bt all" -c /cores/core* -- ./libcoro_test

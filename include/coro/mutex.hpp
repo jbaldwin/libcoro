@@ -7,6 +7,10 @@
 #include <mutex>
 #include <utility>
 
+#ifdef LIBCORO_TSAN
+#include <sanitizer/tsan_interface.h>
+#endif
+
 namespace coro
 {
 class mutex;
@@ -115,7 +119,13 @@ private:
 class mutex
 {
 public:
-    explicit mutex() noexcept : m_state(const_cast<void*>(unlocked_value())) {}
+    explicit mutex() noexcept
+        : m_state(const_cast<void*>(unlocked_value()))
+    {
+#ifdef LIBCORO_TSAN
+        __tsan_release(&m_state);
+#endif
+    }
     ~mutex() = default;
 
     mutex(const mutex&)                    = delete;

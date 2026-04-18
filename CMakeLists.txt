@@ -32,12 +32,31 @@ project(libcoro
 
 message(STATUS "${PROJECT_NAME} version: ${PROJECT_VERSION}")
 
+set(LIBCORO_MACOS_LLVM_VERSION ${LIBCORO_MACOS_LLVM_VERSION} CACHE INTERNAL "21")
 if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
     set(MACOSX TRUE)
-    # We need to build with clang >= 17, assuming its installed by
-    # brew. We also need to force linking to libc++.a
-    add_link_options(-L/usr/local/opt/llvm/lib)
-    link_libraries(-lc++)
+
+    # Dynamically determine where llvm was installed based on the brew --prefix.
+    execute_process(
+        COMMAND brew --prefix llvm@${LIBCORO_MACOS_LLVM_VERSION}
+        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+        RESULT_VARIABLE LIBCORO_MACOS_BREW_LLVM_PREFIX_RESULT
+        OUTPUT_VARIABLE LIBCORO_MACOS_BREW_LLVM_PREFIX
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+
+    message("LIBCORO_MACOS_BREW_LLVM_PREFIX = ${LIBCORO_MACOS_BREW_LLVM_PREFIX}")
+    include_directories(BEFORE SYSTEM ${LIBCORO_MACOS_BREW_LLVM_PREFIX}/include)
+#    include_directories(BEFORE SYSTEM /opt/homebrew/opt/llvm@21/include)
+    link_directories(AFTER ${LIBCORO_MACOS_BREW_LLVM_PREFIX}/lib ${LIBCORO_MACOS_BREW_LLVM_PREFIX}/lib/c++ ${LIBCORO_MACOS_BREW_LLVM_PREFIX}/lib/unwind)
+#    link_directories(AFTER /opt/homebrew/opt/llvm@21/lib /opt/homebrew/opt/llvm@21/lib/c++ /opt/homebrew/opt/llvm@21/lib/unwind)
+    link_libraries(c++ unwind)
+
+    # Required for the macos system clang to be ignored.
+    add_compile_definitions(_LIBCPP_DISABLE_AVAILABILITY)
+
+    # Uncomment to show all linked libraries the binaries will require.
+    # add_link_options(-Wl,-t)
 endif()
 
 if(UNIX AND NOT APPLE)
@@ -47,7 +66,6 @@ endif()
 include(GNUInstallDirs)
 include(GenerateExportHeader)
 include(cmake/CPM.cmake)
-# CPMAddPackage("gh:ConorWilliams/ConcurrentDeque#v2.0.0")
 
 if (NOT "$ENV{version}" STREQUAL "")
     set(PROJECT_VERSION "$ENV{version}" CACHE INTERNAL "Copied from environment variable")
@@ -214,11 +232,17 @@ if(DEFINED EMSCRIPTEN)
     add_link_options(-sEXIT_RUNTIME)
 endif()
 
-if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+# Global compiler options to apply across all of libcoro.
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
     add_compile_options(
         $<$<COMPILE_LANGUAGE:CXX>:-Wall>
         $<$<COMPILE_LANGUAGE:CXX>:-Wextra>
         $<$<COMPILE_LANGUAGE:CXX>:-Wno-interference-size>
+    )
+elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    add_compile_options(
+        $<$<COMPILE_LANGUAGE:CXX>:-Wall>
+        $<$<COMPILE_LANGUAGE:CXX>:-Wextra>
     )
 elseif(MSVC)
     add_compile_options(
@@ -228,7 +252,6 @@ endif()
 
 add_library(${PROJECT_NAME} ${LIBCORO_SOURCE_FILES})
 set_target_properties(${PROJECT_NAME} PROPERTIES LINKER_LANGUAGE CXX PREFIX "" VERSION ${PROJECT_VERSION} SOVERSION ${PROJECT_VERSION_MAJOR})
-# target_link_libraries(${PROJECT_NAME} PUBLIC RiftenDeque::RiftenDeque)
 
 if(LIBCORO_ENABLE_ASAN)
     add_compile_options(-g -O0 -fno-omit-frame-pointer -fsanitize=address)
@@ -241,7 +264,9 @@ if(LIBCORO_ENABLE_MSAN)
 endif()
 
 if(LIBCORO_ENABLE_TSAN)
-    add_compile_options(-g -O0 -fno-omit-frame-pointer -fsanitize=thread)
+    add_compile_options(-fno-omit-frame-pointer -fsanitize=thread)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE LIBCORO_TSAN)
+    set_target_properties(${PROJECT_NAME} PROPERTIES POSITION_INDEPENDENT_CODE FALSE)
     add_link_options(-fsanitize=thread)
 endif()
 
@@ -269,8 +294,8 @@ if(LIBCORO_FEATURE_NETWORKING)
 endif()
 
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
-    if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "10.2.0")
-        message(FATAL_ERROR "g++ version ${CMAKE_CXX_COMPILER_VERSION} is unsupported, please upgrade to at least 10.2.0")
+    if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "11.0")
+        message(FATAL_ERROR "g++ version ${CMAKE_CXX_COMPILER_VERSION} is unsupported, please upgrade to at least 11.0")
     endif()
 
     target_compile_options(${PROJECT_NAME} PUBLIC

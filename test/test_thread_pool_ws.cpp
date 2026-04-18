@@ -16,9 +16,8 @@ TEST_CASE("thread_pool_ws simple testing", "[thread_pool_ws]")
     });
     //    .on_thread_start_functor = [](std::size_t i) -> void { std::cerr << "thread " << i << " starting\n"; },
     //    .on_thread_stop_functor  = [](std::size_t i) -> void { std::cerr << "thread " << i << " starting\n"; }});
-    coro::mutex m{};
 
-    auto make_task = [&tp, &m](int task_id) -> coro::task<void>
+    auto make_task = [&tp](int task_id) -> coro::task<void>
     {
         for (size_t i = 0; i < 5'000; ++i)
         {
@@ -230,7 +229,7 @@ TEST_CASE("thread_pool_ws high cpu usage when threadcount is greater than the nu
             std::this_thread::sleep_for(delay);
             auto amount = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - now);
             auto lk     = co_await m.scoped_lock();
-            std::cout << "delay=" << std::chrono::duration_cast<std::chrono::milliseconds>(delay).count()
+            std::cerr << "delay=" << std::chrono::duration_cast<std::chrono::milliseconds>(delay).count()
                       << " actual=" << amount.count() << "\n";
             co_return;
         };
@@ -247,6 +246,8 @@ TEST_CASE("thread_pool_ws high cpu usage when threadcount is greater than the nu
         {
             co_await tasks[i];
         }
+
+        std::cerr << "wait_for_task() return\n";
 
         co_return;
     };
@@ -323,21 +324,27 @@ TEST_CASE("thread_pool_ws::schedule(task)", "[thread_pool_ws]")
 TEST_CASE("thread_pool_ws::schedule(task) manually resume returned task", "[thread_pool_ws]")
 {
     auto tp = coro::thread_pool_ws::make_unique(coro::thread_pool_ws::options{.thread_count = 1});
+    std::mutex block{};
 
-    auto long_task = []() -> coro::task<bool>
+    auto long_task = [](std::mutex& b) -> coro::task<bool>
     {
-        std::this_thread::sleep_for(std::chrono::milliseconds{200});
+        std::unique_lock<std::mutex> blk{b};
         co_return true;
     };
 
-    auto task = long_task();
-    tp->resume(task.handle());
-
+    block.lock();
+    auto task = long_task(block);
     REQUIRE(!task.is_ready());
+    tp->resume(task.handle());
+    block.unlock();
 
-    std::this_thread::sleep_for(std::chrono::milliseconds{500});
+    while (!task.is_ready())
+    {
+        std::this_thread::sleep_for(std::chrono::milliseconds{10});
+    }
+
+    auto result = task.promise().result();
     REQUIRE(task.is_ready());
-    auto result = coro::sync_wait(task);
     REQUIRE(result == true);
 }
 

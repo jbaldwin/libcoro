@@ -38,6 +38,10 @@ public:
 
         auto start() -> void;
 
+        std::atomic<bool> m_sleeping{false};
+        std::mutex m_wait_mutex{};
+        std::condition_variable m_wait_cv{};
+
     private:
         thread_pool_ws& m_thread_pool;
         uint32_t        m_idx;
@@ -58,7 +62,7 @@ public:
     class schedule_operation
     {
         friend class thread_pool_ws;
-        explicit schedule_operation(thread_pool_ws& tp) noexcept;
+        explicit schedule_operation(thread_pool_ws& tp, bool allocated = false) noexcept;
 
     public:
         auto await_ready() noexcept -> bool { return false; }
@@ -70,7 +74,7 @@ public:
 
     private:
         thread_pool_ws&   m_thread_pool;
-        std::atomic<bool> m_allocated{false};
+        std::atomic<bool> m_allocated;
     };
 
     /**
@@ -123,7 +127,7 @@ private:
     std::atomic<schedule_operation*>            m_global_queue{nullptr};
     std::atomic<uint32_t>                       m_sleeping{0};
     std::mutex                                  m_wait_mutex{};
-    std::condition_variable_any                 m_wait_cv{};
+    // std::condition_variable_any                 m_wait_cv{};
     std::atomic<uint32_t>                       m_workers_started{0};
     std::atomic<uint32_t>                       m_workers_stopped{0};
     std::atomic<uint64_t>                       m_try_wake_workers_size{0};
