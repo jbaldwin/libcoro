@@ -144,22 +144,27 @@ jobs:
                 run: git config --global --add safe.directory "*"
             -   name: Build
                 run: |
-                    mkdir Release
-                    cd Release
+                    mkdir RelWithDebInfo
+                    cd RelWithDebInfo
                     cmake \
                         -GNinja \
-                        -DCMAKE_BUILD_TYPE=Release \
+                        -DCMAKE_BUILD_TYPE=RelWithDebInfo \
                         -DCMAKE_C_COMPILER=clang-${{ matrix.clang_version }} \
                         -DCMAKE_CXX_COMPILER=clang++-${{ matrix.clang_version }} \
                         -DCMAKE_CXX_STANDARD=${{ matrix.cxx_standard }} \
                         -DLIBCORO_FEATURE_NETWORKING=${{ matrix.libcoro_feature_networking.enabled }} \
                         -DLIBCORO_FEATURE_TLS=${{ matrix.libcoro_feature_networking.tls }} \
                         ..
-                    cmake --build . --config Release
+                    cmake --build . --config RelWithDebInfo
             -   name: Test
                 run: |
-                    cd Release
-                    ctest --build-config Release -VV
+                    cd RelWithDebInfo
+                    sudo sysctl -w kernel.core_pattern=core.%p.%e
+                    ulimit -c unlimited
+                    ./test/libcoro_test
+                    gdb ./test/libcoro_test core* -ex "thread apply all bt" -ex "quit"
+                    #gdb -ex run -ex bt -ex q --args ./test/libcoro_test
+                    #ctest --build-config RelWithDebInfo -VV
 
     ci-ubuntu-24-04-clang:
         name: ci-ubuntu-24.04-clang
@@ -200,19 +205,24 @@ jobs:
                 run: git config --global --add safe.directory "*"
             -   name: Build
                 run: |
-                    mkdir Release
-                    cd Release
+                    mkdir RelWithDebInfo
+                    cd RelWithDebInfo
                     cmake \
                         -GNinja \
-                        -DCMAKE_BUILD_TYPE=Release \
+                        -DCMAKE_BUILD_TYPE=RelWithDebInfo \
                         -DCMAKE_C_COMPILER=clang-${{ matrix.clang_version }} \
                         -DCMAKE_CXX_COMPILER=clang++-${{ matrix.clang_version }} \
                         -DCMAKE_CXX_STANDARD=${{ matrix.cxx_standard }} \
                         -DLIBCORO_FEATURE_NETWORKING=${{ matrix.libcoro_feature_networking.enabled }} \
                         -DLIBCORO_FEATURE_TLS=${{ matrix.libcoro_feature_networking.tls }} \
                         ..
-                    cmake --build . --config Release
+                    cmake --build . --config RelWithDebInfo
             -   name: Test
                 run: |
-                    cd Release
-                    ctest --build-config Release -VV
+                    cd RelWithDebInfo
+                    sudo sysctl -w kernel.core_pattern=core.%p.%e
+                    ulimit -c unlimited
+                    ./test/libcoro_test
+                    gdb ./test/libcoro_test core* -ex "thread apply all bt" -ex "quit"
+                    #gdb -ex run -ex bt -ex q --args ./test/libcoro_test
+                    #ctest --build-config Release -VV
