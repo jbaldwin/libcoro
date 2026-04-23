@@ -1,5 +1,5 @@
-#include "coro/detail/awaiter_list.hpp"
 #include "coro/mutex.hpp"
+#include "coro/detail/awaiter_list.hpp"
 
 namespace coro
 {
@@ -12,9 +12,9 @@ auto lock_operation_base::await_ready() const noexcept -> bool
 
 auto lock_operation_base::await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept -> bool
 {
-    m_awaiting_coroutine = awaiting_coroutine;
-    auto& state = m_mutex.m_state;
-    void* current = state.load(std::memory_order::acquire);
+    m_awaiting_coroutine.store(awaiting_coroutine, std::memory_order::release);
+    auto&       state          = m_mutex.m_state;
+    void*       current        = state.load(std::memory_order::acquire);
     const void* unlocked_value = m_mutex.unlocked_value();
     do
     {
@@ -27,7 +27,7 @@ auto lock_operation_base::await_suspend(std::coroutine_handle<> awaiting_corouti
             if (state.compare_exchange_weak(current, nullptr, std::memory_order::acq_rel, std::memory_order::acquire))
             {
                 // We've acquired the lock, don't suspend.
-                m_awaiting_coroutine = nullptr;
+                m_awaiting_coroutine.store(nullptr, std::memory_order::release);
                 return false;
             }
         }
@@ -35,7 +35,8 @@ auto lock_operation_base::await_suspend(std::coroutine_handle<> awaiting_corouti
         {
             // The lock is still owned, attempt to add ourself as a waiter.
             m_next = static_cast<lock_operation_base*>(current);
-            if (state.compare_exchange_weak(current, static_cast<void*>(this), std::memory_order::acq_rel, std::memory_order::acquire))
+            if (state.compare_exchange_weak(
+                    current, static_cast<void*>(this), std::memory_order::acq_rel, std::memory_order::acquire))
             {
                 // We've successfully added ourself to the waiter queue.
                 return true;
@@ -82,10 +83,10 @@ auto mutex::unlock() -> void
         if (current == nullptr)
         {
             if (m_state.compare_exchange_weak(
-                current,
-                const_cast<void*>(unlocked_value()),
-                std::memory_order::acq_rel,
-                std::memory_order::acquire))
+                    current,
+                    const_cast<void*>(unlocked_value()),
+                    std::memory_order::acq_rel,
+                    std::memory_order::acquire))
             {
                 // We've successfully unlocked the mutex, return since there are no current waiters.
                 std::atomic_thread_fence(std::memory_order::acq_rel);
@@ -93,20 +94,22 @@ auto mutex::unlock() -> void
             }
             else
             {
-                // This means someone has added themselves as a waiter, we need to try again with our updated current state.
-                // assert(m_state now holds a lock_operation_base*)
+                // This means someone has added themselves as a waiter, we need to try again with our updated current
+                // state. assert(m_state now holds a lock_operation_base*)
                 continue;
             }
         }
         else
         {
-            // There are waiters, lets wake the first one up. This will set the state to the next waiter, or nullptr (no waiters but locked).
-            std::atomic<detail::lock_operation_base*>* casted = reinterpret_cast<std::atomic<detail::lock_operation_base*>*>(&m_state);
+            // There are waiters, lets wake the first one up. This will set the state to the next waiter, or nullptr (no
+            // waiters but locked).
+            std::atomic<detail::lock_operation_base*>* casted =
+                reinterpret_cast<std::atomic<detail::lock_operation_base*>*>(&m_state);
             auto* waiter = detail::awaiter_list_pop<detail::lock_operation_base>(*casted);
             // assert waiter != nullptr, nobody else should be unlocking this mutex.
             // Directly transfer control to the waiter, they are now responsible for unlocking the mutex.
             std::atomic_thread_fence(std::memory_order::acq_rel);
-            waiter->m_awaiting_coroutine.resume();
+            waiter->m_awaiting_coroutine.load(std::memory_order::acquire).resume();
             return;
         }
     } while (true);

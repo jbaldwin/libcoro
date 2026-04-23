@@ -9,11 +9,11 @@
 #include "coro/expected.hpp"
 
 #ifdef LIBCORO_FEATURE_NETWORKING
-    #include "coro/scheduler.hpp"
     #include "coro/net/dns/resolver.hpp"
     #include "coro/net/tcp/client.hpp"
     #include "coro/net/tcp/server.hpp"
     #include "coro/poll.hpp"
+    #include "coro/scheduler.hpp"
     #ifdef LIBCORO_FEATURE_TLS
         #include "coro/net/tls/client.hpp"
         #include "coro/net/tls/connection_status.hpp"
@@ -22,8 +22,8 @@
     #endif
     #include "coro/net/connect.hpp"
     #include "coro/net/hostname.hpp"
-    #include "coro/net/ip_address.hpp"
     #include "coro/net/io_status.hpp"
+    #include "coro/net/ip_address.hpp"
     #include "coro/net/socket.hpp"
     #include "coro/net/udp/peer.hpp"
 #endif
@@ -43,6 +43,7 @@
 #include "coro/task.hpp"
 #include "coro/task_group.hpp"
 #include "coro/thread_pool.hpp"
+#include "coro/thread_pool_ws.hpp"
 #include "coro/time.hpp"
 #include "coro/when_all.hpp"
 #include "coro/when_any.hpp"

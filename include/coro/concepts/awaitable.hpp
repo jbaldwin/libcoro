@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <concepts>
 #include <coroutine>
 #include <type_traits>
@@ -110,7 +111,7 @@ concept awaiter_forward_list_entry = requires(entry_type* e)
     /// The next awaiter in the list.
     { std::same_as<entry_type*, decltype(e->m_next)> };
     /// The awaiting coroutine for this entry.
-    { std::same_as<std::coroutine_handle<>, decltype(e->m_awaiting_coroutine)> };
+    { std::same_as<std::atomic<std::coroutine_handle<>>, decltype(e->m_awaiting_coroutine)> };
 };
 
 } // namespace detail

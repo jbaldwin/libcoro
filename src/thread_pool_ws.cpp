@@ -1,0 +1,386 @@
+#include "coro/thread_pool_ws.hpp"
+#include "coro/task_group.hpp"
+
+#include <iostream>
+#include <mutex>
+
+#ifdef LIBCORO_TSAN
+#include <sanitizer/tsan_interface.h>
+#endif
+
+namespace coro
+{
+namespace detail
+{
+static auto make_spawned_joinable_wait_task(std::unique_ptr<coro::task_group<coro::thread_pool_ws>> group_ptr)
+    -> coro::task<void>
+{
+    co_await *group_ptr;
+    co_return;
+}
+
+} // namespace detail
+
+thread_local std::optional<uint32_t> thread_pool_ws::m_thread_pool_queue_idx{std::nullopt};
+
+thread_pool_ws::worker_info::worker_info(thread_pool_ws& tp, uint32_t i) : m_thread_pool(tp), m_idx(i)
+{
+}
+
+thread_pool_ws::thread_pool_ws(options opts, private_constructor) : m_opts(std::move(opts))
+{
+    m_workers.reserve(m_opts.thread_count);
+}
+
+auto thread_pool_ws::worker_info::start() -> void
+{
+    // Each worker's thread is only started after *all* worker_info structures are initialized
+    // since they all reference each other's queues for stealing.
+    m_thread = std::thread([this]() -> void { m_thread_pool.execute(m_idx); });
+}
+
+auto thread_pool_ws::make_unique(options opts) -> std::unique_ptr<thread_pool_ws>
+{
+    auto tp = std::make_unique<thread_pool_ws>(std::move(opts), private_constructor{});
+
+    for (uint32_t i = 0; i < tp->m_opts.thread_count; ++i)
+    {
+        tp->m_workers.emplace_back(std::make_unique<worker_info>(*tp, i));
+    }
+
+    for (auto& worker : tp->m_workers)
+    {
+        worker->start();
+    }
+
+    while (tp->m_workers_started.load(std::memory_order::acquire) != tp->m_opts.thread_count)
+    {
+        std::this_thread::yield();
+    }
+
+    return tp;
+}
+
+thread_pool_ws::~thread_pool_ws()
+{
+    shutdown();
+}
+
+thread_pool_ws::schedule_operation::schedule_operation(thread_pool_ws& tp, bool allocated) noexcept
+    : m_thread_pool(tp),
+      m_allocated(allocated)
+{
+#ifdef LIBCORO_TSAN
+    // TSAN thinks the non-atomic constructor is a data race with the loads of this atomic on other threads.
+    __tsan_release(&m_allocated);
+#endif
+}
+
+auto thread_pool_ws::schedule_operation::await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept -> void
+{
+    m_awaiting_coroutine.store(awaiting_coroutine, std::memory_order::release);
+    auto& tp = m_thread_pool; // take a copy since allocated schedule_operations can be deleted before this function completes.
+
+    // See if we are running on a thread pool worker to enqueue locally.
+    auto& idx = thread_pool_ws::m_thread_pool_queue_idx;
+    if (idx.has_value())
+    {
+        m_thread_pool.m_workers[idx.value()]->m_queue.emplace(this);
+    }
+    else
+    {
+        detail::awaiter_list_push(m_thread_pool.m_global_queue, this);
+    }
+
+    // At this point `this` is no longer safe to use since a worker thread could have completed this coroutine.
+    tp.try_wake_worker();
+}
+
+auto thread_pool_ws::schedule() -> schedule_operation
+{
+    m_try_wake_workers_size.fetch_add(1, std::memory_order::release);
+    m_queue_size.fetch_add(1, std::memory_order::release);
+    m_size.fetch_add(1, std::memory_order::release);
+    if (m_shutdown_requested.load(std::memory_order::acquire))
+    {
+        m_try_wake_workers_size.fetch_sub(1, std::memory_order::release);
+        m_queue_size.fetch_sub(1, std::memory_order::release);
+        m_size.fetch_sub(1, std::memory_order::release);
+        throw std::runtime_error("coro::thread_pool_ws is shutting down, unable to schedule new tasks.");
+    }
+
+    return schedule_operation{*this};
+}
+
+auto thread_pool_ws::spawn_detached(coro::task<void> user_task) -> bool
+{
+    if (m_shutdown_requested.load(std::memory_order::acquire))
+    {
+        return false;
+    }
+
+    auto wrapper_task = detail::make_task_self_deleting(std::move(user_task));
+    return resume(wrapper_task.handle());
+}
+
+auto thread_pool_ws::spawn_joinable(coro::task<void> user_task) -> coro::task<void>
+{
+    if (m_shutdown_requested.load(std::memory_order::acquire))
+    {
+        throw std::runtime_error("coro::thread_pool_ws is shutting down, unable to spawn new tasks.");
+    }
+
+    auto group_ptr = std::make_unique<coro::task_group<coro::thread_pool_ws>>(this, std::move(user_task));
+    return detail::make_spawned_joinable_wait_task(std::move(group_ptr));
+}
+
+auto thread_pool_ws::resume(std::coroutine_handle<> handle) noexcept -> bool
+{
+    if (handle == nullptr || handle.done())
+    {
+        return false;
+    }
+
+    m_try_wake_workers_size.fetch_add(1, std::memory_order::release);
+    m_queue_size.fetch_add(1, std::memory_order::release);
+    m_size.fetch_add(1, std::memory_order::release);
+    if (m_shutdown_requested.load(std::memory_order::acquire))
+    {
+        m_try_wake_workers_size.fetch_sub(1, std::memory_order::release);
+        m_queue_size.fetch_sub(1, std::memory_order::release);
+        m_size.fetch_sub(1, std::memory_order::release);
+        return false;
+    }
+
+    auto* op = new schedule_operation{*this, true};
+    op->await_suspend(handle);
+    return true;
+}
+
+auto thread_pool_ws::shutdown() noexcept -> void
+{
+    if (m_shutdown_requested.exchange(true, std::memory_order::acq_rel) == false)
+    {
+        {
+            for (auto& info : m_workers)
+            {
+                std::unique_lock<std::mutex> lk{info->m_wait_mutex};
+                info->m_sleeping.store(false, std::memory_order::release);
+                info->m_wait_cv.notify_one();
+            }
+            // std::unique_lock<std::mutex> lk{m_wait_mutex};
+            // m_wait_cv.notify_all();
+        }
+
+        while (m_workers_stopped.load(std::memory_order::acquire) < m_opts.thread_count)
+        {
+            std::this_thread::yield();
+        }
+
+        for (auto& worker : m_workers)
+        {
+            if (worker->m_thread.joinable())
+            {
+                worker->m_thread.join();
+            }
+        }
+
+        // Make sure all try wake tasks are completed prior to destructing this thread pool.
+        while (m_try_wake_workers_size.load(std::memory_order::acquire) > 0)
+        {
+            std::this_thread::yield();
+        }
+    }
+}
+
+auto thread_pool_ws::execute(uint32_t idx) -> void
+{
+    m_thread_pool_queue_idx = {idx};
+
+    m_workers_started.fetch_add(1, std::memory_order::release);
+
+    if (m_opts.on_thread_start_functor != nullptr)
+    {
+        m_opts.on_thread_start_functor(idx);
+    }
+
+    auto&  info         = m_workers[idx];
+    auto&  thread_queue = info->m_queue;
+    size_t spin_counter{0};
+    while (!m_shutdown_requested.load(std::memory_order::acquire))
+    {
+        bool had_tasks = drain_thread_queue(thread_queue);
+        had_tasks |= try_steal(idx);
+        had_tasks |= drain_global_queue(thread_queue);
+
+        if (had_tasks)
+        {
+            spin_counter = 0;
+            continue;
+        }
+
+        if (++spin_counter <= 100)
+        {
+            continue;
+        }
+
+        // Notify to all scheduled tasks that this worker is going to sleep and upon
+        // scheduling a task this worker will need to be woken up.
+        {
+            std::scoped_lock lk{m_wait_mutex, info->m_wait_mutex};
+            info->m_sleeping.exchange(true);
+            m_sleeping.fetch_add(1, std::memory_order::release);
+        }
+
+        // Go to sleep.
+        {
+            std::unique_lock lk{info->m_wait_mutex};
+            info->m_wait_cv.wait(
+                lk,
+                [&]() {
+                    return !info->m_sleeping.load(std::memory_order::acquire) ||
+                           m_queue_size.load(std::memory_order::acquire) > 0 ||
+                           m_shutdown_requested.load(std::memory_order::acquire);
+                });
+        }
+    }
+
+    // while true; do gdb -ex run -ex quit --args taskset -c 0-1 ./test/libcoro_test "[thread_pool_ws]"; done
+
+    // Run until the queue is fully drained.
+    while (m_queue_size.load(std::memory_order::acquire) > 0)
+    {
+        (void)drain_thread_queue(thread_queue);
+        (void)try_steal(idx);
+        (void)drain_global_queue(thread_queue);
+    }
+
+    if (m_opts.on_thread_stop_functor != nullptr)
+    {
+        m_opts.on_thread_stop_functor(idx);
+    }
+
+    m_workers_stopped.fetch_add(1, std::memory_order::release);
+}
+
+auto thread_pool_ws::drain_thread_queue(riften::Deque<schedule_operation*>& queue) -> bool
+{
+    bool had_task{false};
+    while (!queue.empty())
+    {
+        had_task |= resume_task(queue.pop());
+    }
+    return had_task;
+}
+
+auto thread_pool_ws::try_steal(uint32_t my_idx) -> bool
+{
+    bool had_tasks{false};
+    auto queue_size = m_workers.size();
+    for (size_t i = 1; i < queue_size; ++i)
+    {
+        auto steal_idx = (my_idx + i) % queue_size;
+        had_tasks |= drain_peer_queue(m_workers[steal_idx]->m_queue);
+    }
+    return had_tasks;
+}
+
+auto thread_pool_ws::drain_peer_queue(riften::Deque<schedule_operation*>& queue) -> bool
+{
+    bool had_task{false};
+    while (!queue.empty())
+    {
+        had_task |= resume_task(queue.steal());
+    }
+    return had_task;
+}
+
+auto thread_pool_ws::drain_global_queue(riften::Deque<schedule_operation*>& queue) -> bool
+{
+    if (m_global_queue.load(std::memory_order::acquire) != nullptr)
+    {
+        auto* head_op = detail::awaiter_list_pop_all(m_global_queue);
+        if (head_op != nullptr)
+        {
+            while (head_op != nullptr)
+            {
+                auto* next_op = head_op->m_next;
+                queue.emplace(head_op);
+                head_op = next_op;
+            }
+        }
+
+        // 1. If we got the global list we have tasks.
+        // 2. If we didn't get the global list we know we can possibly steal.
+        // Either way there should be tasks to process.
+        return true;
+    }
+
+    return false;
+}
+
+auto thread_pool_ws::resume_task(std::optional<schedule_operation*> op) -> bool
+{
+    if (op.has_value())
+    {
+        m_queue_size.fetch_sub(1, std::memory_order::release);
+        auto v = op.value();
+        auto allocated = v->m_allocated.load(std::memory_order::acquire);
+        v->m_awaiting_coroutine.load(std::memory_order::acquire).resume();
+        m_size.fetch_sub(1, std::memory_order::release);
+        if (allocated)
+        {
+            delete v;
+        }
+        return true;
+    }
+    return false;
+}
+
+auto thread_pool_ws::try_wake_worker() noexcept -> void
+{
+    // We're shutting down, no need to even attempt to wake any workers.
+    if (m_shutdown_requested.load(std::memory_order::acquire))
+    {
+        m_try_wake_workers_size.fetch_sub(1, std::memory_order::release);
+        return;
+    }
+
+    auto asleep = m_sleeping.load(std::memory_order::acquire);
+    while (asleep > 0 && !m_shutdown_requested.load(std::memory_order::acquire))
+    {
+        if (m_sleeping.compare_exchange_weak(
+                asleep, asleep - 1, std::memory_order::acq_rel, std::memory_order::acquire))
+        {
+            for (auto & info : m_workers)
+            {
+                std::unique_lock lk {info->m_wait_mutex};
+                if (info->m_sleeping.load(std::memory_order::acquire))
+                {
+                    info->m_sleeping.store(false, std::memory_order::release);
+                    info->m_wait_cv.notify_one();
+                    break; // for
+                }
+            }
+            break; // while
+        }
+    }
+
+    m_try_wake_workers_size.fetch_sub(1, std::memory_order::release);
+
+    // // Attempt to wake a sleeper if there are any.
+    // if (m_sleeping.load(std::memory_order::acquire) > 0)
+    // {
+    //     std::unique_lock<std::mutex> lk{m_wait_mutex};
+    //     // Check again after acquiring the lock to see if there are any sleeping workers.
+    //     if (m_sleeping.load(std::memory_order::acquire) == 0)
+    //     {
+    //         return;
+    //     }
+
+    //     m_sleeping.fetch_sub(1, std::memory_order::release);
+    //     m_wait_cv.notify_one();
+    // }
+}
+
+} // namespace coro

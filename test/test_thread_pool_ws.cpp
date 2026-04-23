@@ -1,0 +1,376 @@
+#include "catch_amalgamated.hpp"
+
+#include <coro/coro.hpp>
+
+#include <iostream>
+
+TEST_CASE("thread_pool_ws", "[thread_pool_ws]")
+{
+    std::cerr << "[thread_pool_ws]\n\n";
+}
+
+TEST_CASE("thread_pool_ws simple testing", "[thread_pool_ws]")
+{
+    auto tp = coro::thread_pool_ws::make_unique(coro::thread_pool_ws::options{
+        .thread_count = 8,
+    });
+    //    .on_thread_start_functor = [](std::size_t i) -> void { std::cerr << "thread " << i << " starting\n"; },
+    //    .on_thread_stop_functor  = [](std::size_t i) -> void { std::cerr << "thread " << i << " starting\n"; }});
+
+    auto make_task = [&tp](int task_id) -> coro::task<void>
+    {
+        for (size_t i = 0; i < 5'000; ++i)
+        {
+            co_await tp->schedule();
+            std::stringstream ss;
+            ss << task_id << " iteration " << i << " thread id =[" << std::this_thread::get_id() << "]\n";
+            // std::cout << ss.str();
+        }
+        co_return;
+    };
+
+    size_t                        iterations{1024};
+    std::vector<coro::task<void>> tasks{};
+    tasks.reserve(iterations);
+    for (size_t i = 0; i < iterations; ++i)
+    {
+        tasks.emplace_back(tp->schedule(make_task(i)));
+    }
+
+    coro::sync_wait(coro::when_all(std::move(tasks)));
+}
+
+TEST_CASE("thread_pool_ws one worker one task", "[thread_pool_ws]")
+{
+    auto tp = coro::thread_pool_ws::make_unique(coro::thread_pool_ws::options{1});
+
+    auto func = [](std::unique_ptr<coro::thread_pool_ws>& tp) -> coro::task<uint64_t>
+    {
+        co_await tp->schedule(); // Schedule this coroutine on the scheduler.
+        co_return 42;
+    };
+
+    auto result = coro::sync_wait(func(tp));
+    REQUIRE(result == 42);
+}
+
+TEST_CASE("thread_pool_ws one worker many tasks tuple", "[thread_pool_ws]")
+{
+    auto tp = coro::thread_pool_ws::make_unique(coro::thread_pool_ws::options{1});
+
+    auto f = [](std::unique_ptr<coro::thread_pool_ws>& tp) -> coro::task<uint64_t>
+    {
+        co_await tp->schedule(); // Schedule this coroutine on the scheduler.
+        co_return 50;
+    };
+
+    auto tasks = coro::sync_wait(coro::when_all(f(tp), f(tp), f(tp), f(tp), f(tp)));
+    REQUIRE(std::tuple_size<decltype(tasks)>() == 5);
+
+    uint64_t counter{0};
+    std::apply([&counter](auto&&... t) -> void { ((counter += t.return_value()), ...); }, tasks);
+
+    REQUIRE(counter == 250);
+}
+
+TEST_CASE("thread_pool_ws one worker many tasks vector", "[thread_pool_ws]")
+{
+    auto tp = coro::thread_pool_ws::make_unique(coro::thread_pool_ws::options{1});
+
+    auto f = [](std::unique_ptr<coro::thread_pool_ws>& tp) -> coro::task<uint64_t>
+    {
+        co_await tp->schedule(); // Schedule this coroutine on the scheduler.
+        co_return 50;
+    };
+
+    std::vector<coro::task<uint64_t>> input_tasks;
+    input_tasks.emplace_back(f(tp));
+    input_tasks.emplace_back(f(tp));
+    input_tasks.emplace_back(f(tp));
+
+    auto output_tasks = coro::sync_wait(coro::when_all(std::move(input_tasks)));
+
+    REQUIRE(output_tasks.size() == 3);
+
+    uint64_t counter{0};
+    for (const auto& task : output_tasks)
+    {
+        counter += task.return_value();
+    }
+
+    REQUIRE(counter == 150);
+}
+
+TEST_CASE("thread_pool_ws N workers 100k tasks", "[thread_pool_ws]")
+{
+    constexpr const std::size_t iterations = 100'000;
+    auto                        tp         = coro::thread_pool_ws::make_unique();
+
+    auto make_task = [](std::unique_ptr<coro::thread_pool_ws>& tp) -> coro::task<uint64_t>
+    {
+        co_await tp->schedule();
+        co_return 1;
+    };
+
+    std::vector<coro::task<uint64_t>> input_tasks{};
+    input_tasks.reserve(iterations);
+    for (std::size_t i = 0; i < iterations; ++i)
+    {
+        input_tasks.emplace_back(make_task(tp));
+    }
+
+    auto output_tasks = coro::sync_wait(coro::when_all(std::move(input_tasks)));
+    REQUIRE(output_tasks.size() == iterations);
+
+    uint64_t counter{0};
+    for (const auto& task : output_tasks)
+    {
+        counter += task.return_value();
+    }
+
+    REQUIRE(counter == iterations);
+}
+
+TEST_CASE("thread_pool_ws 1 worker task spawns another task", "[thread_pool_ws]")
+{
+    auto tp = coro::thread_pool_ws::make_unique(coro::thread_pool_ws::options{1});
+
+    auto f1 = [](std::unique_ptr<coro::thread_pool_ws>& tp) -> coro::task<uint64_t>
+    {
+        co_await tp->schedule();
+
+        auto f2 = [](std::unique_ptr<coro::thread_pool_ws>& tp) -> coro::task<uint64_t>
+        {
+            co_await tp->schedule();
+            co_return 5;
+        };
+
+        co_return 1 + co_await f2(tp);
+    };
+
+    REQUIRE(coro::sync_wait(f1(tp)) == 6);
+}
+
+TEST_CASE("thread_pool_ws shutdown", "[thread_pool_ws]")
+{
+    auto tp = coro::thread_pool_ws::make_unique(coro::thread_pool_ws::options{1});
+
+    auto f = [](std::unique_ptr<coro::thread_pool_ws>& tp) -> coro::task<bool>
+    {
+        try
+        {
+            co_await tp->schedule();
+        }
+        catch (...)
+        {
+            co_return true;
+        }
+        co_return false;
+    };
+
+    tp->shutdown();
+
+    REQUIRE(coro::sync_wait(f(tp)) == true);
+}
+
+TEST_CASE("thread_pool_ws event jump threads", "[thread_pool_ws]")
+{
+    // This test verifies that the thread that sets the event ends up executing every waiter on the event
+
+    auto tp1 = coro::thread_pool_ws::make_unique(coro::thread_pool_ws::options{.thread_count = 1});
+    auto tp2 = coro::thread_pool_ws::make_unique(coro::thread_pool_ws::options{.thread_count = 1});
+
+    coro::event e{};
+
+    auto make_tp1_task = [](std::unique_ptr<coro::thread_pool_ws>& tp1, coro::event& e) -> coro::task<void>
+    {
+        co_await tp1->schedule();
+        auto before_thread_id = std::this_thread::get_id();
+        std::cerr << "before event thread_id = " << before_thread_id << "\n";
+        co_await e;
+        auto after_thread_id = std::this_thread::get_id();
+        std::cerr << "after event thread_id = " << after_thread_id << "\n";
+
+        REQUIRE(before_thread_id != after_thread_id);
+
+        co_return;
+    };
+
+    auto make_tp2_task = [](std::unique_ptr<coro::thread_pool_ws>& tp2, coro::event& e) -> coro::task<void>
+    {
+        co_await tp2->schedule();
+        std::this_thread::sleep_for(std::chrono::milliseconds{10});
+        std::cerr << "setting event\n";
+        e.set();
+        co_return;
+    };
+
+    auto task1 = tp1->spawn_joinable(make_tp1_task(tp1, e));
+
+    coro::sync_wait(coro::when_all(std::move(task1), make_tp2_task(tp2, e)));
+}
+
+TEST_CASE("thread_pool_ws high cpu usage when threadcount is greater than the number of tasks", "[thread_pool_ws]")
+{
+    // https://github.com/jbaldwin/libcoro/issues/262
+    // This test doesn't really trigger any error conditions but was reported via
+    // an issue that the thread_pool_ws threads not doing work would spin on the CPU
+    // if there were less tasks running than threads in the pool.
+    // This was due to using m_size instead of m_queue.size() causing the threads
+    // that had no work to go into a spin trying to acquire work.
+
+    auto wait_for_task = [](std::unique_ptr<coro::thread_pool_ws>& tp, std::chrono::seconds delay) -> coro::task<>
+    {
+        coro::mutex m{};
+
+        auto sleep_for_task = [](std::chrono::seconds delay, coro::mutex& m) -> coro::task<void>
+        {
+            auto now = std::chrono::steady_clock::now();
+            std::this_thread::sleep_for(delay);
+            auto amount = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - now);
+            auto lk     = co_await m.scoped_lock();
+            std::cerr << "delay=" << std::chrono::duration_cast<std::chrono::milliseconds>(delay).count()
+                      << " actual=" << amount.count() << "\n";
+            co_return;
+        };
+
+        std::vector<coro::task<void>> tasks{};
+        tasks.reserve(3);
+        co_await tp->schedule();
+        for (int i = 0; i < 3; ++i)
+        {
+            tasks.emplace_back(tp->spawn_joinable(sleep_for_task(delay, m)));
+        }
+
+        for (int i = 0; i < 3; ++i)
+        {
+            co_await tasks[i];
+        }
+
+        std::cerr << "wait_for_task() return\n";
+
+        co_return;
+    };
+
+    auto tp = coro::thread_pool_ws::make_unique(coro::thread_pool_ws::options{.thread_count = 3});
+    coro::sync_wait(coro::when_all(wait_for_task(tp, std::chrono::seconds{1})));
+    coro::sync_wait(coro::when_all(wait_for_task(tp, std::chrono::seconds{3})));
+}
+
+TEST_CASE("issue-287", "[thread_pool_ws]")
+{
+    const int ITERATIONS = 200'000;
+
+    std::atomic<uint32_t> g_count = 0;
+    auto                  tp      = coro::thread_pool_ws::make_unique(coro::thread_pool_ws::options{.thread_count = 1});
+
+    auto task = [](std::atomic<uint32_t>& count) -> coro::task<void>
+    {
+        count++;
+        co_return;
+    };
+
+    for (int i = 0; i < ITERATIONS; ++i)
+    {
+        REQUIRE(tp->spawn_detached(task(g_count)));
+    }
+
+    tp->shutdown();
+
+    std::cerr << "g_count = \t" << g_count.load() << std::endl;
+    REQUIRE(g_count.load() == ITERATIONS);
+}
+
+TEST_CASE("thread_pool_ws::spawn_detached", "[thread_pool_ws]")
+{
+    auto                  tp = coro::thread_pool_ws::make_unique(coro::thread_pool_ws::options{.thread_count = 2});
+    std::atomic<uint64_t> counter{0};
+
+    auto make_task = [](std::atomic<uint64_t>& counter, uint64_t amount) -> coro::task<void>
+    {
+        counter += amount;
+        co_return;
+    };
+
+    REQUIRE(tp->spawn_detached(make_task(counter, 1)));
+    REQUIRE(tp->spawn_detached(make_task(counter, 2)));
+    REQUIRE(tp->spawn_detached(make_task(counter, 3)));
+
+    tp->shutdown();
+
+    REQUIRE(counter == 6);
+}
+
+TEST_CASE("thread_pool_ws::schedule(task)", "[thread_pool_ws]")
+{
+    auto            tp = coro::thread_pool_ws::make_unique(coro::thread_pool_ws::options{.thread_count = 1});
+    uint64_t        counter{0};
+    std::thread::id coroutine_tid;
+
+    auto make_task = [](uint64_t value, std::thread::id& coroutine_id) -> coro::task<uint64_t>
+    {
+        coroutine_id = std::this_thread::get_id();
+        co_return value;
+    };
+
+    auto main_tid = std::this_thread::get_id();
+
+    counter += coro::sync_wait(tp->schedule(make_task(53, coroutine_tid)));
+
+    REQUIRE(counter == 53);
+    REQUIRE(main_tid != coroutine_tid);
+}
+
+TEST_CASE("thread_pool_ws::schedule(task) manually resume returned task", "[thread_pool_ws]")
+{
+    auto tp = coro::thread_pool_ws::make_unique(coro::thread_pool_ws::options{.thread_count = 1});
+    std::mutex block{};
+
+    auto long_task = [](std::mutex& b) -> coro::task<bool>
+    {
+        std::unique_lock<std::mutex> blk{b};
+        co_return true;
+    };
+
+    block.lock();
+    auto task = long_task(block);
+    REQUIRE(!task.is_ready());
+    tp->resume(task.handle());
+    block.unlock();
+
+    while (!task.is_ready())
+    {
+        std::this_thread::sleep_for(std::chrono::milliseconds{10});
+    }
+
+    auto result = task.promise().result();
+    REQUIRE(task.is_ready());
+    REQUIRE(result == true);
+}
+
+TEST_CASE("thread_pool_ws::spawn_joinable", "[thread_pool_ws]")
+{
+    auto                  tp = coro::thread_pool_ws::make_unique(coro::thread_pool_ws::options{.thread_count = 1});
+    std::atomic<uint64_t> counter{0};
+    coro::event           e1{};
+
+    auto long_task = [](std::atomic<uint64_t>& c, coro::event& e1) -> coro::task<void>
+    {
+        ++c;
+        e1.set();
+        std::this_thread::sleep_for(std::chrono::milliseconds{100});
+        ++c;
+        co_return;
+    };
+
+    auto join_task = tp->spawn_joinable(long_task(counter, e1));
+    coro::sync_wait(e1);
+    REQUIRE(counter.load() == 1);
+    coro::sync_wait(join_task);
+    REQUIRE(counter.load() == 2);
+}
+
+TEST_CASE("~thread_pool_ws", "[thread_pool_ws]")
+{
+    std::cerr << "[~thread_pool_ws]\n\n";
+}

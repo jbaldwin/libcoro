@@ -149,7 +149,7 @@ public:
             if (m_scheduler.m_opts.execution_strategy == execution_strategy_t::process_tasks_inline)
             {
                 m_scheduler.m_size.fetch_add(1, std::memory_order::release);
-                m_awaiting_coroutine = awaiting_coroutine;
+                m_awaiting_coroutine.store(awaiting_coroutine, std::memory_order::release);
                 detail::awaiter_list_push(m_scheduler.m_scheduled_ops, this);
 
                 // Trigger the event to wake-up the scheduler if this event isn't currently triggered.
@@ -178,9 +178,9 @@ public:
          */
         auto await_resume() noexcept -> void {}
 
-        std::coroutine_handle<> m_awaiting_coroutine;
-        schedule_operation*     m_next{nullptr};
-        bool                    m_allocated{false};
+        schedule_operation*                  m_next{nullptr};
+        std::atomic<std::coroutine_handle<>> m_awaiting_coroutine;
+        bool                                 m_allocated{false};
 
     private:
         /// The thread pool that this operation will execute on.

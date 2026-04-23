@@ -18,11 +18,11 @@
     #include <stop_token>
 #endif
 
-// latest gcc versions > 13 are incorrectly reporting the std::optional<std::function<bool>()> = std::nullopt as the internal
-// std::function being uninitialized, it is but that is expected since its wrapped in an nullopt optional.
+// latest gcc versions > 13 are incorrectly reporting the std::optional<std::function<bool>()> = std::nullopt as the
+// internal std::function being uninitialized, it is but that is expected since its wrapped in an nullopt optional.
 #if defined(__GNUC__) && !defined(__clang__)
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
+    #pragma GCC diagnostic push
+    #pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
 #endif
 
 namespace coro
@@ -57,7 +57,7 @@ private:
         /// @brief The next waiting awaiter.
         awaiter_base* m_next{nullptr};
         /// @brief The coroutine to resume the waiter.
-        std::coroutine_handle<> m_awaiting_coroutine{nullptr};
+        std::atomic<std::coroutine_handle<>> m_awaiting_coroutine{nullptr};
         /// @brief The condition variable this waiter is waiting on.
         coro::condition_variable& m_condition_variable;
         /// @brief The lock that the wait() was called with.
@@ -229,7 +229,7 @@ private:
             {
                 // The condition coroutine is resumed from here instead of the awaiter hook task to
                 // guarantee the controller is still alive until the caller's coroutine is completed.
-                m_awaiting_coroutine.resume();
+                m_awaiting_coroutine.load(std::memory_order::acquire).resume();
             }
 
             // This was a timeout, do nothing but exit to let the controller task know it can safely exit now.
@@ -257,7 +257,7 @@ private:
                 // must be re-acquired.
                 co_await m_lock.m_mutex->lock();
                 m_predicate_result = data.m_predicate.has_value() ? data.m_predicate.value()() : true;
-                m_awaiting_coroutine.resume();
+                m_awaiting_coroutine.load(std::memory_order::acquire).resume();
                 co_return;
             }
 
@@ -304,7 +304,8 @@ private:
 
         auto await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept -> bool
         {
-            m_awaiting_coroutine = awaiting_coroutine; // This is the real coroutine to resume.
+            m_awaiting_coroutine.store(
+                awaiting_coroutine, std::memory_order::release); // This is the real coroutine to resume.
 
             // Make the background controller which proxies between the notify task and the timeout task.
             auto controller = make_controller_task();
@@ -547,9 +548,8 @@ private:
     }
 };
 
-
 #if defined(__GNUC__) && !defined(__clang__)
-#pragma GCC diagnostic pop
+    #pragma GCC diagnostic pop
 #endif
 
 } // namespace coro
