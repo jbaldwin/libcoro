@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <concepts>
 #include <coroutine>
 #include <exception>
@@ -26,14 +27,13 @@ struct promise_base
         {
             // If there is a continuation call it, otherwise this is the end of the line.
             auto& promise = coroutine.promise();
-            if (promise.m_continuation != nullptr)
+            auto c = promise.m_continuation.load(std::memory_order::acquire);
+            if (c != nullptr)
             {
-                return promise.m_continuation;
+                return c;
             }
-            else
-            {
-                return std::noop_coroutine();
-            }
+
+            return std::noop_coroutine();
         }
 
         auto await_resume() noexcept -> void
@@ -49,10 +49,10 @@ struct promise_base
 
     auto final_suspend() noexcept { return final_awaitable{}; }
 
-    auto continuation(std::coroutine_handle<> continuation) noexcept -> void { m_continuation = continuation; }
+    auto continuation(std::coroutine_handle<> continuation) noexcept -> void { m_continuation.store(continuation, std::memory_order::release); }
 
 protected:
-    std::coroutine_handle<> m_continuation{nullptr};
+    std::atomic<std::coroutine_handle<>> m_continuation{nullptr};
 };
 
 template<typename return_type>
