@@ -201,11 +201,11 @@ TEST_CASE("mutex many shared and exclusive waiters interleaved", "[shared_mutex]
         coro::scheduler::options{.pool = coro::thread_pool::options{.thread_count = 8}});
     coro::shared_mutex<coro::scheduler> m{s};
 
-    std::atomic<bool> read_value{false};
+    std::atomic<bool> trigger{false};
 
     auto make_exclusive_task = [](std::unique_ptr<coro::scheduler> &    s,
                                   coro::shared_mutex<coro::scheduler>& m,
-                                  std::atomic<bool>&                      read_value) -> coro::task<void>
+                                  std::atomic<bool>&                      trigger) -> coro::task<void>
     {
         // Let some readers get through.
         co_await s->yield_for(std::chrono::milliseconds{50});
@@ -216,7 +216,7 @@ TEST_CASE("mutex many shared and exclusive waiters interleaved", "[shared_mutex]
             std::cerr << "make_shared_task exclusive lock acquired\n";
             // Stack readers on the mutex
             co_await s->yield_for(std::chrono::milliseconds{50});
-            read_value.exchange(true, std::memory_order::release);
+            trigger.exchange(true, std::memory_order::release);
             std::cerr << "make_shared_task exclusive lock releasing\n";
             co_await m.unlock();
         }
@@ -226,65 +226,37 @@ TEST_CASE("mutex many shared and exclusive waiters interleaved", "[shared_mutex]
 
     auto make_shared_tasks_task = [](std::unique_ptr<coro::scheduler> &    s,
                                      coro::shared_mutex<coro::scheduler>& m,
-                                     std::atomic<bool>&                      read_value) -> coro::task<void>
+                                     std::atomic<bool>&                      trigger) -> coro::task<void>
     {
         auto make_shared_task = [](std::unique_ptr<coro::scheduler> &    s,
                                    coro::shared_mutex<coro::scheduler>& m,
-                                   std::atomic<bool>&                      read_value) -> coro::task<bool>
+                                   std::atomic<bool>&                      trigger) -> coro::task<void>
         {
             co_await s->schedule();
             std::cerr << "make_shared_task shared lock acquiring\n";
             co_await m.lock_shared();
             std::cerr << "make_shared_task shared lock acquired\n";
-            bool value = read_value.load(std::memory_order::acquire);
+            auto value = trigger.load(std::memory_order::acquire);
             co_await m.unlock_shared();
-            std::cerr << "make_shared_task shared lock releasing on thread_id = " << std::this_thread::get_id() << "\n";
-            co_return value;
+            std::cerr << "make_shared_task shared lock releasing on thread_id = " << std::this_thread::get_id() << " value=" << value << "\n";
+            co_return;
         };
 
         co_await s->schedule();
 
-        std::list<coro::task<bool>> shared_tasks{};
+        coro::task_group<coro::scheduler> shared_tasks{s};
 
-        bool stop{false};
-        while (!stop)
+        while (!trigger.load(std::memory_order::acquire))
         {
-            shared_tasks.emplace_back(make_shared_task(s, m, read_value));
-            shared_tasks.back().resume();
-
+            (void)shared_tasks.start(make_shared_task(s, m, trigger));
             co_await s->yield_for(std::chrono::milliseconds{1});
-
-            for (const auto& st : shared_tasks)
-            {
-                if (st.is_ready())
-                {
-                    stop = st.promise().result();
-                }
-            }
         }
 
-        while (true)
-        {
-            bool tasks_remaining{false};
-            for (const auto& st : shared_tasks)
-            {
-                if (!st.is_ready())
-                {
-                    tasks_remaining = true;
-                    break;
-                }
-            }
-
-            if (!tasks_remaining)
-            {
-                break;
-            }
-        }
-
+        co_await shared_tasks;
         co_return;
     };
 
-    coro::sync_wait(coro::when_all(make_shared_tasks_task(s, m, read_value), make_exclusive_task(s, m, read_value)));
+    coro::sync_wait(coro::when_all(make_shared_tasks_task(s, m, trigger), make_exclusive_task(s, m, trigger)));
 }
 #endif // #ifdef LIBCORO_FEATURE_NETWORKING
 

@@ -67,7 +67,7 @@ public:
         /// @brief The next awaiter in line for this event, nullptr if this is the end.
         awaiter* m_next{nullptr};
         /// @brief The awaiting continuation coroutine handle.
-        std::coroutine_handle<> m_awaiting_coroutine;
+        std::atomic<std::coroutine_handle<>> m_awaiting_coroutine;
         /// Refernce to the event that this awaiter is waiting on.
         const event& m_event;
     };
@@ -119,7 +119,7 @@ public:
             while (waiters != nullptr)
             {
                 auto* next = waiters->m_next;
-                e->resume(waiters->m_awaiting_coroutine);
+                e->resume(waiters->m_awaiting_coroutine.load(std::memory_order::acquire));
                 waiters = next;
             }
         }

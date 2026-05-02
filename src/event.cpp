@@ -26,7 +26,7 @@ auto event::set(resume_order_policy policy) noexcept -> void
         while (waiters != nullptr)
         {
             auto* next = waiters->m_next;
-            waiters->m_awaiting_coroutine.resume();
+            waiters->m_awaiting_coroutine.load(std::memory_order::acquire).resume();
             waiters = next;
         }
     }
@@ -41,7 +41,7 @@ auto event::awaiter::await_suspend(std::coroutine_handle<> awaiting_coroutine) n
 {
     const void* const set_state = &m_event;
 
-    m_awaiting_coroutine = awaiting_coroutine;
+    m_awaiting_coroutine.store(awaiting_coroutine, std::memory_order::release);
 
     // This value will update if other threads write to it via acquire.
     void* old_value = m_event.m_state.load(std::memory_order::acquire);

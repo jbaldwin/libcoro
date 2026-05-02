@@ -1,5 +1,7 @@
 #pragma once
 
+#include <atomic>
+#include <concepts>
 #include <coroutine>
 #include <exception>
 #include <stdexcept>
@@ -25,14 +27,13 @@ struct promise_base
         {
             // If there is a continuation call it, otherwise this is the end of the line.
             auto& promise = coroutine.promise();
-            if (promise.m_continuation != nullptr)
+            auto c = promise.m_continuation.load(std::memory_order::acquire);
+            if (c != nullptr)
             {
-                return promise.m_continuation;
+                return c;
             }
-            else
-            {
-                return std::noop_coroutine();
-            }
+
+            return std::noop_coroutine();
         }
 
         auto await_resume() noexcept -> void
@@ -48,10 +49,10 @@ struct promise_base
 
     auto final_suspend() noexcept { return final_awaitable{}; }
 
-    auto continuation(std::coroutine_handle<> continuation) noexcept -> void { m_continuation = continuation; }
+    auto continuation(std::coroutine_handle<> continuation) noexcept -> void { m_continuation.store(continuation, std::memory_order::release); }
 
 protected:
-    std::coroutine_handle<> m_continuation{nullptr};
+    std::atomic<std::coroutine_handle<>> m_continuation{nullptr};
 };
 
 template<typename return_type>
@@ -72,9 +73,9 @@ public:
     using coroutine_handle                         = std::coroutine_handle<promise<return_type>>;
     static constexpr bool return_type_is_reference = std::is_reference_v<return_type>;
     using stored_type                              = std::conditional_t<
-        return_type_is_reference,
-        std::remove_reference_t<return_type>*,
-        std::remove_const_t<return_type>>;
+                                     return_type_is_reference,
+                                     std::remove_reference_t<return_type>*,
+                                     std::remove_const_t<return_type>>;
     using variant_type = std::variant<unset_return_value, stored_type, std::exception_ptr>;
 
     promise() noexcept {}
@@ -87,9 +88,9 @@ public:
     auto get_return_object() noexcept -> task_type;
 
     template<typename value_type>
-    requires(return_type_is_reference and std::is_constructible_v<return_type, value_type&&>) or
-        (not return_type_is_reference and
-         std::is_constructible_v<stored_type, value_type&&>) auto return_value(value_type&& value) -> void
+        requires(return_type_is_reference && std::is_constructible_v<return_type, value_type &&>) ||
+                    (!return_type_is_reference && std::is_constructible_v<stored_type, value_type &&>)
+    auto return_value(value_type&& value) -> void
     {
         if constexpr (return_type_is_reference)
         {
@@ -102,7 +103,8 @@ public:
         }
     }
 
-    auto return_value(stored_type&& value) -> void requires(not return_type_is_reference)
+    auto return_value(stored_type&& value) -> void
+        requires(!return_type_is_reference)
     {
         if constexpr (std::is_move_constructible_v<stored_type>)
         {

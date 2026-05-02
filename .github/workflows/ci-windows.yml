@@ -5,7 +5,7 @@ on: [pull_request, workflow_dispatch]
 jobs:
     ci-windows-2022:
         name: windows-2022
-        runs-on: windows-latest
+        runs-on: windows-2022
         strategy:
             matrix:
                 cxx_standard: [20, 23]
@@ -29,3 +29,30 @@ jobs:
                 run: |
                     cd Release
                     ctest --build-config Release -VV
+    ci-windows-2025:
+        name: windows-2025
+        runs-on: windows-2025
+        strategy:
+            matrix:
+                cxx_standard: [ 20, 23 ]
+                libcoro_build_shared_libs: [ OFF, ON ]
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+              with:
+                  submodules: recursive
+                  fetch-depth: 0
+                  fetch-tags: true
+            - name: Mark repository as safe
+              run: git config --global --add safe.directory "*"
+            - name: Build
+              run: |
+                  mkdir Release
+                  cd Release
+                  cmake -DCMAKE_CXX_STANDARD=${{ matrix.cxx_standard }} -DLIBCORO_BUILD_SHARED_LIBS=${{ matrix.libcoro_build_shared_libs }} ..
+                  cmake --build . --config Release
+            - name: Test
+              run: |
+                  cd Release
+                  ctest --build-config Release -VV
+

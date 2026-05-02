@@ -63,12 +63,12 @@ jobs:
               exit 1
             fi
   ci-cpu-usage-macos:
-    name: macos-15
+    name: ci-cpu-usage-macos-15-clang-21
     runs-on: macos-15
     strategy:
       fail-fast: false
       matrix:
-        clang_version: [ 20 ]
+        clang_version: [ 21 ]
         cxx_standard: [ 20 ]
         libcoro_feature_networking:
           [
@@ -104,13 +104,15 @@ jobs:
               -DLIBCORO_FEATURE_NETWORKING=${{ matrix.libcoro_feature_networking.enabled }} \
               -DLIBCORO_FEATURE_TLS=${{ matrix.libcoro_feature_networking.tls }} \
               -DLIBCORO_BUILD_SHARED_LIBS=${{ matrix.libcoro_build_shared_libs }} \
+              -DLIBCORO_MACOS_LLVM_VERSION=${{ matrix.clang_version }} \
               ..
           cmake --build . --config Release
       - name: Test CPU Usage
         run: |
           cd Release
           ./examples/coro_http_200_ok_server &
-          CPU_USAGE=top -d 1 -b -n 5 -p $(pgrep coro_http) | egrep -v "top|Tasks|%Cpu|MiB|PID|$^" | awk '{ sum += $9 } END { print sum }'
+          CPU_USAGE=$(top -d 1 -b -n 5 -p $(pgrep coro_http) | egrep -v "top|Tasks|%Cpu|MiB|PID|$^" | awk '{ sum += $9 } END { print sum }')
+          #CPU_USAGE=$(top -l 2 -s 5 -pid $(pgrep coro_http) | tail -n 1 | awk '{ sum += $3 } END { print sum }')
           if [[ $CPU_USAGE -gt "5" ]]; then
             exit 1
           fi

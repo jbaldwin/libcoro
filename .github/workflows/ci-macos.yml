@@ -4,12 +4,12 @@ on: [pull_request, workflow_dispatch]
 
 jobs:
   macos:
-    name: macos-15
+    name: macos-15-${{ matrix.clang_version }}-${{ matrix.cxx_standard }}-${{ matrix.libcoro_feature_networking.enabled }}-${{ matrix.libcoro_feature_networking.tls }}-${{ matrix.libcoro_build_shared_libs }}
     runs-on: macos-15
     strategy:
       fail-fast: false
       matrix:
-        clang_version: [20]
+        clang_version: [21]
         cxx_standard: [20, 23]
         libcoro_feature_networking:
           [
@@ -32,10 +32,10 @@ jobs:
           fetch-tags: true
       - name: Mark repository as safe
         run: git config --global --add safe.directory "*"
-      - name: Release
+      - name: Release build clang
         run: |
           brew --prefix llvm@${{ matrix.clang_version }}
-          ls $(brew --prefix llvm@${{ matrix.clang_version }})/bin
+
           mkdir Release
           cd Release
           cmake \
@@ -47,10 +47,24 @@ jobs:
               -DLIBCORO_FEATURE_NETWORKING=${{ matrix.libcoro_feature_networking.enabled }} \
               -DLIBCORO_FEATURE_TLS=${{ matrix.libcoro_feature_networking.tls }} \
               -DLIBCORO_BUILD_SHARED_LIBS=${{ matrix.libcoro_build_shared_libs }} \
+              -DLIBCORO_MACOS_LLVM_VERSION=${{ matrix.clang_version }} \
               ..
           cmake --build . --config Release
-      - name: Test
+      - name: Test clang
         run: |
           cd Release
-          # lldb -b -o r -- ctest --build-config Release -VV
           ctest --build-config Release -VV
+
+          # Run in lldb and capture the backtrace on crash.
+          #lldb  -b --one-line-on-crash 'thread backtrace all' -o r -- ctest --build-config Release -VV
+
+          # Run, crash, and then backtrace the core file.
+          #sudo chmod 1777 /cores
+          #sudo sysctl kern.coredump=1
+          #cd Release/test
+          #/usr/libexec/PlistBuddy -c "Add :com.apple.security.get-task-allow bool true" debug.entitlements
+          #codesign -s - -f --entitlements debug.entitlements ./libcoro_test
+          #ulimit -c unlimited
+          #./libcoro_test "[thread_pool_ws]" || true
+          #ls -lha /cores
+          #lldb -b -o "bt all" -c /cores/core* -- ./libcoro_test

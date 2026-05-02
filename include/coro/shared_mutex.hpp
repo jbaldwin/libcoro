@@ -20,13 +20,14 @@ struct shared_lock_operation
     explicit shared_lock_operation(coro::shared_mutex<executor_type>& shared_mutex, const bool exclusive)
         : m_shared_mutex(shared_mutex),
           m_exclusive(exclusive)
-    {}
+    {
+    }
     ~shared_lock_operation() = default;
 
-    shared_lock_operation(const shared_lock_operation&) = delete;
-    shared_lock_operation(shared_lock_operation&&) = delete;
+    shared_lock_operation(const shared_lock_operation&)                    = delete;
+    shared_lock_operation(shared_lock_operation&&)                         = delete;
     auto operator=(const shared_lock_operation&) -> shared_lock_operation& = delete;
-    auto operator=(shared_lock_operation&&) -> shared_lock_operation& = delete;
+    auto operator=(shared_lock_operation&&) -> shared_lock_operation&      = delete;
 
     auto await_ready() const noexcept -> bool
     {
@@ -63,8 +64,8 @@ struct shared_lock_operation
         }
         else
         {
-            tail_waiter->m_next = this;
-            m_shared_mutex.m_tail_waiter         = this;
+            tail_waiter->m_next          = this;
+            m_shared_mutex.m_tail_waiter = this;
         }
 
         // If this is an exclusive lock acquire then mark it as so so that shared locks after this
@@ -74,20 +75,20 @@ struct shared_lock_operation
             ++m_shared_mutex.m_exclusive_waiters;
         }
 
-        m_awaiting_coroutine = awaiting_coroutine;
+        m_awaiting_coroutine.store(awaiting_coroutine, std::memory_order::release);
         m_shared_mutex.m_mutex.unlock();
         return true;
     }
 
-    auto await_resume() noexcept -> void { }
+    auto await_resume() noexcept -> void {}
 
 protected:
     friend class coro::shared_mutex<executor_type>;
 
-    std::coroutine_handle<> m_awaiting_coroutine;
-    shared_lock_operation* m_next{nullptr};
-    coro::shared_mutex<executor_type>& m_shared_mutex;
-    bool m_exclusive{false};
+    shared_lock_operation*               m_next{nullptr};
+    std::atomic<std::coroutine_handle<>> m_awaiting_coroutine;
+    coro::shared_mutex<executor_type>&   m_shared_mutex;
+    bool                                 m_exclusive{false};
 };
 
 } // namespace detail
@@ -210,7 +211,7 @@ public:
      */
     [[nodiscard]] auto unlock_shared() -> coro::task<void>
     {
-        auto lk = co_await m_mutex.scoped_lock();
+        auto lk    = co_await m_mutex.scoped_lock();
         auto users = m_shared_users.fetch_sub(1, std::memory_order::acq_rel);
 
         // If this is the final unlock_shared() see if there is anyone to wakeup.
@@ -238,7 +239,7 @@ public:
      */
     [[nodiscard]] auto unlock() -> coro::task<void>
     {
-        auto lk = co_await m_mutex.scoped_lock();
+        auto  lk          = co_await m_mutex.scoped_lock();
         auto* head_waiter = m_head_waiter.load(std::memory_order::acquire);
         if (head_waiter != nullptr)
         {
@@ -257,10 +258,7 @@ public:
      *
      * @return executor_type&
      */
-    [[nodiscard]] auto executor() -> executor_type&
-    {
-        return *m_executor;
-    }
+    [[nodiscard]] auto executor() -> executor_type& { return *m_executor; }
 
 private:
     friend struct detail::shared_lock_operation<executor_type>;
@@ -349,7 +347,7 @@ private:
 
             // Since this is an exclusive lock waiting we can resume it directly.
             lk.unlock();
-            head_waiter->m_awaiting_coroutine.resume();
+            head_waiter->m_awaiting_coroutine.load(std::memory_order::acquire).resume();
         }
         else
         {
@@ -376,7 +374,7 @@ private:
 
                 m_shared_users.fetch_add(1, std::memory_order::release);
 
-                m_executor->resume(to_resume->m_awaiting_coroutine);
+                m_executor->resume(to_resume->m_awaiting_coroutine.load(std::memory_order::acquire));
             }
 
             // Cannot unlock until the entire set of shared waiters has been traversed. I think this

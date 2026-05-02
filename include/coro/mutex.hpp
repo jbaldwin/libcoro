@@ -7,6 +7,10 @@
 #include <mutex>
 #include <utility>
 
+#ifdef LIBCORO_TSAN
+#include <sanitizer/tsan_interface.h>
+#endif
+
 namespace coro
 {
 class mutex;
@@ -21,21 +25,21 @@ struct lock_operation_base
     explicit lock_operation_base(coro::mutex& m) : m_mutex(m) {}
     virtual ~lock_operation_base() = default;
 
-    lock_operation_base(const lock_operation_base&) = delete;
-    lock_operation_base(lock_operation_base&&) = delete;
+    lock_operation_base(const lock_operation_base&)                    = delete;
+    lock_operation_base(lock_operation_base&&)                         = delete;
     auto operator=(const lock_operation_base&) -> lock_operation_base& = delete;
-    auto operator=(lock_operation_base&&) -> lock_operation_base& = delete;
+    auto operator=(lock_operation_base&&) -> lock_operation_base&      = delete;
 
     auto await_ready() const noexcept -> bool;
     auto await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept -> bool;
 
-    std::coroutine_handle<> m_awaiting_coroutine;
-    lock_operation_base*    m_next{nullptr};
+    lock_operation_base*                 m_next{nullptr};
+    std::atomic<std::coroutine_handle<>> m_awaiting_coroutine;
 
 protected:
     friend class coro::mutex;
 
-    coro::mutex&            m_mutex;
+    coro::mutex& m_mutex;
 };
 
 template<typename return_type>
@@ -44,10 +48,10 @@ struct lock_operation : public lock_operation_base
     explicit lock_operation(coro::mutex& m) : lock_operation_base(m) {}
     ~lock_operation() override = default;
 
-    lock_operation(const lock_operation&) = delete;
-    lock_operation(lock_operation&&) = delete;
+    lock_operation(const lock_operation&)                    = delete;
+    lock_operation(lock_operation&&)                         = delete;
     auto operator=(const lock_operation&) -> lock_operation& = delete;
-    auto operator=(lock_operation&&) -> lock_operation& = delete;
+    auto operator=(lock_operation&&) -> lock_operation&      = delete;
 
     auto await_resume() noexcept -> return_type
     {
@@ -92,8 +96,7 @@ public:
     ~scoped_lock();
 
     scoped_lock(const scoped_lock&) = delete;
-    scoped_lock(scoped_lock&& other) noexcept
-        : m_mutex(std::exchange(other.m_mutex, nullptr)) {}
+    scoped_lock(scoped_lock&& other) noexcept : m_mutex(std::exchange(other.m_mutex, nullptr)) {}
     auto operator=(const scoped_lock&) -> scoped_lock& = delete;
     auto operator=(scoped_lock&& other) noexcept -> scoped_lock&
     {
@@ -116,7 +119,13 @@ private:
 class mutex
 {
 public:
-    explicit mutex() noexcept : m_state(const_cast<void*>(unlocked_value())) {}
+    explicit mutex() noexcept
+        : m_state(const_cast<void*>(unlocked_value()))
+    {
+#ifdef LIBCORO_TSAN
+        __tsan_release(&m_state);
+#endif
+    }
     ~mutex() = default;
 
     mutex(const mutex&)                    = delete;
@@ -129,7 +138,10 @@ public:
      *        which will hold the mutex until the coro::scoped_lock destructs.
      * @return A co_await'able operation to acquire the mutex.
      */
-    [[nodiscard]] auto scoped_lock() -> detail::lock_operation<scoped_lock> { return detail::lock_operation<coro::scoped_lock>{*this}; }
+    [[nodiscard]] auto scoped_lock() -> detail::lock_operation<scoped_lock>
+    {
+        return detail::lock_operation<coro::scoped_lock>{*this};
+    }
 
     /**
      * @brief Locks the mutex.

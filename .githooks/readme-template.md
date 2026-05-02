@@ -608,9 +608,9 @@ If you require TLS, provide OpenSSL for the target ABI (static or shared) and se
 
 ### Requirements
     C++20 Compiler with coroutine support
-        g++ [11, 12, 13]
-        clang++ [16, 17]
-        MSVC Windows 2022 CL
+        g++ [11, 12, 13, 14, 15]
+        clang++ with coroutine support [clang-21 is CI tested]
+        MSVC Windows 2022, 2025 CL
             Does not currently support:
                 `LIBCORO_FEATURE_NETWORKING`
                 `LIBCORO_FEATURE_TLS`
