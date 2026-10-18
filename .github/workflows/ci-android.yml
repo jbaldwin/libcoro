@@ -30,6 +30,9 @@ jobs:
 
       - name: Set up Android SDK tools
         uses: android-actions/setup-android@v3
+        with:
+          # The action's default includes the retired SDK package "tools".
+          packages: platform-tools
 
       - name: Cache Gradle & native build
         uses: actions/cache@v4

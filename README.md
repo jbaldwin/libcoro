@@ -1086,7 +1086,9 @@ $ ./examples/coro_invoke
 ```
 
 ### thread_pool
-`coro::thread_pool` is a statically sized pool of worker threads to execute scheduled coroutines from a FIFO queue.  One way to schedule a coroutine on a thread pool is to use the pool's `schedule()` function which should be `co_awaited` inside the coroutine to transfer the execution from the current thread to a thread pool worker thread.  Its important to note that scheduling will first place the coroutine into the FIFO queue and will be picked up by the first available thread in the pool, e.g. there could be a delay if there is a lot of work queued up.
+`coro::thread_pool` is a statically sized pool of worker threads to execute scheduled coroutines.  One way to schedule a coroutine on a thread pool is to use the pool's `schedule()` function which should be `co_awaited` inside the coroutine to transfer the execution from the current thread to a thread pool worker thread.  Scheduling from outside the pool places the coroutine into a shared FIFO queue and it will be picked up by the first available thread in the pool, e.g. there could be a delay if there is a lot of work queued up.  Scheduling from one of the pool's own worker threads places the coroutine into that worker's LIFO queue, so recursive fork-join work (`schedule()` followed by `coro::when_all()` of child tasks) runs depth first and idle workers steal the oldest queued task from busy workers.  `yield()`, `resume()`, `spawn_detached()` and `spawn_joinable()` always use the shared FIFO queue.
+
+The pool does not expose `size()` or `queue_size()`, so scheduling does not maintain a pool-wide task count. Use `coro::task_group` or explicitly join tasks to track completion. `empty()` and `queue_empty()` are transient state queries, not substitutes for joining tasks suspended on external events. `shutdown()` rejects new coroutine publications, drains accepted resumptions, and joins the workers; an operation created before shutdown but awaited afterwards is rejected.
 
 #### Ways to schedule tasks onto a `coro::thread_pool`
 * `coro::thread_pool::schedule()` Use `co_await` on this method inside a coroutine to transfer the tasks execution to the `coro::thread_pool`.
@@ -1211,6 +1213,8 @@ Using a background `coro::thread_pool` will default to using `(std::thread::hard
 Using the inline processing strategy will have the event loop i/o thread process the tasks inline on that thread when events are received.  This processing strategy is best for shorter task that will not block the i/o thread for long or for pure throughput by using thread per core architecture, e.g. spin up an inline i/o scheduler per core and inline process tasks on each scheduler.
 
 The `coro::scheduler` can use a dedicated spawned thread for processing events that are ready or it can be maually driven via its `process_events()` function for integration into existing event loops.  By default i/o schedulers will spawn a dedicated event thread and use a thread pool to process tasks.
+
+`process_events()` returns `bool`: `true` means work remains, and `false` means the scheduler is idle. There is no numeric `size()` query. In manual mode, `shutdown()` drives remaining events before shutting down the worker pool, just as dedicated-thread mode drains its event loop first.
 
 #### Ways to schedule tasks onto a `coro::scheduler`
 * `coro::scheduler::schedule()` Use `co_await` on this method inside a coroutine to transfer the tasks execution to the `coro::scheduler`.
