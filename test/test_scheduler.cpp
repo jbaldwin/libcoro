@@ -207,6 +207,72 @@ TEST_CASE("scheduler task with read poll timeout", "[scheduler]")
     close(trigger_fds[1]);
 }
 
+TEST_CASE("scheduler poll stop token after timeout", "[scheduler]")
+{
+    auto trigger_fds = std::array<fd_t, 2>{};
+    REQUIRE(::pipe(trigger_fds.data()) == 0);
+    auto s =
+        coro::scheduler::make_unique(coro::scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
+    coro::poll_stop_source stop_source{};
+
+    auto make_task =
+        [](std::unique_ptr<coro::scheduler>& s, coro::poll_stop_source& stop_source, int trigger_fd) -> coro::task<void>
+    {
+        co_await s->schedule();
+        auto status = co_await s->poll(trigger_fd, coro::poll_op::read, 10ms, stop_source.get_token());
+        REQUIRE(status == coro::poll_status::timeout);
+
+        // The timed out poll must not leave the stop token registered, or this stop is lost for the next poll.
+        stop_source.signal_stop();
+        // Let the event loop see the stop while no poll is waiting on it.
+        co_await s->yield_for(10ms);
+
+        status = co_await s->poll(trigger_fd, coro::poll_op::read, 500ms, stop_source.get_token());
+        REQUIRE(status == coro::poll_status::cancelled);
+        co_return;
+    };
+
+    coro::sync_wait(make_task(s, stop_source, trigger_fds[0]));
+
+    std::cerr << "scheduler.size() before shutdown = " << s->size() << "\n";
+    s->shutdown();
+    std::cerr << "scheduler.size() after shutdown = " << s->size() << "\n";
+    REQUIRE(s->empty());
+    close(trigger_fds[0]);
+    close(trigger_fds[1]);
+}
+
+TEST_CASE("scheduler poll stop token after cancel", "[scheduler]")
+{
+    auto trigger_fds = std::array<fd_t, 2>{};
+    REQUIRE(::pipe(trigger_fds.data()) == 0);
+    auto s =
+        coro::scheduler::make_unique(coro::scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
+    coro::poll_stop_source stop_source{};
+    stop_source.signal_stop();
+
+    auto make_task =
+        [](std::unique_ptr<coro::scheduler>& s, coro::poll_stop_source& stop_source, int trigger_fd) -> coro::task<void>
+    {
+        co_await s->schedule();
+        // A signalled stop source cancels every poll given its token, not just the first one.
+        auto status = co_await s->poll(trigger_fd, coro::poll_op::read, 500ms, stop_source.get_token());
+        REQUIRE(status == coro::poll_status::cancelled);
+        status = co_await s->poll(trigger_fd, coro::poll_op::read, 500ms, stop_source.get_token());
+        REQUIRE(status == coro::poll_status::cancelled);
+        co_return;
+    };
+
+    coro::sync_wait(make_task(s, stop_source, trigger_fds[0]));
+
+    std::cerr << "scheduler.size() before shutdown = " << s->size() << "\n";
+    s->shutdown();
+    std::cerr << "scheduler.size() after shutdown = " << s->size() << "\n";
+    REQUIRE(s->empty());
+    close(trigger_fds[0]);
+    close(trigger_fds[1]);
+}
+
 TEST_CASE("scheduler separate thread resume", "[scheduler]")
 {
     auto s1 =
