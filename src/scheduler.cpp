@@ -391,12 +391,6 @@ auto scheduler::process_event_execute(detail::poll_info* pi, poll_status status)
         // is ever processed, the other is discarded.
         pi->m_processed = true;
 
-        // Since this event triggered, remove its corresponding timeout if it has one.
-        if (pi->m_timer_pos.has_value())
-        {
-            remove_timer_token(pi->m_timer_pos.value());
-        }
-
         pi->m_poll_status = status;
 
         while (pi->m_awaiting_coroutine == nullptr)
@@ -407,6 +401,12 @@ auto scheduler::process_event_execute(detail::poll_info* pi, poll_status status)
         // Always remove its registrations from epoll so the next poll can blindly EPOLL_CTL_ADD.
         // Only after the coroutine suspended: poll() has then finished watch(), so no registration is added later.
         m_io_notifier.unwatch(*pi);
+
+        // Since this event triggered, remove its corresponding timeout if it has one.
+        if (pi->m_timer_pos.has_value())
+        {
+            remove_timer_token(pi->m_timer_pos.value());
+        }
 
         m_handles_to_resume.emplace_back(pi->m_awaiting_coroutine);
     }
