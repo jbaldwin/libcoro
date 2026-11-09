@@ -391,23 +391,21 @@ auto scheduler::process_event_execute(detail::poll_info* pi, poll_status status)
         // is ever processed, the other is discarded.
         pi->m_processed = true;
 
-        // Given a valid fd always remove it from epoll so the next poll can blindly EPOLL_CTL_ADD.
-        if (pi->m_fd != -1)
-        {
-            m_io_notifier.unwatch(*pi);
-        }
-
-        // Since this event triggered, remove its corresponding timeout if it has one.
-        if (pi->m_timer_pos.has_value())
-        {
-            remove_timer_token(pi->m_timer_pos.value());
-        }
-
         pi->m_poll_status = status;
 
         while (pi->m_awaiting_coroutine == nullptr)
         {
             std::atomic_thread_fence(std::memory_order::acquire);
+        }
+
+        // Always remove its registrations from epoll so the next poll can blindly EPOLL_CTL_ADD.
+        // Only after the coroutine suspended: poll() has then finished watch(), so no registration is added later.
+        m_io_notifier.unwatch(*pi);
+
+        // Since this event triggered, remove its corresponding timeout if it has one.
+        if (pi->m_timer_pos.has_value())
+        {
+            remove_timer_token(pi->m_timer_pos.value());
         }
 
         m_handles_to_resume.emplace_back(pi->m_awaiting_coroutine);
@@ -446,16 +444,14 @@ auto scheduler::process_timeout_execute() -> void
             // is ever processed, the other is discarded.
             pi->m_processed = true;
 
-            // Since this timed out, remove its corresponding event if it has one.
-            if (pi->m_fd != -1)
-            {
-                m_io_notifier.unwatch(*pi);
-            }
-
             while (pi->m_awaiting_coroutine == nullptr)
             {
                 std::atomic_thread_fence(std::memory_order::acquire);
             }
+
+            // Since this timed out, remove its corresponding events if it has any.
+            // Only after the coroutine suspended: poll() may still be inside watch() when its timer expires.
+            m_io_notifier.unwatch(*pi);
 
             m_handles_to_resume.emplace_back(pi->m_awaiting_coroutine);
             pi->m_poll_status = coro::poll_status::timeout;

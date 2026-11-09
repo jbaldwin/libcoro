@@ -118,6 +118,18 @@ auto io_notifier_epoll::unwatch(fd_t fd, poll_op) -> bool
 
 auto io_notifier_epoll::unwatch(poll_info& pi) -> bool
 {
+    // watch(poll_info&) also registered the cancel trigger with &pi, it must not outlive pi.
+    if (pi.m_cancel_trigger.has_value())
+    {
+        unwatch(pi.m_cancel_trigger.value().native_handle(), poll_op::read);
+    }
+
+    // yield_for() and yield_until() have no fd, don't make a system call for them.
+    if (pi.m_fd == -1)
+    {
+        return true;
+    }
+
     return unwatch(pi.m_fd, pi.m_op);
 }
 
@@ -145,18 +157,10 @@ auto io_notifier_epoll::next_events(
         if (is_cancel_event)
         {
             ready_events.emplace_back(pi, poll_status::cancelled);
-            if (!keep_registered)
-            {
-                unwatch(*pi);
-            }
         }
         else
         {
             ready_events.emplace_back(pi, io_notifier_epoll::event_to_poll_status(ready_set[i]));
-            if (pi->m_cancel_trigger.has_value() && !keep_registered)
-            {
-                unwatch(pi->m_cancel_trigger.value().native_handle(), poll_op::read);
-            }
         }
     }
 }
