@@ -6,6 +6,7 @@
 #include <atomic>
 #include <chrono>
 #include <iostream>
+#include <latch>
 #include <thread>
 
 #include <cstring>
@@ -21,6 +22,52 @@ TEST_CASE("scheduler", "[scheduler]")
 using namespace std::chrono_literals;
 using coro::fd_t;
 
+TEST_CASE("scheduler shutdown drains events registered by active workers", "[scheduler]")
+{
+    auto s = coro::scheduler::make_unique(coro::scheduler::options{
+        .pool = coro::thread_pool::options{.thread_count = 1}});
+    std::latch entered{1};
+    std::latch release{1};
+    auto work = [&]() -> coro::task<int>
+    {
+        co_await s->schedule();
+        entered.count_down();
+        release.wait();
+        co_await s->yield_for(5ms);
+        co_return 42;
+    };
+    auto task = work();
+    task.resume();
+    entered.wait();
+    std::thread stopper{[&]() { s->shutdown(); }};
+    while (!s->is_shutdown())
+    {
+        std::this_thread::yield();
+    }
+    release.count_down();
+    stopper.join();
+    REQUIRE(coro::sync_wait(task) == 42);
+    REQUIRE(s->empty());
+}
+
+TEST_CASE("scheduler manual shutdown drains pending events", "[scheduler]")
+{
+    auto s = coro::scheduler::make_unique(coro::scheduler::options{
+        .thread_strategy = coro::scheduler::thread_strategy_t::manual,
+        .pool = coro::thread_pool::options{.thread_count = 1}});
+    auto work = [&]() -> coro::task<int>
+    {
+        co_await s->schedule();
+        co_await s->yield_for(5ms);
+        co_return 42;
+    };
+    auto task = work();
+    task.resume();
+    s->shutdown();
+    REQUIRE(coro::sync_wait(task) == 42);
+    REQUIRE(s->empty());
+}
+
 TEST_CASE("scheduler schedule single task", "[scheduler]")
 {
     auto s =
@@ -34,9 +81,7 @@ TEST_CASE("scheduler schedule single task", "[scheduler]")
 
     auto value = coro::sync_wait(make_task(s));
     REQUIRE(value == 42);
-    std::cerr << "scheduler.size() before shutdown = " << s->size() << "\n";
     s->shutdown();
-    std::cerr << "scheduler.size() after shutdown = " << s->size() << "\n";
     REQUIRE(s->empty());
 }
 
@@ -63,9 +108,7 @@ TEST_CASE("scheduler submit mutiple tasks", "[scheduler]")
 
     REQUIRE(counter == n);
 
-    std::cerr << "scheduler.size() before shutdown = " << s->size() << "\n";
     s->shutdown();
-    std::cerr << "scheduler.size() after shutdown = " << s->size() << "\n";
     REQUIRE(s->empty());
 }
 
@@ -106,9 +149,7 @@ TEST_CASE("scheduler task with multiple events", "[scheduler]")
 
     REQUIRE(counter == 3);
 
-    std::cerr << "scheduler.size() before shutdown = " << s->size() << "\n";
     s->shutdown();
-    std::cerr << "scheduler.size() after shutdown = " << s->size() << "\n";
     REQUIRE(s->empty());
 }
 
@@ -138,9 +179,7 @@ TEST_CASE("scheduler task with read poll", "[scheduler]")
 
     coro::sync_wait(coro::when_all(make_poll_read_task(s, trigger_fds[0]), make_poll_write_task(s, trigger_fds[1])));
 
-    std::cerr << "scheduler.size() before shutdown = " << s->size() << "\n";
     s->shutdown();
-    std::cerr << "scheduler.size() after shutdown = " << s->size() << "\n";
     REQUIRE(s->empty());
     close(trigger_fds[0]);
     close(trigger_fds[1]);
@@ -173,9 +212,7 @@ TEST_CASE("scheduler task with read poll with timeout", "[scheduler]")
 
     coro::sync_wait(coro::when_all(make_poll_read_task(s, trigger_fds[0]), make_poll_write_task(s, trigger_fds[1])));
 
-    std::cerr << "scheduler.size() before shutdown = " << s->size() << "\n";
     s->shutdown();
-    std::cerr << "scheduler.size() after shutdown = " << s->size() << "\n";
     REQUIRE(s->empty());
     close(trigger_fds[0]);
     close(trigger_fds[1]);
@@ -199,9 +236,7 @@ TEST_CASE("scheduler task with read poll timeout", "[scheduler]")
 
     coro::sync_wait(make_task(s, trigger_fds[0]));
 
-    std::cerr << "scheduler.size() before shutdown = " << s->size() << "\n";
     s->shutdown();
-    std::cerr << "scheduler.size() after shutdown = " << s->size() << "\n";
     REQUIRE(s->empty());
     close(trigger_fds[0]);
     close(trigger_fds[1]);
@@ -328,9 +363,7 @@ TEST_CASE("scheduler separate thread resume with return", "[scheduler]")
     coro::sync_wait(make_task(s, start_service, service_done, output));
 
     service.join();
-    std::cerr << "scheduler.size() before shutdown = " << s->size() << "\n";
     s->shutdown();
-    std::cerr << "scheduler.size() after shutdown = " << s->size() << "\n";
     REQUIRE(s->empty());
 }
 
@@ -363,9 +396,7 @@ TEST_CASE("scheduler with basic task", "[scheduler]")
 
     REQUIRE(counter == expected_value);
 
-    std::cerr << "scheduler.size() before shutdown = " << s->size() << "\n";
     s->shutdown();
-    std::cerr << "scheduler.size() after shutdown = " << s->size() << "\n";
     REQUIRE(s->empty());
 }
 
@@ -398,9 +429,7 @@ TEST_CASE("scheduler scheduler_after", "[scheduler]")
 
         REQUIRE(counter == 1);
         REQUIRE(duration < wait_for);
-        std::cerr << "scheduler.size() before shutdown = " << s->size() << "\n";
         s->shutdown();
-        std::cerr << "scheduler.size() after shutdown = " << s->size() << "\n";
         REQUIRE(s->empty());
     }
 
@@ -416,9 +445,7 @@ TEST_CASE("scheduler scheduler_after", "[scheduler]")
 
         REQUIRE(counter == 2);
         REQUIRE(duration >= wait_for);
-        std::cerr << "scheduler.size() before shutdown = " << s->size() << "\n";
         s->shutdown();
-        std::cerr << "scheduler.size() after shutdown = " << s->size() << "\n";
         REQUIRE(s->empty());
     }
 }
@@ -496,9 +523,7 @@ TEST_CASE("scheduler yield", "[scheduler]")
 
     coro::sync_wait(func(s, tid));
 
-    std::cerr << "scheduler.size() before shutdown = " << s->size() << "\n";
     s->shutdown();
-    std::cerr << "scheduler.size() after shutdown = " << s->size() << "\n";
     REQUIRE(s->empty());
 }
 
@@ -521,9 +546,7 @@ TEST_CASE("scheduler yield_for", "[scheduler]")
     auto duration = coro::sync_wait(make_task(s, wait_for));
     REQUIRE(duration >= wait_for);
 
-    std::cerr << "scheduler.size() before shutdown = " << s->size() << "\n";
     s->shutdown();
-    std::cerr << "scheduler.size() after shutdown = " << s->size() << "\n";
     REQUIRE(s->empty());
 }
 
@@ -548,9 +571,7 @@ TEST_CASE("scheduler yield_until", "[scheduler]")
     auto duration = coro::sync_wait(make_task(s, wait_for));
     REQUIRE(duration >= (wait_for - epsilon));
 
-    std::cerr << "scheduler.size() before shutdown = " << s->size() << "\n";
     s->shutdown();
-    std::cerr << "scheduler.size() after shutdown = " << s->size() << "\n";
     REQUIRE(s->empty());
 }
 
@@ -593,9 +614,7 @@ TEST_CASE("scheduler multipler event waiters", "[scheduler]")
 
     coro::sync_wait(coro::when_all(spawn(s, e), release(s, e)));
 
-    std::cerr << "scheduler.size() before shutdown = " << s->size() << "\n";
     s->shutdown();
-    std::cerr << "scheduler.size() after shutdown = " << s->size() << "\n";
     REQUIRE(s->empty());
 }
 
@@ -637,9 +656,7 @@ TEST_CASE("scheduler self generating coroutine (stack overflow check)", "[schedu
 
     REQUIRE(tasks.size() == total - 1);
 
-    std::cerr << "scheduler.size() before shutdown = " << s->size() << "\n";
     s->shutdown();
-    std::cerr << "scheduler.size() after shutdown = " << s->size() << "\n";
     REQUIRE(s->empty());
 }
 
@@ -658,25 +675,19 @@ TEST_CASE("scheduler manual process events thread pool", "[scheduler]")
     auto make_poll_read_task =
         [](std::unique_ptr<coro::scheduler>& s, std::atomic<bool>& polling, int trigger_fd) -> coro::task<void>
     {
-        std::cerr << "poll task start s.size() == " << s->size() << "\n";
         co_await s->schedule();
         polling = true;
-        std::cerr << "poll task polling s.size() == " << s->size() << "\n";
         auto status = co_await s->poll(trigger_fd, coro::poll_op::read);
         REQUIRE(status == coro::poll_status::read);
-        std::cerr << "poll task exiting s.size() == " << s->size() << "\n";
         co_return;
     };
 
     auto make_poll_write_task = [](std::unique_ptr<coro::scheduler>& s, int trigger_fd) -> coro::task<void>
     {
-        std::cerr << "write task start s.size() == " << s->size() << "\n";
         co_await s->schedule();
         uint64_t value{42};
-        std::cerr << "write task writing s.size() == " << s->size() << "\n";
         auto unused = write(trigger_fd, &value, sizeof(value));
         (void)unused;
-        std::cerr << "write task exiting s.size() == " << s->size() << "\n";
         co_return;
     };
 
@@ -691,12 +702,11 @@ TEST_CASE("scheduler manual process events thread pool", "[scheduler]")
 
     write_task.resume();
 
-    while (s->process_events(100ms) > 0)
-        ;
+    while (s->process_events(100ms))
+    {
+    }
 
-    std::cerr << "scheduler.size() before shutdown = " << s->size() << "\n";
     s->shutdown();
-    std::cerr << "scheduler.size() after shutdown = " << s->size() << "\n";
     REQUIRE(s->empty());
     close(trigger_fds[0]);
     close(trigger_fds[1]);
@@ -712,24 +722,18 @@ TEST_CASE("scheduler manual process events inline", "[scheduler]")
 
     auto make_poll_read_task = [](std::unique_ptr<coro::scheduler>& s, int trigger_fd) -> coro::task<void>
     {
-        std::cerr << "poll task start s.size() == " << s->size() << "\n";
         co_await s->schedule();
-        std::cerr << "poll task polling s.size() == " << s->size() << "\n";
         auto status = co_await s->poll(trigger_fd, coro::poll_op::read);
         REQUIRE(status == coro::poll_status::read);
-        std::cerr << "poll task exiting s.size() == " << s->size() << "\n";
         co_return;
     };
 
     auto make_poll_write_task = [](std::unique_ptr<coro::scheduler>& s, int trigger_fd) -> coro::task<void>
     {
-        std::cerr << "write task start s.size() == " << s->size() << "\n";
         co_await s->schedule();
         uint64_t value{42};
-        std::cerr << "write task writing s.size() == " << s->size() << "\n";
         auto unused = write(trigger_fd, &value, sizeof(value));
         (void)unused;
-        std::cerr << "write task exiting s.size() == " << s->size() << "\n";
         co_return;
     };
 
@@ -741,19 +745,11 @@ TEST_CASE("scheduler manual process events inline", "[scheduler]")
     write_task.resume();
 
     // Now process them to completion.
-    while (true)
+    while (s->process_events(100ms))
     {
-        auto remaining = s->process_events(100ms);
-        std::cerr << "remaining " << remaining << "\n";
-        if (remaining == 0)
-        {
-            break;
-        }
-    };
+    }
 
-    std::cerr << "scheduler.size() before shutdown = " << s->size() << "\n";
     s->shutdown();
-    std::cerr << "scheduler.size() after shutdown = " << s->size() << "\n";
     REQUIRE(s->empty());
     close(trigger_fds[0]);
     close(trigger_fds[1]);

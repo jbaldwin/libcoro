@@ -32,9 +32,7 @@ TEST_CASE("dns_resolver basic", "[dns]")
 
     coro::sync_wait(make_host_by_name_task(scheduler, dns_resolver, coro::net::hostname{"www.example.com"}));
 
-    std::cerr << "scheduler.size() before shutdown = " << scheduler->size() << "\n";
     scheduler->shutdown();
-    std::cerr << "scheduler.size() after shutdown = " << scheduler->size() << "\n";
     REQUIRE(scheduler->empty());
 }
 

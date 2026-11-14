@@ -25,7 +25,6 @@ concept executor = requires(executor_type e, std::coroutine_handle<> c)
     { e.spawn_joinable(std::declval<coro::task<void>>()) } -> std::same_as<coro::task<void>>;
     { e.yield() } -> coro::concepts::awaiter;
     { e.resume(c) } -> std::same_as<bool>;
-    { e.size() } -> std::same_as<std::size_t>;
     { e.empty() } -> std::same_as<bool>;
     { e.shutdown() } -> std::same_as<void>;
 };

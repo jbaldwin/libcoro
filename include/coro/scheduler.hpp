@@ -125,9 +125,9 @@ public:
      *                Passing zero (default) for the timeout will check for any events that are
      *                ready now, and then return.  This could be zero events.  Passing -1 means block
      *                indefinitely until an event happens.
-     * @return The number of tasks currently executing or waiting to execute.
+     * @return True if tasks are still executing or waiting for events.
      */
-    auto process_events(std::chrono::milliseconds timeout = std::chrono::milliseconds{0}) -> std::size_t;
+    auto process_events(std::chrono::milliseconds timeout = std::chrono::milliseconds{0}) -> bool;
 
     class schedule_operation
     {
@@ -428,24 +428,15 @@ public:
     }
 
     /**
-     * @return The number of tasks waiting in the task queue + the executing tasks.
+     * @return True if no tasks are executing or waiting for events.
      */
-    auto size() const noexcept -> std::size_t
+    auto empty() const noexcept -> bool
     {
-        if (m_opts.execution_strategy == execution_strategy_t::process_tasks_inline)
-        {
-            return m_size.load(std::memory_order::acquire);
-        }
-        else
-        {
-            return m_size.load(std::memory_order::acquire) + m_thread_pool->size();
-        }
+        // Cover both event-to-worker handoff and timer registration by a worker that is becoming idle.
+        return m_size.load(std::memory_order::acquire) == 0 &&
+               (m_thread_pool == nullptr ||
+                (m_thread_pool->empty() && m_size.load(std::memory_order::acquire) == 0));
     }
-
-    /**
-     * @return True if the task queue is empty and zero tasks are currently executing.
-     */
-    auto empty() const noexcept -> bool { return size() == 0; }
 
     /**
      * Starts the shutdown of the io scheduler.  All currently executing and pending tasks will complete

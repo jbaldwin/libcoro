@@ -2,6 +2,8 @@
 
 #include <coro/coro.hpp>
 
+#include <array>
+#include <barrier>
 #include <iostream>
 
 TEST_CASE("thread_pool", "[thread_pool]")
@@ -314,6 +316,122 @@ TEST_CASE("thread_pool::spawn_joinable", "[thread_pool]")
     REQUIRE(counter.load() == 1);
     coro::sync_wait(join_task);
     REQUIRE(counter.load() == 2);
+}
+
+namespace
+{
+struct live_body
+{
+    std::atomic<std::size_t>& count;
+
+    live_body(std::atomic<std::size_t>& count, std::atomic<std::size_t>& peak) : count(count)
+    {
+        auto current = count.fetch_add(1, std::memory_order::relaxed) + 1;
+        auto seen    = peak.load(std::memory_order::relaxed);
+        while (current > seen && !peak.compare_exchange_weak(seen, current, std::memory_order::relaxed)) {}
+    }
+
+    ~live_body() { count.fetch_sub(1, std::memory_order::relaxed); }
+};
+
+auto fork_join_fib(
+    coro::thread_pool& tp, std::atomic<std::size_t>& live, std::atomic<std::size_t>& peak, std::size_t n)
+    -> coro::task<std::size_t>
+{
+    live_body body{live, peak};
+    if (n < 2)
+    {
+        co_return n;
+    }
+
+    co_await tp.schedule();
+    auto [x, y] = co_await coro::when_all(fork_join_fib(tp, live, peak, n - 1), fork_join_fib(tp, live, peak, n - 2));
+    co_return x.return_value() + y.return_value();
+}
+} // namespace
+
+TEST_CASE("thread_pool runs recursive fork-join work depth first", "[thread_pool]")
+{
+    // https://github.com/jbaldwin/libcoro/issues/446
+    // Breadth-first expansion keeps many coroutine bodies alive; depth-first work stays bounded by tree depth.
+    constexpr std::size_t depth        = 16;
+    const auto            thread_count = GENERATE(1u, 4u);
+    auto                  tp = coro::thread_pool::make_unique(coro::thread_pool::options{.thread_count = thread_count});
+    std::atomic<std::size_t> live{0};
+    std::atomic<std::size_t> peak{0};
+
+    REQUIRE(coro::sync_wait(fork_join_fib(*tp, live, peak, depth)) == 987);
+    REQUIRE(live.load() == 0);
+    REQUIRE(peak.load() <= 2 * thread_count * depth);
+}
+
+TEST_CASE("thread_pool wakes after repeated idle transitions", "[thread_pool]")
+{
+    auto tp = coro::thread_pool::make_unique(coro::thread_pool::options{.thread_count = 4});
+    auto work = [](coro::thread_pool& tp, std::size_t value) -> coro::task<std::size_t>
+    {
+        co_await tp.schedule();
+        co_return value;
+    };
+
+    for (std::size_t round = 0; round < 256; ++round)
+    {
+        while (!tp->empty())
+        {
+            std::this_thread::yield();
+        }
+        auto [a, b, c, d] = coro::sync_wait(coro::when_all(
+            work(*tp, round), work(*tp, round + 1), work(*tp, round + 2), work(*tp, round + 3)));
+        REQUIRE(a.return_value() + b.return_value() + c.return_value() + d.return_value() == 4 * round + 6);
+    }
+}
+
+TEST_CASE("thread_pool wakes peers for locally forked work", "[thread_pool]")
+{
+    constexpr std::size_t workers = 4;
+    auto tp = coro::thread_pool::make_unique(coro::thread_pool::options{.thread_count = workers});
+    std::barrier rendezvous{static_cast<std::ptrdiff_t>(workers)};
+    auto child = [](coro::thread_pool& tp, std::barrier<>& rendezvous) -> coro::task<int>
+    {
+        co_await tp.schedule();
+        rendezvous.arrive_and_wait();
+        co_return 1;
+    };
+    auto root = [&]() -> coro::task<int>
+    {
+        co_await tp->schedule();
+        auto [a, b, c, d] = co_await coro::when_all(
+            child(*tp, rendezvous), child(*tp, rendezvous), child(*tp, rendezvous), child(*tp, rendezvous));
+        co_return a.return_value() + b.return_value() + c.return_value() + d.return_value();
+    };
+    REQUIRE(coro::sync_wait(root()) == workers);
+}
+
+TEST_CASE("thread_pool rejects publication after shutdown", "[thread_pool]")
+{
+    auto tp = coro::thread_pool::make_unique(coro::thread_pool::options{.thread_count = 2});
+    auto operation = tp->schedule();
+    tp->shutdown();
+
+    auto delayed = [&]() -> coro::task<void>
+    {
+        co_await operation;
+    };
+    REQUIRE_THROWS_AS(coro::sync_wait(delayed()), std::runtime_error);
+
+    bool ran{false};
+    auto work = [](bool& ran) -> coro::task<void>
+    {
+        ran = true;
+        co_return;
+    };
+    auto task = work(ran);
+    std::array<std::coroutine_handle<>, 2> handles{task.handle(), nullptr};
+    REQUIRE_FALSE(tp->resume(task.handle()));
+    REQUIRE(tp->resume(handles) == 0);
+    REQUIRE_FALSE(tp->spawn_detached(work(ran)));
+    REQUIRE_FALSE(ran);
+    REQUIRE(tp->empty());
 }
 
 TEST_CASE("~thread_pool", "[thread_pool]")

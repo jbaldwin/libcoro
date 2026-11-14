@@ -76,10 +76,10 @@ scheduler::~scheduler()
     m_schedule_pipe.close();
 }
 
-auto scheduler::process_events(std::chrono::milliseconds timeout) -> std::size_t
+auto scheduler::process_events(std::chrono::milliseconds timeout) -> bool
 {
     process_events_manual(timeout);
-    return size();
+    return !empty();
 }
 
 auto scheduler::spawn_detached(coro::task<void>&& task) -> bool
@@ -201,6 +201,13 @@ auto scheduler::shutdown() noexcept -> void
         {
             m_io_thread.join();
         }
+        else if (m_opts.thread_strategy == thread_strategy_t::manual)
+        {
+            while (!empty())
+            {
+                process_events_manual(m_default_timeout);
+            }
+        }
 
         if (m_thread_pool != nullptr)
         {
@@ -252,7 +259,7 @@ auto scheduler::process_events_dedicated_thread() -> void
 
     m_io_processing.exchange(true, std::memory_order::release);
     // Execute tasks until stopped or there are no more tasks to complete.
-    while (!m_shutdown_requested.load(std::memory_order::acquire) || size() > 0)
+    while (!m_shutdown_requested.load(std::memory_order::acquire) || !empty())
     {
         process_events_execute(m_default_timeout);
     }
