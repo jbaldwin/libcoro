@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.0-alpha] - 2026-11-15
+
 ### Added
 - `io_status::kind::unknown` [#444] [@jbaldwin]
 - This changelog [#465] [@PyXiion]
