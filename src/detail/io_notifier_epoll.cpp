@@ -21,25 +21,23 @@ namespace coro::detail
  * captured event came from the file descriptor of the poll_info, in which case we want to decode the poll_status from
  * the event, or from a registered cancellation token, in which case we want to return a cancelled poll status.
  */
-auto encode_udata(bool keep_registered, bool is_cancel_event, void* udata) -> uint64_t
+auto encode_udata(bool is_cancel_event, void* udata) -> uint64_t
 {
     // Pointers on 64 bit unix machines take up to 48 bit right now. So we have some bits left to encode the boolean to
-    // indicate if this is a cancellation event descriptor at the highest bit.
-    return (((uint64_t)keep_registered) << 63) | (((uint64_t)is_cancel_event) << 62) |
-           (reinterpret_cast<uintptr_t>(udata) & 0x3FFFFFFFFFFFFFFFULL);
+    // indicate if this is a cancellation event descriptor at bit 62.
+    return (((uint64_t)is_cancel_event) << 62) | (reinterpret_cast<uintptr_t>(udata) & 0x3FFFFFFFFFFFFFFFULL);
 }
 
 /**
  * Decode the state that was encoded into the epoll events user data field.
  *
- * For details see documentation of `coro::detail::encode_udata(bool, bool, void*)` above.
+ * For details see documentation of `coro::detail::encode_udata(bool, void*)` above.
  */
-auto decode_udata(uint64_t encoded) -> std::tuple<bool, bool, void*>
+auto decode_udata(uint64_t encoded) -> std::tuple<bool, void*>
 {
-    bool  keep_registered = (bool)(encoded >> 63);
     bool  is_cancel_event = (bool)((encoded >> 62) & 0x1);
     void* udata           = reinterpret_cast<void*>(encoded & 0xFFFFFFFFFFFFULL);
-    return std::make_tuple(keep_registered, is_cancel_event, udata);
+    return std::make_tuple(is_cancel_event, udata);
 }
 
 io_notifier_epoll::io_notifier_epoll() : m_fd{::epoll_create1(EPOLL_CLOEXEC)}
@@ -83,7 +81,7 @@ auto io_notifier_epoll::watch(fd_t fd, poll_op op, void* data, bool keep, bool i
 {
     auto event_data     = event_t{};
     event_data.events   = static_cast<uint32_t>(op) | EPOLLRDHUP;
-    event_data.data.u64 = encode_udata(keep, is_cancel_event, data);
+    event_data.data.u64 = encode_udata(is_cancel_event, data);
 
     if (!keep)
     {
@@ -149,8 +147,8 @@ auto io_notifier_epoll::next_events(
     int  num_ready = ::epoll_wait(m_fd, ready_set.data(), ready_set.size(), timeout.count());
     for (int i = 0; i < num_ready; ++i)
     {
-        auto [keep_registered, is_cancel_event, udata] = decode_udata(ready_set[i].data.u64);
-        auto* pi                                       = static_cast<poll_info*>(udata);
+        auto [is_cancel_event, udata] = decode_udata(ready_set[i].data.u64);
+        auto* pi                      = static_cast<poll_info*>(udata);
 
         // If the event issuing fd is the same as the fd of the cancellation trigger of the registered poll_info we
         // this operation was cancelled by the user.
