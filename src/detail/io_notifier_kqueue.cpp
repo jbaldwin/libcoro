@@ -115,6 +115,19 @@ auto io_notifier_kqueue::unwatch(fd_t fd, poll_op op) -> bool
 
 auto io_notifier_kqueue::unwatch(poll_info& pi) -> bool
 {
+    // watch(poll_info&) also registered the cancel trigger with &pi, it must not outlive pi.
+    // If it fired its EV_ONESHOT knote is already deleted, the ENOENT from EV_DELETE is expected.
+    if (pi.m_cancel_trigger.has_value())
+    {
+        unwatch(pi.m_cancel_trigger.value().native_handle(), poll_op::read);
+    }
+
+    // yield_for() and yield_until() have no fd, don't make a system call for them.
+    if (pi.m_fd == -1)
+    {
+        return true;
+    }
+
     return unwatch(pi.m_fd, pi.m_op);
 }
 
@@ -140,26 +153,16 @@ auto io_notifier_kqueue::next_events(
     {
         auto* pi = static_cast<poll_info*>(ready_set[i].udata);
 
-        auto keep_registered = !(ready_set[i].flags & EV_ONESHOT);
-
         // If the event issuing fd is the same as the fd of the cancellation trigger of the registered poll_info we
         // this operation was cancelled by the user.
         if (pi->m_cancel_trigger.has_value() &&
             ready_set[i].ident == static_cast<uintptr_t>(pi->m_cancel_trigger.value().native_handle()))
         {
             ready_events.emplace_back(pi, poll_status::cancelled);
-            if (!keep_registered)
-            {
-                unwatch(*pi);
-            }
         }
         else
         {
             ready_events.emplace_back(pi, io_notifier_kqueue::event_to_poll_status(ready_set[i]));
-            if (pi->m_cancel_trigger.has_value() && !keep_registered)
-            {
-                unwatch(pi->m_cancel_trigger.value().native_handle(), poll_op::read);
-            }
         }
     }
 }

@@ -258,6 +258,35 @@ TEST_CASE("tcp_server graceful shutdown via socket", "[tcp_server]")
     std::cerr << "END tcp_server graceful shutdown via socket\n";
 }
 
+TEST_CASE("tcp_server shutdown after accept timeout", "[tcp_server]")
+{
+    auto scheduler =
+        coro::scheduler::make_unique(coro::scheduler::options{.pool = coro::thread_pool::options{.thread_count = 1}});
+    coro::net::tcp::server server{scheduler, {"127.0.0.1", 0}};
+
+    auto client = coro::sync_wait(server.accept(std::chrono::milliseconds{10}));
+    REQUIRE_FALSE(client.has_value());
+    REQUIRE(client.error().type == coro::net::io_status::kind::timeout);
+
+    auto make_accept_task = [](coro::net::tcp::server& server) -> coro::task<void>
+    {
+        // The timed out accept must not leave the stop token registered, or shutdown() can't cancel this one.
+        auto client = co_await server.accept(std::chrono::milliseconds{500});
+        REQUIRE_FALSE(client.has_value());
+        REQUIRE(client.error().type == coro::net::io_status::kind::cancelled);
+    };
+
+    auto make_shutdown_task = [](std::unique_ptr<coro::scheduler>& scheduler,
+                                 coro::net::tcp::server&           server) -> coro::task<void>
+    {
+        co_await scheduler->schedule();
+        server.shutdown();
+    };
+
+    // when_all() runs the accept task on this thread until it waits on the socket, then starts the shutdown task.
+    coro::sync_wait(coro::when_all(make_accept_task(server), make_shutdown_task(scheduler, server)));
+}
+
 TEST_CASE("~tcp_server", "[tcp_server]")
 {
     std::cerr << "[~tcp_server]\n\n";
