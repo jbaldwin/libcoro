@@ -234,9 +234,7 @@ TEST_CASE("scheduler poll stop token after timeout", "[scheduler]")
 
     coro::sync_wait(make_task(s, stop_source, trigger_fds[0]));
 
-    std::cerr << "scheduler.size() before shutdown = " << s->size() << "\n";
     s->shutdown();
-    std::cerr << "scheduler.size() after shutdown = " << s->size() << "\n";
     REQUIRE(s->empty());
     close(trigger_fds[0]);
     close(trigger_fds[1]);
@@ -265,9 +263,7 @@ TEST_CASE("scheduler poll stop token after cancel", "[scheduler]")
 
     coro::sync_wait(make_task(s, stop_source, trigger_fds[0]));
 
-    std::cerr << "scheduler.size() before shutdown = " << s->size() << "\n";
     s->shutdown();
-    std::cerr << "scheduler.size() after shutdown = " << s->size() << "\n";
     REQUIRE(s->empty());
     close(trigger_fds[0]);
     close(trigger_fds[1]);
