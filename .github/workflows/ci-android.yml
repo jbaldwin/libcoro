@@ -114,6 +114,14 @@ jobs:
           if ! "$EMU_BIN" -list-avds | grep -q '^test$'; then
             echo "AVD 'test' creation failed" >&2; exit 1; fi
 
+      - name: Enable KVM
+        if: matrix.abi == 'x86_64'
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          ls -l /dev/kvm
+
       - name: Launch emulator
         if: matrix.abi == 'x86_64'
         run: |
@@ -126,7 +134,7 @@ jobs:
           "$ADB" kill-server || true
           "$ADB" start-server
           LOG_FILE=emulator_stdout.log
-          nohup "$EMU_BIN" -avd test -no-window -no-audio -no-boot-anim -accel off -gpu swiftshader_indirect -no-snapshot -wipe-data -netfast > "$LOG_FILE" 2>&1 &
+          nohup "$EMU_BIN" -avd test -no-window -no-audio -no-boot-anim -accel on -gpu swiftshader_indirect -no-snapshot -wipe-data -netfast > "$LOG_FILE" 2>&1 &
           EMU_PID=$!
           sleep 2
           kill -0 "$EMU_PID" || { echo "Emulator exited early" >&2; tail -n 100 "$LOG_FILE" || true; exit 1; }
