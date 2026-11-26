@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.17.0-alpha] - 2026-11-15
+## [0.17.0] - 2026-11-22
 
 ### Added
 - `io_status::kind::unknown` [#444] [@jbaldwin]
@@ -29,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - `coro::task_group` no longer blocks forever when awaited without any tasks having been started [#451] [@ripose-jp]
 - Android CI uses `android-actions/setup-android@v4` [#463] [@jbaldwin]
+- `coro::scheduler::poll()` no longer leaves a poll registration behind after returning, which let a later event make the event loop read a freed `poll_info`. Registrations, including the stop token's pipe, are now removed only after the coroutine has suspended, for both epoll and kqueue [#462] [@Sola1Go] [@PyXiion] [@jbaldwin]
 
 
 [#444]: https://github.com/jbaldwin/libcoro/pull/444
@@ -36,9 +37,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [#456]: https://github.com/jbaldwin/libcoro/pull/456
 [#457]: https://github.com/jbaldwin/libcoro/pull/457
 [#460]: https://github.com/jbaldwin/libcoro/pull/460
+[#462]: https://github.com/jbaldwin/libcoro/pull/462
 [#463]: https://github.com/jbaldwin/libcoro/pull/463
 [#465]: https://github.com/jbaldwin/libcoro/pull/465
 [@PyXiion]: https://github.com/PyXiion
 [@jbaldwin]: https://github.com/jbaldwin
 [@ripose-jp]: https://github.com/ripose-jp
 [@daantimmer]: https://github.com/daantimmer
+[@Sola1Go]: https://github.com/Sola1Go
